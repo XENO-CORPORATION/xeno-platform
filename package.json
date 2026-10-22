@@ -309,7 +309,8 @@
     "test:directory-browser": "node prototypes/xeno-workspace/tests/directory-test.mjs",
     "test:auth-public-paths": "node scripts/auth-public-paths.test.mjs",
     "test:homepage-v21": "node --test scripts/homepage-v21.test.mjs",
-    "test:auth-input-focus": "node --test scripts/auth-input-focus.test.mjs"
+    "test:auth-input-focus": "node --test scripts/auth-input-focus.test.mjs",
+    "test:products-v2": "node --test scripts/products-v2.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",

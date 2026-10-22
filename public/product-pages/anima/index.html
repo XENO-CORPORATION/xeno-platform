@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Anima — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#BE185D}
+input[type=range]{accent-color:#E11D74}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="background:#120D12; color:#F4E9F0; padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#F9A8D4">Personal agent</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">A Mind is given.<br><span style="color:#F9A8D4">A Soul is earned.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#BFA9B8; text-wrap:pretty">Anima is an always-on agent you create, name and keep. You write its Mind; it earns a Soul of memories and skills the longer it runs, and it can drive real XENO apps. Give yours a name, then talk to it.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="#get" style="background:#F9A8D4; color:#120D12; font-size:15px; font-weight:600; padding:12px 18px; border-radius:8px">Get Anima</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8A7484">npm i -g @xenosystem/anima</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; display:grid; grid-template-columns:{{ hCols }}; gap:16px; align-items:stretch">
+      <div style="background:#1C141B; border-radius:18px; overflow:hidden; box-shadow:0 0 0 1px #2E222C, 0 40px 80px -40px rgba(0,0,0,.9); display:flex; flex-direction:column; min-height:560px">
+        <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #2E222C">
+          <span style="width:38px; height:38px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #FBCFE8, #E11D74 70%); box-shadow:0 0 {{ glow }} {{ glowC }}; transition:box-shadow .6s"></span>
+          <span style="display:flex; flex-direction:column"><input value="{{ name }}" onChange="{{ setName }}" maxLength="18" style="width:170px; background:transparent; border:none; outline:none; color:#F4E9F0; font:inherit; font-size:16px; font-weight:600; padding:0" title="Rename your Anima"><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8A7484">{{ presence }}</span></span>
+          <span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A7484">Telegram · always on</span>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:10px; padding:16px; overflow:hidden; justify-content:flex-end">
+          <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="2">
+            <div style="display:flex; justify-content:{{ m.jc }}"><div style="max-width:82%; display:flex; flex-direction:column; gap:6px; padding:10px 13px; border-radius:{{ m.r }}; background:{{ m.bg }}; color:{{ m.fg }}; font-size:14.5px; line-height:1.5"><span>{{ m.t }}</span><sc-for list="{{ m.tools }}" as="t"><span style="display:flex; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:{{ t.c }}"><span>{{ t.k }}</span><span>{{ t.v }}</span></span></sc-for></div></div>
+          </sc-for>
+          <sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}"><div style="display:flex"><span style="padding:10px 14px; border-radius:14px 14px 14px 4px; background:#2A1F28; color:#BFA9B8; font-family:'IBM Plex Mono',monospace; font-size:12px">{{ name }} is thinking…</span></div></sc-if>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; padding:12px 16px; border-top:1px solid #2E222C">
+          <sc-for list="{{ opts }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.on }}" style="padding:9px 12px; border-radius:999px; border:1px solid #3A2C37; background:{{ o.bg }}; color:{{ o.fg }}; font:inherit; font-size:13.5px; cursor:{{ o.cur }}; text-align:left; opacity:{{ o.op }}">{{ o.l }}</button></sc-for>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div style="background:#1C141B; border-radius:16px; padding:16px; box-shadow:0 0 0 1px #2E222C; display:flex; flex-direction:column; gap:10px">
+          <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:600; font-size:14px">Mind</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A7484">authored by you · signed</span></div>
+          <pre style="margin:0; font-family:'IBM Plex Mono',monospace; font-size:12px; line-height:1.65; color:#E9D5E2; white-space:pre-wrap">{{ mindTxt }}</pre>
+          <div style="display:flex; flex-wrap:wrap; gap:6px"><sc-for list="{{ roles }}" as="r"><button onClick="{{ r.on }}" style="height:28px; padding:0 10px; border-radius:999px; border:1px solid {{ r.bd }}; background:{{ r.bg }}; color:{{ r.fg }}; font:inherit; font-size:12px; cursor:pointer">{{ r.l }}</button></sc-for></div>
+        </div>
+        <div style="flex:1; background:#1C141B; border-radius:16px; padding:16px; box-shadow:0 0 0 1px #2E222C; display:flex; flex-direction:column; gap:10px">
+          <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:600; font-size:14px">Soul</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#F9A8D4">{{ soulN }}</span></div>
+          <sc-for list="{{ soul }}" as="s"><div style="display:flex; align-items:flex-start; gap:10px; padding:9px 10px; border-radius:8px; background:{{ s.bg }}; transition:background .6s"><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; padding:2px 6px; border-radius:4px; background:{{ s.tBg }}; color:{{ s.tFg }}; white-space:nowrap">{{ s.k }}</span><span style="font-size:13.5px; line-height:1.4; color:#E9D5E2">{{ s.t }}</span></div></sc-for>
+          <span style="display:{{ soulEmptyD }}; font-size:13.5px; color:#8A7484; line-height:1.5">Empty for now. Memories and skills appear here as you talk.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Talk</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Terminal, Telegram, background service</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Drives</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Pixel, Motion, Canvas, Sound, Docs, Browser, Workflow</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Moves in</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">One-command migration from OpenClaw and Hermes</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Saves as</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">.xanima, signed</div></div></div></section>
+<section id="swarm" data-screen-label="Swarm" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE185D">Swarm</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">Run several. They divide the work.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Animas coordinate as a swarm: send, broadcast, hand off and orchestrate, with an event log between them. A saved swarm, roles and routing included, fits in one signed .xanima file.</p></div>
+    <div data-reveal="" style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:32px"><button onClick="{{ runSw }}" style="height:40px; padding:0 16px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:14px; font-weight:500; cursor:pointer">{{ swL }}</button><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">“Launch Saturday’s gig: poster, teaser and the ticket page”</span></div>
+    <div data-reveal="" style="margin-top:16px; display:grid; grid-template-columns:{{ swCols }}; gap:12px">
+      <sc-for list="{{ lanes }}" as="l" hint-placeholder-count="3"><div style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:10px">
+        <div style="display:flex; align-items:center; gap:10px"><span style="width:30px; height:30px; border-radius:50%; background:{{ l.av }}"></span><span style="display:flex; flex-direction:column"><span style="font-weight:600; font-size:15px">{{ l.n }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">{{ l.role }}</span></span><span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:2px 7px; border-radius:4px; background:{{ l.stBg }}; color:{{ l.stFg }}">{{ l.st }}</span></div>
+        <sc-for list="{{ l.ev }}" as="e"><div style="display:grid; grid-template-columns:18px minmax(0,1fr); gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.45; opacity:{{ e.op }}; transition:opacity .4s"><span style="color:{{ e.c }}">{{ e.m }}</span><span style="color:#3F3B35">{{ e.t }}</span></div></sc-for>
+      </div></sc-for>
+    </div>
+  </div>
+</section>
+<section id="quickstart" data-screen-label="Quickstart" style="background:#120D12; color:#F4E9F0; padding:110px 24px">
+  <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:{{ qCols }}; gap:32px 56px; align-items:center">
+    <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#F9A8D4">Quickstart</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:520px">From nothing to a running agent in about a minute.</h2><p data-reveal="" style="margin:0; font-size:16.5px; line-height:1.55; color:#BFA9B8; text-wrap:pretty">No server, no Docker, no admin rights. Coming from OpenClaw or Hermes? anima migrate brings the persona, memories, skills and keys across, as a dry run first.</p></div>
+    <div data-reveal="" style="background:#0B080B; border-radius:14px; box-shadow:0 0 0 1px #2E222C; overflow:hidden; font-family:'IBM Plex Mono',monospace; font-size:13.5px">
+      <div style="padding:10px 14px; border-bottom:1px solid #2E222C; font-size:11px; color:#8A7484">terminal</div>
+      <sc-for list="{{ cmds }}" as="c"><div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid #1C141B"><span><span style="color:#F9A8D4">$ </span>{{ c.c }}<span style="display:block; margin-top:3px; font-size:11.5px; color:#8A7484">{{ c.n }}</span></span><button onClick="{{ c.on }}" style="height:28px; padding:0 10px; border:1px solid #3A2C37; border-radius:6px; background:transparent; color:#F4E9F0; font:inherit; font-size:11px; cursor:pointer">{{ c.b }}</button></div></sc-for>
+    </div>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE185D">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Installable today, with more in git than on npm.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get Anima.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">Install from npm and run the setup wizard. npm serves 0.0.2 today; the newest work, including the app capability layer, is in git and not published yet.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><div style="border:1px solid #1D1B18; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">npm</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">npm install -g @xenosystem/anima</div></div><a href="https://www.npmjs.com/package/@xenosystem/anima" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">View on npm</a></div><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Docker</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">image in the repository</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">self-host</span></div><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">One-line installer</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">get.xenostudio.ai/anima</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">not live yet</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE185D">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#F9A8D4">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Anima&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Works today","#2FA36B",["Setup wizard, terminal chat and anima doctor","Always-on Telegram daemon with an owner allowlist","Background-service install and a Docker image","One-command migration from OpenClaw and Hermes","Swarm: send, broadcast, handoff and orchestrate","Signed .xanima files for a Mind or a whole swarm","1,066 tests across 75 files"]],["In git, not on npm yet","#C9962E",["Driving XENO apps through their own engines","Verify-on-load and signing by default","One writer per Soul directory, enforced"]],["Roadmap","#8C867C",["Channels beyond Telegram, through XENO Comms","The one-line installer host","App capabilities from the swarm CLI","Driving the rest of the suite and the OS"]]];
+  FAQ = [["How is it different from Hermes or OpenClaw?","On its own it covers the same ground. Anima adds a signed Mind, a Soul that learns skills from what worked, swarms that hand work to each other, and the ability to drive real XENO apps through their own engines."],["What is the difference between the Mind and the Soul?","The Mind is what you write: name, role, voice, boundaries and which apps it may use. The Soul is what it earns by running: memories and self-taught skills."],["Where does it run?","On your own machine. Chat in the terminal, or run it always-on as a background service and talk to it over Telegram."],["Which apps can it drive?","Seven XENO apps ship a capability server: Pixel, Motion, Canvas, Sound, Docs, Browser and Workflow. That layer is in git and not yet on npm."],["Can I bring my existing agent?","Yes. anima migrate imports an OpenClaw or Hermes agent’s persona, memories, skills and keys. It is a dry run by default and reversible."]];
+
+  ROLES = ['personal assistant', 'studio producer', 'research partner'];
+  OPTS = [['a', 'Remind me every Friday to send the invoice'], ['b', 'Keep your replies short, please'], ['c', 'Make a poster for Saturday’s gig and a 15-second teaser'], ['d', 'What did I ask you last week?']];
+  say(t, tools) { this.setState(s => ({ msgs: s.msgs.concat([{ me: false, t, tools: tools || [] }]).slice(-7) })); }
+  wait(ms) { return new Promise(r => { this._to = setTimeout(r, ms); }); }
+  send = async (k) => { const S = this.state; if (S.typing || (S.used || []).includes(k)) return; if (k === 'd' && !(S.soul || []).some(s => s[0] === 'memory')) return;
+    const o = this.OPTS.find(x => x[0] === k); this.setState(s => ({ msgs: s.msgs.concat([{ me: true, t: o[1] }]).slice(-7), used: (s.used || []).concat([k]), typing: true })); await this.wait(900);
+    const addSoul = e => this.setState(s => ({ soul: [e].concat(s.soul || []), fresh: e[1] }));
+    if (k === 'a') { this.setState({ typing: false }); this.say(this.state.short ? 'Done. Fridays, 9:00.' : 'Done. Every Friday at 9:00 I’ll message you here.'); addSoul(['memory', 'Sends invoices on Fridays · reminder at 09:00']); }
+    else if (k === 'b') { this.setState({ typing: false, short: true }); this.say('Noted.'); addSoul(['memory', 'Prefers short replies']); }
+    else if (k === 'c') { this.setState({ typing: false }); this.say(this.state.short ? 'On it.' : 'On it. Pixel for the poster, Motion for the teaser, Sound for the audio.', [{ k: '◌', v: 'pixel · new poster 1080 × 1350', c: '#BFA9B8' }]); await this.wait(900);
+      this.setState(s => { const m = s.msgs.slice(); m[m.length - 1] = Object.assign({}, m[m.length - 1], { tools: [{ k: '✓', v: 'pixel · poster.png exported', c: '#8FD9A8' }, { k: '✓', v: 'motion · 15 s teaser.mp4 rendered', c: '#8FD9A8' }, { k: '✓', v: 'sound · trimmed to 15 s · −14 LUFS', c: '#8FD9A8' }] }); return { msgs: m }; }); await this.wait(700);
+      this.say(this.state.short ? 'Done: poster.png, teaser.mp4.' : 'Done. poster.png and teaser.mp4 are in your workspace.'); addSoul(['skill', 'make-gig-poster · written from what worked']); }
+    else if (k === 'd') { this.setState({ typing: false }); const mem = (this.state.soul || []).filter(s => s[0] === 'memory').map(s => s[1]); const parts = []; if (mem.some(m => m.startsWith('Sends'))) parts.push('set a Friday invoice reminder'); if (mem.some(m => m.startsWith('Prefers'))) parts.push('asked me to keep replies short'); this.say('You ' + parts.join(', and ') + '.'); addSoul(['recall', 'Answered from the Soul, not the chat history']); }
+    clearTimeout(this._fr); this._fr = setTimeout(() => this.setState({ fresh: null }), 1400); };
+  reset = () => { clearTimeout(this._to); this.setState({ msgs: [{ me: false, t: 'Hi, I’m ' + this.state.name + '. What can I take off your plate?', tools: [] }], used: [], soul: [], typing: false, short: false }); };
+  SW = [[0, 'orchestrate · split into poster, teaser, ticket page', '◆', '#E11D74'], [0, 'handoff → Juno · poster 1080 × 1350', '→', '#8C867C'], [1, 'pixel · poster.png exported', '✓', '#1F6A3A'], [0, 'handoff → Mika · 15 s teaser from poster.png', '→', '#8C867C'], [2, 'motion · teaser.mp4 rendered', '✓', '#1F6A3A'], [0, 'broadcast · done, 2 files and the ticket copy', '◆', '#E11D74']];
+  runSw = () => { clearInterval(this._sw); this.setState({ swN: 0 }); let n = 0; this._sw = setInterval(() => { n++; this.setState({ swN: n }); if (n >= this.SW.length) clearInterval(this._sw); }, 750); };
+  mountX() { this.setState({ name: 'Ari', role: 0, msgs: [{ me: false, t: 'Hi, I’m Ari. What can I take off your plate?', tools: [] }], used: [], soul: [], swN: 0, t0: Date.now() }); }
+  unmountX() { clearTimeout(this._to); clearTimeout(this._fr); clearInterval(this._sw); clearTimeout(this._cp); }
+  valsX(S, wide) { const soul = S.soul || [], used = S.used || [], name = S.name || 'Ari', n = S.swN || 0;
+    const opts = used.length >= 4 ? [{ l: 'Start over', on: this.reset, bg: '#F9A8D4', fg: '#120D12', cur: 'pointer', op: 1 }] : this.OPTS.filter(o => !used.includes(o[0])).map(o => { const off = S.typing || (o[0] === 'd' && !soul.some(s => s[0] === 'memory')); return { l: o[1], on: () => this.send(o[0]), bg: 'transparent', fg: '#F4E9F0', cur: off ? 'default' : 'pointer', op: off ? 0.4 : 1 }; });
+    const laneSt = i => { const ev = this.SW.slice(0, n).filter(e => e[0] === i); const last = ev[ev.length - 1]; return !ev.length ? ['idle', '#F0EDE8', '#8C867C'] : (i === 0 ? n >= this.SW.length : last[2] === '✓') ? ['done', '#E4F2E8', '#1F6A3A'] : ['working', '#FCE7F1', '#BE185D']; };
+    return { hCols: S.vw >= 1000 ? 'minmax(0,1.2fr) minmax(0,1fr)' : 'minmax(0,1fr)', name, setName: e => this.setState({ name: e.target.value || '' }), presence: 'online · ' + soul.length + ' things learned',
+      glow: (8 + soul.length * 8) + 'px', glowC: 'rgba(225,29,116,' + (0.25 + soul.length * 0.12) + ')', typing: !!S.typing,
+      msgs: (S.msgs || []).map(m => ({ t: m.t, tools: m.tools || [], jc: m.me ? 'flex-end' : 'flex-start', bg: m.me ? '#E11D74' : '#2A1F28', fg: '#FFFFFF', r: m.me ? '14px 14px 4px 14px' : '14px 14px 14px 4px' })), opts,
+      mindTxt: 'name:  ' + (name || '…') + '\nrole:  ' + this.ROLES[S.role || 0] + '\nvoice: warm, direct\nboundaries:\n  - never spends money without asking\n  - asks before posting anything public\napps:  pixel, motion, sound, docs',
+      roles: this.ROLES.map((r, i) => ({ l: r, on: () => this.setState({ role: i }), bg: i === (S.role || 0) ? '#F9A8D4' : 'transparent', fg: i === (S.role || 0) ? '#120D12' : '#F4E9F0', bd: i === (S.role || 0) ? '#F9A8D4' : '#3A2C37' })),
+      soul: soul.map(s => ({ k: s[0], t: s[1], bg: S.fresh === s[1] ? '#3A2233' : '#231A21', tBg: s[0] === 'skill' ? '#F9A8D4' : s[0] === 'recall' ? '#2E2757' : '#3A2C37', tFg: s[0] === 'skill' ? '#120D12' : s[0] === 'recall' ? '#C4B5FD' : '#E9D5E2' })), soulN: soul.filter(s => s[0] === 'memory').length + ' memories · ' + soul.filter(s => s[0] === 'skill').length + ' skills', soulEmptyD: soul.length ? 'none' : 'block',
+      runSw: this.runSw, swL: n ? (n >= this.SW.length ? 'Run it again' : 'Running…') : '▶ Run the swarm', swCols: S.vw >= 900 ? 'repeat(3, minmax(0,1fr))' : 'minmax(0,1fr)',
+      lanes: [['Ari', 'orchestrator', 'radial-gradient(circle at 35% 30%, #FBCFE8, #E11D74 70%)'], ['Juno', 'design · drives Pixel', 'radial-gradient(circle at 35% 30%, #DDD6FE, #6A4DE0 70%)'], ['Mika', 'video · drives Motion', 'radial-gradient(circle at 35% 30%, #FECACA, #E5483A 70%)']].map((l, i) => { const st = laneSt(i); return { n: l[0], role: l[1], av: l[2], st: st[0], stBg: st[1], stFg: st[2], ev: this.SW.map((e, k) => ({ e, k })).filter(x => x.e[0] === i).map(x => ({ m: x.e[2], t: x.e[1], c: x.e[3], op: x.k < n ? 1 : 0.25 })) }; }),
+      qCols: S.vw >= 900 ? 'minmax(0,.9fr) minmax(0,1.1fr)' : 'minmax(0,1fr)',
+      cmds: [['npm install -g @xenosystem/anima', 'installs the anima CLI'], ['anima setup', 'pick a model, create a Mind, connect Telegram'], ['anima', 'talk to it in the terminal'], ['anima migrate', 'bring over an OpenClaw or Hermes agent']].map(c => ({ c: c[0], n: c[1], b: S.copied === c[0] ? 'Copied' : 'Copy', on: () => { try { navigator.clipboard && navigator.clipboard.writeText(c[0]); } catch (e) {} this.setState({ copied: c[0] }); clearTimeout(this._cp); this._cp = setTimeout(() => this.setState({ copied: null }), 1400); } })) };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Anima').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#BE185D' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>

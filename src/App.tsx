@@ -6,6 +6,7 @@ import { isEmbeddedChatPath, isWorkspaceEmbed, leaveEmbed } from './lib/workspac
 
 import Home3 from "./pages/Home3";
 import HomeV21Redirect from "./pages/HomeV21Redirect";
+import StaticDocRedirect from "./pages/StaticDocRedirect";
 import { lazyRoute } from './components/platform/lazyRoute';
 
 const ProductPage = lazyRoute(() => import('./pages/ProductPage'));
@@ -234,7 +235,7 @@ function App() {
             <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
-            <Route path="/products" element={<ProductsIndex />} />
+            <Route path="/products" element={<StaticDocRedirect to="/products" />} />
             <Route path="/product/:slug" element={<ProductPage />} />
             <Route path="/product/:slug/download" element={<ProductDownload />} />
             <Route path="/product/:slug/releases" element={<ProductReleases />} />

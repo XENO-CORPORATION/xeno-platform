@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Image — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#BE123C}
+input[type=range]{accent-color:#F43F5E}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="background:#130D0F; color:#F5EAEC; padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#F43F5E">Image generation</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">Prompt, pick,<br><span style="color:#F43F5E">keep every take.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#B09CA1; text-wrap:pretty">XENO Image generates pictures from a prompt, keeps them organised in projects with a persistent library, and edits with slash commands. It ships today inside XENO Hub. Type a prompt or a slash command below.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="/product/hub" style="background:#F43F5E; color:#130D0F; font-size:15px; font-weight:600; padding:12px 18px; border-radius:8px">Open in XENO Hub</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#73626A">shipping in Hub · web surface not yet</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; border-radius:14px; overflow:hidden; background:#1B1316; box-shadow:0 0 0 1px #30242A, 0 40px 80px -40px rgba(0,0,0,.9); display:grid; grid-template-columns:{{ iCols }}; min-height:560px">
+      <div style="display:{{ sideD }}; flex-direction:column; gap:2px; padding:12px 8px; border-right:1px solid #30242A">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#73626A; padding:4px 8px 8px">PROJECTS</span>
+        <sc-for list="{{ projs }}" as="p"><button onClick="{{ p.on }}" style="display:flex; justify-content:space-between; padding:8px 10px; border:none; border-radius:7px; background:{{ p.bg }}; color:{{ p.fg }}; font:inherit; font-size:13.5px; text-align:left; cursor:pointer"><span>{{ p.l }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#73626A">{{ p.n }}</span></button></sc-for>
+        <button onClick="{{ newProj }}" style="margin-top:6px; padding:8px 10px; border:1px dashed #3A2C33; border-radius:7px; background:transparent; color:#B09CA1; font:inherit; font-size:13px; text-align:left; cursor:pointer">+ New project</button>
+      </div>
+      <div style="display:flex; flex-direction:column; min-width:0">
+        <div style="flex:1; padding:14px; overflow:auto; max-height:470px; display:flex; flex-direction:column; gap:18px">
+          <sc-for list="{{ gens }}" as="g" hint-placeholder-count="2"><div style="display:flex; flex-direction:column; gap:8px"><div style="display:flex; flex-wrap:wrap; gap:6px 10px; align-items:baseline"><span style="font-size:14px; color:#F5EAEC">{{ g.p }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#73626A">{{ g.meta }}</span></div><div style="display:grid; grid-template-columns:{{ g.cols }}; gap:8px"><sc-for list="{{ g.tiles }}" as="t"><button onClick="{{ t.on }}" style="position:relative; aspect-ratio:{{ g.ar }}; border:none; border-radius:8px; background:{{ t.bg }}; box-shadow:{{ t.sh }}; cursor:pointer; overflow:hidden; opacity:{{ t.op }}; filter:{{ t.f }}; transition:opacity .6s, filter .9s"><span style="position:absolute; right:6px; top:6px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#FFFFFF; background:rgba(0,0,0,.4); padding:2px 5px; border-radius:3px; display:{{ t.kD }}">★</span></button></sc-for></div></div></sc-for>
+          <span style="display:{{ emptyD }}; font-size:14px; color:#73626A">No generations in this project yet.</span>
+        </div>
+        <div style="padding:10px 12px; border-top:1px solid #30242A; display:flex; flex-direction:column; gap:8px">
+          <div style="display:{{ slD }}; flex-wrap:wrap; gap:6px"><sc-for list="{{ slash }}" as="s"><button onClick="{{ s.on }}" style="height:28px; padding:0 10px; border-radius:6px; border:1px solid #3A2C33; background:#241A1E; color:#F5EAEC; font:inherit; font-size:12px; cursor:pointer"><span style="font-family:'IBM Plex Mono',monospace; color:#F43F5E">{{ s.c }}</span> {{ s.d }}</button></sc-for></div>
+          <form onSubmit="{{ go }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap"><input value="{{ q }}" onChange="{{ setQ }}" placeholder="Describe an image, or type / for commands" style="flex:1 1 220px; min-width:0; height:42px; padding:0 14px; border-radius:10px; border:1px solid #3A2C33; background:#130D0F; color:#F5EAEC; font:inherit; font-size:14.5px; outline:none"><button type="button" onClick="{{ improve }}" style="height:42px; padding:0 12px; border:1px solid #3A2C33; border-radius:10px; background:transparent; color:#F5EAEC; font:inherit; font-size:13px; cursor:pointer">✦ Improve</button><button type="submit" style="height:42px; padding:0 16px; border:none; border-radius:10px; background:#F43F5E; color:#130D0F; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Generate</button></form>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#73626A">{{ status }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Generates</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Images from a prompt</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Organises</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Projects and a paginated library</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Edits</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Slash commands and a prompt editor</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Ships in</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">XENO Hub</div></div></div></section>
+<section id="product" data-screen-label="One product" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE123C">One product, any surface</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">The same Image, wherever it’s hosted.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">XENO Image renders inside any surface that satisfies its host contract. Hub ships it today. The web surface is not supported yet, on purpose: about 12,500 lines still reach the host through a compatibility seam.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-top:40px"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:8px"><span style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:600; font-size:17px">XENO Hub</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#1F6A3A">SHIPPING</span></span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">The desktop surface, with your Hub sign-in and credits</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:8px"><span style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:600; font-size:17px">xenostudio.ai</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">NOT YET</span></span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">Waits until the compatibility seam is empty</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:8px"><span style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:600; font-size:17px">Your surface</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#BE123C">CONTRACT</span></span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">@xeno-image/contract says what a host must provide</span></div></div>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE123C">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Shipping in Hub. The web comes later.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Image.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">XENO Image is part of XENO Hub. Install Hub and open Image from the launcher.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><div style="border:1px solid #1D1B18; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">In XENO Hub</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">Windows · Hub 0.11.13</div></div><a href="/product/hub" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">Get Hub</a></div><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">xenostudio.ai</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">web surface</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">not yet</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE123C">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#FDA4AF">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Image&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Shipping","#2FA36B",["Inside XENO Hub, as its own product behind a versioned contract","Projects with a paginated generation library","Slash-command editing and an LLM prompt editor"]],["Not yet","#C9962E",["The xenostudio.ai web surface, until the compatibility seam is empty"]],["By design","#8C867C",["The product never imports a host global, so any conforming surface can run it"]]];
+  FAQ = [["Where can I use XENO Image?","Inside XENO Hub today. The xenostudio.ai web surface is not supported yet."],["Are my images kept?","Yes. Every generation is saved to a persistent library, organised into projects."],["What are slash commands?","Short commands in the prompt box, such as variations, a new aspect ratio or a style, that act on your last generation."],["Is it a tool inside Hub?","It is a product in its own right: the same UI can run in any surface that provides its host contract."],["Are the images on this page real?","No. The tiles are abstract stand-ins to show the flow."]];
+
+  HUE = { poster: [340, 20], cat: [28, 45], city: [220, 260], forest: [130, 90], other: [300, 200] };
+  kind(p) { p = p.toLowerCase(); return /poster|gig|neon/.test(p) ? 'poster' : /cat|dog|fox/.test(p) ? 'cat' : /city|street|night/.test(p) ? 'city' : /forest|tree|moss/.test(p) ? 'forest' : 'other'; }
+  tile(k, i, v) { const hb = this.HUE[k], h1 = (hb[0] + i * 17 + v * 9) % 360, h2 = (hb[1] + i * 23) % 360; return 'radial-gradient(60% 50% at ' + ((30 + i * 13) % 80) + '% ' + ((35 + i * 17) % 70) + '%, hsl(' + h1 + ',80%,68%), transparent 70%), linear-gradient(' + (140 + i * 30) + 'deg, hsl(' + h2 + ',55%,22%), hsl(' + h1 + ',60%,38%))'; }
+  setGens(fn) { this.setState(s => { const g = Object.assign({}, s.gens); g[s.proj] = fn(g[s.proj] || []); return { gens: g }; }); }
+  gen(prompt, o) { const id = Date.now(), k = this.kind(prompt), n = o.n || 4, g = { id, p: prompt, k, n, ar: o.ar || '1 / 1', v: o.v || 0, ready: false, star: -1 };
+    this.setGens(list => [g].concat(list)); this.setState({ status: 'generating ' + n + ' images…' });
+    clearTimeout(this._g); this._g = setTimeout(() => { this.setGens(list => list.map(x => x.id === id ? Object.assign({}, x, { ready: true }) : x)); this.setState(s => ({ status: 'saved to the library · ' + s.proj })); }, 1300); }
+  go = e => { e.preventDefault(); const S = this.state, q = (S.q || '').trim(); if (!q) return; const last = (S.gens[S.proj] || [])[0];
+    if (q.charAt(0) === '/') { const parts = q.split(/\s+/), c = parts[0], arg = parts.slice(1).join(' '); this.setState({ q: '' }); if (!last) { this.setState({ status: 'generate something first' }); return; }
+      if (c === '/variations') this.gen(last.p, { ar: last.ar, v: (last.v || 0) + 1, n: 4 });
+      else if (c === '/aspect') this.gen(last.p, { ar: arg === '16:9' ? '16 / 9' : arg === '9:16' ? '9 / 16' : arg === '4:5' ? '4 / 5' : '1 / 1', n: 2 });
+      else if (c === '/style') this.gen(last.p + ', ' + (arg || 'risograph'), { ar: last.ar, v: 3, n: 4 });
+      else if (c === '/upscale') this.setState({ status: 'upscaled the starred image 4× · saved as a new version' });
+      else this.setState({ status: 'unknown command ' + c });
+      return; }
+    this.gen(q, {}); this.setState({ q: '' }); };
+  mountX() { this.setState({ proj: 'Gig posters', projs: ['Gig posters', 'Moodboards', 'Client · Kiln & Co'], gens: { 'Gig posters': [{ id: 1, p: 'Neon gig poster for a Saturday show, bold type, halftone', k: 'poster', n: 4, ar: '4 / 5', v: 0, ready: true, star: 2 }], 'Moodboards': [{ id: 2, p: 'Mossy forest path at dawn, film grain', k: 'forest', n: 4, ar: '16 / 9', v: 0, ready: true, star: -1 }], 'Client · Kiln & Co': [] }, q: '', status: 'library · 3 projects · synced' }); }
+  unmountX() { clearTimeout(this._g); }
+  valsX(S, wide) { const all = S.gens || {}, gens = all[S.proj] || [], q = S.q || '';
+    const colsFor = g => g.n <= 2 ? 'repeat(2, minmax(0,1fr))' : g.ar === '16 / 9' ? 'repeat(2, minmax(0,1fr))' : (S.vw >= 700 ? 'repeat(4, minmax(0,1fr))' : 'repeat(2, minmax(0,1fr))');
+    return { iCols: S.vw >= 860 ? '220px minmax(0,1fr)' : 'minmax(0,1fr)', sideD: S.vw >= 860 ? 'flex' : 'none', emptyD: gens.length ? 'none' : 'block',
+      projs: (S.projs || []).map(p => ({ l: p, n: (all[p] || []).reduce((a, g) => a + g.n, 0), on: () => this.setState({ proj: p }), bg: p === S.proj ? '#30242A' : 'transparent', fg: p === S.proj ? '#FFFFFF' : '#B09CA1' })),
+      newProj: () => { const nm = 'Untitled ' + ((S.projs || []).length - 2), g = Object.assign({}, all); g[nm] = []; this.setState({ projs: (S.projs || []).concat([nm]), proj: nm, gens: g }); },
+      gens: gens.map(g => ({ p: g.p, meta: g.ar.replace(/ /g, '') + ' · ' + g.n + ' images' + (g.v ? ' · variation ' + g.v : ''), ar: g.ar, cols: colsFor(g),
+        tiles: Array.from({ length: g.n }, (_, i) => ({ bg: this.tile(g.k, i, g.v), op: g.ready ? 1 : 0.35, f: g.ready ? 'blur(0px)' : 'blur(14px)', sh: g.star === i ? '0 0 0 2px #F43F5E' : 'none', kD: g.star === i ? 'block' : 'none', on: () => this.setGens(list => list.map(x => x.id === g.id ? Object.assign({}, x, { star: i }) : x)) })) })),
+      slD: q.charAt(0) === '/' ? 'flex' : 'none', slash: [['/variations', 'of the last prompt'], ['/aspect', '16:9 · 9:16 · 4:5'], ['/style', 'risograph, watercolour…'], ['/upscale', 'the starred image']].map(s => ({ c: s[0], d: s[1], on: () => this.setState({ q: s[0] + ' ' }) })),
+      q, setQ: e => this.setState({ q: e.target.value }), go: this.go, improve: () => { const b = q.trim() || 'a cat on a windowsill'; if (b.charAt(0) === '/') return; this.setState({ q: b.replace(/\.$/, '') + ', soft morning light, shallow depth of field, 35 mm, muted palette', status: 'prompt rewritten by the prompt editor' }); }, status: (S.status || '') + ' · tiles are illustrative' };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Image').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#BE123C' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>

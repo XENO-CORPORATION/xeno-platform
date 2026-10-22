@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Canvas — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Instrument+Serif:ital@0;1&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#0B7F89}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh">
+
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#download" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+<section data-screen-label="Hero" ref="{{ pinWrap }}" style="position:relative; height:calc(210vh - 60px)">
+  <div ref="{{ pinInner }}" style="position:sticky; top:60px; height:calc(100vh - 60px); overflow:hidden">
+  <div ref="{{ heroTextEl }}" style="position:relative; z-index:1; padding:clamp(40px, 11vh, 104px) 24px 0">
+  <div ref="{{ edBox }}" style="max-width:1280px; margin:0 auto">
+    <div ref="{{ heroRow }}" style="position:relative; display:flex; flex-wrap:wrap; gap:40px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="position:absolute; left:{{ mBox.x }}; top:{{ mBox.y }}; width:{{ mBox.w }}; height:{{ mBox.h }}; border:2px solid #D6409F; pointer-events:none; opacity:{{ mSelOp }}; transition:opacity .25s; z-index:2">
+        <span style="position:absolute; left:-2px; top:-21px; background:#D6409F; color:#FFFFFF; font-size:11px; font-weight:600; padding:3px 7px; border-radius:3px 3px 0 0; line-height:1">Mara</span>
+      </div>
+      <div style="position:absolute; left:{{ mPanel.x }}; top:{{ mPanel.y }}; width:272px; background:#FFFFFF; border-radius:10px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 18px 40px -12px rgba(29,27,24,.22); font-size:12px; color:#1D1B18; opacity:{{ mPanelOp }}; transform:{{ mPanelT }}; transition:opacity .3s, transform .3s; pointer-events:none; z-index:4; display:{{ inspD }}">
+        <div style="height:36px; display:flex; gap:14px; align-items:center; padding:0 14px; border-bottom:1px solid #EEEAE4; font-weight:600">
+          <span style="box-shadow:inset 0 -2px 0 #1D1B18; height:36px; display:flex; align-items:center">Design</span>
+          <span style="color:#8C867C">Prototype</span>
+          <span style="color:#8C867C">Inspect</span>
+          <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:#B02E82"><span style="width:7px; height:7px; border-radius:50%; background:#D6409F"></span>Mara</span>
+        </div>
+        <div style="padding:12px 14px 14px; display:flex; flex-direction:column; gap:10px">
+          <div style="display:flex; justify-content:space-between; align-items:center"><span style="font-weight:600; font-size:13px">Design it.</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; background:#F4F2EE; color:#5F5A52; padding:2px 6px; border-radius:4px">Text</span></div>
+          <div ref="{{ mFontRow }}" style="height:28px; display:flex; align-items:center; justify-content:space-between; padding:0 8px; background:#F4F2EE; border-radius:5px; box-shadow:{{ mFontRing }}; transition:box-shadow .2s"><span>{{ mFontName }}</span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="#8C867C" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
+            <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px"><span style="color:#8C867C">Size</span><span style="font-family:'IBM Plex Mono',monospace">120</span></div>
+            <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px"><span style="color:#8C867C">Weight</span><span style="font-family:'IBM Plex Mono',monospace">{{ mWeight }}</span></div>
+          </div>
+          <div ref="{{ mFillRow }}" style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px; box-shadow:{{ mFillRing }}; transition:box-shadow .2s"><span style="width:14px; height:14px; border-radius:3px; background:{{ designColor }}; transition:background .4s"></span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px">{{ mToken }}</span></div>
+        </div>
+        <div style="position:absolute; left:14px; top:108px; width:244px; background:#FFFFFF; border-radius:8px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 12px 28px -8px rgba(29,27,24,.25); padding:4px; opacity:{{ fontPopOp }}; transform:{{ fontPopT }}; transition:opacity .18s, transform .18s">
+          <sc-for list="{{ mFontOpts }}" as="f" hint-placeholder-count="3">
+            <div ref="{{ f.ref }}" style="height:32px; display:flex; align-items:center; justify-content:space-between; padding:0 10px; border-radius:5px; background:{{ f.bg }}; font-family:{{ f.family }}; font-style:{{ f.style }}; font-size:14px">{{ f.name }}<span style="font-family:'IBM Plex Mono',monospace; font-style:normal; font-size:11px; color:#0B7F89">{{ f.check }}</span></div>
+          </sc-for>
+        </div>
+        <div style="position:absolute; left:14px; top:186px; width:244px; background:#FFFFFF; border-radius:8px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 12px 28px -8px rgba(29,27,24,.25); padding:10px; display:flex; flex-direction:column; gap:10px; opacity:{{ fillPopOp }}; transform:{{ fillPopT }}; transition:opacity .18s, transform .18s">
+          <div style="position:relative; height:104px; border-radius:5px; background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #FFFFFF, {{ pick.hueC }}); transition:background .3s">
+            <span style="position:absolute; left:{{ pick.sx }}; top:{{ pick.vy }}; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; border:2px solid #FFFFFF; box-shadow:0 0 0 1px rgba(0,0,0,.3); transition:left .3s, top .3s"></span>
+          </div>
+          <div style="position:relative; height:10px; border-radius:5px; background:linear-gradient(to right, #F00, #FF0, #0F0, #0FF, #00F, #F0F, #F00)">
+            <span style="position:absolute; left:{{ pick.hx }}; top:-2px; width:6px; height:14px; margin-left:-3px; border-radius:3px; background:#FFFFFF; box-shadow:0 0 0 1px rgba(0,0,0,.3); transition:left .3s"></span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center">
+            <sc-for list="{{ mSwatches }}" as="w" hint-placeholder-count="4">
+              <span ref="{{ w.ref }}" style="width:24px; height:24px; border-radius:50%; background:{{ w.c }}; box-shadow:{{ w.ring }}; transition:box-shadow .2s"></span>
+            </sc-for>
+            <span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#5F5A52">{{ mHex }}</span>
+          </div>
+        </div>
+      </div>
+      <div ref="{{ marCur }}" style="position:absolute; left:0; top:0; pointer-events:none; z-index:30; display:{{ inspD }}; will-change:transform; filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">
+        <svg width="22" height="24" viewBox="0 0 16 18"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#D6409F" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+        <span style="position:absolute; left:16px; top:16px; background:#D6409F; color:#FFFFFF; font-size:11px; font-weight:600; padding:2px 6px; border-radius:3px; white-space:nowrap">Mara</span>
+      </div>
+      <svg style="position:absolute; left:0; top:0; width:100%; height:100%; overflow:visible; pointer-events:none; display:{{ inspD }}"><path d="{{ heroPath }}" fill="none" stroke="#0B8F9A" stroke-width="2"></path><circle cx="{{ heroEx }}" cy="{{ heroEy }}" r="4.5" fill="#0B8F9A"></circle><circle cx="{{ heroSx }}" cy="{{ heroSy }}" r="3.5" fill="#FFFFFF" stroke="#0B8F9A" stroke-width="2"></circle></svg>
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:24px; position:relative; z-index:1">
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0B7F89">Figma alternative</div>
+      <h1 style="margin:0; display:flex; flex-direction:column; align-items:flex-start; gap:.04em; font-size:clamp(52px,8.4vw,120px); line-height:.94; letter-spacing:-.05em; font-weight:700">
+        <span ref="{{ designRef }}" style="font-family:{{ dFamily }}; font-style:{{ dStyle }}; font-weight:{{ dWeight }}; letter-spacing:{{ dLs }}; color:{{ designColor }}; transition:color .5s">Design it.</span>
+        <span style="position:relative; min-height:.94em; min-width:1.2em; font-family:{{ pFamily }}; font-style:{{ pStyle }}; font-weight:{{ pWeight }}; letter-spacing:{{ pLs }}; font-size:{{ pSizeCss }}; color:{{ pColor }}; transition:color .3s, font-size .25s"><span ref="{{ pEditRef }}" contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}" spellCheck="false" onInput="{{ pInput }}" onBlur="{{ pCommit }}" onKeyDown="{{ pKey }}" style="display:{{ pEditD }}; min-width:.6em; min-height:.94em; outline:none; cursor:text; white-space:nowrap; caret-color:#0B8F9A">Prototype it.</span><span onClick="{{ pStartEdit }}" title="Click to rewrite" style="display:{{ pShowD }}; cursor:text; white-space:nowrap"><sc-for list="{{ pWords }}" as="w" hint-placeholder-count="1"><span style="filter:{{ w.f }}; user-select:{{ w.us }}; white-space:pre; transition:filter .2s">{{ w.t }}</span></sc-for></span><span style="position:absolute; inset:.06em -.12em -.02em -.1em; border:2px solid #0B8F9A; pointer-events:none"><span style="position:absolute; left:-5px; top:-5px; width:9px; height:9px; background:#FFFFFF; border:2px solid #0B8F9A"></span><span style="position:absolute; right:-5px; top:-5px; width:9px; height:9px; background:#FFFFFF; border:2px solid #0B8F9A"></span><span style="position:absolute; left:-5px; bottom:-5px; width:9px; height:9px; background:#FFFFFF; border:2px solid #0B8F9A"></span><span style="position:absolute; right:-5px; bottom:-5px; width:9px; height:9px; background:#FFFFFF; border:2px solid #0B8F9A"></span><span ref="{{ chipRef }}" style="position:absolute; left:100%; margin-left:14px; top:50%; transform:translateY(-50%); background:{{ pChipBg }}; color:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0; line-height:1; padding:5px 7px; border-radius:3px; white-space:nowrap">{{ pChip }}</span></span></span>
+        <span>Hand it off.</span>
+      </h1>
+      </div>
+      <div style="flex:0 1 380px; align-self:stretch; display:flex; flex-direction:column; justify-content:space-between; gap:40px">
+      <div ref="{{ inspRef }}" style="display:{{ inspD }}; position:relative; z-index:5; transform:{{ insT }}; align-self:flex-end; width:272px; background:#FFFFFF; border-radius:10px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 18px 40px -12px rgba(29,27,24,.22); font-size:12px; color:#1D1B18">
+        <div onPointerDown="{{ insDown }}" onDoubleClick="{{ insReset }}" title="Drag to move · double-click to reset" style="height:36px; display:flex; gap:14px; align-items:center; padding:0 14px; border-bottom:1px solid #EEEAE4; font-weight:600; cursor:{{ insCursor }}; touch-action:none; user-select:none">
+          <span style="box-shadow:inset 0 -2px 0 #1D1B18; height:36px; display:flex; align-items:center">Design</span>
+          <span style="color:#8C867C">Prototype</span>
+          <span style="color:#8C867C">Inspect</span>
+          <span style="margin-left:auto; display:flex; gap:2px; opacity:.55"><span style="width:3px; height:3px; border-radius:50%; background:#1D1B18"></span><span style="width:3px; height:3px; border-radius:50%; background:#1D1B18"></span><span style="width:3px; height:3px; border-radius:50%; background:#1D1B18"></span></span>
+        </div>
+        <div style="padding:12px 14px 14px; display:flex; flex-direction:column; gap:10px">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px"><span style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ pName }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; background:#F4F2EE; color:#5F5A52; padding:2px 6px; border-radius:4px">Text</span></div>
+          <div style="font-size:11.5px; line-height:1.4; color:{{ pNoteC }}; margin-top:-4px">{{ pNote }}</div>
+          <div style="position:relative">
+            <button onClick="{{ pToggleFont }}" style="width:100%; height:28px; display:flex; align-items:center; justify-content:space-between; padding:0 8px; border:none; background:#F4F2EE; border-radius:5px; font:inherit; color:#1D1B18; cursor:pointer; box-shadow:{{ pFontRing }}" style-hover="background:#ECE9E3">{{ pFontName }}<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="#8C867C" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+            <sc-if value="{{ pFontOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; left:0; right:0; top:32px; z-index:6; background:#FFFFFF; border-radius:8px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 12px 28px -8px rgba(29,27,24,.25); padding:4px">
+                <sc-for list="{{ pFontOpts }}" as="f" hint-placeholder-count="3">
+                  <button onClick="{{ f.on }}" style="width:100%; height:32px; display:flex; align-items:center; justify-content:space-between; padding:0 10px; border:none; border-radius:5px; background:{{ f.bg }}; font-family:{{ f.family }}; font-style:{{ f.style }}; font-size:14px; color:#1D1B18; cursor:pointer" style-hover="background:#F4F2EE">{{ f.name }}<span style="font-family:'IBM Plex Mono',monospace; font-style:normal; font-size:11px; color:#0B7F89">{{ f.check }}</span></button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
+            <div style="height:28px; display:flex; align-items:center; gap:4px; padding:0 4px 0 8px; background:#F4F2EE; border-radius:5px">
+              <span style="color:#8C867C">Size</span>
+              <span style="flex:1; font-family:'IBM Plex Mono',monospace; padding-left:4px">{{ pSize }}</span>
+              <button onClick="{{ pSizeDown }}" style="width:20px; height:20px; border:none; border-radius:4px; background:transparent; font:inherit; font-size:13px; color:#1D1B18; cursor:pointer; padding:0" style-hover="background:#FFFFFF">−</button>
+              <button onClick="{{ pSizeUp }}" style="width:20px; height:20px; border:none; border-radius:4px; background:transparent; font:inherit; font-size:13px; color:#1D1B18; cursor:pointer; padding:0" style-hover="background:#FFFFFF">+</button>
+            </div>
+            <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px"><span style="color:#8C867C">Weight</span><span style="font-family:'IBM Plex Mono',monospace">{{ pWeight }}</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <div style="display:flex; justify-content:space-between; align-items:center"><span style="font-size:11px; font-weight:600; color:#8C867C">Fill</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px">{{ pToken }}</span></div>
+            <div style="display:flex; gap:8px">
+              <sc-for list="{{ pSwatches }}" as="w" hint-placeholder-count="4">
+                <button onClick="{{ w.on }}" title="{{ w.token }}" style="width:24px; height:24px; border:none; border-radius:50%; padding:0; background:{{ w.c }}; box-shadow:{{ w.ring }}; cursor:pointer"></button>
+              </sc-for>
+            </div>
+          </div>
+          <a href="#demo" onClick="{{ goDemo }}" style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid #EEEAE4; color:#5F5A52">On click<span style="font-weight:600; color:#0B7F89">→ Try the demo</span></a>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:18px; padding-bottom:10px">
+        <p style="margin:0; font-size:18px; line-height:1.5; color:#5F5A52; text-wrap:pretty">The design app for teams leaving Figma. It opens your .fig files too.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <a href="/product/canvas/download/win" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:12px 18px; border-radius:7px">Download for Windows</a>
+          <a href="#demo" onClick="{{ goDemo }}" style="border:1px solid #D6D0C7; font-size:15px; font-weight:500; padding:11px 17px; border-radius:7px">Try the demo ↓</a>
+        </div>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">v0.41.3 · Windows x64 · Free beta</span>
+      </div>
+      </div>
+    </div>
+
+  </div>
+  </div>
+  <div ref="{{ ovEl }}" style="position:absolute; inset:0; z-index:2; background:rgba(246,244,240,.5); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); opacity:0; pointer-events:none"></div>
+      <div id="demo" ref="{{ edEl }}" style="position:absolute; left:0; top:0; z-index:3; width:1280px; height:680px; transform-origin:640px 0; opacity:0; background:#FFFFFF; border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 2px 4px rgba(29,27,24,.05), 0 40px 80px -20px rgba(29,27,24,.22); display:flex; flex-direction:column; font-size:12px; color:#1D1B18">
+
+        <div style="height:44px; flex:none; display:flex; align-items:center; border-bottom:1px solid #E8E4DD; padding:0 10px 0 14px; gap:10px">
+          <div style="width:226px; display:flex; align-items:center; gap:9px; flex:none">
+            <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:16px; height:16px; display:block">
+            <span style="color:#8C867C">Tidepool /</span>
+            <span style="font-weight:600">Sign up flow</span>
+          </div>
+          <div style="flex:1; display:flex; justify-content:center; gap:2px">
+            <sc-for list="{{ tools }}" as="t" hint-placeholder-count="7">
+              <button onClick="{{ t.on }}" title="{{ t.title }}" style="width:32px; height:32px; border:none; border-radius:6px; background:{{ t.bg }}; color:{{ t.fg }}; display:grid; place-items:center; cursor:pointer; padding:0">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="{{ t.d }}"></path></svg>
+              </button>
+            </sc-for>
+          </div>
+          <div style="width:268px; display:flex; align-items:center; justify-content:flex-end; gap:10px; flex:none">
+            <div style="display:flex">
+              <span style="width:24px; height:24px; border-radius:50%; background:#D6409F; color:#FFFFFF; font-size:11px; font-weight:600; display:grid; place-items:center; border:2px solid #FFFFFF">M</span>
+              <span style="width:24px; height:24px; border-radius:50%; background:#6B5BD6; color:#FFFFFF; font-size:11px; font-weight:600; display:grid; place-items:center; border:2px solid #FFFFFF; margin-left:-6px">J</span>
+              <span style="width:24px; height:24px; border-radius:50%; background:#B7791F; color:#FFFFFF; font-size:9.5px; font-weight:600; display:grid; place-items:center; border:2px solid #FFFFFF; margin-left:-6px">AI</span>
+            </div>
+            <button onClick="{{ togglePresent }}" style="height:28px; padding:0 12px; border:none; border-radius:6px; background:{{ presBtnBg }}; color:{{ presBtnFg }}; font:inherit; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px">
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 1l7 4-7 4z" fill="currentColor"></path></svg>{{ presLabel }}
+            </button>
+          </div>
+        </div>
+
+        <div style="flex:1; display:flex; min-height:0">
+          <div style="width:{{ sideW }}; flex:none; overflow:hidden; border-right:1px solid #E8E4DD; transition:width .45s cubic-bezier(.2,.7,.2,1)">
+            <div style="width:240px; padding:12px 0">
+              <div style="padding:0 16px 6px; font-size:11px; font-weight:600; color:#8C867C">Pages</div>
+              <div style="height:28px; display:flex; align-items:center; margin:0 8px; padding:0 8px; border-radius:5px; background:#F2EFEA; font-weight:500">Sign up</div>
+              <div style="height:28px; display:flex; align-items:center; margin:0 8px; padding:0 8px; color:#5F5A52">Components</div>
+              <div style="height:28px; display:flex; align-items:center; margin:0 8px; padding:0 8px; color:#5F5A52">Archive</div>
+              <div style="height:1px; background:#EEEAE4; margin:10px 0 12px"></div>
+              <div style="padding:0 16px 6px; font-size:11px; font-weight:600; color:#8C867C">Layers</div>
+              <sc-for list="{{ layers }}" as="l" hint-placeholder-count="8">
+                <div onClick="{{ l.on }}" style="height:28px; display:flex; align-items:center; gap:8px; margin:0 8px; padding-left:{{ l.indent }}; border-radius:5px; background:{{ l.bg }}; cursor:pointer">
+                  <span style="width:14px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:{{ l.ic }}">{{ l.glyph }}</span>
+                  <span style="color:{{ l.fg }}; white-space:nowrap">{{ l.name }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div onClick="{{ canvasClick }}" style="flex:1; position:relative; overflow:hidden; background-color:{{ canvasBg }}; background-image:radial-gradient({{ dotC }} 1px, transparent 1px); background-size:20px 20px; transition:background-color .45s">
+            <div ref="{{ world }}" style="position:absolute; left:0; top:0; width:760px; height:636px; transform:{{ worldT }}; transition:transform .7s cubic-bezier(.2,.7,.2,1)">
+              <div onClick="{{ pk.frame }}" style="position:absolute; left:50px; top:26px; font-size:11px; color:{{ lblFrame }}; cursor:default; opacity:{{ chromeOp }}">Sign up — Mobile</div>
+              <div onClick="{{ pk.welcome }}" style="position:absolute; left:410px; top:26px; font-size:11px; color:{{ lblWelcome }}; cursor:default; opacity:{{ chromeOp }}">Welcome</div>
+
+              <div data-sel="frame" onClick="{{ pk.frame }}" style="position:absolute; left:50px; top:48px; width:300px; height:540px; background:{{ tk.bg }}; box-shadow:0 1px 3px rgba(0,0,0,.08); display:flex; flex-direction:column; padding:26px 22px 20px; opacity:{{ opSignup }}; transition:background .45s, opacity .5s">
+                <div style="display:flex; align-items:center; gap:8px">
+                  <span style="width:18px; height:18px; border-radius:5px; background:{{ tk.primary }}"></span>
+                  <span style="font-weight:700; font-size:14px; color:{{ tk.text }}; letter-spacing:-.01em">Tidepool</span>
+                </div>
+                <div data-sel="card" onClick="{{ pk.card }}" style="margin-top:26px; display:flex; flex-direction:column; gap:{{ gapPx }}; padding:{{ padPx }}; background:{{ tk.surface }}; border-radius:12px; transition:background .45s">
+                  <div data-sel="headline" onClick="{{ pk.headline }}" style="font-size:24px; line-height:30px; font-weight:700; letter-spacing:-.02em; color:{{ tk.text }}">Create your account</div>
+                  <div data-sel="subhead" onClick="{{ pk.subhead }}" style="font-size:13.5px; line-height:20px; color:{{ tk.muted }}; margin-top:-6px">Start a 14-day trial. No card needed.</div>
+                  <div data-sel="email" onClick="{{ pk.email }}" style="display:flex; flex-direction:column; gap:6px">
+                    <span style="font-size:11.5px; font-weight:600; color:{{ tk.text }}">Email</span>
+                    <span style="height:38px; display:flex; align-items:center; padding:0 12px; border-radius:8px; background:{{ tk.field }}; border:1px solid {{ tk.border }}; font-size:13px; color:{{ tk.text }}">mara@studio.co</span>
+                  </div>
+                  <div data-sel="password" onClick="{{ pk.password }}" style="display:flex; flex-direction:column; gap:6px">
+                    <span style="font-size:11.5px; font-weight:600; color:{{ tk.text }}">Password</span>
+                    <span style="height:38px; display:flex; align-items:center; padding:0 12px; border-radius:8px; background:{{ tk.field }}; border:1px solid {{ tk.border }}; font-size:13px; letter-spacing:.12em; color:{{ tk.text }}">••••••••••</span>
+                  </div>
+                  <div data-sel="button" onClick="{{ pk.button }}" style="height:40px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:{{ btn.bg }}; color:{{ btn.fg }}; border:1px solid {{ btn.border }}; font-size:14px; font-weight:600; cursor:{{ btnCursor }}; transition:background .3s, color .3s">Create account</div>
+                </div>
+                <div style="margin-top:auto; text-align:center; font-size:12px; color:{{ tk.muted }}">Already have an account? <span style="color:{{ tk.text }}; font-weight:600">Sign in</span></div>
+              </div>
+
+              <div data-sel="welcome" onClick="{{ pk.welcome }}" style="position:absolute; left:410px; top:48px; width:300px; height:540px; background:{{ tk.bg }}; box-shadow:0 1px 3px rgba(0,0,0,.08); display:flex; flex-direction:column; padding:26px 22px 20px; opacity:{{ opWelcome }}; transition:background .45s, opacity .5s">
+                <div style="display:flex; align-items:center; justify-content:space-between">
+                  <div style="display:flex; align-items:center; gap:8px">
+                    <span style="width:18px; height:18px; border-radius:5px; background:{{ tk.primary }}"></span>
+                    <span style="font-weight:700; font-size:14px; color:{{ tk.text }}">Tidepool</span>
+                  </div>
+                  <span onClick="{{ presentBack }}" style="font-size:12px; color:{{ tk.muted }}; cursor:{{ backCursor }}">← Back</span>
+                </div>
+                <div style="margin-top:40px; font-size:24px; line-height:30px; font-weight:700; letter-spacing:-.02em; color:{{ tk.text }}">Welcome, Mara</div>
+                <div style="margin-top:6px; font-size:13.5px; line-height:20px; color:{{ tk.muted }}">Three things to set up first.</div>
+                <div style="margin-top:22px; display:flex; flex-direction:column; gap:8px">
+                  <div style="height:48px; display:flex; align-items:center; gap:12px; padding:0 14px; border-radius:10px; background:{{ tk.surface }}; color:{{ tk.text }}; font-size:13.5px; font-weight:500"><span style="width:18px; height:18px; border-radius:50%; background:{{ tk.primary }}"></span>Invite your team</div>
+                  <div style="height:48px; display:flex; align-items:center; gap:12px; padding:0 14px; border-radius:10px; background:{{ tk.surface }}; color:{{ tk.text }}; font-size:13.5px; font-weight:500"><span style="width:18px; height:18px; border-radius:50%; border:1.5px solid {{ tk.border }}"></span>Connect a data source</div>
+                  <div style="height:48px; display:flex; align-items:center; gap:12px; padding:0 14px; border-radius:10px; background:{{ tk.surface }}; color:{{ tk.text }}; font-size:13.5px; font-weight:500"><span style="width:18px; height:18px; border-radius:50%; border:1.5px solid {{ tk.border }}"></span>Pick a template</div>
+                </div>
+                <div style="margin-top:auto; height:40px; display:flex; align-items:center; justify-content:center; border-radius:8px; background:{{ tk.primary }}; color:{{ tk.primaryFg }}; font-size:14px; font-weight:600">Go to dashboard</div>
+              </div>
+
+              <div style="position:absolute; left:407px; top:45px; width:306px; height:546px; border:1.5px solid #6B5BD6; pointer-events:none; opacity:{{ junSelOp }}; transition:opacity .3s">
+                <span style="position:absolute; right:-1.5px; top:-19px; background:#6B5BD6; color:#FFFFFF; font-size:10.5px; font-weight:600; padding:2px 6px; border-radius:3px 3px 0 0">Jun</span>
+              </div>
+
+              <svg width="760" height="636" style="position:absolute; left:0; top:0; overflow:visible; pointer-events:none; opacity:{{ noodleOp }}; transition:opacity .3s">
+                <path d="{{ noodle }}" fill="none" stroke="#0B8F9A" stroke-width="2"></path>
+                <circle cx="{{ noodleX }}" cy="{{ noodleY }}" r="4" fill="#0B8F9A"></circle>
+              </svg>
+
+              <div style="position:absolute; left:{{ box.x }}; top:{{ box.y }}; width:{{ box.w }}; height:{{ box.h }}; border:1.5px solid #0B8F9A; pointer-events:none; opacity:{{ selOp }}">
+                <span style="position:absolute; left:-4.5px; top:-4.5px; width:7px; height:7px; background:#FFFFFF; border:1.5px solid #0B8F9A"></span>
+                <span style="position:absolute; right:-4.5px; top:-4.5px; width:7px; height:7px; background:#FFFFFF; border:1.5px solid #0B8F9A"></span>
+                <span style="position:absolute; left:-4.5px; bottom:-4.5px; width:7px; height:7px; background:#FFFFFF; border:1.5px solid #0B8F9A"></span>
+                <span style="position:absolute; right:-4.5px; bottom:-4.5px; width:7px; height:7px; background:#FFFFFF; border:1.5px solid #0B8F9A"></span>
+                <span style="position:absolute; left:50%; bottom:-24px; transform:translateX(-50%); background:#0B8F9A; color:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:2px 6px; border-radius:3px; white-space:nowrap">{{ box.label }}</span>
+              </div>
+
+              <sc-if value="{{ showPin }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute; left:{{ pin.x }}; top:{{ pin.y }}; display:flex; gap:8px; align-items:flex-start; z-index:3" onClick="{{ stop }}">
+                  <span style="width:26px; height:26px; flex:none; border-radius:13px 13px 13px 3px; background:#B7791F; color:#FFFFFF; font-size:10px; font-weight:700; display:grid; place-items:center">AI</span>
+                  <div style="width:220px; background:#FFFFFF; border-radius:8px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 10px 24px rgba(29,27,24,.16); padding:11px 12px">
+                    <div style="font-size:11px; font-weight:600; color:#8C867C">XENO Agent · design audit</div>
+                    <div style="margin-top:5px; font-size:12.5px; line-height:1.45; color:#1D1B18">Subhead contrast is {{ pin.ratio }} against its background. Body text needs 4.5:1.</div>
+                    <div style="display:flex; gap:6px; margin-top:10px">
+                      <button onClick="{{ fixContrast }}" style="height:26px; padding:0 10px; border:none; border-radius:5px; background:#1D1B18; color:#FFFFFF; font:inherit; font-size:12px; font-weight:600; cursor:pointer">Apply fix</button>
+                      <button onClick="{{ dismissPin }}" style="height:26px; padding:0 10px; border:1px solid #DDD8D0; border-radius:5px; background:#FFFFFF; color:#1D1B18; font:inherit; font-size:12px; cursor:pointer">Dismiss</button>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div ref="{{ curMara }}" style="position:absolute; left:0; top:0; pointer-events:none; opacity:{{ curOp }}; transition:opacity .3s; will-change:transform">
+                <svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#D6409F" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+                <span style="position:absolute; left:14px; top:14px; background:#D6409F; color:#FFFFFF; font-size:10.5px; font-weight:600; padding:2px 6px; border-radius:3px; white-space:nowrap">Mara</span>
+              </div>
+              <div ref="{{ curJun }}" style="position:absolute; left:0; top:0; pointer-events:none; opacity:{{ curOp }}; transition:opacity .3s; will-change:transform">
+                <svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#6B5BD6" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+                <span style="position:absolute; left:14px; top:14px; background:#6B5BD6; color:#FFFFFF; font-size:10.5px; font-weight:600; padding:2px 6px; border-radius:3px; white-space:nowrap">Jun</span>
+              </div>
+              <div ref="{{ curAgent }}" style="position:absolute; left:0; top:0; pointer-events:none; opacity:{{ agentCurOp }}; transition:opacity .3s; will-change:transform">
+                <svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#B7791F" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+                <span style="position:absolute; left:14px; top:14px; background:#B7791F; color:#FFFFFF; font-size:10.5px; font-weight:600; padding:2px 6px; border-radius:3px; white-space:nowrap">XENO Agent</span>
+              </div>
+            </div>
+
+            <div style="position:absolute; left:50%; bottom:14px; transform:translateX(-50%); background:#1D1B18; color:#EDE9E2; font-size:11.5px; padding:6px 12px; border-radius:6px; white-space:nowrap; pointer-events:none">{{ canvasHint }}</div>
+          </div>
+
+          <div style="width:{{ rightW }}; flex:none; overflow:hidden; border-left:1px solid #E8E4DD; transition:width .45s cubic-bezier(.2,.7,.2,1)">
+            <div style="width:280px; height:100%; display:flex; flex-direction:column">
+              <div style="height:40px; flex:none; display:flex; gap:4px; padding:0 10px; border-bottom:1px solid #EEEAE4">
+                <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+                  <button onClick="{{ tb.on }}" style="height:40px; padding:0 8px; border:none; background:transparent; font:inherit; font-weight:600; color:{{ tb.fg }}; box-shadow:inset 0 -2px 0 {{ tb.line }}; cursor:pointer">{{ tb.label }}</button>
+                </sc-for>
+              </div>
+              <div style="flex:1; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:16px">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px">
+                  <span style="font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ info.name }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:{{ info.typeFg }}; background:{{ info.typeBg }}; padding:2px 6px; border-radius:4px; white-space:nowrap">{{ info.type }}</span>
+                </div>
+
+                <sc-if value="{{ isDesign }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; flex-direction:column; gap:16px">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px">
+                      <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px"><span style="color:#8C867C">W</span><span style="font-family:'IBM Plex Mono',monospace">{{ box.wv }}</span></div>
+                      <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px"><span style="color:#8C867C">H</span><span style="font-family:'IBM Plex Mono',monospace">{{ box.hv }}</span></div>
+                    </div>
+
+                    <sc-if value="{{ showAuto }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex; flex-direction:column; gap:10px">
+                        <div style="font-size:11px; font-weight:600; color:#8C867C">Auto layout · vertical</div>
+                        <label style="display:flex; align-items:center; gap:10px">
+                          <span style="width:54px; color:#5F5A52">Gap</span>
+                          <input type="range" min="0" max="40" step="2" value="{{ gap }}" onChange="{{ setGap }}" style="flex:1; accent-color:#0B8F9A">
+                          <span style="width:26px; text-align:right; font-family:'IBM Plex Mono',monospace">{{ gap }}</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:10px">
+                          <span style="width:54px; color:#5F5A52">Padding</span>
+                          <input type="range" min="8" max="44" step="2" value="{{ pad }}" onChange="{{ setPad }}" style="flex:1; accent-color:#0B8F9A">
+                          <span style="width:26px; text-align:right; font-family:'IBM Plex Mono',monospace">{{ pad }}</span>
+                        </label>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ showButton }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex; flex-direction:column; gap:10px">
+                        <div style="font-size:11px; font-weight:600; color:#7A5AF8">◇ Button · instance</div>
+                        <div style="display:flex; background:#F4F2EE; border-radius:6px; padding:2px">
+                          <sc-for list="{{ variantOpts }}" as="o">
+                            <button onClick="{{ o.on }}" style="flex:1; height:26px; border:none; border-radius:5px; background:{{ o.bg }}; box-shadow:{{ o.sh }}; font:inherit; font-size:11.5px; color:#1D1B18; cursor:pointer">{{ o.label }}</button>
+                          </sc-for>
+                        </div>
+                        <span style="color:#7A5AF8; font-size:11.5px">Go to main component</span>
+                      </div>
+                    </sc-if>
+
+                    <sc-if value="{{ showText }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex; flex-direction:column; gap:8px">
+                        <div style="font-size:11px; font-weight:600; color:#8C867C">Text style</div>
+                        <div style="height:28px; display:flex; align-items:center; padding:0 8px; background:#F4F2EE; border-radius:5px; font-family:'IBM Plex Mono',monospace; font-size:11px">{{ info.textStyle }}</div>
+                      </div>
+                    </sc-if>
+
+                    <div style="display:flex; flex-direction:column; gap:8px">
+                      <div style="font-size:11px; font-weight:600; color:#8C867C">Fill</div>
+                      <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; background:#F4F2EE; border-radius:5px">
+                        <span style="width:14px; height:14px; border-radius:3px; background:{{ info.fill }}; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)"></span>
+                        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px">{{ info.token }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isProto }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; flex-direction:column; gap:10px">
+                    <sc-if value="{{ showButton }}" hint-placeholder-val="{{ false }}">
+                      <div style="border:1px solid #E8E4DD; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:8px">
+                        <div style="font-size:11px; font-weight:600; color:#8C867C">Interaction</div>
+                        <div style="display:flex; justify-content:space-between"><span style="color:#5F5A52">Trigger</span><span style="font-weight:600">On click</span></div>
+                        <div style="display:flex; justify-content:space-between"><span style="color:#5F5A52">Action</span><span style="font-weight:600">Navigate to Welcome</span></div>
+                        <div style="display:flex; justify-content:space-between"><span style="color:#5F5A52">Animation</span><span style="font-weight:600">Smart animate</span></div>
+                        <div style="display:flex; justify-content:space-between"><span style="color:#5F5A52">Timing</span><span style="font-family:'IBM Plex Mono',monospace">ease-out · 300ms</span></div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ notButton }}" hint-placeholder-val="{{ true }}">
+                      <div style="color:#5F5A52; line-height:1.5">Select <span onClick="{{ pk.button }}" style="color:#0B7F89; font-weight:600; cursor:pointer">Button / {{ variantName }}</span> to see its interaction.</div>
+                    </sc-if>
+                    <div style="display:flex; justify-content:space-between; color:#5F5A52"><span>Flow starts at</span><span style="color:#1D1B18; font-weight:600">Sign up — Mobile</span></div>
+                    <button onClick="{{ togglePresent }}" style="height:32px; border:none; border-radius:6px; background:#1D1B18; color:#FFFFFF; font:inherit; font-weight:600; cursor:pointer">Present flow</button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isInspect }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; flex-direction:column; gap:10px">
+                    <div style="display:flex; background:#F4F2EE; border-radius:6px; padding:2px">
+                      <sc-for list="{{ fmtOpts }}" as="o">
+                        <button onClick="{{ o.on }}" style="flex:1; height:26px; border:none; border-radius:5px; background:{{ o.bg }}; box-shadow:{{ o.sh }}; font:inherit; font-size:11.5px; color:#1D1B18; cursor:pointer">{{ o.label }}</button>
+                      </sc-for>
+                    </div>
+                    <pre style="margin:0; background:#1D1B18; color:#E8E4DC; border-radius:8px; padding:12px; font-family:'IBM Plex Mono',monospace; font-size:11px; line-height:1.6; white-space:pre-wrap; word-break:break-word">{{ code }}</pre>
+                    <button onClick="{{ copyCode }}" style="height:28px; border:1px solid #DDD8D0; border-radius:6px; background:#FFFFFF; font:inherit; cursor:pointer">{{ copyLabel }}</button>
+                    <div style="color:#8C867C; font-size:11px; line-height:1.5">Token-aware: colors come out as variables, so a mode switch needs no code change.</div>
+                  </div>
+                </sc-if>
+
+                <div style="margin-top:auto; padding-top:14px; border-top:1px solid #EEEAE4; display:flex; flex-direction:column; gap:8px">
+                  <div style="font-size:11px; font-weight:600; color:#8C867C">Variables · mode</div>
+                  <div style="display:flex; background:#F4F2EE; border-radius:6px; padding:2px">
+                    <sc-for list="{{ modeOpts }}" as="o">
+                      <button onClick="{{ o.on }}" style="flex:1; height:26px; border:none; border-radius:5px; background:{{ o.bg }}; box-shadow:{{ o.sh }}; font:inherit; font-size:11.5px; color:#1D1B18; cursor:pointer">{{ o.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5">
+  <div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px">
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Platforms</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Windows x64 · macOS &amp; Linux coming</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">File format</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">.xcanvas, single-file JSON</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Built on</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Electron · React 19 · @xeno/core</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Status</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Public beta · free</div></div>
+  </div>
+</section>
+
+<section id="figma" data-screen-label="From Figma" ref="{{ figRef }}" style="border-top:1px solid #E2DDD5; background:#FBFAF8">
+  <div style="max-width:1280px; margin:0 auto; padding:96px 24px 104px">
+    <div style="display:flex; flex-wrap:wrap; gap:16px 48px; align-items:flex-end; justify-content:space-between; margin-bottom:40px">
+      <h2 style="margin:0; font-size:clamp(34px,4.4vw,56px); line-height:1; letter-spacing:-.035em; font-weight:700">Coming from Figma</h2>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">Keep your files, your shortcuts and your mental model.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:16px">
+    <div style="display:flex; flex-direction:column; background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; overflow:hidden; min-width:0">
+      <div style="position:relative; height:190px; background-color:#F4F2EE; background-image:radial-gradient(#DAD5CC 1px, transparent 1px); background-size:18px 18px; border-bottom:1px solid #EEEAE4; display:flex; align-items:center; justify-content:center; padding:20px">
+        <div style="display:flex; align-items:center; gap:18px">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+            <div style="position:relative; width:64px; height:78px; background:#FFFFFF; border-radius:6px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 8px 18px -8px rgba(29,27,24,.3)">
+              <span style="position:absolute; right:0; top:0; width:16px; height:16px; background:#EEEAE4; border-radius:0 6px 0 6px"></span>
+              <span style="position:absolute; left:8px; bottom:10px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:500; padding:2px 5px; border-radius:3px; background:#1D1B18; color:#FFFFFF">.fig</span>
+            </div>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#5F5A52">Checkout.fig</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px; margin-top:-22px">
+            <svg width="54" height="14" viewBox="0 0 54 14"><path d="M1 7h48M44 2l6 5-6 5" fill="none" stroke="#0B8F9A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#0B7F89">import</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+            <div style="position:relative; width:64px; height:78px; background:#FFFFFF; border-radius:6px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 8px 18px -8px rgba(29,27,24,.3)">
+              <span style="position:absolute; right:0; top:0; width:16px; height:16px; background:#EEEAE4; border-radius:0 6px 0 6px"></span>
+              <span style="position:absolute; left:8px; bottom:10px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:500; padding:2px 5px; border-radius:3px; background:#0B8F9A; color:#FFFFFF">.xcanvas</span>
+            </div>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#5F5A52">Checkout.xcanvas</span>
+          </div>
+        </div>
+        <span style="position:absolute; left:16px; bottom:12px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C867C">also .svg</span>
+      </div>
+      <div style="padding:22px 24px 26px">
+        <div style="font-weight:600; font-size:17px">Opens .fig files</div>
+        <p style="margin:8px 0 0; font-size:15px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Bring existing files with you. Figma import shipped in 0.35.0, along with SVG import.</p>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; overflow:hidden; min-width:0">
+      <div style="position:relative; height:190px; background-color:#F4F2EE; background-image:radial-gradient(#DAD5CC 1px, transparent 1px); background-size:18px 18px; border-bottom:1px solid #EEEAE4; display:flex; align-items:center; justify-content:center; padding:20px">
+        <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:14px">
+          <div style="width:100%; display:flex; gap:6px; flex-wrap:wrap; justify-content:center">
+            <sc-for list="{{ figKeys }}" as="k" hint-placeholder-count="6">
+              <button onClick="{{ k.on }}" style="min-width:34px; height:34px; padding:0 8px; border:none; border-radius:7px; background:{{ k.bg }}; color:{{ k.fg }}; box-shadow:{{ k.sh }}; transform:{{ k.t }}; font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:500; cursor:pointer; transition:transform .12s, background .12s, box-shadow .12s">{{ k.label }}</button>
+            </sc-for>
+          </div>
+          <div style="height:26px; display:flex; align-items:center; gap:8px; padding:0 10px; border-radius:6px; background:#1D1B18; color:#EDE9E2; font-size:12px">
+            <span style="font-family:'IBM Plex Mono',monospace; color:#7FD3DA">{{ figKeyName }}</span><span style="color:#8C867C">same in Figma</span>
+          </div>
+        </div>
+        <span style="position:absolute; left:16px; bottom:12px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C867C">press a key</span>
+      </div>
+      <div style="padding:22px 24px 26px">
+        <div style="font-weight:600; font-size:17px">Same shortcuts</div>
+        <p style="margin:8px 0 0; font-size:15px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Keyboard defaults match Figma, so V, F, R, T and Shift+A do what your hands expect. A command palette covers the rest.</p>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; overflow:hidden; min-width:0">
+      <div style="position:relative; height:190px; background-color:#F4F2EE; background-image:radial-gradient(#DAD5CC 1px, transparent 1px); background-size:18px 18px; border-bottom:1px solid #EEEAE4; display:flex; align-items:center; justify-content:center; padding:20px">
+        <div style="width:100%; max-width:240px; background:#FFFFFF; border-radius:8px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 10px 24px -12px rgba(29,27,24,.25); padding:8px">
+          <div style="height:28px; display:flex; align-items:center; gap:8px; padding-left:6px; padding-right:10px; border-radius:5px; "><span style="width:14px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">#</span><span style="font-size:12.5px; color:#1D1B18; white-space:nowrap">Checkout — Desktop</span></div>
+          <div style="height:28px; display:flex; align-items:center; gap:8px; padding-left:20px; padding-right:10px; border-radius:5px; background:rgba(11,143,154,.1)"><span style="width:14px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">⇕</span><span style="font-size:12.5px; color:#1D1B18; white-space:nowrap">Summary · auto layout</span></div>
+          <div style="height:28px; display:flex; align-items:center; gap:8px; padding-left:34px; padding-right:10px; border-radius:5px; "><span style="width:14px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7A5AF8">❖</span><span style="font-size:12.5px; color:#5B3FD6; white-space:nowrap">Button · 3 variants</span></div>
+          <div style="height:28px; display:flex; align-items:center; gap:8px; padding-left:48px; padding-right:10px; border-radius:5px; "><span style="width:14px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7A5AF8">◇</span><span style="font-size:12.5px; color:#5B3FD6; white-space:nowrap">Button / Primary</span></div>
+          <div style="height:28px; display:flex; align-items:center; gap:8px; padding-left:48px; padding-right:10px; border-radius:5px; "><span style="width:14px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7A5AF8">◇</span><span style="font-size:12.5px; color:#5B3FD6; white-space:nowrap">Input / Card number</span></div>
+        </div>
+      </div>
+      <div style="padding:22px 24px 26px">
+        <div style="font-weight:600; font-size:17px">Same building blocks</div>
+        <p style="margin:8px 0 0; font-size:15px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Frames, auto-layout, components, variants and instances behave the way your team already works.</p>
+      </div>
+    </div>
+    </div>
+  </div>
+</section>
+
+<section id="loop" data-screen-label="Daily loop" style="max-width:1280px; margin:0 auto; padding:120px 24px 80px">
+  <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0B7F89">The daily loop</div>
+  <h2 style="margin:12px 0 0; font-size:clamp(34px,4.4vw,60px); line-height:1; letter-spacing:-.035em; font-weight:700; max-width:820px; text-wrap:balance">Everything a product designer does in a day, in one app.</h2>
+  <p style="margin:16px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:560px; text-wrap:pretty">Follow one sign-up screen from its first frame to shipped code.</p>
+  <div style="display:grid; grid-template-columns:{{ loopCols }}; gap:24px 64px; margin-top:48px; align-items:start">
+    <div style="position:sticky; top:{{ loopTop }}; z-index:2; background:#F6F4F0; padding:8px 0 12px">
+      <div ref="{{ loopStage }}" style="position:relative; height:{{ stageH }}; border-radius:12px; overflow:hidden; background:#FFFFFF; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 24px 48px -24px rgba(29,27,24,.25)">
+        <div style="position:absolute; inset:0; background-color:#EDEAE4; background-image:radial-gradient(#D6D1C8 1px, transparent 1px); background-size:20px 20px; overflow:hidden">
+          <div style="position:absolute; left:50%; top:50%; width:720px; height:480px; transform:{{ loopT }}; transform-origin:center">
+            <span style="position:absolute; left:60px; top:34px; font-size:11px; color:{{ lp.lblC }}">{{ lp.lbl }}</span>
+            <div style="position:absolute; left:60px; top:56px; width:230px; height:372px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:20px; display:flex; flex-direction:column">
+              <div style="display:flex; align-items:center; gap:7px"><span style="width:15px; height:15px; border-radius:4px; background:#E0603A"></span><span style="font-weight:700; font-size:12.5px">Tidepool</span></div>
+              <div style="margin-top:20px; padding:0 18px; background:#F5F3EF; border-radius:10px; display:flex; flex-direction:column">
+                <div style="height:{{ lp.padH }}; margin:0 -18px; background:{{ lp.redBg }}; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:9px; color:{{ lp.redFg }}; transition:height .25s, background .3s">{{ lp.padL }}</div>
+                <div style="font-size:19px; line-height:24px; font-weight:700; letter-spacing:-.02em">Create your account</div>
+                <div style="height:{{ lp.gapH }}; margin:0 -18px; background:{{ lp.redBg }}; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:9px; color:{{ lp.redFg }}; transition:height .25s, background .3s">{{ lp.gapL }}</div>
+                <div style="height:32px; border-radius:7px; background:#FFFFFF; border:1px solid #DCD7CF; display:flex; align-items:center; padding:0 10px; font-size:11.5px; color:#1D1B18">mara@studio.co</div>
+                <div style="height:{{ lp.gapH }}; margin:0 -18px; background:{{ lp.redBg }}; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:9px; color:{{ lp.redFg }}; transition:height .25s, background .3s">{{ lp.gapL }}</div>
+                <div style="height:32px; border-radius:7px; background:#FFFFFF; border:1px solid #DCD7CF; display:flex; align-items:center; padding:0 10px; font-size:11.5px; letter-spacing:.12em">••••••••</div>
+                <div style="height:{{ lp.gapH }}; margin:0 -18px; background:{{ lp.redBg }}; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:9px; color:{{ lp.redFg }}; transition:height .25s, background .3s">{{ lp.gapL }}</div>
+                <div style="position:relative; height:34px; border-radius:7px; background:#E0603A; color:#FFFFFF; display:grid; place-items:center; font-size:12.5px; font-weight:600; box-shadow:{{ lp.btnRing }}; transition:box-shadow .3s">{{ lp.btnText }}<span style="position:absolute; left:-2px; top:-17px; font-size:9.5px; font-weight:600; color:#7A5AF8; white-space:nowrap; opacity:{{ lp.compOp }}; transition:opacity .3s">◇ Button / Primary</span></div>
+                <div style="height:{{ lp.padH }}; margin:0 -18px; background:{{ lp.redBg }}; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:9px; color:{{ lp.redFg }}; transition:height .25s, background .3s">{{ lp.padL }}</div>
+              </div>
+              <div style="margin-top:auto; text-align:center; font-size:10.5px; color:#6A655D">Already have an account? <b style="color:#1D1B18">Sign in</b></div>
+            </div>
+
+            <div style="position:absolute; left:330px; top:96px; width:340px; background:#FFFFFF; border:1.5px dashed #7A5AF8; border-radius:10px; padding:16px; opacity:{{ lp.varOp }}; transform:{{ lp.varT }}; filter:{{ lp.varF }}; transition:opacity .3s, transform .3s, filter .3s">
+              <div style="font-size:11px; font-weight:600; color:#5B3FD6">❖ Button · 3 variants</div>
+              <div style="display:flex; gap:8px; margin-top:12px">
+                <div style="flex:1; height:32px; border-radius:7px; background:#E0603A; color:#FFFFFF; display:grid; place-items:center; font-size:11.5px; font-weight:600">Primary</div>
+                <div style="flex:1; height:32px; border-radius:7px; border:1px solid #DCD7CF; display:grid; place-items:center; font-size:11.5px; font-weight:600">Secondary</div>
+                <div style="flex:1; height:32px; border-radius:7px; background:#E6E2DB; color:#6A655D; display:grid; place-items:center; font-size:11.5px; font-weight:600">Disabled</div>
+              </div>
+              <div style="margin-top:12px; font-size:11.5px; line-height:1.45; color:#5F5A52">Edit the main component and every instance updates. Overrides stay.</div>
+            </div>
+
+            <div style="position:absolute; left:430px; top:56px; width:230px; height:372px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:20px; display:flex; flex-direction:column; gap:8px; opacity:{{ lp.welOp }}; transform:{{ lp.welT }}; filter:{{ lp.welF }}; transition:opacity .35s, transform .35s, filter .35s">
+              <span style="position:absolute; left:0; top:-22px; font-size:11px; color:#6A655D">Welcome</span>
+              <div style="display:flex; align-items:center; gap:7px"><span style="width:15px; height:15px; border-radius:4px; background:#E0603A"></span><span style="font-weight:700; font-size:12.5px">Tidepool</span></div>
+              <div style="margin-top:22px; font-size:19px; font-weight:700; letter-spacing:-.02em">Welcome, Mara</div>
+              <div style="font-size:11.5px; color:#6A655D; margin-bottom:8px">Three things to set up first.</div>
+              <div style="height:38px; border-radius:8px; background:#F5F3EF; display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:500">Invite your team</div>
+              <div style="height:38px; border-radius:8px; background:#F5F3EF; display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:500">Connect a data source</div>
+              <div style="height:38px; border-radius:8px; background:#F5F3EF; display:flex; align-items:center; padding:0 12px; font-size:11.5px; font-weight:500">Pick a template</div>
+            </div>
+            <svg width="720" height="480" viewBox="0 0 720 480" style="position:absolute; left:0; top:0; pointer-events:none; opacity:{{ lp.nOp }}; transition:opacity .3s">
+              <path d="M258 {{ lp.btnY }} C 350 {{ lp.btnY }}, 340 200, 424 200" fill="none" stroke="#0B8F9A" stroke-width="2" stroke-dasharray="260" stroke-dashoffset="{{ lp.nDash }}" style="transition:stroke-dashoffset .25s"></path>
+              <circle cx="424" cy="200" r="4.5" fill="#0B8F9A" opacity="{{ lp.nEnd }}"></circle>
+            </svg>
+            <span style="position:absolute; left:282px; top:{{ lp.chipY }}; font-family:'IBM Plex Mono',monospace; font-size:10.5px; background:#FFFFFF; border:1px solid #E2DDD5; border-radius:5px; padding:4px 7px; white-space:nowrap; opacity:{{ lp.nLbl }}; transition:opacity .3s">On click · smart animate · 300ms</span>
+
+            <div style="position:absolute; left:{{ lp.mX }}; top:{{ lp.mY }}; opacity:{{ lp.curOp }}; transition:left .35s, top .35s, opacity .3s; pointer-events:none; z-index:6"><svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#D6409F" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg><span style="position:absolute; left:14px; top:14px; background:#D6409F; color:#FFFFFF; font-size:10px; font-weight:600; padding:2px 6px; border-radius:3px; white-space:nowrap">Mara</span></div>
+            <div style="position:absolute; left:{{ lp.jX }}; top:{{ lp.jY }}; opacity:{{ lp.curOp }}; transition:left .35s, top .35s, opacity .3s; pointer-events:none; z-index:6"><svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#6B5BD6" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg><span style="position:absolute; left:14px; top:14px; background:#6B5BD6; color:#FFFFFF; font-size:10px; font-weight:600; padding:2px 6px; border-radius:3px; white-space:nowrap">Jun</span></div>
+            <div style="position:absolute; left:318px; top:250px; width:270px; background:#FFFFFF; border-radius:10px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 12px 28px -10px rgba(29,27,24,.25); padding:12px 14px; display:flex; flex-direction:column; gap:8px; font-size:12px; line-height:1.4; opacity:{{ lp.comOp }}; transform:{{ lp.comT }}; filter:{{ lp.comF }}; transition:opacity .3s, transform .3s, filter .3s">
+              <div><b style="color:#6B5BD6">Jun</b> Can the button say “Start trial”?</div>
+              <div style="opacity:{{ lp.replyOp }}; transition:opacity .3s"><b style="color:#D6409F">Mara</b> Done. Changed it on the main component.</div>
+            </div>
+
+            <div style="position:absolute; left:318px; top:64px; width:372px; height:340px; background:#1D1B18; border-radius:10px; box-shadow:0 20px 40px -16px rgba(0,0,0,.4); overflow:hidden; opacity:{{ lp.codeOp }}; transform:{{ lp.codeT }}; filter:{{ lp.codeF }}; transition:opacity .3s, transform .3s, filter .3s">
+              <div style="height:34px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid #33312D; font-size:11.5px; color:#A9A398"><span style="color:#F3F0EA; font-weight:600">Inspect</span><span>Tailwind</span><span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px">Form</span></div>
+              <div style="padding:14px 16px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.75; color:#E8E4DC; white-space:pre">
+                <sc-for list="{{ lp.code }}" as="c"><div style="color:{{ c.c }}; opacity:{{ c.op }}; filter:{{ c.f }}; transition:opacity .25s, filter .25s">{{ c.t }}</div></sc-for>
+              </div>
+            </div>
+
+            <div style="position:absolute; left:340px; top:84px; width:330px; background:#FFFFFF; border-radius:10px; box-shadow:0 0 0 1px rgba(29,27,24,.08), 0 20px 40px -18px rgba(29,27,24,.3); overflow:hidden; opacity:{{ lp.verOp }}; transform:{{ lp.verT }}; filter:{{ lp.verF }}; transition:opacity .3s, transform .3s, filter .3s">
+              <div style="height:36px; display:flex; align-items:center; padding:0 14px; border-bottom:1px solid #EEEAE4; font-size:12px; font-weight:600">Version history</div>
+              <sc-for list="{{ lp.vers }}" as="v"><div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid #F2EFEA; opacity:{{ v.op }}; transform:{{ v.t }}; filter:{{ v.f }}; transition:opacity .3s, transform .3s, filter .3s"><span style="width:8px; height:8px; border-radius:50%; background:{{ v.c }}"></span><span style="flex:1; font-size:12px">{{ v.name }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C867C">{{ v.when }}</span></div></sc-for>
+              <div style="display:flex; flex-wrap:wrap; gap:6px; padding:12px 14px">
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:3px 7px; border-radius:4px; background:#F4F2EE">425 tests</span>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:3px 7px; border-radius:4px; background:#F4F2EE">21 E2E assertions</span>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:3px 7px; border-radius:4px; background:#F4F2EE">0 type errors</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; margin-top:14px">
+        <sc-for list="{{ bars }}" as="b" hint-placeholder-count="6"><button onClick="{{ b.on }}" title="{{ b.label }}" style="flex:1; min-width:0; padding:5px 0 0; border:none; background:transparent; cursor:pointer; display:flex; flex-direction:column; gap:6px; text-align:left; font:inherit"><span style="position:relative; z-index:1; display:flex; align-items:center; height:5px"><span style="display:block; width:100%; height:{{ b.h }}; border-radius:3px; background:{{ b.c }}; transition:background .3s, height .25s"></span></span><span style="display:block; overflow:hidden; height:18px; margin-top:-2px"><span style="display:block; padding-left:8px; font-size:12.5px; line-height:18px; font-weight:600; color:#1D1B18; white-space:nowrap; opacity:{{ b.op }}; transform:{{ b.t }}; transition:transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s">{{ b.label }}</span></span></button></sc-for>
+      </div>
+    </div>
+    <div>
+      <div data-step="0" style="min-height:60vh; display:flex; flex-direction:column; justify-content:flex-start; padding:10px 0 24px; transform-origin:left center">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">01 / design</div>
+        <h3 style="margin:10px 0 0; font-size:30px; line-height:1.12; letter-spacing:-.02em; font-weight:600; text-wrap:balance">Lay out real screens with auto-layout</h3>
+        <p style="margin:14px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:470px; text-wrap:pretty">Auto-layout works like flexbox on the canvas: direction, gap, per-side padding, hug, fill and wrap, with nested frames reflowing as content changes. Style it with tokens, fill stacks, gradients, shadows, blurs and masks.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:18px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px 9px; border-radius:5px; background:#FFFFFF; border:1px solid #E2DDD5; color:#1D1B18">Shift+A</span>
+          <a href="#demo" onClick="{{ try0 }}" style="font-size:14px; font-weight:600; color:#0B7F89">Try it in the demo →</a>
+        </div>
+      </div>
+      <div data-step="1" style="min-height:60vh; display:flex; flex-direction:column; justify-content:center; padding:24px 0; transform-origin:left center">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">02 / systematize</div>
+        <h3 style="margin:10px 0 0; font-size:30px; line-height:1.12; letter-spacing:-.02em; font-weight:600; text-wrap:balance">Build it once as a component</h3>
+        <p style="margin:14px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:470px; text-wrap:pretty">Components carry variants and properties. Instances keep their overrides when the main component changes, and you can swap or detach them. Publish a library and subscribe to it from other files.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:18px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px 9px; border-radius:5px; background:#FFFFFF; border:1px solid #E2DDD5; color:#1D1B18">Ctrl+Alt+K</span>
+          <a href="#demo" onClick="{{ try1 }}" style="font-size:14px; font-weight:600; color:#0B7F89">Try it in the demo →</a>
+        </div>
+      </div>
+      <div data-step="2" style="min-height:60vh; display:flex; flex-direction:column; justify-content:center; padding:24px 0; transform-origin:left center">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">03 / collaborate</div>
+        <h3 style="margin:10px 0 0; font-size:30px; line-height:1.12; letter-spacing:-.02em; font-weight:600; text-wrap:balance">Work in the same file</h3>
+        <p style="margin:14px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:470px; text-wrap:pretty">Cursors, selections and presence sync live, and undo only reverts your own edits. Today this runs across windows on one machine. Networked sessions arrive with the xeno-comms server.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:18px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px 9px; border-radius:5px; background:#FFFFFF; border:1px solid #E2DDD5; color:#1D1B18">C · comment</span>
+          <a href="#demo" onClick="{{ try2 }}" style="font-size:14px; font-weight:600; color:#0B7F89">Try it in the demo →</a>
+        </div>
+      </div>
+      <div data-step="3" style="min-height:60vh; display:flex; flex-direction:column; justify-content:center; padding:24px 0; transform-origin:left center">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">04 / prototype</div>
+        <h3 style="margin:10px 0 0; font-size:30px; line-height:1.12; letter-spacing:-.02em; font-weight:600; text-wrap:balance">Click through it before anyone builds it</h3>
+        <p style="margin:14px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:470px; text-wrap:pretty">Wire frames into flows with click, hover, drag and delay triggers. Smart-animate between frames, add overlays, scroll behaviour and device shells, then present.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:18px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px 9px; border-radius:5px; background:#FFFFFF; border:1px solid #E2DDD5; color:#1D1B18">Present ▶</span>
+          <a href="#demo" onClick="{{ try3 }}" style="font-size:14px; font-weight:600; color:#0B7F89">Try it in the demo →</a>
+        </div>
+      </div>
+      <div data-step="4" style="min-height:60vh; display:flex; flex-direction:column; justify-content:center; padding:24px 0; transform-origin:left center">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">05 / hand off</div>
+        <h3 style="margin:10px 0 0; font-size:30px; line-height:1.12; letter-spacing:-.02em; font-weight:600; text-wrap:balance">Give developers code that compiles</h3>
+        <p style="margin:14px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:470px; text-wrap:pretty">Inspect any node for CSS or Tailwind. The output is token-aware, so colors and spacing arrive as your variables, not as loose hex values.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:18px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px 9px; border-radius:5px; background:#FFFFFF; border:1px solid #E2DDD5; color:#1D1B18">Copy as Tailwind</span>
+          <a href="#demo" onClick="{{ try4 }}" style="font-size:14px; font-weight:600; color:#0B7F89">Try it in the demo →</a>
+        </div>
+      </div>
+      <div data-step="5" style="min-height:60vh; display:flex; flex-direction:column; justify-content:center; padding:24px 0; transform-origin:left center">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">06 / trust it</div>
+        <h3 style="margin:10px 0 0; font-size:30px; line-height:1.12; letter-spacing:-.02em; font-weight:600; text-wrap:balance">Built not to lose work</h3>
+        <p style="margin:14px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:470px; text-wrap:pretty">Every action is undoable. Files autosave with crash recovery, and every release passes its test suite and an end-to-end run against the packaged build.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:18px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:4px 9px; border-radius:5px; background:#FFFFFF; border:1px solid #E2DDD5; color:#1D1B18">Autosave + crash recovery</span>
+          <a href="#demo" onClick="{{ try5 }}" style="font-size:14px; font-weight:600; color:#0B7F89">Try it in the demo →</a>
+        </div>
+      </div>
+      <div style="height:18vh"></div>
+    </div>
+  </div>
+</section>
+<section id="agent" data-screen-label="Agent" style="background:#171614; color:#E8E4DC; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#7FD3DA">Agent panel</div>
+    <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.4vw,60px); line-height:1; letter-spacing:-.035em; font-weight:700; color:#F3F0EA; max-width:820px; text-wrap:balance">An agent that edits through the same API as you.</h2>
+    <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#A9A398; max-width:640px; text-wrap:pretty">The agent’s tools are the plugin document API, so every change it makes is a real node you can select, and one undo away. It can also audit a design and review it visually.</p>
+    <div data-reveal="" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:36px; align-items:center">
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8C867C; margin-right:4px">Try a prompt</span>
+      <sc-for list="{{ agChips }}" as="c" hint-placeholder-count="3">
+        <button onClick="{{ c.on }}" style="height:34px; padding:0 14px; border-radius:999px; border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font:inherit; font-size:13.5px; font-weight:500; cursor:pointer; transition:background .2s, color .2s">{{ c.label }}</button>
+      </sc-for>
+    </div>
+    <div ref="{{ agentRef }}" data-reveal="" style="margin-top:16px; background:#1F1D1B; border:1px solid #2E2C29; border-radius:14px; overflow:hidden">
+      <div style="height:44px; display:flex; align-items:center; gap:12px; padding:0 14px; border-bottom:1px solid #2E2C29; font-size:12.5px">
+        <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:15px; height:15px; display:block; filter:invert(1)">
+        <span style="color:#8C867C">Tidepool /</span><span style="color:#F3F0EA; font-weight:600">{{ agFile }}</span>
+        <div style="margin-left:auto; display:flex; background:#2A2825; border-radius:6px; padding:2px">
+          <sc-for list="{{ runOpts }}" as="o"><button onClick="{{ o.on }}" style="height:26px; padding:0 10px; border:none; border-radius:5px; background:{{ o.bg }}; color:{{ o.fg }}; font:inherit; font-size:12px; cursor:pointer">{{ o.label }}</button></sc-for>
+        </div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap">
+        <div style="flex:1 1 440px; min-width:0; min-height:520px; position:relative; background-color:#EDEAE4; background-image:radial-gradient(#D6D1C8 1px, transparent 1px); background-size:20px 20px; display:grid; place-items:center; padding:48px 24px 32px; color:#1D1B18">
+          <sc-if value="{{ an.s1 }}" hint-placeholder-val="{{ true }}">
+            <div onMouseEnter="{{ an.f1H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.f1Op }}; filter:{{ an.f1F }}; box-shadow:{{ an.f1R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; position:relative; width:280px; min-height:400px; background:#FFFFFF; border-radius:4px; padding:{{ an.pad1 }}; display:flex; flex-direction:column; gap:14px; transition:padding .35s, opacity .3s, filter .3s, box-shadow .2s">
+              <span style="position:absolute; left:0; top:-20px; font-size:11px; color:#6A655D">Sign up — Mobile</span>
+              <div onMouseEnter="{{ an.h1H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.h1Op }}; filter:{{ an.h1F }}; box-shadow:{{ an.h1R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; font-size:22px; line-height:27px; font-weight:700; letter-spacing:-.02em; color:#1D1B18; border-radius:3px">Create your account</div>
+              <div onMouseEnter="{{ an.sb1H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.sb1Op }}; filter:{{ an.sb1F }}; box-shadow:{{ an.sb1R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; margin-top:-6px; font-size:13px; line-height:19px; color:{{ an.sb1C }}; border-radius:3px">Start a 14-day trial. No card needed.</div>
+              <div onMouseEnter="{{ an.e1H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.e1Op }}; filter:{{ an.e1F }}; box-shadow:{{ an.e1R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; display:flex; flex-direction:column; gap:5px; border-radius:6px"><span style="font-size:11px; font-weight:600">Email</span><span style="height:36px; border-radius:7px; border:1px solid #DCD7CF; display:flex; align-items:center; padding:0 10px; font-size:12px">mara@studio.co</span></div>
+              <div onMouseEnter="{{ an.p1H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.p1Op }}; filter:{{ an.p1F }}; box-shadow:{{ an.p1R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; display:flex; flex-direction:column; gap:5px; border-radius:6px"><span style="font-size:11px; font-weight:600">Password</span><span style="height:36px; border-radius:7px; border:1px solid #DCD7CF; display:flex; align-items:center; padding:0 10px; font-size:12px; letter-spacing:.12em">••••••••</span></div>
+              <div onMouseEnter="{{ an.b1H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.b1Op }}; filter:{{ an.b1F }}; box-shadow:{{ an.b1R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; height:40px; border-radius:8px; background:#E0603A; color:#FFFFFF; display:grid; place-items:center; font-size:13.5px; font-weight:600">Create account</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ an.s2 }}" hint-placeholder-val="{{ false }}">
+            <div onMouseEnter="{{ an.f2H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.f2Op }}; filter:{{ an.f2F }}; box-shadow:{{ an.f2R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; position:relative; width:300px; min-height:400px; background:#FFFFFF; border-radius:14px; padding:{{ an.pad2 }}; display:flex; flex-direction:column; gap:12px; transition:padding .35s, opacity .3s, filter .3s, box-shadow .2s">
+              <span style="position:absolute; left:0; top:-20px; font-size:11px; color:#6A655D">Pricing / Pro</span>
+              <span onMouseEnter="{{ an.bd2H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.bd2Op }}; filter:{{ an.bd2F }}; box-shadow:{{ an.bd2R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; position:absolute; right:20px; top:22px; height:24px; padding:0 10px; border-radius:999px; background:#F4A38A; color:{{ an.bd2C }}; font-size:11px; font-weight:700; display:flex; align-items:center">Popular</span>
+              <div onMouseEnter="{{ an.t2H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.t2Op }}; filter:{{ an.t2F }}; box-shadow:{{ an.t2R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; font-size:15px; font-weight:700; color:#1D1B18; border-radius:3px; align-self:flex-start">Pro</div>
+              <div onMouseEnter="{{ an.pr2H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.pr2Op }}; filter:{{ an.pr2F }}; box-shadow:{{ an.pr2R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; display:flex; align-items:baseline; gap:6px; border-radius:3px; align-self:flex-start"><span style="font-size:40px; font-weight:700; letter-spacing:-.03em">$24</span><span style="font-size:13px; color:#6A655D">/ month</span></div>
+              <div onMouseEnter="{{ an.l2H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.l2Op }}; filter:{{ an.l2F }}; box-shadow:{{ an.l2R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; display:flex; flex-direction:column; gap:9px; padding:8px 0; border-radius:4px; font-size:13px"><span>✓ Unlimited files</span><span>✓ Team libraries</span><span>✓ Dev handoff</span></div>
+              <div onMouseEnter="{{ an.b2H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.b2Op }}; filter:{{ an.b2F }}; box-shadow:{{ an.b2R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; margin-top:auto; height:40px; border-radius:8px; background:#1D1B18; color:#FFFFFF; display:grid; place-items:center; font-size:13.5px; font-weight:600">Start trial</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ an.s3 }}" hint-placeholder-val="{{ false }}">
+            <div onMouseEnter="{{ an.f3H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.f3Op }}; filter:{{ an.f3F }}; box-shadow:{{ an.f3R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; position:relative; width:280px; min-height:400px; background:{{ an.bg3 }}; border-radius:4px; padding:24px; display:flex; flex-direction:column; gap:14px; color:{{ an.tx3 }}">
+              <span style="position:absolute; left:0; top:-20px; font-size:11px; color:#6A655D">Sign up — Mobile · {{ an.mode3 }}</span>
+              <div style="font-size:22px; line-height:27px; font-weight:700; letter-spacing:-.02em">Create your account</div>
+              <div style="margin-top:-6px; font-size:13px; line-height:19px; color:{{ an.mu3 }}; transition:color .4s">Start a 14-day trial. No card needed.</div>
+              <div onMouseEnter="{{ an.i3H }}" onMouseLeave="{{ agHoverOff }}" style="opacity:{{ an.i3Op }}; filter:{{ an.i3F }}; box-shadow:{{ an.i3R }}; transition:opacity .3s, filter .3s, box-shadow .2s, background .4s, color .4s, border-color .4s; display:flex; flex-direction:column; gap:10px; border-radius:6px"><span style="height:36px; border-radius:7px; border:1px solid {{ an.bo3 }}; background:{{ an.fi3 }}; transition:border-color .4s, background .4s"></span><span style="height:36px; border-radius:7px; border:1px solid {{ an.bo3 }}; background:{{ an.fi3 }}; transition:border-color .4s, background .4s"></span></div>
+              <div style="height:40px; border-radius:8px; background:{{ an.pr3 }}; color:{{ an.pf3 }}; display:grid; place-items:center; font-size:13.5px; font-weight:600; transition:background .4s">Create account</div>
+            </div>
+          </sc-if>
+          <div style="position:absolute; left:14px; bottom:12px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#5F5A52; background:#FFFFFF; border:1px solid #E2DDD5; border-radius:5px; padding:4px 8px">{{ agCanvasNote }}</div>
+        </div>
+        <div style="flex:0 1 400px; min-width:300px; display:flex; flex-direction:column; border-left:1px solid #2E2C29">
+          <div style="padding:16px; display:flex; flex-direction:column; gap:12px; flex:1">
+            <div style="align-self:flex-end; max-width:92%; background:#2E2C29; color:#F3F0EA; border-radius:10px 10px 3px 10px; padding:10px 12px; font-size:14px; line-height:1.45; min-height:40px">{{ agPrompt }}<span style="display:{{ agCaretD }}; width:7px; height:15px; margin-left:2px; vertical-align:-2px; background:#7FD3DA"></span></div>
+            <div title="Tool names in this demo are illustrative" style="display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C; margin-top:4px; cursor:help"><span>Tool calls ⓘ</span><span>{{ agCount }}</span></div>
+            <div style="display:flex; flex-direction:column; gap:2px; font-family:'IBM Plex Mono',monospace; font-size:12px">
+              <sc-for list="{{ agLines }}" as="ln">
+                <div onMouseEnter="{{ ln.hover }}" onMouseLeave="{{ agHoverOff }}" style="display:grid; grid-template-columns:14px auto minmax(0,1fr) auto; gap:8px; align-items:baseline; padding:5px 6px; margin:0 -6px; border-radius:5px; background:{{ ln.bg }}; opacity:{{ ln.op }}; cursor:default; transition:background .15s, opacity .25s">
+                  <span style="color:{{ ln.dot }}">{{ ln.mark }}</span>
+                  <span style="color:{{ ln.fc }}">{{ ln.fn }}</span>
+                  <span style="color:#A9A398; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ ln.arg }}</span>
+                  <span style="color:#6F6A62; font-size:10.5px">{{ ln.time }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ agShowSum }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:13.5px; line-height:1.5; color:#E8E4DC">{{ agSummary }}</div>
+            </sc-if>
+          </div>
+          <div style="padding:12px 14px; border-top:1px solid #2E2C29; display:flex; flex-direction:column; gap:10px">
+            <div style="display:flex; align-items:center; gap:10px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">
+              <span style="flex:1">{{ agMeterLabel }}</span>
+              <span style="width:90px; height:4px; border-radius:2px; background:#33312D; overflow:hidden; display:{{ agMeterD }}"><span style="display:block; height:100%; width:{{ agMeterW }}; background:#7FD3DA; transition:width .4s"></span></span>
+            </div>
+            <div style="display:flex; gap:8px">
+              <button onClick="{{ agUndoBtn }}" style="flex:1; height:32px; border:none; border-radius:6px; background:{{ agUndoBg }}; color:{{ agUndoFg }}; font:inherit; font-size:13px; font-weight:600; cursor:{{ agUndoCur }}; transition:background .2s">{{ agUndoLabel }}</button>
+              <button onClick="{{ agentReplay }}" style="height:32px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:transparent; color:#E8E4DC; font:inherit; font-size:13px; cursor:pointer">Replay</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Architecture" style="max-width:1100px; margin:0 auto; padding:120px 24px 100px">
+  <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0B7F89">Inside XENO</div>
+  <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.4vw,56px); line-height:1; letter-spacing:-.035em; font-weight:700; max-width:780px; text-wrap:balance">Part of the XENO ecosystem, not a silo.</h2>
+  <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:640px; text-wrap:pretty">Canvas owns live, multi-author product design. Raster and print vector stay in Pixel, motion in Motion, and 3D in xeno-3d. Shared services handle vectors, sync, inference and accounts.</p>
+  <div ref="{{ archRef }}" style="margin-top:56px; display:flex; flex-direction:column">
+    <div style="opacity:{{ a0 }}; transform:{{ t0 }}; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px">
+      <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:14px 16px"><div style="font-weight:600">XENO Pixel</div><div style="font-size:13px; color:#5F5A52; margin-top:3px">rasters dropped into Canvas</div></div>
+      <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:14px 16px"><div style="font-weight:600">XENO Hub</div><div style="font-size:13px; color:#5F5A52; margin-top:3px">sign-in, credits, launch, updates</div></div>
+      <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:14px 16px"><div style="font-weight:600">Marketplace</div><div style="font-size:13px; color:#5F5A52; margin-top:3px">libraries and plugins</div></div>
+    </div>
+    <div style="height:44px; display:flex; justify-content:center"><div style="width:1.5px; height:100%; background:#0B8F9A; transform-origin:top; transform:{{ c0 }}"></div></div>
+    <div style="opacity:{{ a1 }}; transform:{{ t1 }}; border:1.5px solid #0B8F9A; border-radius:12px; background:rgba(11,143,154,.06); padding:22px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap">
+        <div style="font-size:24px; font-weight:700; letter-spacing:-.02em">XENO Canvas</div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#0B7F89">Electron 34 · React 19 · TypeScript · .xcanvas</div>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; margin-top:16px">
+        <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:12px 14px"><div style="font-weight:600">@xeno/core</div><div style="font-size:13px; color:#5F5A52; margin-top:3px; line-height:1.4">vector primitives, compositor, color, history</div></div>
+        <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:12px 14px"><div style="font-weight:600">xeno-comms</div><div style="font-size:13px; color:#5F5A52; margin-top:3px; line-height:1.4">presence, cursors, ops, comments</div></div>
+        <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:12px 14px"><div style="font-weight:600">xeno-rt</div><div style="font-size:13px; color:#5F5A52; margin-top:3px; line-height:1.4">OpenAI-compatible inference</div></div>
+        <div style="background:#FFFFFF; border:1px solid #E2DDD5; border-radius:8px; padding:12px 14px"><div style="font-weight:600">xeno-agent-sdk</div><div style="font-size:13px; color:#5F5A52; margin-top:3px; line-height:1.4">embedded agents and tool registry</div></div>
+      </div>
+    </div>
+    <div style="height:44px; display:flex; justify-content:center"><div style="width:1.5px; height:100%; background:#0B8F9A; transform-origin:top; transform:{{ c1 }}"></div></div>
+    <div style="opacity:{{ a2 }}; transform:{{ t2 }}; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px">
+      <div style="background:#EFECE6; border:1px solid #E2DDD5; border-radius:8px; padding:14px 16px"><div style="font-weight:600">Local agent</div><div style="font-size:13px; color:#5F5A52; margin-top:3px">xeno-rt or api.xenostudio.ai</div></div>
+      <div style="background:#EFECE6; border:1px solid #E2DDD5; border-radius:8px; padding:14px 16px"><div style="font-weight:600">Cloud runs</div><div style="font-size:13px; color:#5F5A52; margin-top:3px">xeno-agents-api, billed in credits</div></div>
+      <div style="background:#EFECE6; border:1px solid #E2DDD5; border-radius:8px; padding:14px 16px"><div style="font-weight:600">Updates</div><div style="font-size:13px; color:#5F5A52; margin-top:3px">published to R2, installed by Hub</div></div>
+    </div>
+  </div>
+</section>
+
+<dc-import name="SuiteLoop" current="canvas" hint-size="100%,640px"></dc-import>
+
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div ref="{{ statRef }}" style="max-width:1100px; margin:0 auto">
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0B7F89">Where it stands</div>
+    <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.4vw,56px); line-height:1; letter-spacing:-.035em; font-weight:700; max-width:780px; text-wrap:balance">Shipping today, with the gaps in plain view.</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:0 56px; margin-top:44px">
+      <div style="display:flex; flex-direction:column">
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">History &amp; editing</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Tokens &amp; styles</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Auto-layout</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Components &amp; variants</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Text &amp; vector</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Fills &amp; effects</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Prototyping &amp; present</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w100 }}; background:#1D1B18; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">100%</span></div>
+      </div>
+      <div style="display:flex; flex-direction:column">
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Libraries</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w90 }}; background:#0B8F9A; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">90%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Plugins</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w90 }}; background:#0B8F9A; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">90%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">AI agent</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w90 }}; background:#0B8F9A; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">90%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Platform &amp; import</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w90 }}; background:#0B8F9A; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">90%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) 110px 58px; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Performance</span><span style="height:5px; background:#E2DDD5; border-radius:3px; overflow:hidden"><span style="display:block; height:100%; width:{{ w85 }}; background:#0B8F9A; transition:width .9s cubic-bezier(.2,.7,.2,1)"></span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; text-align:right">85%</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Multiplayer</span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8A6A1F">local today · networked next</span></div>
+        <div data-reveal="" style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid #E2DDD5"><span style="font-weight:500">Dev handoff</span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8A6A1F">CSS + Tailwind · more targets next</span></div>
+      </div>
+    </div>
+    <p style="margin:22px 0 0; font-size:14px; line-height:1.55; color:#5F5A52; max-width:720px; text-wrap:pretty">The remaining work waits on sibling projects or operator items rather than on Canvas itself: the xeno-comms server for networked multiplayer, xeno-rt and the agent SDK for the last of the AI work, @xeno/core for boolean geometry, and code-signing certificates. Completion figures come from the roadmap as recorded at v0.36.0.</p>
+  </div>
+</section>
+
+<section id="download" data-screen-label="Download" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px 110px">
+  <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start">
+    <div>
+      <h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700; text-wrap:balance">Get XENO Canvas.</h2>
+      <p style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:440px; text-wrap:pretty">Public beta, free while it runs. Version 0.41.3, released 26 September 2026. Sign in with your XENO account.</p>
+      <sc-if value="{{ osShow }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px; display:inline-flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; color:{{ osC }}; background:{{ osBg }}; border-radius:6px; padding:6px 10px"><span style="width:7px; height:7px; border-radius:50%; background:{{ osC }}"></span>{{ osNote }}</div></sc-if>
+      <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:22px; font-size:14px; font-weight:600">
+        <a href="/product/canvas/releases" style="color:#0B7F89">All platforms &amp; versions →</a>
+        <a href="#" style="color:#0B7F89">Documentation →</a>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px">
+      <div data-reveal="" style="border:1px solid #1D1B18; border-radius:10px; padding:20px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between">
+        <div>
+          <div style="font-weight:600; font-size:17px">Windows x64</div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">XENO Canvas Setup 0.41.3.exe</div>
+        </div>
+        <a href="/product/canvas/download/win" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">Download</a>
+      </div>
+      <div data-reveal="" style="border:1px solid #E2DDD5; border-radius:10px; padding:20px; display:flex; justify-content:space-between; gap:14px; align-items:center; color:#5F5A52">
+        <div style="font-weight:600; font-size:17px; color:#1D1B18">macOS · Linux</div>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px">coming after the Windows beta</span>
+      </div>
+      <div data-reveal="" style="background:#FBF3E2; border-radius:10px; padding:16px; font-size:14px; line-height:1.55; color:#5C4414">
+        <div style="font-weight:600">The installer is not code-signed yet</div>
+        <div style="margin-top:4px">Windows SmartScreen warns you once before it runs. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. Code signing is on the way.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="releases" data-screen-label="Releases" style="border-top:1px solid #E2DDD5; padding:100px 24px">
+  <div style="max-width:1100px; margin:0 auto">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap">
+      <h2 data-reveal="" style="margin:0; font-size:clamp(30px,3.6vw,44px); line-height:1.05; letter-spacing:-.03em; font-weight:700">Latest releases</h2>
+      <a href="/product/canvas/releases" style="font-size:14px; font-weight:600; color:#0B7F89">View all →</a>
+    </div>
+    <div style="margin-top:28px; border-top:1px solid #1D1B18">
+      <a data-reveal="" href="/product/canvas/releases" style="display:grid; grid-template-columns:120px minmax(0,1fr) auto; gap:8px 24px; align-items:baseline; padding:20px 0; border-bottom:1px solid #E2DDD5; color:#1D1B18">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; display:flex; gap:8px; align-items:center">v0.41.3<span style="font-size:10.5px; padding:2px 6px; border-radius:4px; background:#E2F1F2; color:#0B6F78">Latest</span></span>
+        <span style="display:flex; flex-direction:column; gap:6px"><span style="font-size:16px; font-weight:600">The Agent panel shows your cloud models</span><span style="font-size:14.5px; line-height:1.55; color:#5F5A52; text-wrap:pretty">The panel could say “Cloud unavailable” while you were signed in. It now reads models through Canvas’s own sign-in and updates as soon as the list loads.</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">2026-09-26</span>
+      </a>
+      <a data-reveal="" href="/product/canvas/releases" style="display:grid; grid-template-columns:120px minmax(0,1fr) auto; gap:8px 24px; align-items:baseline; padding:20px 0; border-bottom:1px solid #E2DDD5; color:#1D1B18">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; display:flex; gap:8px; align-items:center">v0.41.2</span>
+        <span style="display:flex; flex-direction:column; gap:6px"><span style="font-size:16px; font-weight:600">The account button always shows who is signed in</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">2026-09-26</span>
+      </a>
+      <a data-reveal="" href="/product/canvas/releases" style="display:grid; grid-template-columns:120px minmax(0,1fr) auto; gap:8px 24px; align-items:baseline; padding:20px 0; border-bottom:1px solid #E2DDD5; color:#1D1B18">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; display:flex; gap:8px; align-items:center">v0.41.1</span>
+        <span style="display:flex; flex-direction:column; gap:6px"><span style="font-size:16px; font-weight:600">The Agent panel shows the models your Canvas account can use</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">2026-09-25</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px">
+  <div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start">
+    <div style="flex:1 1 280px; position:{{ faqPos }}; top:96px">
+      <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0B7F89">FAQ</div>
+      <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2>
+      <p data-reveal="" style="margin:16px 0 0; font-size:16px; line-height:1.55; color:#5F5A52; max-width:340px; text-wrap:pretty">Straight answers about the beta, what works today and what comes next.</p>
+      <div data-reveal="" style="margin-top:28px; padding:18px; border-radius:12px; background:#FFFFFF; border:1px solid #E6E1D9; max-width:340px">
+        <div style="font-weight:600; font-size:15px">Still have a question?</div>
+        <div style="margin-top:4px; font-size:14px; line-height:1.5; color:#5F5A52">The team reads the forum every day.</div>
+        <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap">
+          <a href="#" style="height:34px; padding:0 13px; display:flex; align-items:center; border-radius:7px; background:#1D1B18; color:#F6F4F0; font-size:13.5px; font-weight:600">Ask in the forum</a>
+          <a href="#" style="height:34px; padding:0 13px; display:flex; align-items:center; border-radius:7px; border:1px solid #D6D0C7; font-size:13.5px; font-weight:600">Read the docs</a>
+        </div>
+      </div>
+    </div>
+    <div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18">
+      <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+        <button onClick="{{ tg0 }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ fqN0 }}; transition:color .25s">01</span>
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:#1D1B18; text-wrap:balance">Can I use XENO Canvas yet?</span>
+          <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ fqB0 }}; background:{{ fqBg0 }}; display:grid; place-items:center; transform:{{ icT0 }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ fqI0 }}" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          </span>
+        </button>
+        <div style="display:grid; grid-template-rows:{{ fqR0 }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)">
+          <div style="overflow:hidden; min-height:0">
+            <div style="padding:0 0 26px 56px; display:flex; flex-direction:column; gap:14px; opacity:{{ fqO0 }}; transform:{{ fqT0 }}; transition:opacity .35s, transform .35s">
+              <p style="margin:0; font-size:16px; line-height:1.6; color:#5F5A52; max-width:640px; text-wrap:pretty">Yes. It is in public beta for Windows x64 and free while the beta runs. The installer is not code-signed yet, so Windows asks you to confirm once before it runs.</p>
+              <a href="#download" style="align-self:flex-start; font-size:14px; font-weight:600; color:#0B7F89">Download for Windows →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+        <button onClick="{{ tg1 }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ fqN1 }}; transition:color .25s">02</span>
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:#1D1B18; text-wrap:balance">What already works today?</span>
+          <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ fqB1 }}; background:{{ fqBg1 }}; display:grid; place-items:center; transform:{{ icT1 }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ fqI1 }}" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          </span>
+        </button>
+        <div style="display:grid; grid-template-rows:{{ fqR1 }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)">
+          <div style="overflow:hidden; min-height:0">
+            <div style="padding:0 0 26px 56px; display:flex; flex-direction:column; gap:14px; opacity:{{ fqO1 }}; transform:{{ fqT1 }}; transition:opacity .35s, transform .35s">
+              <p style="margin:0; font-size:16px; line-height:1.6; color:#5F5A52; max-width:640px; text-wrap:pretty">Drawing and pen editing, auto-layout, components with variants and overrides, tokens with light and dark modes, fills, effects and masks, prototyping with present mode, libraries, plugins, the Agent panel, .fig and SVG import, and CSS or Tailwind handoff.</p>
+              <a href="#status" style="align-self:flex-start; font-size:14px; font-weight:600; color:#0B7F89">See where it stands →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+        <button onClick="{{ tg2 }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ fqN2 }}; transition:color .25s">03</span>
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:#1D1B18; text-wrap:balance">Is it really multiplayer?</span>
+          <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ fqB2 }}; background:{{ fqBg2 }}; display:grid; place-items:center; transform:{{ icT2 }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ fqI2 }}" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          </span>
+        </button>
+        <div style="display:grid; grid-template-rows:{{ fqR2 }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)">
+          <div style="overflow:hidden; min-height:0">
+            <div style="padding:0 0 26px 56px; display:flex; flex-direction:column; gap:14px; opacity:{{ fqO2 }}; transform:{{ fqT2 }}; transition:opacity .35s, transform .35s">
+              <p style="margin:0; font-size:16px; line-height:1.6; color:#5F5A52; max-width:640px; text-wrap:pretty">The document and its history are built for multiple editors from the start. Live cursors, selections and edit sync work across windows on one machine today. Sessions between machines arrive with the xeno-comms server.</p>
+              <a href="#status" style="align-self:flex-start; font-size:14px; font-weight:600; color:#0B7F89">Roadmap status →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+        <button onClick="{{ tg3 }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ fqN3 }}; transition:color .25s">04</span>
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:#1D1B18; text-wrap:balance">How is it different from XENO Pixel?</span>
+          <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ fqB3 }}; background:{{ fqBg3 }}; display:grid; place-items:center; transform:{{ icT3 }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ fqI3 }}" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          </span>
+        </button>
+        <div style="display:grid; grid-template-rows:{{ fqR3 }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)">
+          <div style="overflow:hidden; min-height:0">
+            <div style="padding:0 0 26px 56px; display:flex; flex-direction:column; gap:14px; opacity:{{ fqO3 }}; transform:{{ fqT3 }}; transition:opacity .35s, transform .35s">
+              <p style="margin:0; font-size:16px; line-height:1.6; color:#5F5A52; max-width:640px; text-wrap:pretty">Pixel covers raster editing and Illustrator-style print vector for a single author. Canvas covers live, multi-author, component-driven product design. Canvas can place and mask images, but it has no brush engine.</p>
+              <a href="#" style="align-self:flex-start; font-size:14px; font-weight:600; color:#0B7F89">Explore XENO Pixel →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+        <button onClick="{{ tg4 }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ fqN4 }}; transition:color .25s">05</span>
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:#1D1B18; text-wrap:balance">Will my Figma files import?</span>
+          <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ fqB4 }}; background:{{ fqBg4 }}; display:grid; place-items:center; transform:{{ icT4 }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ fqI4 }}" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          </span>
+        </button>
+        <div style="display:grid; grid-template-rows:{{ fqR4 }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)">
+          <div style="overflow:hidden; min-height:0">
+            <div style="padding:0 0 26px 56px; display:flex; flex-direction:column; gap:14px; opacity:{{ fqO4 }}; transform:{{ fqT4 }}; transition:opacity .35s, transform .35s">
+              <p style="margin:0; font-size:16px; line-height:1.6; color:#5F5A52; max-width:640px; text-wrap:pretty">Yes. Canvas opens .fig files, a feature added in 0.35.0. Import is best-effort, so complex files may need some touch-up afterwards.</p>
+              <a href="#figma" style="align-self:flex-start; font-size:14px; font-weight:600; color:#0B7F89">Coming from Figma →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+        <button onClick="{{ tg5 }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ fqN5 }}; transition:color .25s">06</span>
+          <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:#1D1B18; text-wrap:balance">What will it cost?</span>
+          <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ fqB5 }}; background:{{ fqBg5 }}; display:grid; place-items:center; transform:{{ icT5 }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ fqI5 }}" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          </span>
+        </button>
+        <div style="display:grid; grid-template-rows:{{ fqR5 }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)">
+          <div style="overflow:hidden; min-height:0">
+            <div style="padding:0 0 26px 56px; display:flex; flex-direction:column; gap:14px; opacity:{{ fqO5 }}; transform:{{ fqT5 }}; transition:opacity .35s, transform .35s">
+              <p style="margin:0; font-size:16px; line-height:1.6; color:#5F5A52; max-width:640px; text-wrap:pretty">Canvas is free during the public beta. Pricing after the beta has not been announced. Agent runs in the cloud are billed in XENO credits.</p>
+              <a href="#" style="align-self:flex-start; font-size:14px; font-weight:600; color:#0B7F89">Pricing →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#7FD3DA">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Canvas&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;},&quot;demoMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Hero demo&quot;},&quot;collaborators&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Hero demo&quot;},&quot;agentAudit&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Hero demo&quot;}}">
+class Component extends DCLogic {
+  state = { agScene: 0, agPhase: 'typing', agMax: 0, agHover: -1, osName: '', loopQ: 0, loopK: 0.8, figKey: 0, figDown: -1, pText: 'Prototype it.', pEditing: false, pLiveBad: false, insX: 0, insY: 0, insDrag: false, pFont: 0, pSize: 120, pFill: 0, pFontOpen: false, exp: 'none', expS: null, expT: null, mFont: 0, mPop: null, mSel: false, mPanelOn: false, mFill: 0, mBox: null, mPanel: null, vw: 1400, faq: 0, nlEmail: '', nlSent: false, sel: 'card', tab: 'design', mode: null, gap: 16, pad: 24, variant: 'primary', tool: 'V', present: false, presentAt: 'signup', box: null, noodle: '', nx: 0, ny: 0, pinBase: null, pin: false, fixed: false, junSel: false, fmt: 'css', copied: false, edScale: 1, step: 0, archP: 0, statOn: false, typed: 0, agN: 0, agDone: false, cloud: false };
+  designRef = React.createRef(); marCur = React.createRef(); swRefs = [React.createRef(), React.createRef(), React.createRef(), React.createRef()]; fontRefs = [React.createRef(), React.createRef(), React.createRef()]; mFontRow = React.createRef(); mFillRow = React.createRef();
+  FILLS = [['text/primary', '#1D1B18', 30, .35, .11], ['brand/teal', '#0B6F78', 186, .91, .47], ['brand/coral', '#C4461F', 14, .84, .77], ['brand/violet', '#5B3FD6', 252, .7, .84]];
+  FONTS = [['Schibsted Grotesk', "'Schibsted Grotesk',system-ui,sans-serif", 'normal', 700, '-.05em'], ['Instrument Serif', "'Instrument Serif',Georgia,serif", 'italic', 400, '-.02em'], ['IBM Plex Mono', "'IBM Plex Mono',monospace", 'normal', 500, '-.06em']];
+  VARS = [['fill', 1], ['font', 1], ['fill', 2], ['font', 0], ['fill', 3], ['fill', 0]];
+  pEditRef = React.createRef();
+  BAD = ['fuck','shit','bitch','cunt','dick','cock','pussy','asshole','arsehole','bastard','slut','whore','nigger','nigga','faggot','retard','motherfuck','wank','twat','prick','bollock','porn','nazi','hitler','scheisse','scheiße','arschloch','fotze','hurensohn','wichser','schlampe','ficken','fick','spast','missgeburt','mierda','merde','putain','connard','salope','cazzo','stronzo'];
+  SHORT = ['ass','fag','fags','cum','tit','tits','sex','kill','nsfw','wtf','stfu','fu','nig','nigs','spic','spics','coon','coons','paki','pakis','gook','gooks','kike','kikes','chink','chinks','dyke','dykes','heil','kkk','fck','fk','fkn','azz','hoe','hoes','jap','japs','homo','negro','niger','nigers','tard','fuk','fuks','rape','raped','rapes','raping','rapist','rapists','kys','sht','puta','putas','mong','mongo','slag','wog','wogs','abo'];
+  BAD = this.BAD.concat(['nigg','fagg','fukk','fukin','fck','fcuk','phuck','fuq','biatch','beotch','shyt','dickhead','cocksuck','blowjob','handjob','dildo','jizz','wetback','beaner','tranny','shemale','raghead','towelhead','sandnigg','zipperhead','whitepower','siegheil','heilhitler','killyourself','killurself','neger','kanake','zigeuner','schwuchtel','judensau','kinderficker','spasti','nutte','bastardo','maricon','pendejo','culero','encule','frocio','vaffanculo','hijodeputa','cabron']);
+  norm(s) { return s.toLowerCase().replace(/[0@4]/g, m => ({ '0': 'o', '@': 'a', '4': 'a' })[m]).replace(/[1!|]/g, 'i').replace(/3/g, 'e').replace(/[5$]/g, 's').replace(/7/g, 't').replace(/[^a-zäöüß]/g, '').replace(/(.)\1{2,}/g, '$1$1'); }
+  PROPER = ['niger'];
+  ALLOW = ['nigeria','nigerian','nigerien','niggle','niggling','sniggle','snigger','scunthorpe','cocktail','cockpit','cockroach','cockney','cocky','cockatoo','cockatiel','cockerel','cockle','peacock','hitchcock','hancock','woodcock','gamecock','weathercock','shuttlecock','dickens','dickinson','dickson','shitake','shiitake','prickly','prickle','fickle','swank','swanky','nutter','retardant','retardation','assassin','bassist','class','classic','passion','spicy','spice','pakistan','raccoon','heilig','heilbronn','fukushima','computation','reputation','amputate','deputation','disputation','imputation','therapist','therapeutic','grape','grapefruit','drape','drapery','scrape','scraper','skyscraper','trapeze','parapet','rapeseed','ashtray','sussex','essex','analyst','analysis','titan','title','cumulative','document','cucumber','scum','homophone','homogenous','homosapiens','japan','japanese','hoedown'];
+  REPL = ['bruv', 'please stop', 'omg', 'fr?'];
+  allowed(n, raw) { if (this.PROPER.some(x => (n === x || (n.startsWith(x) && n.length - x.length <= 1))) && /^[^A-Za-z]*[A-Z]/.test(raw || '')) return true; return this.ALLOW.some(x => n === x || (n.startsWith(x) && n.length - x.length <= 3)); }
+  wordBad(w) {
+    const n = this.norm(w); if (!n || this.allowed(n, w)) return false;
+    if (this.SHORT.includes(n) || this.SHORT.includes(n.replace(/(.)\1+/g, '$1'))) return true;
+    const d = n.replace(/(.)\1+/g, '$1');
+    return this.BAD.some(x => x.length >= 4 && (n.includes(x) || d.includes(x)));
+  }
+  ambiguous(w) { const n = this.norm(w); return !!n && this.ALLOW.some(x => x.length > n.length && x.startsWith(n)); }
+  spacedBad(t) {
+    const toks = t.split(/\s+/).filter(Boolean); let run = '';
+    for (const k of toks.concat([''])) { if (k && this.norm(k).length <= 2) { run += this.norm(k); continue; } if (run.length >= 3 && (this.SHORT.includes(run) || this.BAD.some(x => x.length >= 4 && run.includes(x)))) return true; run = ''; }
+    return false;
+  }
+  textBad(t) { return t.split(/\s+/).some(w => this.wordBad(w)) || this.spacedBad(t); }
+  shouldSwap(t, final) {
+    const parts = t.split(/(\s+)/); let last = -1;
+    parts.forEach((p, i) => { if (/\S/.test(p)) last = i; });
+    const endSp = /\s$/.test(t);
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i]; if (!/\S/.test(p) || !this.wordBad(p)) continue;
+      const complete = final || endSp || i !== last;
+      if (complete || !this.ambiguous(p)) return 'now';
+      return 'wait';
+    }
+    if ((final || endSp) && this.spacedBad(t)) return 'now';
+    return null;
+  }
+  replaceBad(t) {
+    const n = this.pStrikes || 0; const word = this.REPL[Math.min(n, this.REPL.length - 1)];
+    let hit = false;
+    let next = t.split(/(\s+)/).map(p => { if (/\S/.test(p) && this.wordBad(p)) { hit = true; return word; } return p; }).join('');
+    if (!hit || this.textBad(next)) next = word;
+    this.pStrikes = n + 1; this._swapWord = word;
+    return next.slice(0, 26);
+  }
+  lockEdit(el) {
+    this.pStrikes = (this.pStrikes || 0) + 1;
+    if (el) { el.style.filter = 'none'; el.textContent = 'Prototype it.'; el.blur(); }
+    this._pFocused = false;
+    clearTimeout(this._lockT); this._lockT = setTimeout(() => { this.pStrikes = 0; this.setState({ pLocked: false }); }, 60000);
+    this.setState({ pText: 'Prototype it.', pEditing: false, pLiveBad: false, pLocked: true, pSwapped: false });
+  }
+  swapNow(el) {
+    if (this._swapT) return;
+    clearTimeout(this._waitT);
+    el.style.transition = 'filter .18s'; el.style.filter = 'blur(0.14em)';
+    this.setState({ pLiveBad: true });
+    this._swapT = setTimeout(() => {
+      this._swapT = null;
+      if ((this.pStrikes || 0) >= this.REPL.length) { this.lockEdit(el); return; }
+      if (this.shouldSwap(el.textContent || '', true) !== 'now') { el.style.filter = 'none'; this.setState({ pLiveBad: false }); return; }
+      el.textContent = this.replaceBad(el.textContent || '');
+      try { const rg = document.createRange(); rg.selectNodeContents(el); rg.collapse(false); const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg); } catch (_) {}
+      el.style.filter = 'none';
+      this.setState({ pLiveBad: false, pSwapped: true });
+      clearTimeout(this._swapMsgT); this._swapMsgT = setTimeout(() => this.setState({ pSwapped: false }), 2600);
+    }, 280);
+  }
+  pStartEdit = e => { if (e) e.stopPropagation(); if (this.state.pLocked) return; if (!this.state.pEditing) this.setState({ pEditing: true, pLiveBad: false }); };
+  pInput = e => {
+    const el = e.currentTarget, t = el.textContent || '';
+    clearTimeout(this._waitT);
+    const v = this.shouldSwap(t, false);
+    if (v === 'now') { this.swapNow(el); return; }
+    if (v === 'wait') this._waitT = setTimeout(() => { if (this.shouldSwap(el.textContent || '', true) === 'now') this.swapNow(el); }, 1400);
+  };
+  pCommit = () => {
+    const el = this.pEditRef.current; if (!el || !this.state.pEditing) return;
+    clearTimeout(this._waitT);
+    let t = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 26);
+    if (!t) t = 'Prototype it.';
+    if (this.shouldSwap(t, true) === 'now') {
+      if ((this.pStrikes || 0) >= this.REPL.length) { this.lockEdit(el); return; }
+      t = this.replaceBad(t);
+      this.setState({ pSwapped: true }); clearTimeout(this._swapMsgT); this._swapMsgT = setTimeout(() => this.setState({ pSwapped: false }), 2600);
+    }
+    this._pFocused = false;
+    this.setState({ pText: t, pEditing: false, pLiveBad: false });
+  };
+  pKey = e => {
+    if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (this.pEditRef.current) this.pEditRef.current.textContent = this.state.pText; e.currentTarget.blur(); }
+    else if ((e.currentTarget.textContent || '').length >= 26 && e.key.length === 1 && !(window.getSelection && String(window.getSelection()).length)) e.preventDefault();
+  };
+  insDown = e => {
+    if (e.button !== 0) return;
+    const el = this.inspRef.current, row = this.heroRow.current; if (!el || !row) return;
+    const r = el.getBoundingClientRect(), R = row.getBoundingClientRect();
+    this._drag = { px: e.clientX, py: e.clientY, ox: this.state.insX, oy: this.state.insY, bl: r.left - this.state.insX, bt: r.top - this.state.insY, w: r.width, h: r.height, R };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    window.addEventListener('pointermove', this.insMove); window.addEventListener('pointerup', this.insUp); window.addEventListener('pointercancel', this.insUp);
+    this.setState({ insDrag: true });
+  };
+  insMove = e => {
+    const d = this._drag; if (!d) return;
+    let x = d.ox + e.clientX - d.px, y = d.oy + e.clientY - d.py;
+    const minL = d.R.left - 8, maxL = d.R.right - d.w + 8, minT = d.R.top - 80, maxT = d.R.bottom - d.h + 40;
+    x = Math.min(maxL - d.bl, Math.max(minL - d.bl, x)); y = Math.min(maxT - d.bt, Math.max(minT - d.bt, y));
+    this.setState({ insX: Math.round(x), insY: Math.round(y) });
+  };
+  insUp = () => { this._drag = null; window.removeEventListener('pointermove', this.insMove); window.removeEventListener('pointerup', this.insUp); window.removeEventListener('pointercancel', this.insUp); this.setState({ insDrag: false }); };
+  pinWrap = React.createRef(); pinInner = React.createRef(); heroTextEl = React.createRef(); ovEl = React.createRef(); edEl = React.createRef();
+  pinTick = () => {
+    const wrap = this.pinWrap.current, inner = this.pinInner.current, ed = this.edEl.current, tx = this.heroTextEl.current, ov = this.ovEl.current;
+    if (!wrap || !inner || !ed || !tx) return;
+    const W = inner.clientWidth, H = inner.clientHeight;
+    if (W < 200 || H < 200 || wrap.offsetHeight <= H || !(this.state.edScale > 0.1)) return;
+    const range = Math.max(1, wrap.offsetHeight - H);
+    const p = Math.min(1, Math.max(0, -(wrap.getBoundingClientRect().top - 60) / range));
+    const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const k0 = this.state.edScale || 1, left0 = (W - 1280 * k0) / 2, top0 = tx.offsetHeight + Math.min(72, H * 0.08);
+    const k1 = Math.min((W - 40) / 1280, (H - 32) / 680, 1.35), left1 = (W - 1280 * k1) / 2, top1 = (H - 680 * k1) / 2;
+    const m = this.reduce ? (p > 0.5 ? 1 : 0) : ss(0.06, 1, p), rot = this.reduce ? 0 : 18 * (1 - ss(0, 0.5, p));
+    const k = k0 + (k1 - k0) * m, L = left0 + (left1 - left0) * m, T = top0 + (top1 - top0) * m;
+    const tx0 = Math.round(L + 640 * k - 640), ty0 = Math.round(T);
+    ed.style.transform = rot > 0.05
+      ? 'perspective(2200px) translate(' + tx0 + 'px, ' + ty0 + 'px) scale(' + k.toFixed(4) + ') rotateX(' + rot.toFixed(2) + 'deg)'
+      : 'translate(' + tx0 + 'px, ' + ty0 + 'px) scale(' + k.toFixed(4) + ')';
+    clearTimeout(this._crispT);
+    ed.style.willChange = 'transform';
+    this._crispT = setTimeout(() => { if (this.edEl.current) this.edEl.current.style.willChange = 'auto'; }, 160);
+    ed.style.opacity = '1';
+    if (ov) ov.style.opacity = String(ss(0.2, 0.85, p));
+    tx.style.transform = 'translateY(' + (-70 * m).toFixed(1) + 'px)';
+    tx.style.opacity = String(1 - 0.3 * ss(0.3, 0.9, p));
+    this.pinP = p;
+  };
+  goDemo = e => {
+    if (e) e.preventDefault();
+    const w = this.pinWrap.current, inner = this.pinInner.current; if (!w || !inner) return;
+    const top = window.scrollY + w.getBoundingClientRect().top - 60 + (w.offsetHeight - inner.clientHeight);
+    window.scrollTo({ top, behavior: 'smooth' });
+  };
+  figRef = React.createRef();
+  FIGKEYS = [['V', 'V · Move'], ['F', 'F · Frame'], ['R', 'R · Rectangle'], ['O', 'O · Ellipse'], ['T', 'T · Text'], ['P', 'P · Pen'], ['⇧A', 'Shift+A · Auto layout'], ['⌘/', 'Ctrl+/ · Command palette']];
+  figPress(i) { this.setState({ figKey: i, figDown: i }); clearTimeout(this._figT); this._figT = setTimeout(() => this.setState({ figDown: -1 }), 140); }
+  figKeydown = e => {
+    if (!this.figVis) return; const t = e.target && e.target.tagName; if (t === 'INPUT' || t === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+    const k = e.key.toUpperCase(); let i = -1;
+    if ((e.metaKey || e.ctrlKey) && e.key === '/') i = 7; else if (e.shiftKey && k === 'A') i = 6; else if (!e.metaKey && !e.ctrlKey && !e.altKey) i = ['V', 'F', 'R', 'O', 'T', 'P'].indexOf(k);
+    if (i >= 0) { if (i === 7) e.preventDefault(); this.figPress(i); }
+  };
+  loopStage = React.createRef();
+  onLoopResize = () => { const el = this.loopStage.current; if (!el) return; const k = Math.max(0.3, Math.min((el.clientWidth - 20) / 720, (el.clientHeight - 24) / 480, 1.25)); if (Math.abs(k - (this.state.loopK || 0)) > 0.002) this.setState({ loopK: k }); };
+  tryStep(i) {
+    const cfg = [['design', 'card'], ['design', 'button'], ['design', 'button'], ['proto', 'button'], ['inspect', 'card'], ['design', 'frame']][i];
+    this.setState({ tab: cfg[0], sel: cfg[1], present: false });
+    this.goDemo();
+  }
+  loopGo(i) { const el = document.querySelector('[data-step="' + i + '"]'); if (!el) return; const r = el.getBoundingClientRect(); window.scrollTo({ top: window.scrollY + r.top + r.height / 2 - window.innerHeight / 2 + 2, behavior: 'smooth' }); }
+  loopVals(S) {
+    const st = S.step, q = S.loopQ || 0, cl = x => Math.min(1, Math.max(0, x));
+    const gap = st === 0 ? Math.round(4 + 12 * q) : 16, red = st === 0;
+    const btnY = 56 + 20 + 15 + 20 + 18 + 24 + gap * 3 + 32 * 2 + 17;
+    const typed = st === 4 ? Math.ceil(cl(q * 1.3) * 9) : 9;
+    const CODE = [['<div class="flex flex-col', '#F0C987'], ['  gap-4 px-[18px] py-[18px]', '#7FD3DA'], ['  bg-surface-raised rounded-[10px]">', '#7FD3DA'], ['  <h1 class="text-[19px] font-bold">', '#F0C987'], ['    Create your account', '#E8E4DC'], ['  </h1>', '#F0C987'], ['  <button class="h-[34px] rounded-[7px]', '#F0C987'], ['    bg-brand-primary">Start trial</button>', '#7FD3DA'], ['</div>', '#F0C987']];
+    const VERS = [['Autosaved', 'just now', '#3E9A5E'], ['Named: “Trial copy”', '2 min ago', '#0B8F9A'], ['Recovered after crash', 'yesterday', '#C9962E']];
+    const mq = st === 2 ? q : 0;
+    const o = {
+      gapH: gap + 'px', gapL: red ? String(gap) : '', padH: '18px', padL: red ? '18' : '',
+      redBg: red ? 'rgba(214,64,159,.14)' : 'transparent', redFg: '#B02E82',
+      lbl: st === 0 ? 'Sign up · auto layout ↓' : 'Sign up', lblC: st === 0 ? '#0B7F89' : '#6A655D',
+      compOp: st >= 1 ? 1 : 0, btnRing: st === 1 ? '0 0 0 2px #FFFFFF, 0 0 0 3.5px #7A5AF8' : 'none',
+      btnText: st > 2 || (st === 2 && q > 0.7) ? 'Start trial' : 'Create account',
+      varOp: st === 1 ? cl(q * 3) : 0, varT: 'translateX(' + (st === 1 ? (1 - cl(q * 3)) * 24 : 24) + 'px)',
+      welOp: st >= 3 ? (st === 3 ? cl(q * 2.5) : 1) : 0, welT: 'translateX(' + (st === 3 ? (1 - cl(q * 2.5)) * 24 : st > 3 ? 0 : 24) + 'px)',
+      btnY: String(btnY), nOp: st >= 3 ? (st === 3 ? 1 : 0.35) : 0, nDash: String(st === 3 ? Math.round(260 * (1 - cl((q - 0.2) * 1.8))) : st > 3 ? 0 : 260),
+      nEnd: st === 3 ? String(cl((q - 0.6) * 4)) : st > 3 ? '1' : '0', nLbl: st === 3 ? cl((q - 0.55) * 4) : 0, chipY: (Math.round((btnY + 200) / 2) + 10) + 'px',
+      curOp: st === 2 ? 1 : 0,
+      mX: Math.round(262 - 70 * mq) + 'px', mY: Math.round(360 - (360 - btnY + 6) * mq) + 'px',
+      jX: Math.round(20 + 90 * mq) + 'px', jY: Math.round(110 + 40 * mq) + 'px',
+      comOp: st === 2 ? cl((q - 0.25) * 4) : 0, comT: 'translateY(' + (st === 2 ? (1 - cl((q - 0.25) * 4)) * 8 : 8) + 'px)', replyOp: st === 2 && q > 0.6 ? 1 : 0,
+      codeOp: st === 4 ? 1 : 0, codeT: 'translateX(' + (st === 4 ? 0 : 24) + 'px)',
+      code: CODE.map((c, i) => ({ t: c[0], c: c[1], op: i < typed ? 1 : 0, f: i < typed ? 'blur(0px)' : 'blur(3px)' })),
+      verOp: st === 5 ? 1 : 0, verT: 'translateX(' + (st === 5 ? 0 : 24) + 'px)',
+      vers: VERS.map((v, i) => { const on = st === 5 && q > 0.12 + i * 0.22; return { name: v[0], when: v[1], c: v[2], op: on ? 1 : 0, t: on ? 'translateY(0px)' : 'translateY(6px)', f: on ? 'blur(0px)' : 'blur(4px)' }; })
+    };
+    const bf = x => 'blur(' + ((1 - Math.min(1, Math.max(0, x))) * 8).toFixed(1) + 'px)';
+    o.varF = bf(o.varOp); o.welF = bf(o.welOp); o.comF = bf(o.comOp); o.codeF = bf(o.codeOp); o.verF = bf(o.verOp);
+    return o;
+  }
+  heroRow = React.createRef(); chipRef = React.createRef(); inspRef = React.createRef();
+  edBox = React.createRef(); world = React.createRef(); curMara = React.createRef(); curJun = React.createRef(); curAgent = React.createRef();
+  agentRef = React.createRef(); archRef = React.createRef(); statRef = React.createRef();
+  TOOLS = [
+    { k: 'V', title: 'Move', d: 'M3.5 2.5l9 5-4 1-2 4.5z' },
+    { k: 'F', title: 'Frame', d: 'M5 1.5v13M11 1.5v13M1.5 5h13M1.5 11h13' },
+    { k: 'R', title: 'Rectangle', d: 'M2.5 3.5h11v9h-11z' },
+    { k: 'O', title: 'Ellipse', d: 'M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z' },
+    { k: 'P', title: 'Pen', d: 'M8 1.5l4.5 6.5L8 14.5 3.5 8zM8 8v6.5' },
+    { k: 'T', title: 'Text', d: 'M3 3h10M8 3v10.5' },
+    { k: 'C', title: 'Comment', d: 'M2.5 3h11v7.5h-6l-3 2.5v-2.5h-2z' }
+  ];
+  LAYERS = [
+    { id: 'frame', name: 'Sign up — Mobile', g: '#', d: 0 },
+    { id: 'card', name: 'Form', g: '⇕', d: 1 },
+    { id: 'headline', name: 'Headline', g: 'T', d: 2 },
+    { id: 'subhead', name: 'Subhead', g: 'T', d: 2 },
+    { id: 'email', name: 'Input / Email', g: '◇', d: 2 },
+    { id: 'password', name: 'Input / Password', g: '◇', d: 2 },
+    { id: 'button', name: 'Button', g: '◇', d: 2 },
+    { id: 'welcome', name: 'Welcome', g: '#', d: 0 }
+  ];
+  VARIANTS = { primary: 'Primary', secondary: 'Secondary', disabled: 'Disabled' };
+  AG_PROMPT = 'Make a mobile sign-up screen with email, password and a primary button. Use our tokens.';
+  AG_LINES = [
+    ['create_frame', '"Sign up — Mobile" 360×640'],
+    ['set_auto_layout', 'vertical · gap 16 · padding 24'],
+    ['create_text', '"Create your account" · Heading/L'],
+    ['create_instance', 'Input / Email'],
+    ['create_instance', 'Input / Password'],
+    ['create_instance', 'Button / Primary'],
+    ['audit_contrast', '0 issues']
+  ];
+  mode() { return this.state.mode || this.props.demoMode || 'light'; }
+  tokens() {
+    const f = this.state.fixed;
+    return this.mode() === 'dark'
+      ? { bg: '#141317', surface: '#1F1E24', field: '#18171C', border: '#34323A', text: '#F2F0EC', muted: f ? '#B3ADA4' : '#77726B', primary: '#FF7A52', primaryFg: '#1B0E08', disabled: '#2A2930', disabledFg: '#77726B' }
+      : { bg: '#FFFFFF', surface: '#F5F3EF', field: '#FFFFFF', border: '#DCD7CF', text: '#1B1A1F', muted: f ? '#6A655D' : '#9C968D', primary: '#E0603A', primaryFg: '#FFFFFF', disabled: '#E6E2DB', disabledFg: '#8C867C' };
+  }
+  lum(hex) { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+  ratio(a, b) { const x = this.lum(a), y = this.lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  rectOf(id) {
+    const w = this.world.current; if (!w) return null;
+    const el = w.querySelector('[data-sel="' + id + '"]'); if (!el) return null;
+    let x = 0, y = 0, n = el;
+    while (n && n !== w) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+    if (n !== w) return null;
+    return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+  }
+  measureHero() {
+    const row = this.heroRow.current, c = this.chipRef.current, i = this.inspRef.current;
+    if (!row || !c || !i || !i.offsetWidth) return;
+    const R = row.getBoundingClientRect(), a = c.getBoundingClientRect(), b = i.getBoundingClientRect();
+    const sx = Math.round(a.right - R.left + 6), sy = Math.round(a.top + a.height / 2 - R.top);
+    const ex = Math.round(b.left - R.left - 6), ey = Math.round(b.top + b.height * 0.62 - R.top);
+    const mx = Math.round((sx + ex) / 2);
+    const d = 'M' + sx + ' ' + sy + ' C ' + mx + ' ' + sy + ', ' + mx + ' ' + ey + ', ' + ex + ' ' + ey;
+    const upd = {};
+    if (d !== this.state.heroPath) Object.assign(upd, { heroPath: d, hSx: sx, hSy: sy, hEx: ex, hEy: ey });
+    const ds = this.designRef.current;
+    if (ds) {
+      const r = ds.getBoundingClientRect();
+      const mb = { x: Math.round(r.left - R.left - 10), y: Math.round(r.top - R.top + r.height * 0.06), w: Math.round(r.width + 20), h: Math.round(r.height * 0.92) };
+      const mp = { x: Math.round(b.left - R.left - 272 - 150), y: Math.round(b.top - R.top - 60) };
+      if (mp.x < 0) mp.x = Math.round(Math.min(R.width - 272, b.right - R.left + 40));
+      if (JSON.stringify(mb) !== JSON.stringify(this.state.mBox) || JSON.stringify(mp) !== JSON.stringify(this.state.mPanel)) Object.assign(upd, { mBox: mb, mPanel: mp });
+    }
+    if (Object.keys(upd).length) this.setState(upd);
+  }
+  tickMara(now) {
+    const cur = this.marCur.current, row = this.heroRow.current, S = this.state;
+    if (!cur || !row || !S.mBox || !S.mPanel || !this.inspRef.current || !this.inspRef.current.offsetWidth) return;
+    const R = row.getBoundingClientRect();
+    const pos = (ref, fx, fy) => { const el = ref && ref.current; if (!el || !el.offsetWidth) return null; const r = el.getBoundingClientRect(); return { x: r.left - R.left + r.width * fx, y: r.top - R.top + r.height * fy }; };
+    if (!this.mT0) { this.mT0 = now; this.mPos = { x: S.mPanel.x + 200, y: S.mPanel.y + 16 }; }
+    const L = 10, t = (now - this.mT0) / 1000, ph = t % L, cyc = Math.floor(t / L), V = this.VARS[cyc % this.VARS.length];
+    const rest = { x: S.mPanel.x + 200, y: S.mPanel.y + 16 };
+    const tD = { x: S.mBox.x + S.mBox.w * 0.6, y: S.mBox.y + S.mBox.h * 0.55 };
+    const tRow = pos(V[0] === 'fill' ? this.mFillRow : this.mFontRow, 0.72, 0.5) || rest;
+    const tOpt = pos(V[0] === 'fill' ? this.swRefs[V[1]] : this.fontRefs[V[1]], 0.5, 0.5) || tRow;
+    let tgt = rest;
+    if (ph >= 1 && ph < 2.6) tgt = tD; else if (ph >= 2.6 && ph < 3.9) tgt = tRow; else if (ph >= 3.9 && ph < 5.8) tgt = tOpt; else if (ph >= 5.8 && ph < 8.2) tgt = tRow;
+    const want = { sel: ph >= 2.45 && ph < 8.6, panel: ph >= 2.6 && ph < 8.4, pop: ph >= 3.8 && ph < 5.8 ? V[0] : null };
+    if (want.sel !== S.mSel || want.panel !== S.mPanelOn || want.pop !== S.mPop) this.setState({ mSel: want.sel, mPanelOn: want.panel, mPop: want.pop });
+    if (ph >= 5.2 && this.lastPickCyc !== cyc) { this.lastPickCyc = cyc; this.setState(V[0] === 'fill' ? { mFill: V[1] } : { mFont: V[1] }); }
+    this.mPos.x += (tgt.x - this.mPos.x) * 0.08; this.mPos.y += (tgt.y - this.mPos.y) * 0.08;
+    const click = (ph > 2.35 && ph < 2.55) || (ph > 3.65 && ph < 3.85) || (ph > 5.05 && ph < 5.25) ? 0.82 : 1;
+    cur.style.transform = 'translate(' + this.mPos.x.toFixed(1) + 'px,' + this.mPos.y.toFixed(1) + 'px) scale(' + click + ')';
+  }
+  expTarget() { const vw = window.innerWidth, vh = window.innerHeight, k = Math.min((vw - 48) / 1280, (vh - 48) / 680, 1.35); return { l: Math.round((vw - 1280 * k) / 2), t: Math.round((vh - 680 * k) / 2), k }; }
+  openExp = () => {
+    if (this.state.exp !== 'none' || Date.now() < (this.expCool || 0) || !this.edBox.current) return;
+    clearTimeout(this.hovT);
+    const r = this.edBox.current.getBoundingClientRect();
+    document.documentElement.style.overflow = 'hidden';
+    this.setState({ exp: 'pre', expS: { l: r.left, t: r.top, k: this.state.edScale || 1 }, expT: this.expTarget() });
+    clearTimeout(this.expTm);
+    this.expTm = setTimeout(() => { if (this.state.exp === 'pre') this.setState({ exp: 'open' }); }, 40);
+  };
+  closeExp = () => {
+    if (this.state.exp === 'pre') { clearTimeout(this.expTm); document.documentElement.style.overflow = ''; this.setState({ exp: 'none' }); return; }
+    if (this.state.exp !== 'open' || !this.edBox.current) { document.documentElement.style.overflow = ''; return; }
+    const r = this.edBox.current.getBoundingClientRect();
+    this.setState({ exp: 'closing', expS: { l: r.left, t: r.top, k: this.state.edScale || 1 } });
+    clearTimeout(this.expTm);
+    this.expTm = setTimeout(() => { document.documentElement.style.overflow = ''; this.expCool = Date.now() + 900; this.setState({ exp: 'none' }); }, 640);
+  };
+  edEnter = () => { if (!this.hoverOK || this.state.exp !== 'none') return; clearTimeout(this.hovT); this.hovT = setTimeout(this.openExp, 450); };
+  edLeave = () => clearTimeout(this.hovT);
+  measure = () => {
+    this.measureHero();
+    if (this.state.present) return;
+    const b = this.rectOf(this.state.sel), bt = this.rectOf('button'), sh = this.rectOf('subhead');
+    const upd = {};
+    if (b) { const nb = { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) }; if (JSON.stringify(nb) !== JSON.stringify(this.state.box)) upd.box = nb; }
+    if (bt) {
+      const x0 = bt.x + bt.w, y0 = bt.y + bt.h / 2, x1 = 410, y1 = 318;
+      const d = 'M' + x0 + ' ' + y0 + ' C ' + (x0 + 50) + ' ' + y0 + ', ' + (x1 - 50) + ' ' + y1 + ', ' + (x1 - 4) + ' ' + y1;
+      if (d !== this.state.noodle) Object.assign(upd, { noodle: d, nx: x1 - 4, ny: y1 });
+    }
+    if (sh) { const pb = { x: Math.round(sh.x + sh.w - 40), y: Math.round(sh.y + sh.h - 2) }; if (JSON.stringify(pb) !== JSON.stringify(this.state.pinBase)) upd.pinBase = pb; }
+    if (Object.keys(upd).length) this.setState(upd);
+  };
+  onResize = () => {
+    if (Math.abs(window.innerWidth - this.state.vw) > 1) this.setState({ vw: window.innerWidth });
+    requestAnimationFrame(this.pinTick);
+    if (this.state.exp === 'open') this.setState({ expT: this.expTarget() });
+    const el = this.edBox.current; if (!el || !el.clientWidth) return;
+    if (this._obsEd !== el && this.ro) { this.ro.observe(el); this._obsEd = el; if (this.io) this.io.observe(el); }
+    const k = Math.max(0.2, Math.min(1, el.clientWidth / 1280));
+    if (Math.abs(k - this.state.edScale) > 0.001) this.setState({ edScale: k });
+  };
+  pick(id, e) {
+    if (e) e.stopPropagation();
+    if (this.state.present) { if (id === 'button' && this.state.variant !== 'disabled') this.setState({ presentAt: 'welcome' }); return; }
+    this.setState({ sel: id, tool: 'V' });
+  }
+  onKey = e => {
+    const t = e.target && e.target.tagName; if (t === 'INPUT' || t === 'TEXTAREA') return;
+    if (e.key === 'Escape' && this.state.present) { this.setState({ present: false }); return; }
+    if (e.key === 'Escape' && this.state.exp !== 'none') { this.closeExp(); return; }
+    if (!this.edVis || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toUpperCase(); if (this.TOOLS.some(x => x.k === k)) this.setState({ tool: k });
+  };
+  tickCursors = () => {
+    const t = performance.now() / 1000, S = this.state;
+    const set = (r, x, y) => { if (r.current) r.current.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; };
+    set(this.curMara, 200 + 95 * Math.sin(t * 0.45), 330 + 110 * Math.sin(t * 0.31 + 1));
+    set(this.curJun, 620 + 36 * Math.sin(t * 0.7), 150 + 40 * Math.cos(t * 0.5));
+    if (!this.ag) this.ag = { x: 690, y: 560 };
+    let tx = 660 + 50 * Math.sin(t * 0.4), ty = 570 + 18 * Math.cos(t * 0.6);
+    if (this.agentPhase === 'go' && S.pinBase) { tx = S.pinBase.x + 6; ty = S.pinBase.y + 6; }
+    if (this.agentPhase === 'pinned' && S.pinBase) { tx = S.pinBase.x - 16; ty = S.pinBase.y - 14; }
+    this.ag.x += (tx - this.ag.x) * 0.05; this.ag.y += (ty - this.ag.y) * 0.05;
+    set(this.curAgent, this.ag.x, this.ag.y);
+    if (this.agentPhase === 'go' && Math.hypot(tx - this.ag.x, ty - this.ag.y) < 6) { this.agentPhase = 'pinned'; this.setState({ pin: true }); }
+    if (!this.reduce) this.tickMara(performance.now());
+    this.tickAgentDemo();
+    this.raf = requestAnimationFrame(this.tickCursors);
+  };
+  scheduleAudit(ms) {
+    clearTimeout(this.auditT);
+    this.auditT = setTimeout(() => { if ((this.props.agentAudit ?? true) && !this.state.fixed && !this.state.present) this.agentPhase = 'go'; else this.scheduleAudit(8000); }, ms);
+  }
+  SC = [
+    { chip: 'Sign-up screen', file: 'Sign up — Mobile', prompt: 'Make a mobile sign-up screen with email, password and a primary button. Use our tokens.', steps: [['create_frame', '"Sign up — Mobile" 360×640', '0.3s'], ['set_auto_layout', 'vertical · gap 14 · padding 24', '0.2s'], ['create_text', '"Create your account" · Heading/L', '0.4s'], ['create_text', '"Start a 14-day trial" · Body/S', '0.3s'], ['create_instance', 'Input / Email', '0.2s'], ['create_instance', 'Input / Password', '0.2s'], ['create_instance', 'Button / Primary', '0.2s'], ['audit_contrast', '1 issue · Subhead 2.9:1', '0.9s', 'warn'], ['set_fill', 'Subhead → text/muted · 5.8:1', '0.2s', 'fix']], nodes: { f1: [0, 1], h1: [2], sb1: [3, 7, 8], e1: [4], p1: [5], b1: [6] }, flag: ['sb1'], summary: 'Built 6 nodes and fixed 1 contrast issue. The whole run is one undo away.' },
+    { chip: 'Pricing card', file: 'Pricing / Pro', prompt: 'Design a Pro pricing card with the price, three features, a trial button and a “Popular” badge.', steps: [['create_frame', '"Pricing / Pro" 320×420', '0.3s'], ['set_auto_layout', 'vertical · gap 12 · padding 24', '0.2s'], ['create_text', '"Pro" · Heading/M', '0.3s'], ['create_text', '"$24 / month" · Display/S', '0.3s'], ['create_instance', 'List / Check × 3', '0.4s'], ['create_instance', 'Button / Primary', '0.2s'], ['create_instance', 'Badge / Popular', '0.2s'], ['audit_contrast', '1 issue · Badge text 2.0:1', '0.8s', 'warn'], ['set_fill', 'Badge label → text/on-accent · 6.4:1', '0.2s', 'fix']], nodes: { f2: [0, 1], t2: [2], pr2: [3], l2: [4], b2: [5], bd2: [6, 7, 8] }, flag: ['bd2'], summary: 'Built the card and fixed the badge label contrast.' },
+    { chip: 'Make it dark mode', file: 'Sign up — Mobile', pre: true, prompt: 'Switch this screen to dark mode and check it still passes contrast.', steps: [['select_node', '"Sign up — Mobile"', '0.1s'], ['set_variable_mode', 'Theme → Dark', '0.2s'], ['resolve_tokens', '12 bindings updated', '0.3s'], ['audit_contrast', '1 issue · Input border 1.2:1', '0.7s', 'warn'], ['set_stroke', 'Inputs → border/strong · 3.4:1', '0.2s', 'fix']], nodes: { f3: [0, 1, 2], i3: [3, 4] }, flag: ['i3'], summary: 'Switched to dark mode and fixed 1 issue. No layout changed.' }
+  ];
+  tickAgentDemo() {
+    if (!this.agVis) return;
+    const now = performance.now(), S = this.state, sc = this.SC[S.agScene || 0], L = sc.steps.length, ph = S.agPhase || 'typing';
+    if (!this.agT) this.agT = now;
+    const dt = now - this.agT;
+    if (ph === 'typing') { if (S.typed < sc.prompt.length) { if (dt > 18) { this.agT = now; this.setState({ typed: S.typed + 1 }); } } else if (dt > 380) { this.agT = now; this.setState({ agPhase: 'running' }); } return; }
+    if (ph === 'running') { if (dt > 560) { this.agT = now; const n = S.agN + 1; this.setState({ agN: n, agMax: Math.max(S.agMax || 0, n), agPhase: n >= L ? 'done' : 'running' }); } return; }
+    if (ph === 'done') { if (!this.agUser && dt > 7500) { this.agReset((S.agScene + 1) % this.SC.length); } return; }
+    if (ph === 'undoing') { if (dt > 110) { this.agT = now; const n = S.agN - 1; this.setState({ agN: Math.max(0, n), agPhase: n <= 0 ? 'undone' : 'undoing' }); } return; }
+    if (ph === 'redoing') { if (dt > 110) { this.agT = now; const n = S.agN + 1; this.setState({ agN: Math.min(L, n), agPhase: n >= L ? 'done' : 'redoing' }); } }
+  }
+  agReset(scene) { this.agT = performance.now(); this.setState({ agScene: scene == null ? (this.state.agScene || 0) : scene, typed: 0, agN: 0, agMax: 0, agPhase: 'typing', agHover: -1 }); }
+  agentVals(S) {
+    const i = S.agScene || 0, sc = this.SC[i], n = S.agN || 0, max = S.agMax || 0, ph = S.agPhase || 'typing', hov = S.agHover == null ? -1 : S.agHover, L = sc.steps.length;
+    const w = sc.steps.findIndex(s => s[3] === 'warn'), f = sc.steps.findIndex(s => s[3] === 'fix');
+    const an = { s1: i === 0, s2: i === 1, s3: i === 2 };
+    Object.keys(sc.nodes).forEach(k => {
+      const st = sc.nodes[k], vis = sc.pre || n > st[0], flagged = sc.flag.includes(k) && n === w + 1;
+      an[k + 'Op'] = vis ? 1 : 0; an[k + 'F'] = vis ? 'blur(0px)' : 'blur(6px)';
+      an[k + 'R'] = flagged ? '0 0 0 2px #B3261E' : st.includes(hov) && vis ? '0 0 0 2px #0B8F9A' : 'none';
+      an[k + 'H'] = () => this.setState({ agHover: st[st.length - 1] < max ? st[st.length - 1] : st[0] });
+    });
+    an.pad1 = n > 1 ? '24px' : '8px'; an.sb1C = i === 0 && n > f ? '#6A655D' : '#9C968D';
+    an.pad2 = n > 1 ? '24px' : '8px'; an.bd2C = i === 1 && n > f ? '#5C1D0A' : '#FFFFFF';
+    const dark = i === 2 && n >= 2, fixed = i === 2 && n > f;
+    Object.assign(an, { bg3: dark ? '#141317' : '#FFFFFF', tx3: dark ? '#F2F0EC' : '#1D1B18', mu3: dark ? '#B3ADA4' : '#6A655D', bo3: fixed ? '#6B6875' : dark ? '#26252B' : '#DCD7CF', fi3: dark ? '#1B1A20' : '#FFFFFF', pr3: dark ? '#FF7A52' : '#E0603A', pf3: dark ? '#1B0E08' : '#FFFFFF', mode3: dark ? 'Dark' : 'Light' });
+    const running = ph === 'running';
+    const lines = sc.steps.map((s, k) => {
+      const shown = k < max || (running && k === n); if (!shown) return null;
+      const done = k < n, cur = running && k === n;
+      return { fn: s[0], arg: s[1], time: done ? s[2] : cur ? '…' : '', mark: done ? (s[3] === 'warn' ? '!' : '✓') : cur ? '◌' : '↶', dot: done ? (s[3] === 'warn' ? '#F0A35E' : '#6FC58A') : cur ? '#F0C987' : '#6F6A62', fc: done || cur ? '#F0C987' : '#6F6A62', op: done || cur ? 1 : 0.45, bg: hov === k ? '#2A2825' : 'transparent', hover: () => this.setState({ agHover: k }) };
+    }).filter(Boolean);
+    const credits = Math.round(max * 4.5), canUndo = ph === 'done' || ph === 'undone';
+    return {
+      an, agLines: lines, agFile: sc.file, agPrompt: sc.prompt.slice(0, S.typed || 0), agCaretD: ph === 'typing' ? 'inline-block' : 'none',
+      agCount: max + ' / ' + L,
+      agChips: this.SC.map((c, k) => ({ label: c.chip, on: () => { this.agUser = true; this.agReset(k); }, bg: k === i ? '#F3F0EA' : 'transparent', fg: k === i ? '#1D1B18' : '#E8E4DC', bd: k === i ? '#F3F0EA' : '#3A3835' })),
+      agShowSum: ph === 'done' || ph === 'undone',
+      agSummary: ph === 'undone' ? 'Run undone in one step. Redo brings every node back.' : sc.summary,
+      agUndoLabel: ph === 'undone' || ph === 'redoing' ? 'Redo' : 'Undo run',
+      agUndoBg: canUndo ? '#F3F0EA' : '#2A2825', agUndoFg: canUndo ? '#1D1B18' : '#6F6A62', agUndoCur: canUndo ? 'pointer' : 'default',
+      agUndoBtn: () => { this.agUser = true; if (ph === 'done') { this.agT = performance.now(); this.setState({ agPhase: 'undoing', agHover: -1 }); } else if (ph === 'undone') { this.agT = performance.now(); this.setState({ agPhase: 'redoing' }); } },
+      agHoverOff: () => { if (this.state.agHover !== -1) this.setState({ agHover: -1 }); },
+      agMeterLabel: S.cloud ? 'hosted run · ' + credits + ' of 1,000 credits held' : 'local · xeno-rt · no credits used',
+      agMeterD: S.cloud ? 'block' : 'none', agMeterW: Math.max(2, credits / 1000 * 100 * 4) + '%',
+      agCanvasNote: ph === 'typing' ? 'Waiting for the prompt…' : running ? 'Agent is editing · ' + n + ' of ' + L + ' steps' : ph === 'undone' ? 'Undone' : ph === 'undoing' ? 'Undoing…' : ph === 'redoing' ? 'Redoing…' : 'Hover a tool call to find its node'
+    };
+  }
+  revealCheck() {
+    if (!this._revPending || !this._revPending.length) return;
+    const vh = window.innerHeight;
+    this._revPending = this._revPending.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; });
+  }
+  revealAll() { (this._revPending || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; }); this._revPending = []; }
+  onScroll = () => {
+    this.pinTick();
+    this.revealCheck();
+    const mid = window.innerHeight / 2; let best = 0, bd = Infinity;
+    document.querySelectorAll('[data-step]').forEach(el => { const b = el.getBoundingClientRect(), d = Math.abs(b.top + b.height / 2 - mid); if (d < bd) { bd = d; best = +el.dataset.step; } });
+    if (best !== this.state.step) this.setState({ step: best });
+    const vh = window.innerHeight;
+    document.querySelectorAll('[data-step]').forEach(el => {
+      const b = el.getBoundingClientRect(), raw = Math.max(-1, Math.min(1, (b.top + b.height / 2 - mid) / (vh * 0.7)));
+      const hold = 0.3, ar = Math.abs(raw), d = ar <= hold ? 0 : Math.sign(raw) * (ar - hold) / (1 - hold);
+      const ad = Math.abs(d), x = this.reduce ? 0 : 110 * (1 - Math.sqrt(1 - d * d));
+      el.style.transform = 'translateX(' + x.toFixed(1) + 'px)';
+      el.style.opacity = (1 - 0.75 * Math.min(1, ad * 1.25)).toFixed(3);
+      el.style.filter = 'blur(' + (Math.min(1, ad * 1.25) * 5).toFixed(2) + 'px)';
+    });
+    const se = document.querySelector('[data-step="' + best + '"]');
+    if (se) { const r = se.getBoundingClientRect(); const q = Math.round(Math.min(1, Math.max(0, (mid - r.top) / r.height)) * 14) / 14; if (q !== this.state.loopQ) this.setState({ loopQ: q }); }
+    const a = this.archRef.current;
+    if (a) { const r = a.getBoundingClientRect(), p = this.reduce ? 1 : Math.min(1, Math.max(0, (window.innerHeight * 0.92 - r.top) / (r.height * 0.85))); if (Math.abs(p - this.state.archP) > 0.01 || (p === 1 && this.state.archP !== 1)) this.setState({ archP: p }); }
+    const s = this.statRef.current;
+    if (s && !this.state.statOn && s.getBoundingClientRect().top < window.innerHeight * 0.8) this.setState({ statOn: true });
+  };
+  componentDidMount() {
+    this.reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.onResize();
+    this.ro = new ResizeObserver(() => { this.onResize(); this.measure(); this.onLoopResize(); });
+    if (this.edBox.current) { this.ro.observe(this.edBox.current); this._obsEd = this.edBox.current; }
+    if (this.loopStage.current) this.ro.observe(this.loopStage.current);
+    setTimeout(this.onLoopResize, 50);
+    setTimeout(this.pinTick, 100); requestAnimationFrame(() => requestAnimationFrame(this.pinTick));
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.pinTick());
+    this.io = new IntersectionObserver(es => es.forEach(en => { if (en.target === this.edBox.current) this.edVis = en.isIntersecting; if (en.target === this.agentRef.current) this.agVis = en.isIntersecting; }), { threshold: 0.1 });
+    if (this.edBox.current) this.io.observe(this.edBox.current);
+    if (this.agentRef.current) this.io.observe(this.agentRef.current);
+    window.addEventListener('keydown', this.onKey);
+    window.addEventListener('keydown', this.figKeydown);
+    if (!this.reduce && 'IntersectionObserver' in window) {
+      const els = document.querySelectorAll('[data-reveal]');
+      this.revIO = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) { const t = en.target; t.style.opacity = '1'; t.style.filter = 'blur(0px)'; t.style.transform = 'translateY(0px)'; this.revIO.unobserve(t); } }), { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+      this._revPending = [];
+      els.forEach((el, k) => { const r = el.getBoundingClientRect(); if (r.top < window.innerHeight * 0.9) return; this._revPending.push(el); el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this.revIO.observe(el); });
+    }
+    setTimeout(() => this.revealCheck(), 60);
+    this._revSafe = setTimeout(() => this.revealAll(), 12000);
+    const ua = navigator.userAgent || '';
+    this.setState({ osName: /Windows/i.test(ua) ? 'windows' : /Mac/i.test(ua) ? 'mac' : /Linux|X11/i.test(ua) ? 'linux' : '' });
+    this.figIO = new IntersectionObserver(es => es.forEach(en => { this.figVis = en.isIntersecting; }), { threshold: 0.3 });
+    if (this.figRef.current) this.figIO.observe(this.figRef.current);
+    window.addEventListener('resize', this.onResize);
+    requestAnimationFrame(() => this.onResize()); setTimeout(() => this.onResize(), 300);
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+    this.onScroll();
+    this.junT = setInterval(() => this.setState(s => ({ junSel: !s.junSel })), 5200);
+    this.hoverOK = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+    this.agentPhase = 'idle'; this.scheduleAudit(4500);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.measure());
+    setTimeout(this.measure, 60);
+    this.raf = requestAnimationFrame(this.tickCursors);
+  }
+  componentDidUpdate(pp, ps) {
+    if (ps && ps.edScale !== this.state.edScale) this.pinTick();
+    if (this.state.pEditing && !this._pFocused && this.pEditRef.current) { const el = this.pEditRef.current; this._pFocused = true; el.textContent = this.state.pText; el.focus(); try { const rg = document.createRange(); rg.selectNodeContents(el); const s = window.getSelection(); s.removeAllRanges(); s.addRange(rg); } catch (_) {} } if (!this.state.edScale || this._obsEd !== this.edBox.current) this.onResize(); this.measure(); }
+  componentWillUnmount() {
+    cancelAnimationFrame(this.raf); this.insUp(); clearTimeout(this._swapT); clearTimeout(this._swapMsgT); clearTimeout(this._lockT); clearTimeout(this.hovT); clearTimeout(this.expTm); document.documentElement.style.overflow = ''; clearInterval(this.junT); clearTimeout(this.auditT); clearTimeout(this.copyT);
+    this.ro && this.ro.disconnect(); this.io && this.io.disconnect();
+    window.removeEventListener('keydown', this.onKey); window.removeEventListener('keydown', this.figKeydown); this.revIO && this.revIO.disconnect(); clearTimeout(this._revSafe); this.figIO && this.figIO.disconnect(); clearTimeout(this._figT); window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.onResize);
+  }
+  genCode(sel, fmt) {
+    const S = this.state, tw = n => n % 4 === 0 ? String(n / 4) : '[' + n + 'px]', v = S.variant;
+    const btnCss = v === 'primary' ? 'background: var(--brand-primary);\n  color: var(--brand-on-primary);' : v === 'secondary' ? 'background: transparent;\n  border: 1px solid var(--border-default);\n  color: var(--text-primary);' : 'background: var(--surface-disabled);\n  color: var(--text-disabled);';
+    const btnTw = v === 'primary' ? 'bg-brand-primary text-brand-on-primary' : v === 'secondary' ? 'border border-default text-primary' : 'bg-surface-disabled text-disabled';
+    const C = {
+      frame: ['.sign-up {\n  width: 300px;\n  height: 540px;\n  padding: 26px 22px 20px;\n  background: var(--surface-page);\n}', 'class="flex flex-col w-[300px] h-[540px]\n  px-[22px] pt-[26px] pb-5 bg-surface-page"'],
+      card: ['.form {\n  display: flex;\n  flex-direction: column;\n  gap: ' + S.gap + 'px;\n  padding: ' + S.pad + 'px;\n  background: var(--surface-raised);\n  border-radius: 12px;\n}', 'class="flex flex-col gap-' + tw(S.gap) + ' p-' + tw(S.pad) + '\n  bg-surface-raised rounded-xl"'],
+      headline: ['.headline {\n  font: 700 24px/30px var(--font-sans);\n  letter-spacing: -0.02em;\n  color: var(--text-primary);\n}', 'class="text-2xl/[30px] font-bold\n  tracking-tight text-primary"'],
+      subhead: ['.subhead {\n  font: 400 13.5px/20px var(--font-sans);\n  color: var(--text-muted);\n}', 'class="text-[13.5px]/5 text-muted"'],
+      email: ['.input {\n  height: 38px;\n  padding: 0 12px;\n  border: 1px solid var(--border-default);\n  border-radius: 8px;\n  background: var(--surface-field);\n}', 'class="h-[38px] px-3 rounded-lg border\n  border-default bg-surface-field"'],
+      button: ['.button {\n  height: 40px;\n  border-radius: 8px;\n  font: 600 14px var(--font-sans);\n  ' + btnCss + '\n}', 'class="h-10 rounded-lg font-semibold text-sm\n  ' + btnTw + '"'],
+      welcome: ['.welcome {\n  width: 300px;\n  height: 540px;\n  background: var(--surface-page);\n}', 'class="w-[300px] h-[540px] bg-surface-page"']
+    };
+    C.password = C.email;
+    return (fmt === 'css' ? '/* mode: ' + this.mode() + ' */\n' : '') + C[sel][fmt === 'css' ? 0 : 1];
+  }
+  renderVals() {
+    const S = this.state, tk = this.tokens(), P = S.present, sel = S.sel, v = S.variant, mode = this.mode();
+    const collab = this.props.collaborators ?? true;
+    const pk = {}; this.LAYERS.forEach(l => { pk[l.id] = e => this.pick(l.id, e); });
+    const btn = v === 'primary' ? { bg: tk.primary, fg: tk.primaryFg, border: 'transparent' } : v === 'secondary' ? { bg: 'transparent', fg: tk.text, border: tk.border } : { bg: tk.disabled, fg: tk.disabledFg, border: 'transparent' };
+    const INFO = {
+      frame: ['Sign up — Mobile', 'Frame', 'surface/page', tk.bg], card: ['Form', 'Auto layout', 'surface/raised', tk.surface],
+      headline: ['Headline', 'Text', 'text/primary', tk.text], subhead: ['Subhead', 'Text', 'text/muted', tk.muted],
+      email: ['Input / Email', 'Instance', 'surface/field', tk.field], password: ['Input / Password', 'Instance', 'surface/field', tk.field],
+      button: ['Button / ' + this.VARIANTS[v], 'Instance', v === 'primary' ? 'brand/primary' : v === 'secondary' ? 'none · border/default' : 'surface/disabled', btn.bg === 'transparent' ? tk.bg : btn.bg],
+      welcome: ['Welcome', 'Frame', 'surface/page', tk.bg]
+    }[sel];
+    const isInst = INFO[1] === 'Instance';
+    const box = S.box || { x: 0, y: 0, w: 0, h: 0 };
+    const seg = (opts, cur, fn) => opts.map(([k, label]) => ({ label, on: () => fn(k), bg: cur === k ? '#FFFFFF' : 'transparent', sh: cur === k ? '0 1px 2px rgba(0,0,0,.12)' : 'none' }));
+    const showPin = S.pin && !P && !S.fixed && (this.props.agentAudit ?? true);
+    const pb = S.pinBase || { x: 0, y: 0 };
+    const hints = { design: 'Select a layer · drag Gap and Padding · switch Light/Dark', proto: 'Prototype · the button navigates to Welcome', inspect: 'Inspect · copy token-aware CSS or Tailwind' };
+    const toolT = this.TOOLS.find(t => t.k === S.tool);
+    const st = S.step, sp = S.archP, sg = (a, b) => Math.min(1, Math.max(0, (sp - a) / (b - a)));
+    const e0 = sg(0, .3), e1 = sg(.3, .6), e2 = sg(.6, .9);
+    const AP = this.AG_PROMPT.length, n = S.agN;
+    const out = {
+      edBox: this.edBox, world: this.world, curMara: this.curMara, curJun: this.curJun, curAgent: this.curAgent, agentRef: this.agentRef, archRef: this.archRef, statRef: this.statRef,
+      edH: Math.round(680 * (S.edScale || 1)) + 'px', edPos: S.exp === 'none' ? 'absolute' : 'fixed', edL: S.exp === 'none' ? '0px' : (S.exp === 'open' ? S.expT.l : S.expS.l) + 'px', edTp: S.exp === 'none' ? '0px' : (S.exp === 'open' ? S.expT.t : S.expS.t) + 'px', edZ: S.exp === 'none' ? 'auto' : '90', edTr: S.exp === 'open' || S.exp === 'closing' ? 'left .62s cubic-bezier(.2,.8,.2,1), top .62s cubic-bezier(.2,.8,.2,1), transform .62s cubic-bezier(.2,.8,.2,1)' : 'none', edT: 'scale(' + (S.exp === 'none' ? (S.edScale || 1) : S.exp === 'open' ? S.expT.k : S.expS.k) + ')',
+      tools: this.TOOLS.map(t => ({ title: t.title + ' (' + t.k + ')', d: t.d, on: e => { e.stopPropagation(); this.setState({ tool: t.k }); }, bg: S.tool === t.k ? '#0B8F9A' : 'transparent', fg: S.tool === t.k ? '#FFFFFF' : '#3F3B35' })),
+      togglePresent: () => this.setState(s => ({ present: !s.present, presentAt: 'signup' })),
+      presBtnBg: P ? '#1D1B18' : '#0B8F9A', presBtnFg: '#FFFFFF', presLabel: P ? 'Exit' : 'Present',
+      sideW: P ? '0px' : '240px', rightW: P ? '0px' : '280px',
+      layers: this.LAYERS.map(l => ({ on: e => this.pick(l.id, e), indent: (8 + l.d * 14) + 'px', bg: sel === l.id ? 'rgba(11,143,154,.12)' : 'transparent', glyph: l.g, ic: l.g === '◇' ? '#7A5AF8' : '#8C867C', fg: l.g === '◇' ? '#5B3FD6' : '#1D1B18', name: l.id === 'button' ? 'Button / ' + this.VARIANTS[v] : l.name })),
+      canvasClick: () => { if (S.tool !== 'V') this.setState({ tool: 'V' }); },
+      canvasBg: P ? '#1D1B18' : '#EDEAE4', dotC: P ? 'rgba(255,255,255,.05)' : '#D6D1C8',
+      worldT: P ? 'translate(' + (S.presentAt === 'signup' ? 440 : 80) + 'px, 0px)' : 'translate(0px, 0px)',
+      pk, tk, btn, gapPx: S.gap + 'px', padPx: S.pad + 'px',
+      lblFrame: sel === 'frame' ? '#0B7F89' : '#6A655D', lblWelcome: sel === 'welcome' ? '#0B7F89' : '#6A655D', chromeOp: P ? 0 : 1,
+      opSignup: P && S.presentAt !== 'signup' ? 0 : 1, opWelcome: P && S.presentAt !== 'welcome' ? 0 : 1,
+      btnCursor: P ? 'pointer' : 'default', backCursor: P ? 'pointer' : 'default',
+      presentBack: e => { if (P) { e.stopPropagation(); this.setState({ presentAt: 'signup' }); } },
+      junSelOp: collab && S.junSel && !P ? 1 : 0, curOp: collab && !P ? 1 : 0, agentCurOp: (this.props.agentAudit ?? true) && !P ? 1 : 0,
+      noodleOp: S.tab === 'proto' && !P ? 1 : 0, noodle: S.noodle, noodleX: S.nx, noodleY: S.ny,
+      box: { x: box.x + 'px', y: box.y + 'px', w: box.w + 'px', h: box.h + 'px', label: box.w + ' × ' + box.h, wv: String(box.w), hv: String(box.h) },
+      selOp: P || !S.box ? 0 : 1,
+      showPin, pin: { x: pb.x + 'px', y: pb.y + 'px', ratio: this.ratio(tk.muted, tk.surface).toFixed(1) + ':1' },
+      stop: e => e.stopPropagation(),
+      fixContrast: e => { e.stopPropagation(); this.agentPhase = 'idle'; this.setState({ fixed: true, pin: false, sel: 'subhead' }); },
+      dismissPin: e => { e.stopPropagation(); this.agentPhase = 'idle'; this.setState({ pin: false }); this.scheduleAudit(20000); },
+      canvasHint: P ? (S.presentAt === 'signup' ? 'Presenting · click “Create account” · Esc to exit' : 'Smart animate · click ← Back to return') : (S.tool !== 'V' ? toolT.k + ' · ' + toolT.title + ', the same key as in Figma' : hints[S.tab]),
+      tabs: [['design', 'Design'], ['proto', 'Prototype'], ['inspect', 'Inspect']].map(([k, label]) => ({ label, on: () => this.setState({ tab: k }), fg: S.tab === k ? '#1D1B18' : '#8C867C', line: S.tab === k ? '#1D1B18' : 'transparent' })),
+      info: { name: INFO[0], type: INFO[1], typeFg: isInst ? '#5B3FD6' : '#5F5A52', typeBg: isInst ? 'rgba(122,90,248,.1)' : '#F4F2EE', token: INFO[2], fill: INFO[3], textStyle: sel === 'headline' ? 'Heading/L · 24/30 · Bold' : 'Body/S · 13.5/20 · Regular' },
+      isDesign: S.tab === 'design', isProto: S.tab === 'proto', isInspect: S.tab === 'inspect',
+      showAuto: sel === 'card', showButton: sel === 'button', notButton: sel !== 'button', showText: sel === 'headline' || sel === 'subhead',
+      gap: S.gap, pad: S.pad, setGap: e => this.setState({ gap: +e.target.value }), setPad: e => this.setState({ pad: +e.target.value }),
+      variantOpts: seg([['primary', 'Primary'], ['secondary', 'Secondary'], ['disabled', 'Disabled']], v, k => this.setState({ variant: k })),
+      variantName: this.VARIANTS[v],
+      fmtOpts: seg([['css', 'CSS'], ['tw', 'Tailwind']], S.fmt, k => this.setState({ fmt: k })),
+      modeOpts: seg([['light', 'Light'], ['dark', 'Dark']], mode, k => this.setState({ mode: k })),
+      code: this.genCode(sel, S.fmt),
+      copyLabel: S.copied ? 'Copied' : 'Copy',
+      copyCode: () => { try { navigator.clipboard && navigator.clipboard.writeText(this.genCode(sel, S.fmt)); } catch (_) {} this.setState({ copied: true }); clearTimeout(this.copyT); this.copyT = setTimeout(() => this.setState({ copied: false }), 1400); },
+      stepCap: ['auto layout · gap 16 · padding 24', 'component set · 3 variants', 'live cursors · 2 editors', 'flow · 2 frames', 'inspect · tailwind', 'release gates · v0.36.0'][st],
+      bars: [0, 1, 2, 3, 4, 5].map(i => ({ label: ['Design', 'Systematize', 'Collaborate', 'Prototype', 'Hand off', 'Trust it'][i], on: () => this.loopGo(i), op: i === st ? 1 : 0, t: i === st ? 'translateY(0%)' : 'translateY(-110%)', h: i === st ? '5px' : '3px', c: i === st ? '#1D1B18' : i < st ? '#9A948A' : '#DDD8D0' })),
+      runOpts: [['local', 'Local'], ['cloud', 'Run in cloud']].map(([k, label]) => { const on = (k === 'cloud') === S.cloud; return { label, on: () => this.setState({ cloud: k === 'cloud' }), bg: on ? '#F3F0EA' : 'transparent', fg: on ? '#1D1B18' : '#A9A398' }; }),
+      agentPrompt: this.AG_PROMPT.slice(0, S.typed),
+      agentLines: this.AG_LINES.slice(0, n).map((l, i) => { const done = i < n - 1 || S.agDone; return { fn: l[0], arg: l[1], mark: done ? '✓' : '◌', dot: done ? '#6FC58A' : '#F0C987' }; }),
+      agentDone: S.agDone,
+      runNote: S.cloud ? 'hosted run · bills credits · budget 1,000' : 'local · xeno-rt or api.xenostudio.ai',
+      agentReplay: () => this.agReset(),
+      ag0: n >= 1 ? 1 : 0, agPad: n >= 2 ? '24px' : '8px', ag2: n >= 3 ? 1 : 0, ag3: n >= 4 ? 1 : 0, ag4: n >= 5 ? 1 : 0, ag5: n >= 6 ? 1 : 0,
+      agSel: n >= 1 && !S.agDone ? 1 : 0,
+      a0: e0, a1: e1, a2: e2, t0: 'translateY(' + (1 - e0) * 18 + 'px)', t1: 'translateY(' + (1 - e1) * 18 + 'px)', t2: 'translateY(' + (1 - e2) * 18 + 'px)',
+      c0: 'scaleY(' + sg(.22, .38) + ')', c1: 'scaleY(' + sg(.52, .68) + ')',
+      w100: S.statOn ? '100%' : '0%', w90: S.statOn ? '90%' : '0%', w85: S.statOn ? '85%' : '0%'
+    };
+    for (let i = 0; i < 6; i++) { const on = S.faq === i; out['fq' + i] = on; out['ic' + i] = on ? '−' : '+'; out['fqR' + i] = on ? '1fr' : '0fr'; out['fqO' + i] = on ? 1 : 0; out['fqT' + i] = on ? 'translateY(0px)' : 'translateY(-6px)'; out['icT' + i] = on ? 'rotate(45deg)' : 'rotate(0deg)'; out['fqBg' + i] = on ? '#1D1B18' : 'transparent'; out['fqB' + i] = on ? '#1D1B18' : '#D6D0C7'; out['fqI' + i] = on ? '#FFFFFF' : '#1D1B18'; out['fqN' + i] = on ? '#0B7F89' : '#9A948A'; out['tg' + i] = () => this.setState(s => ({ faq: s.faq === i ? -1 : i })); }
+    Object.assign(out, { designRef: this.designRef, marCur: this.marCur,
+      designColor: this.FILLS[S.mFill][1], mToken: this.FILLS[S.mFill][0], mHex: this.FILLS[S.mFill][1],
+      dFamily: this.FONTS[S.mFont][1], dStyle: this.FONTS[S.mFont][2], dWeight: this.FONTS[S.mFont][3], dLs: this.FONTS[S.mFont][4], mFontName: this.FONTS[S.mFont][0], mWeight: String(this.FONTS[S.mFont][3]),
+      mFontRing: S.mPop === 'font' ? '0 0 0 1.5px #D6409F' : 'none', mFillRing: S.mPop === 'fill' ? '0 0 0 1.5px #D6409F' : 'none',
+      fontPopOp: S.mPop === 'font' ? 1 : 0, fontPopT: S.mPop === 'font' ? 'translateY(0px)' : 'translateY(-4px)',
+      fillPopOp: S.mPop === 'fill' ? 1 : 0, fillPopT: S.mPop === 'fill' ? 'translateY(0px)' : 'translateY(-4px)',
+      mFontOpts: this.FONTS.map((f, i) => ({ ref: this.fontRefs[i], name: f[0], family: f[1], style: f[2], bg: i === S.mFont ? '#F4F2EE' : 'transparent', check: i === S.mFont ? '✓' : '' })),
+      mSwatches: this.FILLS.map((f, i) => ({ ref: this.swRefs[i], c: f[1], ring: i === S.mFill ? '0 0 0 2px #FFFFFF, 0 0 0 4px #D6409F' : '0 0 0 1px rgba(0,0,0,.1)' })),
+      pick: { hueC: 'hsl(' + this.FILLS[S.mFill][2] + ',100%,50%)', sx: (this.FILLS[S.mFill][3] * 100) + '%', vy: ((1 - this.FILLS[S.mFill][4]) * 100) + '%', hx: (this.FILLS[S.mFill][2] / 360 * 100) + '%' },
+      mBox: S.mBox ? { x: S.mBox.x + 'px', y: S.mBox.y + 'px', w: S.mBox.w + 'px', h: S.mBox.h + 'px' } : { x: '0px', y: '0px', w: '0px', h: '0px' },
+      mPanel: S.mPanel ? { x: S.mPanel.x + 'px', y: S.mPanel.y + 'px' } : { x: '0px', y: '0px' },
+      mSelOp: S.mSel && S.vw >= 1060 ? 1 : 0, mPanelOp: S.mPanelOn ? 1 : 0, mPanelT: S.mPanelOn ? 'translateY(0px)' : 'translateY(8px)',
+      mFontRow: this.mFontRow, mFillRow: this.mFillRow,
+      edEnter: this.edEnter, edLeave: this.edLeave, openExp: this.openExp, closeExp: this.closeExp,
+      bdOp: S.exp === 'open' ? 1 : 0, bdPe: S.exp === 'open' || S.exp === 'pre' ? 'auto' : 'none',
+      pinWrap: this.pinWrap, pinInner: this.pinInner, heroTextEl: this.heroTextEl, ovEl: this.ovEl, edEl: this.edEl, goDemo: this.goDemo,
+      heroRow: this.heroRow, chipRef: this.chipRef, inspRef: this.inspRef, heroPath: S.heroPath || '', heroSx: S.hSx || 0, heroSy: S.hSy || 0, heroEx: S.hEx || 0, heroEy: S.hEy || 0, inspD: S.vw >= 1060 ? 'block' : 'none', productSlug: String(this.props.product ?? 'Canvas').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none', });
+    Object.assign(out, {
+      pFamily: this.FONTS[S.pFont][1], pStyle: this.FONTS[S.pFont][2], pWeight: String(this.FONTS[S.pFont][3]), pLs: this.FONTS[S.pFont][4], pFontName: this.FONTS[S.pFont][0],
+      pWeightName: ({ 700: 'Bold', 400: 'Regular', 500: 'Medium' })[this.FONTS[S.pFont][3]],
+      pSize: String(S.pSize), pSizeCss: 'calc(' + (S.pSize / 120).toFixed(3) + ' * clamp(52px, 8.4vw, 120px))',
+      pColor: this.FILLS[S.pFill][1], pToken: this.FILLS[S.pFill][0],
+      pFontOpen: S.pFontOpen, pFontRing: S.pFontOpen ? '0 0 0 1.5px #0B8F9A' : 'none',
+      pToggleFont: () => this.setState(s => ({ pFontOpen: !s.pFontOpen })),
+      pFontOpts: this.FONTS.map((f, i) => ({ name: f[0], family: f[1], style: f[2], bg: i === S.pFont ? '#F4F2EE' : 'transparent', check: i === S.pFont ? '✓' : '', on: () => this.setState({ pFont: i, pFontOpen: false }) })),
+      pSizeDown: () => this.setState(s => ({ pSize: Math.max(72, s.pSize - 8) })), pSizeUp: () => this.setState(s => ({ pSize: Math.min(136, s.pSize + 8) })),
+      pSwatches: this.FILLS.map((f, i) => ({ token: f[0], c: f[1], ring: i === S.pFill ? '0 0 0 2px #FFFFFF, 0 0 0 4px #0B8F9A' : '0 0 0 1px rgba(0,0,0,.1)', on: () => this.setState({ pFill: i }) }))
+    });
+    const pBad = this.textBad(S.pText);
+    Object.assign(out, {
+      pEditRef: this.pEditRef, pInput: this.pInput, pCommit: this.pCommit, pKey: this.pKey, pStartEdit: this.pStartEdit,
+      pEditD: S.pEditing ? 'inline-block' : 'none', pShowD: S.pEditing ? 'none' : 'inline',
+      pWords: S.pText.split(/(\s+)/).filter(Boolean).map(t => { const b = /\S/.test(t) && this.wordBad(t); return { t, f: b ? 'blur(0.2em)' : 'none', us: b ? 'none' : 'auto' }; }),
+      pName: pBad ? 'Hidden wording' : S.pText,
+      pNote: S.pLocked ? 'Okay, that’s enough. Editing is paused for a minute.' : S.pSwapped ? 'Blocked word swapped for “' + (this._swapWord || 'bruv') + '”.' : S.pEditing ? (S.pLiveBad ? 'That wording isn’t allowed.' : 'Enter to save · Esc to cancel') : (pBad ? 'Blocked words are blurred. Click the headline to rewrite it.' : 'Click the headline to rewrite it.'),
+      pNoteC: S.pLocked || S.pSwapped || (S.pEditing && S.pLiveBad) || (!S.pEditing && pBad) ? '#B3261E' : '#6A655D',
+      pChip: pBad ? 'Blocked wording hidden' : 'Heading/XL · ' + ({ 700: 'Bold', 400: 'Regular', 500: 'Medium' })[this.FONTS[S.pFont][3]],
+      pChipBg: pBad || (S.pEditing && S.pLiveBad) ? '#B3261E' : '#0B8F9A',
+      insT: 'translate(' + S.insX + 'px, ' + S.insY + 'px)', insCursor: S.insDrag ? 'grabbing' : 'grab',
+      insDown: this.insDown, insReset: () => this.setState({ insX: 0, insY: 0 })
+    });
+    const LT = ['Design', 'Systematize', 'Collaborate', 'Prototype', 'Hand off', 'Trust it'], TOOLS = ['Move', 'Frame', 'Component', 'Comment', 'Prototype', 'Inspect'], TA = [1, 2, 3, 4, 5, 0];
+    Object.assign(out, {
+      loopStage: this.loopStage, lp: this.loopVals(S),
+      loopTop: S.vw >= 900 ? 'max(72px, calc(50vh - (clamp(420px, 68vh, 620px) + 70px) / 2))' : '68px',
+      loopCols: S.vw >= 900 ? 'minmax(0,1.25fr) minmax(0,1fr)' : 'minmax(0,1fr)', stageH: S.vw >= 900 ? 'clamp(420px, 68vh, 620px)' : '46vh',
+      loopT: 'translate(-50%, calc(-50% + 0px)) scale(' + (S.loopK || 0.8).toFixed(3) + ')',
+      loopTabs: LT.map((l, i) => ({ label: l, on: () => this.loopGo(i), bg: i === S.step ? '#1D1B18' : 'transparent', fg: i === S.step ? '#FFFFFF' : '#5F5A52', bd: i === S.step ? '#1D1B18' : '#DDD8D0' })),
+      loopFileD: S.vw >= 1100 ? 'inline' : 'none', loopToolsJ: S.vw >= 1100 ? 'center' : 'flex-start',
+      loopTools: TOOLS.map((l, i) => ({ label: l, px: S.vw >= 1100 ? '9px' : '6px', bg: TA[S.step] === i ? '#0B8F9A' : 'transparent', fg: TA[S.step] === i ? '#FFFFFF' : '#5F5A52' })),
+      loopHint: ['F · Shift+A', 'Ctrl+Alt+K', 'C', 'Present ▶', 'Copy code', 'Autosave'][S.step], loopHintD: S.vw >= 1180 ? 'inline' : 'none',
+      try0: e => { e.preventDefault(); this.tryStep(0); }, try1: e => { e.preventDefault(); this.tryStep(1); }, try2: e => { e.preventDefault(); this.tryStep(2); },
+      try3: e => { e.preventDefault(); this.tryStep(3); }, try4: e => { e.preventDefault(); this.tryStep(4); }, try5: e => { e.preventDefault(); this.tryStep(5); }
+    });
+    Object.assign(out, this.agentVals(S));
+    Object.assign(out, { osShow: !!S.osName, osNote: S.osName === 'windows' ? 'You’re on Windows. This installer is for you.' : S.osName === 'mac' ? 'You’re on macOS. Mac builds are coming; Windows only for now.' : 'You’re on Linux. Linux builds are coming; Windows only for now.', osC: S.osName === 'windows' ? '#0B6F78' : '#8A6A1F', osBg: S.osName === 'windows' ? 'rgba(11,143,154,.1)' : '#FBF3E2' });
+    Object.assign(out, { faqPos: S.vw >= 1000 ? 'sticky' : 'static' });
+    Object.assign(out, { figRef: this.figRef, figKeyName: this.FIGKEYS[S.figKey][1],
+      figKeys: this.FIGKEYS.map((k, i) => ({ label: k[0], on: () => this.figPress(i), bg: i === S.figKey ? '#1D1B18' : '#FFFFFF', fg: i === S.figKey ? '#FFFFFF' : '#1D1B18', sh: i === S.figDown ? '0 0 0 1px rgba(29,27,24,.2)' : '0 0 0 1px rgba(29,27,24,.12), 0 2px 0 rgba(29,27,24,.18)', t: i === S.figDown ? 'translateY(2px)' : 'translateY(0px)' })) });
+    Object.assign(out, { nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } });
+    for (let i = 0; i < 6; i++) { out['bl' + i] = i === st ? 'blur(0px)' : 'blur(3px)'; out['op' + i] = i === st ? 1 : 0.3; out['v' + i] = i === st ? 1 : 0; out['vt' + i] = i === st ? 'translateY(0px)' : 'translateY(14px)'; }
+    return out;
+  }
+}
+</script>
+</body>
+</html>

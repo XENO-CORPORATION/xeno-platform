@@ -15,6 +15,8 @@ import {
 import { downloadClickHandler } from '../lib/startDownload';
 import { getProductContent } from '../content/products';
 import ProductLanding from './ProductLanding';
+import StaticDocRedirect from './StaticDocRedirect';
+import { PRODUCT_DESIGN_SLUGS } from '../lib/productDesigns';
 
 type OS = 'windows' | 'mac' | 'linux';
 function detectOS(): OS {
@@ -195,6 +197,10 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
  * the full ProductLanding; everything else keeps the lean page (SPEC L3). */
 const ProductPage: React.FC = () => {
   const { slug } = useParams();
+  // Slugs with an owner v2 design are static documents at this address
+  // (served by nginx); hand in-app navigation to it. This runs before the
+  // catalog lookup: twelve designs are not catalog products at all.
+  if (slug && PRODUCT_DESIGN_SLUGS.has(slug)) return <StaticDocRedirect to={`/product/${slug}`} />;
   const product = getProduct(slug);
   if (!product) return <Navigate to="/" replace />;
   const content = getProductContent(slug);
