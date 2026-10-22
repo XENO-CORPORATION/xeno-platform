@@ -66,6 +66,24 @@ async function main() {
     check(await code(() => rel.getDeploy(pool, who, d1.deploy.id)) === 'not_found', `${label} cannot read a deploy`);
   }
   check((await rel.listDeploys(pool, staff)).length === 4 && (await rel.listDeploys(pool, bot)).length === 4, 'staff and a staff agent read every deploy');
+  const paging=await pool.connect();await paging.query('BEGIN');
+  try{
+    const inserted=(await paging.query(`INSERT INTO release_deploys(natural_key,service,sha,mode,status,provenance,started_at)
+      SELECT 'page-proof-'||n,'page-proof','page-proof-'||n,'swap','ok','recorded',
+        CASE WHEN n>400 THEN NULL WHEN n>200 THEN '2026-01-06T10:00:00.123456Z'::timestamptz ELSE '2026-10-20T10:00:00Z'::timestamptz END
+      FROM generate_series(1,405) n RETURNING id`)).rows;
+    const seen=[];let beforeId;
+    for(let page=0;page<4;page++){
+      const rows=await rel.listDeploys(paging,staff,{service:'page-proof',limit:200,beforeId});
+      seen.push(...rows.map(r=>r.id));if(!rows.length)break;beforeId=rows.at(-1).id;
+      if(page===0)await paging.query("INSERT INTO release_deploys(natural_key,service,sha,mode,status,provenance,started_at) VALUES('page-new','page-proof','new','swap','ok','recorded',now())");
+    }
+    check(seen.length===405&&new Set(seen).size===405&&inserted.every(r=>seen.includes(r.id)), 'cursor paging reaches every old deploy despite equal dates, microseconds, null dates and a new deploy between pages');
+    check(await code(()=>rel.listDeploys(paging,staff,{beforeId:'invalid'}))==='invalid_cursor', 'malformed deploy cursors are refused');
+    check(await code(()=>rel.listDeploys(paging,staff,{before:'invalid-date'}))==='invalid_cursor', 'malformed deploy dates are refused');
+    const toolPage=await relMcp.callTool(paging,bot,'list_deploys',{service:'page-proof',limit:200,beforeId:seen[199]});
+    check(toolPage.structuredContent.deploys.length===200&&!toolPage.structuredContent.deploys.some(d=>seen.slice(0,200).includes(d.id)), 'staff agents can retrieve the same next deploy page');
+  }finally{await paging.query('ROLLBACK');paging.release();}
   const one = await rel.getDeploy(pool, staff, d1.deploy.id);
   check(one.healthcheck === 'passed /api/ready' && one.migrations[0] === '20261001-a.sql' && one.deployedBy === 'ops@xeno.test', 'a deploy carries its healthcheck, migrations and who ran it');
 

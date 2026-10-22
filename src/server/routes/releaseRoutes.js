@@ -51,7 +51,7 @@ const b = (req) => req.body || {};
 router.get('/whats-new', ...A, run(async (req) => ({ notes: await rel.whatsNew(req.db, req.actor, { limit: req.query.limit }) })));
 router.get('/summary', ...A, run(async (req) => ({ summary: await rel.summary(req.db, req.actor) })));
 router.get('/deploys', ...A, run(async (req) => {
-  const deploys = await rel.listDeploys(req.db, req.actor, { service: req.query.service, status: req.query.status, limit: req.query.limit, before: req.query.before });
+  const deploys = await rel.listDeploys(req.db, req.actor, { service: req.query.service, status: req.query.status, limit: req.query.limit, before: req.query.before, beforeId: req.query.beforeId });
   const states = await inotes.noteStates(req.db, req.actor, deploys.map((d) => d.id));
   return { deploys: deploys.map((d) => ({ ...d, internalNote: states[d.id] || null })) };
 }));

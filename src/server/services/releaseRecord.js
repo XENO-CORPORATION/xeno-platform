@@ -90,14 +90,23 @@ export async function recordDeploy(db, d) {
   return { deploy: deployShape(r.rows[0]), inserted: r.rows[0].inserted };
 }
 
-export async function listDeploys(db, actor, { service, status, limit, before } = {}) {
+export async function listDeploys(db, actor, { service, status, limit, before, beforeId } = {}) {
   needRead(actor);
   const where = [], p = [];
   if (service) { p.push(service); where.push(`service = $${p.length}`); }
   if (status) { p.push(status); where.push(`status = $${p.length}`); }
-  if (before) { p.push(new Date(before)); where.push(`started_at < $${p.length}`); }
+  if (beforeId) {
+    if(!UUID.test(String(beforeId)))throw new ReleaseError('Invalid deploy cursor','invalid_cursor');
+    const cursor=(await db.query('SELECT started_at::text AS started_at FROM release_deploys WHERE id=$1',[beforeId])).rows[0];
+    if(!cursor)throw new ReleaseError('Deploy cursor no longer exists; refresh the list','invalid_cursor');
+    if(cursor.started_at===null){p.push(beforeId);where.push(`started_at IS NULL AND id < $${p.length}::uuid`);}
+    else{p.push(cursor.started_at,beforeId);where.push(`(started_at < $${p.length-1}::timestamptz OR (started_at = $${p.length-1}::timestamptz AND id < $${p.length}::uuid) OR started_at IS NULL)`);}
+  } else if (before) {
+    const date=new Date(before);if(!Number.isFinite(date.getTime()))throw new ReleaseError('Invalid deploy date','invalid_cursor');
+    p.push(date);where.push(`started_at < $${p.length}`);
+  }
   p.push(limitOf(limit));
-  const r = await db.query(`SELECT * FROM release_deploys ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY started_at DESC NULLS LAST LIMIT $${p.length}`, p);
+  const r = await db.query(`SELECT * FROM release_deploys ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY started_at DESC NULLS LAST, id DESC LIMIT $${p.length}`, p);
   return r.rows.map(deployShape);
 }
 
