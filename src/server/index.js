@@ -533,7 +533,9 @@ console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pr
 app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
 
 // ULTRA HIGH LIMITS for base64 image data processing
-app.use(express.json({ 
+// Bound evidence requests before the general 100 MB parser allocates their body.
+app.use('/api/forum/report', express.json({ limit: '17mb', type: 'application/json' }));
+app.use(express.json({
   limit: '100mb',
   parameterLimit: 50000,
   type: ['application/json', 'text/plain']

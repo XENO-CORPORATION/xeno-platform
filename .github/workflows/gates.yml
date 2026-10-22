@@ -126,6 +126,9 @@ jobs:
       - name: Verify shared marketing navigation across homepage and all product designs
         run: npm run test:marketing-navigation
 
+      - name: Verify workspace reporting and evidence capture
+        run: npm run test:workspace-report
+
       # The build is only half the claim. Prerender writes the product pages,
       # and a build that silently emits nothing would still exit 0.
       - name: Assert the build produced a real bundle

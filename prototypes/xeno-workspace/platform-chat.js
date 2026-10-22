@@ -243,6 +243,7 @@
   addEventListener('message', (e) => {
     if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
     const m = e.data; if (!m || m.source !== 'xeno-chat') return;
+    if (m.type === 'report-open') { if (!document.querySelector('dialog[open],.xd')) window.XENO_REPORT?.open().catch(error => console.warn(error.message)); return; }
     if (m.type === 'generation-view') { window.XENO_GENERATIONS?.showView?.(window.XENO_GENERATIONS.asView(m.view)); return; }
     if (m.type === 'generation-grid-size') { window.XENO_GENERATIONS?.showSize?.(m.size); return; }
     if (m.type === 'generation-open') { if (['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(m.generationType) && window.XENO_GENERATIONS?.route?.()) { if (m.carry) window.XENO_GENERATIONS.carry(m.generationType, m.carry, frame); else window.XENO_GENERATIONS.open(m.generationType); } return; }

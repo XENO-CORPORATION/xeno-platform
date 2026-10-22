@@ -1,0 +1,9 @@
+import { build } from 'esbuild';
+import {readFileSync,writeFileSync,readdirSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+await build({ entryPoints: ['packages/report-client/src/index.ts'], outfile: 'prototypes/xeno-workspace/report-client.js', bundle: true, format: 'iife', globalName: 'XenoReportClient', platform: 'browser', target: 'es2022', banner: {js:'// GENERATED shared @xenosystem/report-client browser distribution.'} });
+const asset=name=>`/workspace/${name}?v=${createHash('sha256').update(readFileSync('prototypes/xeno-workspace/'+name)).digest('hex').slice(0,16)}`;
+writeFileSync('public/site/report-loader.js',`// GENERATED shared report composer loader.\n(()=>{if(window.XENO_REPORT||/^\\/(?:$|v3\\/?$|home-v21(?:\\/|$))/.test(location.pathname))return;const css=document.createElement('link');css.rel='stylesheet';css.href=${JSON.stringify(asset('report.css'))};document.head.append(css);(async()=>{for(const src of ${JSON.stringify(['report-client.js','report-capture.js','report-view.js'].map(asset))})await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;document.head.append(script);});})().catch(()=>console.warn('Report composer could not load'));})();\n`);
+const loaderHash=createHash('sha256').update(readFileSync('public/site/report-loader.js')).digest('hex').slice(0,16);
+const documents=['public/home-v21/index.html','public/product-pages/index.html',...readdirSync('public/product-pages',{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>`public/product-pages/${e.name}/index.html`)];
+for(const file of documents){const source=readFileSync(file,'utf8');const next=source.replace(/\/site\/report-loader\.js\?v=[a-f0-9]{16}/g,`/site/report-loader.js?v=${loaderHash}`);if(next!==source)writeFileSync(file,next);}

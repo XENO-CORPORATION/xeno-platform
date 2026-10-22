@@ -15,7 +15,8 @@ function products(source) {
 
 export function marketingAssets() {
   const version = extension => createHash('sha256').update(readFileSync(new URL(`../../public/site/marketing-header.${extension}`, import.meta.url))).digest('hex').slice(0, 16);
-  return `<link rel="stylesheet" href="/site/marketing-header.css?v=${version('css')}">\n<script src="/site/marketing-header.js?v=${version('js')}" defer></script>`;
+  const reportVersion=createHash('sha256').update(readFileSync(new URL('../../public/site/report-loader.js',import.meta.url))).digest('hex').slice(0,16);
+  return `<link rel="stylesheet" href="/site/marketing-header.css?v=${version('css')}">\n<script src="/site/marketing-header.js?v=${version('js')}" defer></script>\n<script src="/site/report-loader.js?v=${reportVersion}" defer></script>`;
 }
 
 export function marketingHeader({ source, product = '', home = false, brand = '', theme = '' } = {}) {

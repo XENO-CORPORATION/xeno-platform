@@ -79,6 +79,9 @@ html = html.replaceAll('--r-sm:7px', '--r-sm:6px').replaceAll('--r-lg:10px', '--
   .replaceAll('max-width:1360px;margin:0 auto;padding-left:clamp(16px,3vw,40px);padding-right:clamp(16px,3vw,40px)',
     'max-width:none;margin:0 auto;padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px)');
 
+// The system alternates with inset neighbouring sections.
+html = html.replace('padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px);box-sizing:border-box;flex:1;display:grid','padding-left:0;padding-right:0;box-sizing:border-box;flex:1;display:grid');
+
 function replaceRequired(from, to) {
   if (!html.includes(from)) throw new Error(`homepage integration anchor missing: ${from.slice(0, 90)}`);
   html = html.replace(from, to);
