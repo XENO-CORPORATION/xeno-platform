@@ -9,7 +9,7 @@ const indexSource = readFileSync(join(docsRoot, 'index.ts'), 'utf8');
 
 const required = {
   agent: { version: '0.3.17', pages: ['introduction', 'chat-and-agent-modes', 'sessions-and-resume', 'goal-loop-handoff', 'nested-agents', 'ade-workbench', 'troubleshooting'] },
-  'agent-cli': { version: '0.5.124', pages: ['introduction', 'self-review', 'authentication', 'chat-and-agent-modes', 'sessions', 'goal-loop-handoff', 'delegation', 'cli-reference', 'troubleshooting'] },
+  'agent-cli': { version: '0.5.126', pages: ['introduction', 'self-review', 'authentication', 'chat-and-agent-modes', 'sessions', 'goal-loop-handoff', 'delegation', 'cli-reference', 'troubleshooting'] },
   sdk: { version: '0.10.75', pages: ['introduction', 'self-review', 'agent-loop', 'sessions', 'goal-loop-handoff', 'governed-automation', 'package-exports', 'versioning-stability'] },
   acp: { version: '0.2.14', pages: ['introduction', 'architecture', 'coordination-extension', 'session-lifecycle', 'agent-endpoint', 'troubleshooting'] },
   hub: { version: '0.11.18', pages: ['introduction', 'agent', 'agent-runtime-updates', 'updates', 'troubleshooting'] },
