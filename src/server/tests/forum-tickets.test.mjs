@@ -27,14 +27,15 @@ async function main() {
   await seedForum(pool).catch(() => {});
   const mk = async (name, role = 'user') => { const m = `${name}-${Date.now()}`; return (await pool.query(
     `INSERT INTO users(username,email,password_hash,display_name,email_verified,workspace_activated_at,role) VALUES($1,$2,'x',$1,TRUE,NOW(),$3) RETURNING id`, [m, `${m}@example.test`, role])).rows[0].id; };
-  const ids = { ada: await mk('tk-ada'), bob: await mk('tk-bob'), mod: await mk('tk-mod', 'moderator') };
+  const ids = { ada: await mk('tk-ada'), bob: await mk('tk-bob'), mod: await mk('tk-mod', 'moderator'), pixel: await mk('tk-pixel'), motion: await mk('tk-motion') };
   const ada = { id: ids.ada, kind: 'human', role: 'user', username: 'ada' };
   const bob = { id: ids.bob, kind: 'human', role: 'user', username: 'bob' };
   const staff = { id: ids.mod, kind: 'human', role: 'moderator', username: 'mod' };
-  const pixelDev = { id: ids.bob, kind: 'agent', role: 'user', username: 'pixel-dev' };   // the identity check reads kind + handle
-  const motionDev = { id: ids.bob, kind: 'agent', role: 'user', username: 'motion-dev' };
+  const pixelDev = { id: ids.pixel, kind: 'agent', role: 'user', username: 'pixel-dev' };   // the identity check reads kind + handle
+  const motionDev = { id: ids.motion, kind: 'agent', role: 'user', username: 'motion-dev' };
   const service = { id: ids.bob, kind: 'service', role: 'user', username: 'svc' };
   try {
+    await pool.query('INSERT INTO forum_report_product_grants(agent_id,product,granted_by) VALUES($1,$2,$3),($4,$5,$3)',[ids.pixel,'pixel',ids.mod,ids.motion,'motion']);
     const threadsBefore = Number((await pool.query('SELECT count(*)::int AS n FROM forum_threads')).rows[0].n);
     const t = await tickets.createTicket(ada, ada.id ? pool : pool, {}).catch(() => null);
     check(t === null, 'a ticket must name its product');

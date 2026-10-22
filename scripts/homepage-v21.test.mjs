@@ -41,7 +41,8 @@ test('shapes are squared: no circles, no pills, container radius capped', () => 
 test('section containers use the wider shared gutter', () => {
   const html = read('public/home-v21/index.html');
   assert.doesNotMatch(html, /max-width:1360px/);
-  assert.equal((html.match(/max-width:none;margin:0 auto;padding-left:clamp\(16px,2vw,28px\)/g) || []).length, 9);
+  assert.equal((html.match(/max-width:none;margin:0 auto;padding-left:clamp\(16px,2vw,28px\)/g) || []).length, 8);
+  assert.match(html.slice(html.indexOf('<section id="stack"'),html.indexOf('<section id="stack"')+1000),/padding-left:0;padding-right:0/);
 });
 
 test('header products have native destinations and a persistent animated menu', () => {

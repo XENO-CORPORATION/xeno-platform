@@ -207,7 +207,7 @@
       <div class="rzone" id="rzone" data-for="">${zoneHTML()}</div>
       </div>
       ${rb('bell', 'bell', 'Notifications')}
-      ${rb('help', 'help', 'Help & report', 'F1')}
+      ${rb('help', 'help', 'Help & report', 'Shift R')}
       <button class="credits" data-go="usage" data-tip="Usage" aria-label="Usage">2.4k</button>
       <button class="avatar" data-go="account" data-tip="Account, settings, connected accounts, get the apps" aria-label="Account">E</button>`;
   }
@@ -1812,12 +1812,12 @@
       if (q) {
         const res = DOCS.filter(([t, s]) => (t + ' ' + s).toLowerCase().includes(q)).slice(0, 5);
         const mark = (t) => esc(t).replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>');
-        const acts = [['report', 'edit', 'Report a problem', 'F1'], ['support', 'mail', 'Contact support', ''], ['keys', 'terminal', 'Keyboard shortcuts', 'Ctrl /'], ['community', 'community', 'Ask the community', ''], ['idea', 'megaphone', 'Suggest a feature', '']].filter((r) => hit(r[2]));
+        const acts = [['report', 'edit', 'Report a problem', 'Shift R'], ['support', 'mail', 'Contact support', ''], ['keys', 'terminal', 'Keyboard shortcuts', 'Ctrl /'], ['community', 'community', 'Ask the community', ''], ['idea', 'megaphone', 'Suggest a feature', '']].filter((r) => hit(r[2]));
         body.innerHTML = `<section class="pl pl-list"><div class="pl-cap"><span>Docs</span><span>${res.length || 'No'} result${res.length === 1 ? '' : 's'}</span></div>${res.map(([t, s], i) => `<button class="mi hp" data-hp="doc" data-doc="${esc(t)}" data-fk="doc${i}">${ic('doc')}<span class="hp-t">${mark(t)}<small>${esc(s)}</small></span></button>`).join('')}<button class="mi hp" data-hp="search" data-fk="docall">${ic('search')}<span class="hp-t">Search all docs for “${esc(input.value.trim())}”</span><kbd>Enter</kbd></button></section>`
           + (acts.length ? `<section class="pl pl-list"><div class="pl-cap"><span>Actions</span></div>${acts.map(([id, i, t, k]) => `<button class="mi hp" data-hp="${id}" data-fk="a${id}">${ic(i)}<span class="hp-t">${esc(t)}</span>${k ? `<kbd>${k}</kbd>` : ''}</button>`).join('')}</section>` : '');
         return;
       }
-      body.innerHTML = `<div class="hp-quick">${[['report', 'edit', 'Report', 'a problem · F1'], ['support', 'mail', 'Support', 'private ticket'], ['keys', 'terminal', 'Shortcuts', 'Ctrl /']].map(([id, i, t, k]) => `<button class="pl hp-q mi hp" data-hp="${id}" data-fk="q${id}" aria-label="${esc(t)} ${esc(k)}"><span class="hp-q-ic">${ic(i)}</span><span class="hp-q-t"><b>${esc(t)}</b><small>${esc(k)}</small></span></button>`).join('')}</div>
+      body.innerHTML = `<div class="hp-quick">${[['report', 'edit', 'Report', 'a problem · Shift R'], ['support', 'mail', 'Support', 'private ticket'], ['keys', 'terminal', 'Shortcuts', 'Ctrl /']].map(([id, i, t, k]) => `<button class="pl hp-q mi hp" data-hp="${id}" data-fk="q${id}" aria-label="${esc(t)} ${esc(k)}"><span class="hp-q-ic">${ic(i)}</span><span class="hp-q-t"><b>${esc(t)}</b><small>${esc(k)}</small></span></button>`).join('')}</div>
         <button class="pl hp-news mi hp" data-hp="new" data-fk="new"><span class="hp-news-k">${!seen ? '<span class="hp-badge">New</span>' : ''}What's new<em>Sep 17</em></span><b>Canvas 0.39 ships the shared agent panel</b><small>Your agent conversation, docked inside Canvas.</small><span class="hp-go">${ic('right')}</span></button>
         <section class="pl pl-list"><div class="pl-cap"><span>Tips for ${esc(ctxName)}</span>${MODE_INTRO[ctxId] ? `<button class="pl-capbtn" data-hp="intro" data-fk="intro">Mode intro</button>` : ''}</div>${(MODE_TIPS[ctxId] || MODE_TIPS.overview).map(([t, s], i) => `<button class="mi hp hp-tip" data-hp="tip" data-doc="${esc(t)}" data-fk="tip${i}">${ic('spark')}<span class="hp-l" title="${esc(t)} · ${esc(s)}">${esc(t)}</span><span class="hp-tipgo">${ic('right')}</span></button>`).join('')}</section>`;
     };
@@ -1852,7 +1852,7 @@
     s.classList.add('on'); s.querySelector('[data-kb-close]').focus();
   }
   function closeShortcuts() { const s = document.getElementById('kbsheet'); if (!s) return; s.classList.remove('on'); sheetOpener?.focus?.(); sheetOpener = null; }
-  { const K = window.XENO_KEYS; if (K) { [['Ctrl K', 'Search everything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Ctrl / or ?', 'Keyboard shortcuts'], ['F1', 'Report a problem'], ['Esc', 'Close the open panel']].forEach(([k, l]) => K.add('General', k, l));
+  { const K = window.XENO_KEYS; if (K) { [['Ctrl K', 'Search everything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Ctrl / or ?', 'Keyboard shortcuts'], ['Shift R', 'Report a problem'], ['Esc', 'Close the open panel']].forEach(([k, l]) => K.add('General', k, l));
     [['Alt 0', 'Overview'], ['Alt 1–6', 'Switch mode']].forEach(([k, l]) => K.add('Moving around', k, l));
     [['↑ ↓', 'Move between notifications'], ['Enter', 'Open'], ['E', 'Archive'], ['S', 'Snooze']].forEach(([k, l]) => K.add('Notifications', k, l)); } }
   // ? opens the sheet too (Gmail, GitHub, Linear) — never while typing or with a dialog open
@@ -2048,7 +2048,7 @@
       if (g === 'chat') { const h = homeHash('product', { product: 'chat' }); return [H.nav(h, click, 'Open Chat'), [{ label: 'New chat', icon: 'plus', kbd: 'Ctrl ⇧ O', run: () => { go('product', { product: 'chat' }); } }]]; }
       if (g === 'home') return [H.nav(inOv() ? '#/overview' : '#/' + S.mode, click, 'Go home'), [{ label: 'Customize home…', icon: 'sliders', run: () => { click(); setTimeout(() => document.querySelector('[data-home-custom]')?.click(), 250); } }]];
       if (g === 'account') return [[{ label: 'Open account', icon: 'open', run: click }, { label: 'Settings…', icon: 'sliders', kbd: 'Ctrl ,', run: () => window.XA.settings() }]];
-      if (g === 'help') return [[{ label: 'Open help', icon: 'open', run: click }, { label: 'Keyboard shortcuts', icon: 'grid', kbd: 'Ctrl /', run: () => openShortcuts() }, { label: 'Report a problem…', icon: 'info', kbd: 'F1', run: () => window.XA.report() }]];
+      if (g === 'help') return [[{ label: 'Open help', icon: 'open', run: click }, { label: 'Keyboard shortcuts', icon: 'grid', kbd: 'Ctrl /', run: () => openShortcuts() }, { label: 'Report a problem…', icon: 'info', kbd: 'Shift R', run: () => window.XA.report() }]];
       if (g === 'usage') return [[{ label: 'Open usage', icon: 'open', run: click }, { label: 'Plans & credits…', icon: 'chart', run: () => window.XA.plans() }]];
       return [[{ label: `Open ${label}`, icon: 'open', run: click }]];
     } });
@@ -2231,7 +2231,6 @@
     if ((e.ctrlKey || e.metaKey) && e.code === 'Backslash') { e.preventDefault(); setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); }
     if (e.altKey && /^Digit[0-7]$/.test(e.code)) { e.preventDefault(); const n = +e.code.slice(5); n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
     if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && document.activeElement?.id === 'logo') { e.preventDefault(); openSwitcher(); }
-    if (e.key === 'F1' && !document.querySelector('.xd')) { e.preventDefault(); hidePops(); window.XA.report(); }
   });
 
 

@@ -33,6 +33,7 @@ import * as tickets from '../services/forumTickets.js';
 import * as ranker from '../services/forumRanker.js';
 import * as mcp from '../services/forumMcp.js';
 import * as notify from '../services/forumNotify.js';
+import * as reportIntake from '../services/forumReportIntake.js';
 
 const router = express.Router();
 
@@ -543,6 +544,8 @@ router.post('/report/preflight', authMiddleware, loadActor, handled('reportPrefl
  * shown what is about to leave their machine.
  */
 router.post('/report', authMiddleware, loadActor, handled('submitReport', async (req, res) => {
+  if (req.get('x-xeno-report-actor') && String(req.get('x-xeno-report-actor')) !== String(req.actor.id)) throw new ForumError('The signed-in account changed. Review the report again.', 'report_actor_changed', 409);
+  if (req.body?.schema) return res.json({ success: true, ...(await reportIntake.submitReviewedReport(req.db, req.actor, req.body, req.get('Idempotency-Key'))) });
   // private: a TICKET only the reporter, XENO staff and the product's dev agent can read; never a Forum thread
   if (req.body?.visibility === 'private') {
     return res.json({ success: true, private: true, ticket: await tickets.createTicket(req.db, req.actor, {
@@ -562,6 +565,18 @@ router.post('/report', authMiddleware, loadActor, handled('submitReport', async 
       kind: req.body?.kind || 'bug',
     })),
   });
+}));
+
+router.get('/report/submissions/:submissionId', authMiddleware, loadActor, handled('recoverReport', async (req,res) => {
+  res.json({success:true,...await reportIntake.recoverReport(req.db,req.actor,req.params.submissionId)});
+}));
+router.get('/report/evidence/:id', optionalAuthMiddleware, (req,res,next) => req.user?.id ? loadActor(req,res,next) : next(), handled('reportEvidence', async (req,res) => {
+  const evidence=await reportIntake.readEvidence(req.db,req.actor,req.params.id);
+  res.set({'Content-Type':evidence.type,'Content-Length':String(evidence.bytes),'Content-Disposition':`inline; filename*=UTF-8''${encodeURIComponent(evidence.name)}`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; img-src 'self'; media-src 'self'; sandbox"});
+  res.send(evidence.content);
+}));
+router.get('/report/mine', authMiddleware, loadActor, handled('reportMine', async (req,res) => {
+  res.json({success:true,tickets:await tickets.listMyTickets(req.db,req.actor)});
 }));
 
 /* ── Private reports: tickets (services/forumTickets.js) ──

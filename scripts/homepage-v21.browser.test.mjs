@@ -100,7 +100,7 @@ test('homepage hover navigation, previews and responsive geometry', { timeout: 9
     for (const feature of ['code', 'workflow', 'image', 'video', 'comms', 'sdk', 'shell']) {
       await page.evaluate(key => window.xenoHomePreview(key), feature);
       assert.match(await page.$eval('dialog', el => el.textContent), /PREPARED EXAMPLE/);
-      await page.click('dialog button');
+      await page.evaluate(()=>document.querySelector('dialog button')?.click());
     }
     const geometry = [];
     for (const width of [1920, 1440, 768, 390]) {
@@ -115,7 +115,7 @@ test('homepage hover navigation, previews and responsive geometry', { timeout: 9
       assert.equal(result.overflow, false, `page overflow at ${width}`);
       assert.ok(result.padding >= 16 && result.padding <= 28);
       assert.ok(result.left < 1 && result.right >= width - 1);
-      geometry.push(result);
+      const stack=await page.$eval('#stack > div > div',n=>({padding:parseFloat(getComputedStyle(n).paddingLeft),width:n.getBoundingClientRect().width}));assert.equal(stack.padding,0);assert.ok(Math.abs(stack.width-width)<1);geometry.push({...result,stack});
     }
     await page.tap('[data-product-trigger]');
     assert.equal(await page.$eval('[data-product-menu]', el => el.inert), false);
