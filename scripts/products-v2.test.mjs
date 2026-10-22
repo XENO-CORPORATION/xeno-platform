@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const onDisk = (p) => existsSync(new URL(`../${p}`, import.meta.url));
@@ -22,8 +23,12 @@ test('every product design document is vendored and self-contained', () => {
     assert.match(doc, /<title>XENO [^<]+ — XENOsystem<\/title>/, slug);
     assert.match(doc, /src="\/products-v2\/support\.js"/, slug);
     assert.match(doc, /data-marketing-header="1"/, slug);
-    assert.match(doc, /src="\/site\/marketing-header\.js"/, slug);
-    assert.match(doc, /href="\/site\/marketing-header\.css"/, slug);
+    assert.match(doc, /src="\/site\/marketing-header\.js\?v=[a-f0-9]{16}"/, slug);
+    assert.match(doc, /href="\/site\/marketing-header\.css\?v=[a-f0-9]{16}"/, slug);
+    for (const extension of ['js', 'css']) {
+      const version = createHash('sha256').update(read(`public/site/marketing-header.${extension}`)).digest('hex').slice(0, 16);
+      assert.ok(doc.includes(`/site/marketing-header.${extension}?v=${version}`), `${slug}: asset version matches bytes`);
+    }
     assert.doesNotMatch(doc.match(/<header\b[\s\S]*?<\/header>/)?.[0] || '', /href="#"/, `${slug}: no header placeholders`);
     assert.doesNotMatch(doc.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || '', /href="#"/, `${slug}: no footer placeholders`);
     assert.doesNotMatch(doc, /\.dc\.html/, `${slug}: design cross-links must be rewritten to /product/<slug>`);

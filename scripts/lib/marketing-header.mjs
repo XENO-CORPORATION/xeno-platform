@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { createHash } from 'node:crypto';
 
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const chevron = '<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
@@ -13,7 +14,8 @@ function products(source) {
 }
 
 export function marketingAssets() {
-  return '<link rel="stylesheet" href="/site/marketing-header.css">\n<script src="/site/marketing-header.js" defer></script>';
+  const version = extension => createHash('sha256').update(readFileSync(new URL(`../../public/site/marketing-header.${extension}`, import.meta.url))).digest('hex').slice(0, 16);
+  return `<link rel="stylesheet" href="/site/marketing-header.css?v=${version('css')}">\n<script src="/site/marketing-header.js?v=${version('js')}" defer></script>`;
 }
 
 export function marketingHeader({ source, product = '', home = false, brand = '', theme = '' } = {}) {
