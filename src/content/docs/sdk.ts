@@ -4,8 +4,8 @@ const sdk: ProductDocs = {
   "slug": "sdk",
   "productName": "XENO Agent SDK",
   "tagline": "The embeddable agent runtime behind every XENO app — agent loop, tools, permissions, sessions, memory, and providers in one library.",
-  "version": "0.9.24",
-  "updated": "2026-08-30",
+  "version": "0.10.75",
+  "updated": "2026-10-22",
   "seo": {
     "title": "XENO Agent SDK documentation",
     "description": "Embed the XENO agent runtime in any app: the agent loop, tool registry, permission engine, sessions, memory, soul, providers, MCP, Electron bridge, and a framework-free UI — all app-agnostic and additive-only."
@@ -14,6 +14,26 @@ const sdk: ProductDocs = {
     {
       "title": "Getting started",
       "pages": [
+        {
+          "slug": "self-review",
+          "title": "End-of-run self-review",
+          "description": "Configure the bounded review pass and render its runtime event.",
+          "body": `# End-of-run self-review
+
+Available since SDK 0.10.74; documented for 0.10.75. A top-level run that records a mutation gets one bounded review of host-collected file changes, command exit codes, and verification results. The review checks task completion, unsupported claims, leftovers, obvious bugs, and unverified work. It may fix issues under normal run permissions; those fixes do not trigger another review.
+
+Chat, read-only runs, delegated subagents, and edits under 10 changed lines with no shell command are skipped. Read-only arrow-function commands no longer trigger review in 0.10.75; real output redirects still do.
+
+## Configure the pass
+
+Pass \`selfReview: false\` to \`createXenoAgent\` or \`AgentLoop\` to disable it. An options object accepts \`enabled\`, \`minChangedLines\`, \`maxIterations\`, \`tokenBudget\`, and \`timeoutMs\`. Defaults are 10 changed lines, 8 iterations, 60,000 tokens, and 180,000 milliseconds. \`XENO_SELF_REVIEW=0\` disables the pass unless \`enabled: true\` is explicit.
+
+## Render results
+
+Observe the typed \`run.self_review\` runtime event. Display its \`summary\` and \`status\` (\`completed\`, \`failed\`, or \`timed_out\`), and make \`findings\`, \`fixes\`, and \`unverified\` available to the user. The event also carries host-measured \`fixToolCalls\`, \`verificationsRerun\`, \`changedFiles\`, and \`durationMs\`. The review text is not streamed as the normal reply; the reply and run termination remain separate.
+
+A review result is a model assessment, not a correctness guarantee. An absent event is not a passing review. Preserve failed and timed-out outcomes in your UI so users can act on unverified work. See [the agent loop](/docs/sdk/agent-loop) and [release history](/product/sdk/releases).`
+        },
         {
           "slug": "introduction",
           "title": "Introduction",
