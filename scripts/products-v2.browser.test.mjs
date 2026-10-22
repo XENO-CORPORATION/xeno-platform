@@ -35,6 +35,12 @@ test('all 46 product documents have working shared navigation on desktop and pho
         await page.setViewport({ width: 1440, height: 1000 });
         await page.goto(`http://127.0.0.1:${server.address().port}/${slug === 'index' ? 'products' : 'product/' + slug}`, { waitUntil: 'load' });
         await page.waitForSelector('[data-marketing-header] [data-product-trigger]');
+        if (['pixel', 'canvas', 'motion', 'sound'].includes(slug)) {
+          await page.waitForSelector('[data-screen-label="Works with"]', { timeout: 15000 });
+          const suite = await page.$eval('[data-screen-label="Works with"]', el => ({ text: el.textContent, height: el.getBoundingClientRect().height }));
+          assert.match(suite.text, /Follow one project through the whole suite/);
+          assert.ok(suite.height > 0, `${slug}: suite story occupies a real section`);
+        }
         assert.equal(await page.$$eval('header a[href="#"],footer a[href="#"]', els => els.length), 0, slug);
         for (const href of ['/docs', '/pricing', '/blog', '/forum', '/auth']) {
           assert.ok(await page.$(`header a[href="${href}"]`), `${slug}: ${href}`);
