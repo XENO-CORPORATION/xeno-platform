@@ -40,15 +40,15 @@ input[type=range]{accent-color:#D9D9D9;}
         <a href="/download" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--r-sm);background:var(--gd9);color:var(--g0b);font-size:14px;font-weight:600" style-hover="background:var(--gff);color:var(--g0b)">Download<svg width="13" height="13" viewBox="0 0 14 14" style="fill:none;stroke:currentColor;stroke-width:1.5"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
       </div>
     </div>
-    <div id="home-products-menu" data-product-menu="1" inert aria-label="Products" style="border-top:1px solid var(--g2a);background:var(--g0f)">
-        <div style="max-width:1320px;margin:0 auto;padding:20px clamp(16px,2vw,28px) 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px 24px">
-          <sc-for list="{{ menuGroups }}" as="g" hint-placeholder-count="0"><div style="display:flex;flex-direction:column;gap:2px">
+    <div id="home-products-menu" data-product-menu="1" inert aria-label="Products"><div class="home-products-card">
+        <div class="home-products-list"><div class="home-products-highlight" aria-hidden="true"></div>
+          <sc-for list="{{ menuGroups }}" as="g" hint-placeholder-count="0"><div class="home-products-category" style="display:flex;flex-direction:column;gap:2px">
             <span style="padding:0 8px 6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--g8f)">{{ g.name }}</span>
-            <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="0"><a href="{{ p.href }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;border:0;border-radius:6px;background:transparent;text-align:left;cursor:pointer" style-hover="background:var(--g11)"><span style="font-size:13.5px;font-weight:600;color:var(--gd9)">{{ p.label }}</span><span style="font-size:12px;color:var(--g8f)">{{ p.subtitle }}</span></a></sc-for>
+            <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="0"><a class="home-product-row" href="{{ p.href }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;border:0;border-radius:6px;background:transparent;text-align:left;cursor:pointer" style-hover="background:var(--g11)"><span style="font-size:13.5px;font-weight:600;color:var(--gd9)"><span class="home-product-prefix">XENO </span>{{ p.word }}<span class="home-product-arrow" aria-hidden="true">↗</span></span><span style="font-size:12px;color:var(--g8f)">{{ p.subtitle }}</span></a></sc-for>
           </div></sc-for>
         </div>
-      <div class="home-products-footer"><a href="/products">View all products ↗</a><a href="/product/hub">XENO Hub — all your tools together ↗</a></div>
-    </div>
+      <div class="home-products-featured"><a href="/product/hub"><img src="/home-v21/site/xeno-logo.svg" alt=""><span><strong>XENO Hub <small>ALL-IN-ONE</small></strong><span>The desktop app that brings every XENO tool together</span></span><b>Explore Hub ↗</b></a></div><div class="home-products-footer"><a href="/products">View all products ↗</a><span>Explore the tools. Find your next workspace.</span></div>
+    </div></div>
   </header>
   <main id="top" style="flex:1;display:flex;flex-direction:column">
 
@@ -808,7 +808,7 @@ class Component extends DCLogic {
     const out = {
       goTop: e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
       menuOpen: s.menu, menuBtnBg: s.menu ? 'rgba(255,255,255,.06)' : 'transparent', toggleMenu: () => this.setState({ menu: !s.menu }),
-      menuGroups: MENU.map(([g, items]) => ({ name: g, items: items.map(([label, subtitle]) => ({ label, subtitle, href: '/product/' + (label === 'XENO 3D Gen' ? '3d' : label === 'XENO 3D' ? 'form' : label.replace(/^XENO\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) })) })),
+      menuGroups: MENU.map(([g, items]) => ({ name: g, items: items.map(([label, subtitle]) => ({ label, word: label.replace(/^XENO\s+/i, ''), subtitle, href: '/product/' + (label === 'XENO 3D Gen' ? '3d' : label === 'XENO 3D' ? 'form' : label.replace(/^XENO\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) })) })),
       navLinks: [{ label: 'Command Center', onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) }, { label: 'Pricing', onClick: () => this.scrollTo('pricing') }, { label: 'Marketplace', onClick: () => { window.location.href = '/marketplace'; } }, { label: 'Docs', onClick: () => { window.location.href = '/docs'; } }],
       goProducts: () => { window.location.href = '/products'; },
       hostText: host ? 'live' : 'preview', hostDot: host ? 'var(--gd9)' : 'var(--gbd)', hostTip: host ? 'Chat, CLI, Workflow and the prompt enhancer answer from a live model.' : 'Prepared examples — create an account to work with your own prompts.',

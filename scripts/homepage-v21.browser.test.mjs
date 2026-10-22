@@ -36,6 +36,33 @@ test('homepage hover navigation, previews and responsive geometry', { timeout: 9
     assert.ok((await page.$eval('[data-product-menu]', el => getComputedStyle(el).transitionDuration)).split(', ').every(duration => duration === '0.2s'));
     await page.hover('[data-product-menu] a[href="/product/pixel"]');
     assert.equal(await page.$eval('[data-product-menu]', el => el.inert), false);
+    // Returning across header whitespace used to leave an older close timer alive.
+    const pause = ms => new Promise(done => setTimeout(done, ms));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.hover('[data-product-trigger]');
+      const trigger = await page.$eval('[data-product-trigger]', el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, bottom: r.bottom }; });
+      await page.mouse.move(trigger.x, trigger.bottom + 3);
+      await pause(70);
+      await page.hover('[data-product-menu] a[href="/product/pixel"]');
+      await pause(400);
+      assert.equal(await page.$eval('[data-product-menu]', el => el.inert), false, `re-entry ${attempt} must cancel every pending close`);
+    }
+    const card = await page.$eval('.home-products-card', el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width, background: getComputedStyle(el).backgroundColor }; });
+    assert.ok(card.left > 0 && card.right < 1920 && card.width <= 1260, 'old floating card is centered with outside space');
+    assert.equal(card.background, 'rgb(21, 21, 21)');
+    await page.hover('.home-product-row[href="/product/docs"]');
+    await pause(220);
+    const highlight = await page.evaluate(() => {
+      const row = document.querySelector('.home-product-row[href="/product/docs"]').getBoundingClientRect();
+      const highlight = document.querySelector('.home-products-highlight').getBoundingClientRect();
+      return { dx: Math.abs(row.left - highlight.left), dy: Math.abs(row.top - highlight.top) };
+    });
+    assert.ok(highlight.dx < 1 && highlight.dy < 1, 'sliding highlight follows the hovered product');
+    await page.mouse.move(1900, 900);
+    await pause(500);
+    assert.equal(await page.$eval('[data-product-menu]', el => el.inert), true, 'leaving the menu closes it');
+    await page.hover('[data-product-trigger]');
+    await page.hover('.home-product-row[href="/product/pixel"]');
     const hrefs = await page.$$eval('[data-product-menu] a', els => els.map(el => el.getAttribute('href')));
     for (const href of hrefs) {
       assert.match(href, /^\/(?:product\/[a-z0-9-]+|products)$/);
