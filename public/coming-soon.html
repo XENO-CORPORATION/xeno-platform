@@ -121,7 +121,7 @@
       <p>XENOsystem is open to invited people for now.</p>
       <a class="btn primary" href="/login">Sign in</a>
 
-      <details class="code">
+      <details class="code" id="codebox">
         <summary>Have an access code?</summary>
         <form id="f" novalidate>
           <input id="c" name="code" type="text" placeholder="Access code" autocomplete="off"
@@ -145,9 +145,7 @@
         no_access_code: 'This site is invitation only right now. Ask for access.',
         default: 'Could not check that code. Try again.',
       };
-      form.addEventListener('submit', function (event) {
-        event.preventDefault();
-        var code = input.value.trim();
+      function unlock(code) {
         if (!code || button.disabled) return;
         button.disabled = true;
         error.textContent = '';
@@ -162,7 +160,7 @@
           body: JSON.stringify({ code: code }),
           credentials: 'same-origin',
         }).then(function (r) {
-          if (r.ok) { window.location.reload(); return null; } // 204 shared code, 200 a personal code
+          if (r.ok) { window.location.replace('/'); return null; } // 204 shared code, 200 a personal code
           return r.json().catch(function () { return {}; }).then(function (body) {
             error.textContent = MESSAGES[body.error] || MESSAGES.default;
             button.disabled = false;
@@ -171,7 +169,21 @@
           error.textContent = MESSAGES.default;
           button.disabled = false;
         });
+      }
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        unlock(input.value.trim());
       });
+      // The shareable entry: xenosystem.ai/access (nginx sends it to
+      // /?access=1) opens the code form instead of leaving it folded, and
+      // a link carrying the code (xenosystem.ai/?code=XXXX, the form people
+      // are sent) fills it in and unlocks straight away. The check itself
+      // is the same POST /unlock as typing it - no second door.
+      var linked = new URLSearchParams(window.location.search).get('code');
+      if (linked || new URLSearchParams(window.location.search).has('access') || window.location.hash === '#access') {
+        document.getElementById('codebox').open = true;
+      }
+      if (linked) { input.value = linked; unlock(linked.trim()); }
     })();
   </script>
 </body>
