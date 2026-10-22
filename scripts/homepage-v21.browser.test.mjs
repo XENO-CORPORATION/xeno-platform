@@ -110,18 +110,28 @@ test('homepage hover navigation, previews and responsive geometry', { timeout: 9
       const result = await page.evaluate(() => {
         const section = document.querySelector('#pricing > div');
         const rect = section.getBoundingClientRect();
-        return { viewport: innerWidth, left: rect.left, right: rect.right, padding: parseFloat(getComputedStyle(section).paddingLeft), overflow: document.documentElement.scrollWidth > innerWidth };
+        const padding = parseFloat(getComputedStyle(section).paddingLeft);
+        const stack = document.querySelector('#stack > div > div');
+        const stackRect = stack.getBoundingClientRect();
+        return {
+          viewport: innerWidth,
+          left: rect.left,
+          right: rect.right,
+          padding,
+          contentLeft: rect.left + padding,
+          stackContentLeft: stackRect.left + parseFloat(getComputedStyle(stack).paddingLeft),
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
       });
       assert.equal(result.overflow, false, `page overflow at ${width}`);
-      assert.ok(result.padding >= 16 && result.padding <= 28);
-      assert.ok(result.left < 1 && result.right >= width - 1);
-      const stack=await page.$eval('#stack > div > div',n=>({padding:parseFloat(getComputedStyle(n).paddingLeft),width:n.getBoundingClientRect().width}));
-      assert.equal(stack.padding,0);
-      assert.ok(Math.abs(stack.width-width)<1);
-      const copy=await page.$eval('#stack [data-stack-copy]',n=>({padding:parseFloat(getComputedStyle(n).paddingLeft),firstLeft:n.firstElementChild.getBoundingClientRect().left}));
-      assert.ok(copy.padding>=16&&copy.padding<=28,`the full-bleed section's copy keeps the page gutter at ${width}`);
-      assert.ok(Math.abs(copy.firstLeft-copy.padding)<1,`copy content starts at the gutter, not the viewport edge, at ${width}`);
-      geometry.push({...result,stack,copy});
+      assert.ok(result.padding >= 16 && result.padding <= 40);
+      // The distance a reader sees from the viewport edge to the text: 320px at 1920, 80px at 1440.
+      const margin = result.contentLeft;
+      if (width >= 1920) assert.ok(margin >= 300, `sections keep a wide side margin at ${width} (measured ${Math.round(margin)})`);
+      else if (width >= 1440) assert.ok(margin >= 75, `sections keep a wide side margin at ${width} (measured ${Math.round(margin)})`);
+      else assert.ok(margin >= 15, `sections keep the phone gutter at ${width}`);
+      assert.ok(Math.abs(result.stackContentLeft - result.contentLeft) < 1, `every section shares one content edge at ${width}`);
+      geometry.push(result);
     }
     await page.tap('[data-product-trigger]');
     assert.equal(await page.$eval('[data-product-menu]', el => el.inert), false);

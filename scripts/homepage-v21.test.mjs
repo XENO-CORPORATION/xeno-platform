@@ -38,13 +38,12 @@ test('shapes are squared: no circles, no pills, container radius capped', () => 
   assert.match(html, /radius: m.role === 'user' \? '8px 3px 8px 8px'/, 'dynamic chat bubbles follow the same rule');
 });
 
-test('section containers use the wider shared gutter', () => {
+test('section containers keep the design’s centred 1360px column and 40px gutter', () => {
   const html = read('public/home-v21/index.html');
-  assert.doesNotMatch(html, /max-width:1360px/);
-  assert.equal((html.match(/max-width:none;margin:0 auto;padding-left:clamp\(16px,2vw,28px\)/g) || []).length, 8);
-  assert.match(html.slice(html.indexOf('<section id="stack"'),html.indexOf('<section id="stack"')+1000),/padding-left:0;padding-right:0/);
-  assert.match(html.slice(html.indexOf('<section id="stack"'),html.indexOf('<section id="stack"')+1000),/data-stack-copy="1"/, 'the full-bleed copy column carries the page gutter');
-  assert.match(read('public/home-v21/homepage.css'), /#stack \[data-stack-copy\]\{padding-left:clamp\(16px,2vw,28px\)/, 'the gutter is not left to the inline style');
+  assert.doesNotMatch(html, /max-width:none/, 'a full-width container puts the copy back on the viewport edge');
+  assert.equal((html.match(/max-width:1360px;margin:0 auto;padding-left:clamp\(16px,3vw,40px\)/g) || []).length, 9);
+  assert.doesNotMatch(html, /data-stack-copy/);
+  assert.doesNotMatch(read('public/home-v21/homepage.css'), /#stack \[data-stack-copy\]/);
 });
 
 test('the homepage stylesheet URL names its own bytes', async () => {

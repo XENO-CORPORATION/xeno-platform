@@ -76,20 +76,14 @@ html = html.replaceAll('--r-sm:7px', '--r-sm:6px').replaceAll('--r-lg:10px', '--
   .replaceAll('3px 10px 10px 10px', '3px 8px 8px 8px')
   .replace(/border-radius:\s*50%/g, 'border-radius:3px')
   .replace(/border-radius:\s*999px/g, 'border-radius:6px')
-  .replace(/border-radius:\s*(?:10|12|16|20)px/g, 'border-radius:8px')
-  .replaceAll('max-width:1360px;margin:0 auto;padding-left:clamp(16px,3vw,40px);padding-right:clamp(16px,3vw,40px)',
-    'max-width:none;margin:0 auto;padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px)');
-
-// The system alternates with inset neighbouring sections: the section stays full-bleed, so its grid
-// loses the gutter and the copy column carries it (homepage.css). Without the second half the copy
-// sits on the viewport edge while every neighbouring section is inset.
-html = html.replace('padding-left:clamp(16px,2vw,28px);padding-right:clamp(16px,2vw,28px);box-sizing:border-box;flex:1;display:grid','padding-left:0;padding-right:0;box-sizing:border-box;flex:1;display:grid');
+  .replace(/border-radius:\s*(?:10|12|16|20)px/g, 'border-radius:8px');
+// Keep the design's centred 1360px column and its 40px gutter. 28px measured too close to the
+// viewport edge on wide screens (owner, 2026-10-22); do not widen this back to max-width:none.
 
 function replaceRequired(from, to) {
   if (!html.includes(from)) throw new Error(`homepage integration anchor missing: ${from.slice(0, 90)}`);
   html = html.replace(from, to);
 }
-replaceRequired('<div style="display:flex;flex-direction:column;gap:clamp(18px,3vh,28px);min-width:0">', '<div data-stack-copy="1" style="display:flex;flex-direction:column;gap:clamp(18px,3vh,28px);min-width:0">');
 // Cloudflare rewrites the origin's no-cache on static files to max-age=14400 (measured 2026-10-22), so an
 // unversioned homepage.css would keep serving old bytes to returning visitors for four hours. Bind the URL
 // to the committed bytes: normalize CRLF so a Windows checkout and the deployed LF archive agree.
