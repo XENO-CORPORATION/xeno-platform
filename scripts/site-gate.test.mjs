@@ -156,6 +156,16 @@ test('Coming soon is the v21 design, and its code field has no floating focus st
   assert.doesNotMatch(page, /input:focus\s*\{\s*outline/, 'focus on the code field is border only, never an outline outside it');
   assert.match(page, /\.code input:focus \{ border-color:/);
 });
+test('/access is the shareable code entry, and a code in the link unlocks on arrival', () => {
+  const nginx = readFileSync(new URL('../nginx/default.conf', import.meta.url), 'utf8');
+  assert.match(nginx, /location = \/access \{ return 302 \/\?access=1; \}/);
+  const page = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
+  assert.match(page, /id="codebox"/);
+  assert.match(page, /URLSearchParams\(window\.location\.search\)\.get\('code'\)/, 'a ?code= link fills the form');
+  assert.match(page, /unlock\(linked\.trim\(\)\)/, 'and unlocks through the same POST /unlock as typing it');
+  assert.match(page, /window\.location\.replace\('\/'\)/, 'success leaves for the homepage, code out of the address bar');
+  assert.doesNotMatch(page, /fetch\('\/api\/site-gate\/(?!unlock)/, 'no second unlock door');
+});
 test('Coming soon sends the CSRF half, so a signed-in visitor can still enter the code', () => {
   const page = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
   assert.match(page, /xeno_csrf=/);
