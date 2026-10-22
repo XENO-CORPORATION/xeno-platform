@@ -5,6 +5,7 @@ import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-do
 import { isEmbeddedChatPath, isWorkspaceEmbed, leaveEmbed } from './lib/workspaceEmbed';
 
 import Home3 from "./pages/Home3";
+import HomeV21Redirect from "./pages/HomeV21Redirect";
 import { lazyRoute } from './components/platform/lazyRoute';
 
 const ProductPage = lazyRoute(() => import('./pages/ProductPage'));
@@ -228,8 +229,8 @@ function App() {
       <CollaborationProvider>
         <OSStateProvider>
           <Routes>
-            {/* Landing Page — the v3 redesign is now the default homepage */}
-            <Route path="/" element={<Home3 />} />
+            {/* Landing: nginx serves the static Home v21 document at `/`; this hands in-app navigation to it. /v3 keeps the previous React homepage. */}
+            <Route path="/" element={<HomeV21Redirect />} />
             <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
