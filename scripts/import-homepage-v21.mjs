@@ -11,6 +11,7 @@
 // Expects in that dir: "XENOsystem Home v21.dc.html", support.js, site/*.png,
 // and this repo's node_modules with react, react-dom, @babel/standalone.
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { marketingAssets, marketingHeader } from './lib/marketing-header.mjs';
@@ -89,7 +90,11 @@ function replaceRequired(from, to) {
   html = html.replace(from, to);
 }
 replaceRequired('<div style="display:flex;flex-direction:column;gap:clamp(18px,3vh,28px);min-width:0">', '<div data-stack-copy="1" style="display:flex;flex-direction:column;gap:clamp(18px,3vh,28px);min-width:0">');
-replaceRequired('</head>', '<link rel="stylesheet" href="/home-v21/homepage.css">\n<script src="/home-v21/homepage.js" defer></script>\n</head>');
+// Cloudflare rewrites the origin's no-cache on static files to max-age=14400 (measured 2026-10-22), so an
+// unversioned homepage.css would keep serving old bytes to returning visitors for four hours. Bind the URL
+// to the committed bytes: normalize CRLF so a Windows checkout and the deployed LF archive agree.
+const homepageCssVersion = createHash('sha256').update(readFileSync(join(outDir, 'homepage.css'), 'utf8').replace(/\r\n/g, '\n')).digest('hex').slice(0, 16);
+replaceRequired('</head>', `<link rel="stylesheet" href="/home-v21/homepage.css?v=${homepageCssVersion}">\n<script src="/home-v21/homepage.js" defer></script>\n</head>`);
 const originalHeader = html.match(/<header\b[\s\S]*?<\/header>/)?.[0];
 if (!originalHeader) throw new Error('Homepage header missing');
 const brand = originalHeader.match(/<a\b[\s\S]*?<\/a>/)?.[0];
