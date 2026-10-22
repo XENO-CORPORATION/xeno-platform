@@ -123,6 +123,9 @@ jobs:
       - name: Build the frontend exactly as the image does
         run: npm run build
 
+      - name: Verify shared marketing navigation across homepage and all product designs
+        run: npm run test:marketing-navigation
+
       # The build is only half the claim. Prerender writes the product pages,
       # and a build that silently emits nothing would still exit 0.
       - name: Assert the build produced a real bundle

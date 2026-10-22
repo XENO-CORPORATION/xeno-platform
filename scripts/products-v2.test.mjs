@@ -21,6 +21,11 @@ test('every product design document is vendored and self-contained', () => {
     const doc = read(slug === 'index' ? 'public/product-pages/index.html' : `public/product-pages/${slug}/index.html`);
     assert.match(doc, /<title>XENO [^<]+ — XENOsystem<\/title>/, slug);
     assert.match(doc, /src="\/products-v2\/support\.js"/, slug);
+    assert.match(doc, /data-marketing-header="1"/, slug);
+    assert.match(doc, /src="\/site\/marketing-header\.js"/, slug);
+    assert.match(doc, /href="\/site\/marketing-header\.css"/, slug);
+    assert.doesNotMatch(doc.match(/<header\b[\s\S]*?<\/header>/)?.[0] || '', /href="#"/, `${slug}: no header placeholders`);
+    assert.doesNotMatch(doc.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || '', /href="#"/, `${slug}: no footer placeholders`);
     assert.doesNotMatch(doc, /\.dc\.html/, `${slug}: design cross-links must be rewritten to /product/<slug>`);
     assert.doesNotMatch(doc, /["'(]https?:\/\/xenostudio\.ai/, `${slug}: self-links must be this host's paths`);
     assert.doesNotMatch(doc, /updates\.xenostudio\.ai\/apps\//, `${slug}: raw installer URLs bypass the download gate`);
@@ -39,6 +44,7 @@ test('nginx serves the designs at /products and bare /product/<slug>, gated; sub
   assert.match(bare, /try_files \/product-pages\/\$product_v2_slug\/index\.html \/product\/\$product_v2_slug\/index\.html @spa_shell;/,
     'design first, then the prerendered React page, then the SPA shell');
   assert.match(nginx, /location \^~ \/products-v2\/ \{/);
+  assert.match(nginx, /location \^~ \/site\/ \{[\s\S]*?Cache-Control "no-cache"/);
   // Download/release sub-addresses keep their own routes (not the bare-slug pattern).
   assert.match(nginx, /location ~ \^\/product\/\[\^\/\]\+\/download\//);
 });

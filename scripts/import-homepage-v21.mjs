@@ -13,6 +13,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { marketingAssets, marketingHeader } from './lib/marketing-header.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const srcDir = process.argv[2];
@@ -83,23 +84,12 @@ function replaceRequired(from, to) {
   html = html.replace(from, to);
 }
 replaceRequired('</head>', '<link rel="stylesheet" href="/home-v21/homepage.css">\n<script src="/home-v21/homepage.js" defer></script>\n</head>');
-replaceRequired('<header style=', '<header data-home-header="1" style=');
-// Keep the menu mounted for a fade in AND out; native links retain new-tab,
-// keyboard and touch behavior. The enhancement owns only its visibility.
-replaceRequired('onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpen }}"',
-  'data-product-trigger="1" aria-controls="home-products-menu" aria-expanded="false"');
-replaceRequired('    <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">\n      <div style="border-top:1px solid var(--g2a);background:var(--g0f)">',
-  '    <div id="home-products-menu" data-product-menu="1" inert aria-label="Products"><div class="home-products-card">');
-replaceRequired('      </div>\n    </sc-if>\n  </header>',
-  '      <div class="home-products-featured"><a href="/product/hub"><img src="/home-v21/site/xeno-logo.svg" alt=""><span><strong>XENO Hub <small>ALL-IN-ONE</small></strong><span>The desktop app that brings every XENO tool together</span></span><b>Explore Hub ↗</b></a></div><div class="home-products-footer"><a href="/products">View all products ↗</a><span>Explore the tools. Find your next workspace.</span></div>\n    </div></div>\n  </header>');
-replaceRequired('<div style="max-width:1320px;margin:0 auto;padding:20px clamp(16px,2vw,28px) 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px 24px">',
-  '<div class="home-products-list"><div class="home-products-highlight" aria-hidden="true"></div>');
-replaceRequired('<div style="display:flex;flex-direction:column;gap:2px">\n            <span',
-  '<div class="home-products-category" style="display:flex;flex-direction:column;gap:2px">\n            <span');
-replaceRequired('<button onClick="{{ p.onClick }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;',
-  '<a class="home-product-row" href="{{ p.href }}" style="display:flex;flex-direction:column;gap:1px;padding:6px 8px;');
-replaceRequired('{{ p.label }}</span><span style="font-size:12px;color:var(--g8f)">{{ p.subtitle }}</span></button></sc-for>',
-  '<span class="home-product-prefix">XENO </span>{{ p.word }}<span class="home-product-arrow" aria-hidden="true">↗</span></span><span style="font-size:12px;color:var(--g8f)">{{ p.subtitle }}</span></a></sc-for>');
+const originalHeader = html.match(/<header\b[\s\S]*?<\/header>/)?.[0];
+if (!originalHeader) throw new Error('Homepage header missing');
+const brand = originalHeader.match(/<a\b[\s\S]*?<\/a>/)?.[0];
+const theme = originalHeader.match(/<div role="radiogroup" aria-label="Theme"[\s\S]*?<\/div>/)?.[0];
+replaceRequired(originalHeader, marketingHeader({ source: html, home: true, brand, theme }));
+replaceRequired('</head>', marketingAssets() + '\n</head>');
 replaceRequired('({ label, subtitle, onClick: () => { this.setState({ menu: false, cat: g, pq: \'\', openP: label, showAll: true }); this.scrollTo(\'products\'); } })',
   "({ label, word: label.replace(/^XENO\\s+/i, ''), subtitle, href: '/product/' + (label === 'XENO 3D Gen' ? '3d' : label === 'XENO 3D' ? 'form' : label.replace(/^XENO\\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) })");
 replaceRequired("goProducts: () => this.scrollTo('products')", "goProducts: () => { window.location.href = '/products'; }");
