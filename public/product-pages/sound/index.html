@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Sound — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#8A5A00}
+input[type=range]{accent-color:#E8A317}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#download" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" ref="{{ hWrap }}" style="position:relative; height:calc(250vh - 60px)">
+  <div ref="{{ hInner }}" style="position:sticky; top:60px; height:calc(100vh - 60px); overflow:hidden">
+    <div style="position:relative; height:100%; max-width:1368px; margin:0 auto">
+      <div ref="{{ appBg }}" style="position:absolute; left:12px; right:12px; top:10px; bottom:10px; border-radius:18px; background:#1B1A17; box-shadow:0 30px 80px -30px rgba(0,0,0,.6); opacity:0; pointer-events:none"></div>
+      <div ref="{{ appBar }}" style="position:absolute; left:24px; right:24px; top:10px; height:40px; display:flex; align-items:center; gap:14px; color:#EFE9DD; font-size:12.5px; opacity:0; pointer-events:none">
+        <span style="display:flex; gap:6px"><span style="width:10px; height:10px; border-radius:50%; background:#D9573B"></span><span style="width:10px; height:10px; border-radius:50%; background:#E8A317"></span><span style="width:10px; height:10px; border-radius:50%; background:#3E9C8A"></span></span>
+        <span style="font-weight:600">Demo.xsound</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8F887C">XENO Sound 0.2.0</span>
+        <span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8F887C; display:{{ kbdD }}">Space play · 1–8 slices · drag the XY pad</span>
+      </div>
+      <div ref="{{ textRow }}" style="position:absolute; left:24px; right:24px; top:clamp(20px,5vh,56px); display:grid; grid-template-columns:{{ heroCols }}; gap:20px 48px; align-items:stretch">
+        <div style="display:flex; flex-direction:column; justify-content:center; gap:clamp(12px,2.2vh,20px); min-width:0">
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8A5A00">Audio workstation</div>
+          <h1 ref="{{ h1El }}" style="margin:0; display:flex; flex-direction:column; font-size:{{ h1Fs }}; line-height:.95; letter-spacing:-.05em; font-weight:700; transform-origin:left bottom; will-change:transform">
+            <span style="white-space:{{ h1Ws }}">From the first beat</span>
+            <span style="color:#8C867C; white-space:{{ h1Ws }}">to the final master.</span>
+          </h1>
+          <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center">
+            <button onClick="{{ onPlay }}" style="height:46px; padding:0 18px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:15px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:10px"><svg width="12" height="12" viewBox="0 0 12 12"><path d="{{ playIcon }}" fill="#FFC24B"></path></svg>{{ playLabel }}</button>
+            <a href="#get" style="border:1px solid #D6D0C7; font-size:15px; font-weight:500; padding:12px 17px; border-radius:8px">Get XENO Sound</a>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">v0.2.0 · Windows x64 · in development</span>
+          </div>
+        </div>
+        <div style="display:{{ outD }}; flex-direction:column; gap:8px; background:#1B1A17; color:#FFC24B; border-radius:16px; padding:14px 16px; box-shadow:inset 0 2px 8px rgba(0,0,0,.6), 0 24px 50px -28px rgba(29,27,24,.6); min-width:0">
+          <div style="display:flex; justify-content:space-between; gap:10px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C"><span>OUTPUT · MASTER</span><span>{{ lcdPat }}</span></div>
+          <canvas ref="{{ scopeCv }}" width="800" height="240" style="flex:1; min-height:110px; width:100%; height:clamp(110px,20vh,190px); display:block"></canvas>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-family:'IBM Plex Mono',monospace"><span ref="{{ lcdStep }}" style="font-size:12px">STEP --/16</span><span><span ref="{{ lcdLufs }}" style="font-size:22px">−∞ LUFS</span></span></div>
+          <div style="font-family:'Schibsted Grotesk',sans-serif; font-size:13px; line-height:1.45; color:#ADA597">Every sound on this page is generated live by your browser’s Web Audio engine, the same engine XENO Sound ships on. Scroll to open the full demo.</div>
+        </div>
+      </div>
+      <div ref="{{ devEl }}" style="position:absolute; left:24px; right:24px; top:0; transform-origin:top center; will-change:transform; background:linear-gradient(180deg,#EFEBE4,#E3DED5); border-radius:20px; padding:clamp(12px,1.4vw,18px); box-shadow:inset 0 1px 0 #FFFFFF, 0 0 0 1px rgba(29,27,24,.08), 0 40px 70px -36px rgba(29,27,24,.5)">
+        <div style="display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; justify-content:space-between">
+          <div style="display:flex; flex-wrap:wrap; gap:12px 18px; align-items:center; padding:6px 4px">
+          <button onClick="{{ onPlay }}" title="Play / stop (Space)" style="width:62px; height:62px; border-radius:50%; border:none; background:{{ playBg }}; box-shadow:inset 0 -3px 0 rgba(0,0,0,.25), 0 6px 14px -6px rgba(0,0,0,.4); display:grid; place-items:center; cursor:pointer; transition:background .2s"><svg width="20" height="20" viewBox="0 0 12 12"><path d="{{ playIcon }}" fill="{{ playFg }}"></path></svg></button>
+          <div style="display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#6A655D">TEMPO</span><div style="display:flex; align-items:center; gap:4px"><button onClick="{{ bpmDn }}" style="width:30px; height:30px; border:none; border-radius:7px; background:#D8D3CA; font:inherit; font-size:16px; cursor:pointer">−</button><span style="font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:500; min-width:44px; text-align:center">{{ bpm }}</span><button onClick="{{ bpmUp }}" style="width:30px; height:30px; border:none; border-radius:7px; background:#D8D3CA; font:inherit; font-size:16px; cursor:pointer">+</button></div></div>
+          <div style="display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#6A655D">PATTERN</span><div style="display:flex; gap:4px"><sc-for list="{{ presets }}" as="p" hint-placeholder-count="3"><button onClick="{{ p.on }}" title="{{ p.name }}" style="height:30px; padding:0 11px; border:none; border-radius:7px; background:{{ p.bg }}; color:{{ p.fg }}; font:inherit; font-size:13px; font-weight:500; cursor:pointer">{{ p.name }}</button></sc-for></div></div>
+        </div>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6A655D; padding-right:4px">Drum machine · 16 steps</span>
+        </div>
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px; overflow-x:auto">
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+          <div style="display:grid; grid-template-columns:{{ rowLab }} minmax(0,1fr); gap:10px; align-items:center; min-width:620px">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:6px">
+              <span style="display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600"><span style="width:9px; height:9px; border-radius:50%; background:{{ r.c }}"></span>{{ r.name }}</span>
+              <button onClick="{{ r.mute }}" title="Mute" style="width:26px; height:24px; border:none; border-radius:6px; background:{{ r.mBg }}; color:{{ r.mFg }}; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">M</button>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(16, minmax(0,1fr)); gap:5px">
+              <sc-for list="{{ r.pads }}" as="p" hint-placeholder-count="16"><button data-col="{{ p.col }}" onClick="{{ p.on }}" style="height:{{ padH }}; margin-left:{{ p.ml }}; border:none; border-radius:7px; background:{{ p.bg }}; box-shadow:inset 0 -2px 0 rgba(0,0,0,.14); color:rgba(255,255,255,.9); font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer; transition:background .12s, transform .08s">{{ p.n }}</button></sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+        <div style="margin-top:10px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 16px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6A655D"><span>Click pads to write the pattern · Space to play or stop</span><span>{{ soundNote }}</span></div>
+      </div>
+      <div ref="{{ dawEl }}" style="position:absolute; left:24px; right:24px; top:100%; opacity:0; display:grid; grid-template-columns:{{ dawCols }}; gap:10px; color:#EFE9DD; font-size:12px">
+        <div style="background:#26231E; border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0">
+          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px"><span style="font-weight:600; font-size:13.5px">Slicer</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">{{ slInfo }}</span>
+            <span style="margin-left:auto; display:flex; gap:4px; flex-wrap:wrap"><sc-for list="{{ slFx }}" as="f"><button onClick="{{ f.on }}" style="height:26px; padding:0 10px; border:none; border-radius:6px; background:{{ f.bg }}; color:{{ f.fg }}; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">{{ f.label }}</button></sc-for><button onClick="{{ doBounce }}" style="height:26px; padding:0 10px; border:1px solid #3A362F; border-radius:6px; background:transparent; color:#EFE9DD; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">Re-bounce</button></span></div>
+          <div style="position:relative; flex:1; min-height:90px; border-radius:8px; background:#1B1A17; overflow:hidden">
+            <canvas ref="{{ slCv }}" width="1200" height="260" style="position:absolute; inset:0; width:100%; height:100%; display:block"></canvas>
+            <div style="position:absolute; inset:0; display:grid; grid-template-columns:repeat(16, minmax(0,1fr))"><sc-for list="{{ slices }}" as="s" hint-placeholder-count="16"><button data-sl="{{ s.i }}" onClick="{{ s.on }}" title="Slice {{ s.n }}" style="border:none; border-right:1px solid rgba(255,194,75,.12); background:transparent; color:#8F887C; font-family:'IBM Plex Mono',monospace; font-size:9.5px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:5px; cursor:pointer" style-hover="background:rgba(255,194,75,.08)">{{ s.n }}</button></sc-for></div>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">One bar of your pattern, rendered offline and cut at every step. Click a slice, or press 1 to 8.</span>
+        </div>
+        <div style="background:#26231E; border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0">
+          <div style="display:flex; align-items:center; gap:10px"><span style="font-weight:600; font-size:13.5px">Master FX</span><span ref="{{ luApp }}" style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#FFC24B">−∞ LUFS</span></div>
+          <div ref="{{ xyEl }}" onPointerDown="{{ xyDown }}" style="position:relative; flex:1; min-height:110px; border-radius:10px; background:radial-gradient(circle at 50% 50%, #2E2A23, #1B1A17); box-shadow:inset 0 0 0 1px #3A362F; touch-action:none; cursor:crosshair; overflow:hidden">
+            <span style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(255,194,75,.12)"></span><span style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(255,194,75,.12)"></span>
+            <span style="position:absolute; left:8px; bottom:6px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#8F887C">← low-pass</span><span style="position:absolute; right:8px; bottom:6px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#8F887C">high-pass →</span><span style="position:absolute; left:8px; top:6px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#8F887C">↑ resonance</span>
+            <span ref="{{ xyDot }}" style="position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%; background:#FFC24B; box-shadow:0 0 0 6px rgba(255,194,75,.18), 0 0 24px rgba(255,194,75,.5); pointer-events:none; transition:left .25s, top .25s"></span>
+            <span ref="{{ xyLab }}" style="position:absolute; right:8px; top:6px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#FFC24B">filter off</span>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap"><sc-for list="{{ mfx }}" as="f"><button onClick="{{ f.on }}" style="height:28px; padding:0 11px; border:none; border-radius:6px; background:{{ f.bg }}; color:{{ f.fg }}; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">{{ f.label }}</button></sc-for></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5">
+  <div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px">
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Engine</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Web Audio, sample-accurate transport</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Metering</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">EBU R128 LUFS, true peak, correlation</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Imports</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">WAV, MP3, FLAC, OGG, MIDI</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Exports</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">WAV, MIDI</div></div>
+  </div>
+</section>
+
+<section id="from" data-screen-label="Coming from your DAW" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8A5A00">Coming from another DAW</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:720px">Keep the way you already work.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Sound brings the workflows of five different tools into one app. Pick the one you use today to see where each part lives, and how far along it is.</p>
+    </div>
+    <div style="display:grid; grid-template-columns:{{ fdCols }}; gap:24px 56px; margin-top:44px; align-items:start">
+      <div style="display:flex; flex-direction:column; border-top:1px solid #1D1B18">
+        <sc-for list="{{ fdTabs }}" as="t" hint-placeholder-count="5">
+          <button data-reveal="" onClick="{{ t.on }}" style="display:grid; grid-template-columns:3px minmax(0,1fr); gap:16px; padding:16px 0; border:none; border-bottom:1px solid #E2DDD5; background:transparent; font:inherit; text-align:left; cursor:pointer">
+            <span style="border-radius:2px; background:{{ t.bar }}; transition:background .25s"></span>
+            <span style="display:flex; flex-direction:column; gap:4px"><span style="font-size:clamp(22px,2.4vw,30px); font-weight:700; letter-spacing:-.025em; color:{{ t.c }}; transition:color .25s">{{ t.name }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8C867C">{{ t.known }}</span></span>
+          </button>
+        </sc-for>
+      </div>
+      <div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:16px; padding:26px 26px 22px; display:flex; flex-direction:column; gap:4px">
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:8px 16px; margin-bottom:10px"><span style="font-size:20px; font-weight:600; letter-spacing:-.015em">{{ fdTitle }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">{{ fdCount }}</span></div>
+        <sc-for list="{{ fdRows }}" as="r">
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:center; padding:14px 0; border-top:1px solid #F0EDE8">
+            <span style="font-size:15.5px; line-height:1.45; color:#3F3B35; text-wrap:pretty">{{ r.t }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; padding:3px 9px; border-radius:999px; background:{{ r.bg }}; color:{{ r.fg }}; white-space:nowrap">{{ r.s }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="modes" data-screen-label="Two modes" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8A5A00">Two modes, one app</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">Jam in the grid. Finish on the timeline.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Session mode is a clip grid for trying ideas and playing live. Arrangement mode lays the same clips out in time. Switch between them without leaving the project.</p>
+    </div>
+    <div data-reveal="" style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-top:36px">
+      <div style="display:flex; padding:4px; border-radius:10px; background:#E9E5DE">
+        <button onClick="{{ toArr }}" style="height:34px; padding:0 14px; border:none; border-radius:7px; background:{{ arrBg }}; color:#1D1B18; font:inherit; font-size:14px; font-weight:500; cursor:pointer; box-shadow:{{ arrSh }}">Arrangement</button>
+        <button onClick="{{ toSes }}" style="height:34px; padding:0 14px; border:none; border-radius:7px; background:{{ sesBg }}; color:#1D1B18; font:inherit; font-size:14px; font-weight:500; cursor:pointer; box-shadow:{{ sesSh }}">Session</button>
+      </div>
+      <button onClick="{{ modePlay }}" style="height:40px; padding:0 14px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:14px; font-weight:500; cursor:pointer; display:flex; gap:8px; align-items:center"><svg width="10" height="10" viewBox="0 0 12 12"><path d="{{ modeIcon }}" fill="#FFC24B"></path></svg>{{ modePlayLabel }}</button>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">{{ modeHint }}</span>
+    </div>
+    <div data-reveal="" style="margin-top:16px; background:#1B1A17; color:#EFE9DD; border-radius:16px; padding:16px; box-shadow:0 30px 60px -30px rgba(29,27,24,.55)">
+      <div style="position:relative; height:{{ mdH }}">
+        <div style="position:absolute; left:0; right:0; top:0; height:30px; opacity:{{ arrOp }}; transition:opacity .4s; pointer-events:none">
+          <sc-for list="{{ bars }}" as="b"><span style="position:absolute; left:{{ b.x }}; top:6px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">{{ b.l }}</span></sc-for>
+        </div>
+        <div style="position:absolute; left:0; right:0; top:0; height:30px; opacity:{{ sesOp }}; transition:opacity .4s; pointer-events:none">
+          <sc-for list="{{ colHeads }}" as="c"><span style="position:absolute; left:{{ c.x }}; top:6px; font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:7px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.c }}"></span>{{ c.l }}</span></sc-for>
+        </div>
+        <sc-for list="{{ rowHeads }}" as="r"><span style="position:absolute; left:0; top:{{ r.y }}; height:{{ r.h }}; display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; opacity:{{ arrOp }}; transition:opacity .4s"><span style="width:8px; height:8px; border-radius:50%; background:{{ r.c }}"></span>{{ r.l }}</span></sc-for>
+        <sc-for list="{{ scenes }}" as="s"><button onClick="{{ s.on }}" style="position:absolute; right:0; top:{{ s.y }}; width:{{ s.w }}; height:{{ s.h }}; border:none; border-radius:8px; background:{{ s.bg }}; color:#EFE9DD; font:inherit; font-size:12.5px; cursor:pointer; opacity:{{ sesOp }}; pointer-events:{{ sesPe }}; transition:opacity .4s, background .2s; display:flex; align-items:center; justify-content:center; gap:6px">▶ Scene {{ s.n }}</button></sc-for>
+        <sc-for list="{{ mClips }}" as="c">
+          <button onClick="{{ c.on }}" style="position:absolute; left:{{ c.x }}; top:{{ c.y }}; width:{{ c.w }}; height:{{ c.h }}; border:none; border-radius:9px; padding:0; overflow:hidden; background:{{ c.bg }}; color:#1B1A17; font:inherit; text-align:left; cursor:pointer; box-shadow:{{ c.sh }}; transition:left .7s cubic-bezier(.2,.8,.2,1), top .7s cubic-bezier(.2,.8,.2,1), width .7s cubic-bezier(.2,.8,.2,1), height .7s cubic-bezier(.2,.8,.2,1), box-shadow .2s, opacity .3s; opacity:{{ c.op }}">
+            <span style="position:absolute; left:10px; top:8px; font-size:12.5px; font-weight:600; white-space:nowrap">{{ c.name }}</span>
+            <span style="position:absolute; left:10px; right:10px; bottom:10px; height:16px; display:flex; gap:2px; align-items:flex-end"><sc-for list="{{ c.dots }}" as="d"><span style="flex:1; height:{{ d.h }}; border-radius:1px; background:rgba(27,26,23,{{ d.a }})"></span></sc-for></span>
+            <span data-prog="{{ c.key }}" style="position:absolute; left:0; bottom:0; height:3px; width:0%; background:#1B1A17"></span>
+          </button>
+        </sc-for>
+        <div ref="{{ arrHead }}" style="position:absolute; top:26px; bottom:0; left:{{ arrLeft }}; width:2px; background:#FFC24B; opacity:0; pointer-events:none"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="instruments" data-screen-label="Instruments" style="background:#141310; color:#EFE9DD; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#FFC24B">Instruments</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:720px">Play it from your keyboard.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#ADA597; text-wrap:pretty">The built-in synth has eight presets. Pick one and play with the A to K keys, or click the keys below. Z and X change octave. Notes land in the piano roll as you play.</p>
+    </div>
+    <div ref="{{ instRef }}" data-reveal="" style="margin-top:40px; background:#1D1B18; border-radius:18px; padding:16px; box-shadow:0 0 0 1px #2E2B26">
+      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center">
+        <sc-for list="{{ ipres }}" as="p" hint-placeholder-count="8"><button onClick="{{ p.on }}" style="height:32px; padding:0 12px; border:none; border-radius:999px; background:{{ p.bg }}; color:{{ p.fg }}; font:inherit; font-size:13px; font-weight:500; cursor:pointer">{{ p.label }}</button></sc-for>
+        <span style="margin-left:auto; display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#ADA597"><button onClick="{{ octDn }}" style="width:28px; height:28px; border:none; border-radius:6px; background:#2E2B26; color:#EFE9DD; cursor:pointer">Z</button>{{ octL }}<button onClick="{{ octUp }}" style="width:28px; height:28px; border:none; border-radius:6px; background:#2E2B26; color:#EFE9DD; cursor:pointer">X</button></span>
+      </div>
+      <div style="position:relative; margin-top:12px; height:150px; border-radius:10px; background:#141310; overflow:hidden"><canvas ref="{{ prCv }}" width="1200" height="300" style="position:absolute; inset:0; width:100%; height:100%; display:block"></canvas><span style="position:absolute; left:10px; top:8px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">Piano roll · last 6 seconds</span></div>
+      <div style="position:relative; margin-top:12px; height:170px; display:flex; gap:3px; user-select:none; touch-action:none">
+        <sc-for list="{{ wKeys }}" as="k" hint-placeholder-count="14"><button data-note="{{ k.m }}" onPointerDown="{{ k.down }}" onPointerUp="{{ k.up }}" onPointerLeave="{{ k.up }}" style="flex:1; height:100%; border:none; border-radius:0 0 8px 8px; background:#F3EFE7; box-shadow:inset 0 -6px 0 #D8D3CA; cursor:pointer; display:flex; align-items:flex-end; justify-content:center; padding-bottom:10px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C; transition:background .06s">{{ k.lab }}</button></sc-for>
+        <sc-for list="{{ bKeys }}" as="k" hint-placeholder-count="10"><button data-note="{{ k.m }}" onPointerDown="{{ k.down }}" onPointerUp="{{ k.up }}" onPointerLeave="{{ k.up }}" style="position:absolute; top:0; left:{{ k.x }}; width:{{ k.w }}; height:60%; border:none; border-radius:0 0 6px 6px; background:#1B1A17; box-shadow:inset 0 -5px 0 #000000; cursor:pointer; z-index:2; display:flex; align-items:flex-end; justify-content:center; padding-bottom:8px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8F887C; transition:background .06s">{{ k.lab }}</button></sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mix" data-screen-label="Mix and master" style="background:#141310; color:#EFE9DD; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#FFC24B">Mix and master</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:780px">Mix it by ear. Master it by the numbers.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#ADA597; text-wrap:pretty">Every track gets a fader, mute and solo, and an insert chain with EQ, compression, reverb and delay. The master bus ends in a limiter and is metered to EBU R128. The console below is live: press play and move things.</p>
+    </div>
+    <div style="display:grid; grid-template-columns:{{ mxCols }}; gap:16px; margin-top:40px; align-items:stretch">
+      <div data-reveal="" style="background:#1D1B18; border-radius:16px; padding:16px; box-shadow:0 0 0 1px #2E2B26; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px">
+        <sc-for list="{{ strips }}" as="s" hint-placeholder-count="4">
+          <div style="background:{{ s.bg }}; border-radius:12px; padding:12px 10px; display:flex; flex-direction:column; gap:10px; min-width:0">
+            <div style="display:flex; align-items:center; gap:7px; font-weight:600; font-size:13.5px"><span style="width:8px; height:8px; border-radius:50%; background:{{ s.c }}"></span>{{ s.name }}</div>
+            <div style="display:flex; flex-direction:column; gap:4px">
+              <sc-for list="{{ s.fx }}" as="f"><button onClick="{{ f.on }}" style="height:24px; border:none; border-radius:5px; background:{{ f.bg }}; color:{{ f.fg }}; font-family:'IBM Plex Mono',monospace; font-size:10.5px; cursor:{{ f.cur }}; text-align:left; padding:0 7px; transition:background .2s">{{ f.label }}</button></sc-for>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:center; align-items:stretch; height:170px">
+              <div style="display:flex; gap:3px"><div style="position:relative; width:8px; border-radius:2px; background:#2E2B26; overflow:hidden"><span data-meter="{{ s.key }}" style="position:absolute; left:0; right:0; bottom:0; height:0%; background:linear-gradient(0deg,#3E9C8A 0%,#3E9C8A 60%,#E8A317 82%,#D9573B 100%); background-size:100% 170px; background-position:bottom"></span></div></div>
+              <input type="range" min="-30" max="6" step="0.5" value="{{ s.vol }}" onInput="{{ s.setVol }}" onChange="{{ s.setVol }}" style="writing-mode:vertical-lr; direction:rtl; height:170px; width:26px; margin:0">
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; text-align:center; color:#ADA597">{{ s.volL }}</div>
+            <div style="display:{{ s.msD }}; gap:4px"><button onClick="{{ s.onM }}" style="flex:1; height:26px; border:none; border-radius:5px; background:{{ s.mBg }}; color:{{ s.mFg }}; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">M</button><button onClick="{{ s.onS }}" style="flex:1; height:26px; border:none; border-radius:5px; background:{{ s.sBg }}; color:{{ s.sFg }}; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">S</button></div>
+          </div>
+        </sc-for>
+      </div>
+      <div data-reveal="" style="background:#1D1B18; border-radius:16px; padding:20px; box-shadow:0 0 0 1px #2E2B26; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px"><span style="font-weight:600; font-size:15px">Loudness</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">ITU-R BS.1770 · measured live</span></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+          <div style="background:#141310; border-radius:10px; padding:12px"><div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">MOMENTARY</div><div ref="{{ luM }}" style="font-family:'IBM Plex Mono',monospace; font-size:26px; color:#FFC24B; margin-top:6px">−∞</div></div>
+          <div style="background:#141310; border-radius:10px; padding:12px"><div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">SHORT-TERM</div><div ref="{{ luS }}" style="font-family:'IBM Plex Mono',monospace; font-size:26px; color:#FFC24B; margin-top:6px">−∞</div></div>
+        </div>
+        <div style="position:relative; height:10px; border-radius:5px; background:#2E2B26">
+          <span ref="{{ luBar }}" style="position:absolute; left:0; top:0; bottom:0; width:0%; border-radius:5px; background:#E8A317; transition:width .15s"></span>
+          <span style="position:absolute; top:-4px; bottom:-4px; left:{{ tgX }}; width:2px; background:#EFE9DD; transition:left .3s"></span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">DELIVERY TARGET</span>
+          <div style="display:flex; flex-wrap:wrap; gap:6px"><sc-for list="{{ targets }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.on }}" style="height:32px; padding:0 12px; border-radius:999px; border:1px solid {{ t.bd }}; background:{{ t.bg }}; color:{{ t.fg }}; font:inherit; font-size:13px; cursor:pointer">{{ t.label }}</button></sc-for></div>
+        </div>
+        <div ref="{{ luNote }}" style="font-size:14px; line-height:1.5; color:#ADA597; min-height:3em">Press play to measure.</div>
+        <button onClick="{{ matchLoud }}" style="align-self:flex-start; height:38px; padding:0 14px; border:none; border-radius:8px; background:#FFC24B; color:#1B1A17; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Match master gain to target</button>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C; margin-top:auto">Browser measurement, K-weighted. The app meters true peak and phase correlation as well.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="agent" data-screen-label="Agent" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8A5A00">Agent</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:720px">Say what you want to hear.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">The agent plans and calls the same tools you use: tracks, volume, pan, mute, solo, effects and their settings, tempo and export. Every change is undoable. When a tool needs a model you haven’t installed, it says so.</p>
+    </div>
+    <div data-reveal="" style="display:grid; grid-template-columns:{{ agCols }}; gap:16px; margin-top:40px">
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <sc-for list="{{ agPrompts }}" as="p" hint-placeholder-count="4"><button onClick="{{ p.on }}" style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:16px 18px; border-radius:12px; border:1px solid {{ p.bd }}; background:{{ p.bg }}; color:#1D1B18; font:inherit; font-size:16px; font-weight:500; text-align:left; cursor:pointer; transition:background .2s, border-color .2s"><span>“{{ p.label }}”</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">{{ p.tag }}</span></button></sc-for>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C; margin-top:4px">Changes apply to the mixer above. Press play first to hear them.</span>
+      </div>
+      <div style="background:#1B1A17; color:#EFE9DD; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:0 30px 60px -30px rgba(29,27,24,.55); min-height:340px">
+        <div style="display:flex; align-items:center; gap:10px"><span style="font-weight:600; font-size:14px">Agent</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8F887C">{{ agState }}</span><button onClick="{{ agUndo }}" style="margin-left:auto; height:28px; padding:0 11px; border:1px solid #3A362F; border-radius:6px; background:transparent; color:{{ agUndoC }}; font:inherit; font-size:12.5px; cursor:pointer">Undo agent changes</button></div>
+        <div style="padding:12px 14px; border-radius:10px; background:#26231E; font-size:15px; min-height:46px">{{ agTyped }}<span style="display:{{ agCaretD }}; width:2px; height:1em; background:#FFC24B; margin-left:2px; vertical-align:-2px"></span></div>
+        <sc-for list="{{ agCalls }}" as="c">
+          <div style="display:grid; grid-template-columns:16px minmax(0,1fr); gap:10px; padding:10px 12px; border-radius:8px; background:{{ c.bg }}; font-family:'IBM Plex Mono',monospace; font-size:12px; opacity:{{ c.op }}; transition:opacity .3s">
+            <span style="color:{{ c.dot }}">{{ c.mark }}</span>
+            <span style="display:flex; flex-direction:column; gap:3px; min-width:0"><span style="color:#FFC24B">{{ c.fn }}</span><span style="color:#ADA597; white-space:pre-wrap">{{ c.arg }}</span><span style="display:{{ c.noteD }}; color:#F4A193; font-family:'Schibsted Grotesk',sans-serif; font-size:13.5px; line-height:1.45">{{ c.note }}</span></span>
+          </div>
+        </sc-for>
+        <span style="margin-top:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8F887C">separate_stems is the app’s own tool name. The others are illustrative.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<dc-import name="SuiteLoop" current="sound" hint-size="100%,640px"></dc-import>
+
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1180px; margin:0 auto">
+    <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8A5A00">Where it stands</div>
+    <h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Version 0.2.0, and honest about it.</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px">
+      <sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3">
+        <div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px">
+          <div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div>
+          <sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start">
+    <div>
+      <h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Sound.</h2>
+      <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">Version 0.2.0 builds as a Windows installer today. Signed public downloads, and macOS and Linux builds, are still to come. Leave your email and we’ll tell you when it’s out.</p>
+    </div>
+    <div data-reveal="" style="display:flex; flex-direction:column; gap:12px">
+      <sc-if value="{{ getNotSent }}" hint-placeholder-val="{{ true }}">
+        <form onSubmit="{{ getSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+          <input type="email" value="{{ getEmail }}" onChange="{{ getSet }}" placeholder="you@studio.com" style="flex:1 1 220px; height:48px; padding:0 14px; border:1px solid #D6D0C7; border-radius:8px; font:inherit; font-size:15px; background:#F6F4F0; color:#1D1B18">
+          <button type="submit" style="height:48px; padding:0 18px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:15px; font-weight:500; cursor:pointer">Notify me</button>
+        </form>
+      </sc-if>
+      <sc-if value="{{ getSent }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 16px; border-radius:10px; background:#FBF0D9; color:#6B4700; font-size:15px">Thanks. We’ll email {{ getEmail }} when XENO Sound is available.</div></sc-if>
+      <div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:grid; grid-template-columns:1fr auto; gap:8px 16px; align-items:center">
+        <span style="font-weight:600; font-size:16px">Windows x64</span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8A5A00">builds today · not yet published</span>
+        <span style="font-weight:600; font-size:16px">macOS · Linux</span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">on the roadmap</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px">
+  <div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start">
+    <div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8A5A00">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div>
+    <div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18">
+      <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5">
+        <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+          <button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span>
+            <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span>
+            <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span>
+          </button>
+          <div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#FFC24B">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Sound&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  PRE = [
+    { name: 'Floor', kick: [0, 4, 8, 12], snare: [4, 12], hat: [2, 6, 10, 14], bass: { 0: 33, 3: 33, 6: 45, 8: 33, 11: 36, 14: 31 } },
+    { name: 'Break', kick: [0, 3, 8, 10], snare: [4, 12, 15], hat: [0, 2, 4, 6, 8, 10, 12, 14], bass: { 0: 33, 2: 33, 8: 36, 10: 36, 13: 31 } },
+    { name: 'Half-time', kick: [0, 11], snare: [8], hat: [0, 2, 4, 6, 8, 10, 12, 14], bass: { 0: 28, 7: 31, 11: 33 } }];
+  KEYS = [[[57, 60, 64], [53, 57, 60]], [[53, 57, 60], [55, 59, 62]], [[52, 55, 59], [52, 55, 59]]];
+  CLIPN = { drums: ['Floor', 'Break', 'Half-time'], bass: ['Root', 'Octave', 'Walk'], keys: ['Am – F', 'F – G', 'Em'] };
+  TC = { drums: '#E8A317', bass: '#8C96E8', keys: '#C98BDB' };
+  mkPat(i) { const p = this.PRE[i], a = l => Array.from({ length: 16 }, (_, k) => l.includes(k)); return { kick: a(p.kick), snare: a(p.snare), hat: a(p.hat), bass: Array.from({ length: 16 }, (_, k) => p.bass[k] || null) }; }
+  mkMix() { const t = (x) => Object.assign({ vol: 0, m: false, s: false, eq: false, comp: false, rev: false, dly: false }, x); return { drums: t({}), bass: t({ vol: -2 }), keys: t({ vol: -8, rev: true }), master: { vol: -3 } }; }
+  state = { vw: 1400, vh: 900, playing: false, bpm: 120, preset: 0, pat: this.mkPat(0), mute: {}, mode: 'ses', cur: { drums: 0, bass: 0, keys: 0 }, arrPlay: false, mix: this.mkMix(), target: 0, ag: -1, agTyped: 0, agDoneN: 0, agBusy: false, hasSnap: false, faq: 0, getEmail: '', getSent: false, nlEmail: '', nlSent: false, osName: '' };
+  h1El = React.createRef(); scopeCv = React.createRef(); lcdStep = React.createRef(); lcdLufs = React.createRef(); arrHead = React.createRef(); luM = React.createRef(); luS = React.createRef(); luBar = React.createRef(); luNote = React.createRef();
+
+  hWrap = React.createRef(); hInner = React.createRef(); textRow = React.createRef(); devEl = React.createRef(); dawEl = React.createRef(); appBg = React.createRef(); appBar = React.createRef(); slCv = React.createRef(); xyEl = React.createRef(); xyDot = React.createRef(); xyLab = React.createRef(); luApp = React.createRef();
+  ss(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+  pinTick = () => {
+    const w = this.hWrap.current, inr = this.hInner.current, tr = this.textRow.current, dv = this.devEl.current, dw = this.dawEl.current; if (!w || !inr || !tr || !dv || !dw) return;
+    const H = inr.clientHeight, p = Math.min(1, Math.max(0, -(w.getBoundingClientRect().top - 60) / Math.max(1, w.offsetHeight - H))), m = this.reduce ? (p > 0.4 ? 1 : 0) : this.ss(0.06, 0.7, p);
+    const t0 = tr.offsetTop + tr.offsetHeight + 22, devH = dv.offsetHeight, top1 = 58, dawMin = Math.min(300, Math.max(200, H * 0.34)), kd = Math.max(0.55, Math.min(1, (H - top1 - 10 - dawMin - 22) / devH));
+    const k = 1 + (kd - 1) * m, top = t0 + (top1 - t0) * m;
+    dv.style.transform = 'translateY(' + top.toFixed(1) + 'px) scale(' + k.toFixed(4) + ')';
+    const d1 = top1 + devH * kd + 10, dTop = (H + 30) + (d1 - (H + 30)) * m;
+    dw.style.top = dTop.toFixed(1) + 'px'; dw.style.height = Math.max(160, H - d1 - 22) + 'px'; dw.style.opacity = String(this.ss(0.1, 0.6, m)); dw.style.pointerEvents = m > 0.8 ? 'auto' : 'none';
+    tr.style.opacity = String(1 - this.ss(0, 0.45, m)); tr.style.transform = 'translateY(' + (-50 * m).toFixed(1) + 'px)'; tr.style.pointerEvents = m > 0.4 ? 'none' : 'auto';
+    if (this.appBg.current) this.appBg.current.style.opacity = String(this.ss(0.2, 0.9, m)); if (this.appBar.current) this.appBar.current.style.opacity = String(this.ss(0.55, 1, m));
+    const on = m > 0.75; if (on !== this.appOn) { this.appOn = on; if (on && !this.slBuf) this.bounce(); }
+  };
+  vK(ac, d, t) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.12); this.env(g, t, 0.003, 1, 0.36); o.connect(g); g.connect(d); o.start(t); o.stop(t + 0.42); }
+  vS(ac, d, t, nb) { const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), o = ac.createOscillator(), og = ac.createGain(); n.buffer = nb; f.type = 'highpass'; f.frequency.value = 1400; this.env(g, t, 0.002, 0.55, 0.17); n.connect(f); f.connect(g); g.connect(d); n.start(t); n.stop(t + 0.22); o.type = 'triangle'; o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.08); this.env(og, t, 0.002, 0.4, 0.09); o.connect(og); og.connect(d); o.start(t); o.stop(t + 0.14); }
+  vH(ac, d, t, nb) { const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); n.buffer = nb; f.type = 'highpass'; f.frequency.value = 7500; this.env(g, t, 0.001, 0.22, 0.045); n.connect(f); f.connect(g); g.connect(d); n.start(t); n.stop(t + 0.08); }
+  vB(ac, d, t, m, len) { const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(); o.type = 'sawtooth'; o.frequency.value = this.mf(m); f.type = 'lowpass'; f.Q.value = 6; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(180, t + len); this.env(g, t, 0.005, 0.42, len); o.connect(f); f.connect(g); g.connect(d); o.start(t); o.stop(t + len + 0.05); }
+  bounce = () => {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (!OAC) return; const S = this.state, sr = 44100, spb = 60 / S.bpm / 4, len = Math.ceil(sr * spb * 16);
+    const oc = new OAC(1, len, sr), nb = oc.createBuffer(1, sr, sr), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const out = oc.createGain(); out.gain.value = 0.8; out.connect(oc.destination); const p = S.pat, mu = S.mute;
+    for (let i = 0; i < 16; i++) { const t = i * spb + 0.001; if (p.kick[i] && !mu.kick) this.vK(oc, out, t); if (p.snare[i] && !mu.snare) this.vS(oc, out, t, nb); if (p.hat[i] && !mu.hat) this.vH(oc, out, t, nb); if (p.bass[i] && !mu.bass) this.vB(oc, out, t, p.bass[i], spb * 1.8); }
+    this.setState({ slBusy: true });
+    oc.startRendering().then(buf => { this.slBuf = buf; this.slSpb = spb; const rv = (this.ac || oc).createBuffer ? new AudioBuffer({ length: buf.length, sampleRate: buf.sampleRate, numberOfChannels: 1 }) : null; if (rv) { const a = buf.getChannelData(0), b = rv.getChannelData(0); for (let i = 0; i < a.length; i++) b[i] = a[a.length - 1 - i]; this.slRev = rv; } this.drawSlicer(); this.setState({ slBusy: false, slAt: Date.now() }); }).catch(() => this.setState({ slBusy: false }));
+  };
+  drawSlicer() {
+    const c = this.slCv.current, b = this.slBuf; if (!c || !b) return; const x = c.getContext('2d'), W = c.width, H = c.height, d = b.getChannelData(0), step = d.length / W;
+    x.clearRect(0, 0, W, H); x.fillStyle = 'rgba(255,194,75,.9)';
+    for (let i = 0; i < W; i++) { let mn = 1, mx = -1; const s0 = Math.floor(i * step), s1 = Math.floor((i + 1) * step); for (let k = s0; k < s1; k += 4) { const v = d[k]; if (v < mn) mn = v; if (v > mx) mx = v; } x.fillRect(i, H / 2 - mx * H * 0.44, 1, Math.max(1, (mx - mn) * H * 0.44)); }
+  }
+  playSlice(i) {
+    const ac = this.ensureAudio(); if (!ac || !this.slBuf) { if (!this.slBuf) this.bounce(); return; } ac.resume();
+    const S = this.state, spb = this.slSpb, now = ac.currentTime + 0.01, rev = S.slRev, buf = rev ? this.slRev : this.slBuf, off = rev ? (15 - i) * spb : i * spb, rate = Math.pow(2, (S.slPitch || 0) / 12);
+    const fire = (t, o, dur) => { const s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; const g = ac.createGain(); g.gain.setValueAtTime(1, t); g.gain.setValueAtTime(1, t + dur / rate - 0.005); g.gain.linearRampToValueAtTime(0, t + dur / rate); s.connect(g); g.connect(this.slGain); s.start(t, o, dur); };
+    if (S.slStut) for (let k = 0; k < 4; k++) fire(now + k * spb / 4 / rate, off, spb / 4); else fire(now, off, spb);
+    const el = document.querySelector('[data-sl="' + i + '"]'); if (el) { el.style.background = 'rgba(255,194,75,.32)'; clearTimeout(el._t); el._t = setTimeout(() => { el.style.background = ''; }, 220); }
+  }
+  setXY(xn, yn, show) {
+    const ac = this.ac, dot = this.xyDot.current, lab = this.xyLab.current; if (dot) { dot.style.left = (xn * 100) + '%'; dot.style.top = ((1 - yn) * 100) + '%'; }
+    let txt = 'filter off';
+    if (ac && this.xyF) { const now = ac.currentTime, q = 0.7 + yn * 13; if (xn < 0.46) { const f = 180 * Math.pow(20000 / 180, xn / 0.46); this.xyF.type = 'lowpass'; this.xyF.frequency.setTargetAtTime(f, now, 0.02); this.xyF.Q.setTargetAtTime(q, now, 0.02); txt = 'low-pass ' + Math.round(f) + ' Hz'; } else if (xn > 0.54) { const f = 20 * Math.pow(6000 / 20, (xn - 0.54) / 0.46); this.xyF.type = 'highpass'; this.xyF.frequency.setTargetAtTime(f, now, 0.02); this.xyF.Q.setTargetAtTime(q, now, 0.02); txt = 'high-pass ' + Math.round(f) + ' Hz'; } else { this.xyF.type = 'lowpass'; this.xyF.frequency.setTargetAtTime(20000, now, 0.03); this.xyF.Q.setTargetAtTime(0.7, now, 0.03); } }
+    if (lab) lab.textContent = txt;
+  }
+  xyDown = e => {
+    const el = this.xyEl.current; if (!el) return; this.ensureAudio(); if (!this.state.playing) this.start();
+    const at = ev => { const r = el.getBoundingClientRect(); this.setXY(Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), Math.min(1, Math.max(0, 1 - (ev.clientY - r.top) / r.height)), true); };
+    if (this.xyDot.current) this.xyDot.current.style.transition = 'none'; at(e);
+    const up = () => { window.removeEventListener('pointermove', at); window.removeEventListener('pointerup', up); if (this.xyDot.current) this.xyDot.current.style.transition = 'left .25s, top .25s'; if (!this.state.xyHold) this.setXY(0.5, 0.5); };
+    window.addEventListener('pointermove', at); window.addEventListener('pointerup', up);
+  };
+
+  instRef = React.createRef(); prCv = React.createRef(); held = {}; roll = [];
+  IP = ['Saw', 'Sub bass', 'Pluck', 'Pad', 'Lead', 'Kick', 'Snare', 'Hi-hat'];
+  KMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12 };
+  instVis() { const r = this.instRef.current; if (!r) return false; const b = r.getBoundingClientRect(); return b.top < window.innerHeight && b.bottom > 0; }
+  noteOn(m) {
+    if (this.held[m]) return; const ac = this.ensureAudio(); if (!ac) return; ac.resume();
+    if (!this.instG) { this.instG = ac.createGain(); this.instG.gain.value = 0.9; this.instG.connect(this.master); }
+    const d = this.instG, t = ac.currentTime + 0.005, pr = this.IP[this.state.ip || 0], nodes = [];
+    const vg = ac.createGain(); vg.gain.value = 0; vg.connect(d); let rel = 0.3, sus = 0.16;
+    const osc = (type, freq, det) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = freq; if (det) o.detune.value = det; nodes.push(o); return o; };
+    const lp = (f, q) => { const x = ac.createBiquadFilter(); x.type = 'lowpass'; x.frequency.value = f; x.Q.value = q || 1; return x; };
+    const f = this.mf(m);
+    if (pr === 'Kick') { this.vK(ac, d, t); this.held[m] = { stop: () => {} }; this.roll.push({ m, t0: performance.now(), t1: performance.now() + 180 }); this.keyDom(m, true); return; }
+    if (pr === 'Snare') { this.vS(ac, d, t, this.noise); this.held[m] = { stop: () => {} }; this.roll.push({ m, t0: performance.now(), t1: performance.now() + 150 }); this.keyDom(m, true); return; }
+    if (pr === 'Hi-hat') { this.vH(ac, d, t, this.noise); this.held[m] = { stop: () => {} }; this.roll.push({ m, t0: performance.now(), t1: performance.now() + 80 }); this.keyDom(m, true); return; }
+    if (pr === 'Saw') { const o = osc('sawtooth', f), l = lp(2600, 1); o.connect(l); l.connect(vg); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(0.22, t + 0.01); vg.gain.setTargetAtTime(sus, t + 0.02, 0.15); }
+    else if (pr === 'Sub bass') { const o = osc('sine', f / 2), o2 = osc('triangle', f / 2); const g2 = ac.createGain(); g2.gain.value = 0.25; o.connect(vg); o2.connect(g2); g2.connect(vg); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(0.5, t + 0.01); sus = 0.42; vg.gain.setTargetAtTime(sus, t + 0.02, 0.2); rel = 0.18; }
+    else if (pr === 'Pluck') { const o = osc('sawtooth', f), l = lp(3200, 3); l.frequency.setValueAtTime(3200, t); l.frequency.exponentialRampToValueAtTime(260, t + 0.3); o.connect(l); l.connect(vg); vg.gain.setValueAtTime(0.28, t); vg.gain.exponentialRampToValueAtTime(0.0001, t + 0.55); sus = 0; rel = 0.1; }
+    else if (pr === 'Pad') { const l = lp(1600, 0.8); [-9, 9, 0].forEach(dt => { const o = osc('sawtooth', f, dt); o.connect(l); }); l.connect(vg); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(0.09, t + 0.5); sus = 0.09; rel = 1.2; }
+    else { const o = osc('square', f), l = lp(3200, 1.5), lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 5.5; lg.gain.value = 7; lfo.connect(lg); lg.connect(o.detune); nodes.push(lfo); o.connect(l); l.connect(vg); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(0.14, t + 0.02); sus = 0.12; vg.gain.setTargetAtTime(sus, t + 0.03, 0.1); rel = 0.25; }
+    nodes.forEach(n => n.start(t));
+    const note = { m, t0: performance.now(), t1: null }; this.roll.push(note);
+    this.held[m] = { stop: () => { const n = ac.currentTime; vg.gain.cancelScheduledValues(n); vg.gain.setValueAtTime(Math.max(0.0001, vg.gain.value), n); vg.gain.setTargetAtTime(0, n, rel / 3); nodes.forEach(o => o.stop(n + rel + 0.1)); note.t1 = performance.now(); } };
+    this.keyDom(m, true);
+  }
+  noteOff(m) { const h = this.held[m]; if (!h) return; h.stop(); delete this.held[m]; this.keyDom(m, false); }
+  keyDom(m, on) { const el = document.querySelector('[data-note="' + m + '"]'); if (!el) return; const blk = el.style.zIndex === '2'; el.style.background = on ? '#FFC24B' : (blk ? '#1B1A17' : '#F3EFE7'); }
+  drawRoll() {
+    const c = this.prCv.current; if (!c || !this.instVis()) return; const x = c.getContext('2d'), W = c.width, H = c.height, now = performance.now(), span = 6000, lo = 36, hi = 84;
+    x.clearRect(0, 0, W, H); x.fillStyle = 'rgba(255,194,75,.05)'; for (let n = lo; n <= hi; n++) if ([1, 3, 6, 8, 10].includes(n % 12)) x.fillRect(0, H - (n - lo + 1) / (hi - lo + 1) * H, W, H / (hi - lo + 1));
+    x.strokeStyle = 'rgba(255,194,75,.08)'; for (let s = 0; s < 6; s++) { const px = W - s * W / 6; x.beginPath(); x.moveTo(px, 0); x.lineTo(px, H); x.stroke(); }
+    this.roll = this.roll.filter(n => !n.t1 || now - n.t1 < span);
+    this.roll.forEach(n => { const x0 = W - (now - n.t0) / span * W, x1 = W - (now - (n.t1 || now)) / span * W, y = H - (Math.min(hi, Math.max(lo, n.m)) - lo + 1) / (hi - lo + 1) * H; x.fillStyle = n.t1 ? '#E8A317' : '#FFC24B'; x.fillRect(Math.max(0, x0), y, Math.max(3, x1 - Math.max(0, x0)), Math.max(4, H / (hi - lo + 1) - 1)); });
+  }
+  onKeyUp = e => { const k = e.key.toLowerCase(); if (k in this.KMAP) this.noteOff(48 + (this.state.oct || 0) * 12 + this.KMAP[k]); };
+  FD = [
+    ['FL Studio', 'Beat-making and the step sequencer', [['A 16-step sequencer and piano roll driving the built-in synth', 's'], ['A drum machine with 16 velocity pads, choke groups and your own samples', 's'], ['Patterns as clips you can launch or arrange', 's']]],
+    ['Ableton Live', 'Session and arrangement views, live performance', [['A session clip grid with per-track stop and scene launch', 's'], ['An arrangement timeline built from the same clips', 's'], ['Clip looping and launch quantization', 'b'], ['Hardware MIDI controllers', 'b']]],
+    ['Logic Pro', 'A full DAW with virtual instruments', [['A polyphonic synth with eight presets', 's'], ['MIDI file import and export', 's'], ['Wavetable, FM, granular and multi-layer sampler instruments', 'b'], ['Audio plugin hosting', 'r']]],
+    ['Pro Tools', 'Recording, editing and mixing', [['Move, trim, split, duplicate and delete clips, all undoable', 's'], ['A mixer with EQ, compression, reverb, delay and a master limiter', 's'], ['Multi-track recording and live looping', 'b'], ['Sends, returns and track freeze', 'b']]],
+    ['Adobe Audition', 'Waveform, spectral and podcast editing', [['Waveform display and clip editing', 's'], ['EBU R128 loudness, true-peak and correlation metering', 's'], ['AI denoise', 's'], ['Spectral editing and MP3, FLAC and OGG export', 'b'], ['Stem separation and transcription', 'r']]]];
+  dB(x) { return Math.pow(10, x / 20); }
+  mf(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  nn(m) { return ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][m % 12] + (Math.floor(m / 12) - 1); }
+  ensureAudio() {
+    if (this.ac) return this.ac; const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; const ac = new AC(); this.ac = ac;
+    this.noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const nd = this.noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const irL = 2.4 * ac.sampleRate, ir = ac.createBuffer(2, irL, ac.sampleRate); for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < irL; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irL, 2.6); }
+    this.master = ac.createGain(); this.lim = ac.createDynamicsCompressor(); Object.assign(this, {}); this.lim.threshold.value = -1.5; this.lim.knee.value = 0; this.lim.ratio.value = 20; this.lim.attack.value = 0.002; this.lim.release.value = 0.08;
+    this.anM = ac.createAnalyser(); this.anM.fftSize = 2048; this.xyF = ac.createBiquadFilter(); this.xyF.type = 'lowpass'; this.xyF.frequency.value = 20000; this.xyF.Q.value = 0.7; this.crDry = ac.createGain(); this.crWet = ac.createGain(); this.crWet.gain.value = 0; this.shaper = ac.createWaveShaper(); const cc = new Float32Array(4096); for (let i = 0; i < 4096; i++) { const v = i / 2047.5 - 1; cc[i] = Math.round(v * 7) / 7; } this.shaper.curve = cc; this.master.connect(this.xyF); this.xyF.connect(this.crDry); this.crDry.connect(this.lim); this.xyF.connect(this.shaper); this.shaper.connect(this.crWet); this.crWet.connect(this.lim); this.slGain = ac.createGain(); this.slGain.gain.value = 0.9; this.slGain.connect(this.master); this.lim.connect(this.anM); this.anM.connect(ac.destination);
+    const ks = ac.createBiquadFilter(); ks.type = 'highshelf'; ks.frequency.value = 1681; ks.gain.value = 4; const kh = ac.createBiquadFilter(); kh.type = 'highpass'; kh.frequency.value = 38; kh.Q.value = 0.5; this.anK = ac.createAnalyser(); this.anK.fftSize = 2048; this.lim.connect(ks); ks.connect(kh); kh.connect(this.anK);
+    this.trk = {};
+    ['drums', 'bass', 'keys'].forEach(n => {
+      const T = { in: ac.createGain(), comp: ac.createDynamicsCompressor(), post: ac.createGain(), lo: ac.createBiquadFilter(), hi: ac.createBiquadFilter(), fader: ac.createGain(), an: ac.createAnalyser(), revW: ac.createGain(), conv: ac.createConvolver(), dlyW: ac.createGain(), dly: ac.createDelay(2), fb: ac.createGain(), compOn: false };
+      T.comp.threshold.value = -26; T.comp.ratio.value = 5; T.comp.attack.value = 0.004; T.comp.release.value = 0.12; T.comp.connect(T.post);
+      T.lo.type = 'lowshelf'; T.lo.frequency.value = 110; T.lo.gain.value = 0; T.hi.type = 'peaking'; T.hi.frequency.value = 3200; T.hi.Q.value = 0.9; T.hi.gain.value = 0;
+      T.in.connect(T.post); T.post.connect(T.lo); T.lo.connect(T.hi); T.hi.connect(T.fader);
+      T.conv.buffer = ir; T.hi.connect(T.revW); T.revW.connect(T.conv); T.conv.connect(T.fader); T.revW.gain.value = 0;
+      T.hi.connect(T.dlyW); T.dlyW.connect(T.dly); T.dly.connect(T.fb); T.fb.connect(T.dly); T.dly.connect(T.fader); T.fb.gain.value = 0.35; T.dlyW.gain.value = 0;
+      T.an.fftSize = 1024; T.fader.connect(T.an); T.fader.connect(this.master); this.trk[n] = T;
+    });
+    this.anMaster = this.anM; this.applyMix(); return ac;
+  }
+  applyMix() {
+    if (!this.ac) return; const S = this.state, now = this.ac.currentTime, anyS = ['drums', 'bass', 'keys'].some(k => S.mix[k].s);
+    ['drums', 'bass', 'keys'].forEach(k => { const m = S.mix[k], T = this.trk[k], on = !m.m && (!anyS || m.s);
+      T.fader.gain.setTargetAtTime(on ? this.dB(m.vol) : 0, now, 0.02);
+      if (m.comp !== T.compOn) { T.in.disconnect(); T.in.connect(m.comp ? T.comp : T.post); T.compOn = m.comp; }
+      T.lo.gain.setTargetAtTime(m.eq ? 2.5 : 0, now, 0.03); T.hi.gain.setTargetAtTime(m.eq ? 3.5 : 0, now, 0.03);
+      T.revW.gain.setTargetAtTime(m.rev ? 0.5 : 0, now, 0.05); T.dlyW.gain.setTargetAtTime(m.dly ? 0.32 : 0, now, 0.05); T.dly.delayTime.setTargetAtTime(60 / S.bpm * 0.75, now, 0.05); });
+    this.master.gain.setTargetAtTime(this.dB(S.mix.master.vol), now, 0.03);
+  }
+  env(g, t, a, peak, d) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
+  kick(t) { const ac = this.ac, o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.12); this.env(g, t, 0.003, 1, 0.36); o.connect(g); g.connect(this.trk.drums.in); o.start(t); o.stop(t + 0.42); this.kq.push(t); }
+  snare(t) { const ac = this.ac, n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), o = ac.createOscillator(), og = ac.createGain(); n.buffer = this.noise; f.type = 'highpass'; f.frequency.value = 1400; this.env(g, t, 0.002, 0.55, 0.17); n.connect(f); f.connect(g); g.connect(this.trk.drums.in); n.start(t); n.stop(t + 0.22); o.type = 'triangle'; o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.08); this.env(og, t, 0.002, 0.4, 0.09); o.connect(og); og.connect(this.trk.drums.in); o.start(t); o.stop(t + 0.14); }
+  hat(t) { const ac = this.ac, n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(); n.buffer = this.noise; f.type = 'highpass'; f.frequency.value = 7500; this.env(g, t, 0.001, 0.22, 0.045); n.connect(f); f.connect(g); g.connect(this.trk.drums.in); n.start(t); n.stop(t + 0.08); }
+  bassN(t, m, len) { const ac = this.ac, o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(); o.type = 'sawtooth'; o.frequency.value = this.mf(m); f.type = 'lowpass'; f.Q.value = 6; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(180, t + len); this.env(g, t, 0.005, 0.42, len); o.connect(f); f.connect(g); g.connect(this.trk.bass.in); o.start(t); o.stop(t + len + 0.05); }
+  chord(t, ns, len) { const ac = this.ac; ns.forEach((m, i) => { [-6, 6].forEach(dt => { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle'; o.frequency.value = this.mf(m); o.detune.value = dt; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.07, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + len); o.connect(g); g.connect(this.trk.keys.in); o.start(t); o.stop(t + len + 0.05); }); }); }
+  onBar() {
+    const S = this.state, up = {}; let cur = Object.assign({}, S.cur), changed = false;
+    if (S.arrPlay) { this.arrBar = ((this.arrBar ?? -1) + 1) % 6; const sc = Math.floor(this.arrBar / 2); if (cur.drums !== sc || cur.bass !== sc || cur.keys !== sc) { cur = { drums: sc, bass: sc, keys: sc }; changed = true; } }
+    if (this.pending) { Object.assign(cur, this.pending); this.pending = null; changed = true; }
+    if (changed) this.applyClips(cur);
+  }
+  applyClips(cur) {
+    const S = this.state, pat = Object.assign({}, S.pat), d = this.mkPat(cur.drums), b = this.mkPat(cur.bass);
+    if (cur.drums !== S.cur.drums || !this._clipInit) { pat.kick = d.kick; pat.snare = d.snare; pat.hat = d.hat; }
+    if (cur.bass !== S.cur.bass || !this._clipInit) pat.bass = b.bass;
+    this._clipInit = true;
+    this.setState({ cur, pat, preset: cur.drums === cur.bass ? cur.drums : -1 });
+  }
+  sched = () => {
+    const ac = this.ac; if (!ac) return; const spb = 60 / this.state.bpm / 4;
+    while (this.nextT < ac.currentTime + 0.12) {
+      if (this.stepI === 0) this.onBar();
+      const S = this.state, i = this.stepI, t = this.nextT, p = S.pat, mu = S.mute;
+      if (p.kick[i] && !mu.kick) this.kick(t); if (p.snare[i] && !mu.snare) this.snare(t); if (p.hat[i] && !mu.hat) this.hat(t);
+      if (p.bass[i] && !mu.bass) this.bassN(t, p.bass[i], spb * 1.8);
+      if (i === 0 || i === 8) { const ch = this.KEYS[S.cur.keys][i ? 1 : 0]; if (ch) this.chord(t, ch, spb * 7.6); }
+      this.sq.push([i, t]); this.nextT += spb; this.stepI = (i + 1) % 16;
+    }
+  };
+  start() { const ac = this.ensureAudio(); if (!ac) { this.setState({ noAudio: true }); return; } ac.resume(); this.nextT = ac.currentTime + 0.06; this.stepI = 0; this.sq = []; this.kq = []; clearInterval(this.schT); this.schT = setInterval(this.sched, 25); this.setState({ playing: true }); }
+  stop() { clearInterval(this.schT); this.schT = null; this.setState({ playing: false, arrPlay: false }); this.arrBar = -1; this.setCol(-1); }
+  onPlay = () => { this.state.playing ? this.stop() : this.start(); };
+  setCol(c) { if (c === this._col) return; const root = document; if (this._col >= 0) root.querySelectorAll('[data-col="' + this._col + '"]').forEach(el => { el.style.transform = ''; el.style.filter = ''; el.style.outline = ''; }); if (c >= 0) root.querySelectorAll('[data-col="' + c + '"]').forEach(el => { el.style.transform = 'translateY(1px)'; el.style.filter = 'brightness(1.12)'; el.style.outline = '2px solid #1D1B18'; el.style.outlineOffset = '-2px'; }); this._col = c; if (this.lcdStep.current) this.lcdStep.current.textContent = c >= 0 ? 'STEP ' + String(c + 1).padStart(2, '0') + '/16' : 'STEP --/16'; }
+  frame = () => {
+    this.raf = requestAnimationFrame(this.frame); const ac = this.ac, S = this.state; this.drawRoll();
+    let step = -1;
+    if (ac && S.playing) { const now = ac.currentTime; while (this.sq.length > 1 && this.sq[1][1] <= now) this.sq.shift(); if (this.sq.length && this.sq[0][1] <= now) step = this.sq[0][0]; while (this.kq.length && this.kq[0] <= now) { this.kq.shift(); this.pulse = 1; } }
+    this.setCol(step);
+    this.pulse = (this.pulse || 0) * 0.86; if (this.h1El.current && !this.reduce) this.h1El.current.style.transform = 'scale(' + (1 + 0.012 * this.pulse).toFixed(4) + ')';
+    document.querySelectorAll('[data-prog]').forEach(el => { const [tk, s] = el.dataset.prog.split('-'); el.style.width = S.playing && S.cur[tk] === +s && step >= 0 ? ((step + 1) / 16 * 100) + '%' : '0%'; });
+    const ah = this.arrHead.current; if (ah) { if (S.arrPlay && step >= 0) { ah.style.opacity = '1'; ah.style.left = (12 + ((this.arrBar || 0) + (step + 1) / 16) / 6 * 88) + '%'; } else ah.style.opacity = '0'; }
+    const buf = this._buf || (this._buf = new Float32Array(2048)), pk = an => { if (!an || !S.playing) return 0; an.getFloatTimeDomainData(buf); let m = 0; for (let i = 0; i < an.fftSize; i++) m = Math.max(m, Math.abs(buf[i])); return m; };
+    const lv = { drums: pk(this.trk && this.trk.drums.an), bass: pk(this.trk && this.trk.bass.an), keys: pk(this.trk && this.trk.keys.an), master: pk(this.anM) };
+    document.querySelectorAll('[data-meter]').forEach(el => { const v = lv[el.dataset.meter] || 0, d = v > 0 ? 20 * Math.log10(v) : -60, pct = Math.max(0, Math.min(1, (d + 48) / 48)); const prev = +(el.dataset.v || 0), nv = Math.max(pct, prev - 0.025); el.dataset.v = nv; el.style.height = (nv * 100).toFixed(1) + '%'; });
+    if (ac && S.playing && this.anK) { this.anK.getFloatTimeDomainData(buf); let ms = 0; for (let i = 0; i < 2048; i++) ms += buf[i] * buf[i]; ms /= 2048; const tn = performance.now(); this.lq = (this.lq || []).filter(q => tn - q[0] < 3000); this.lq.push([tn, ms]);
+      const avg = w => { const a = this.lq.filter(q => tn - q[0] < w); return a.reduce((s, q) => s + q[1], 0) / Math.max(1, a.length); }, L = x => x > 1e-9 ? -0.691 + 10 * Math.log10(2 * x) : -70;
+      this.lufsM = L(avg(400)); this.lufsS = L(avg(3000)); }
+    else if (!S.playing) { this.lufsM = null; }
+    const fmt = v => v == null || v < -69 ? '−∞' : (v < 0 ? '−' : '+') + Math.abs(v).toFixed(1);
+    if ((this._lt = (this._lt || 0) + 1) % 6 === 0) {
+      if (this.luM.current) this.luM.current.textContent = fmt(this.lufsM); if (this.luS.current) this.luS.current.textContent = S.playing ? fmt(this.lufsS) : '−∞';
+      if (this.lcdLufs.current) this.lcdLufs.current.textContent = (S.playing ? fmt(this.lufsS) : '−∞') + ' LUFS'; if (this.luApp.current) this.luApp.current.textContent = (S.playing ? fmt(this.lufsS) : '−∞') + ' LUFS';
+      if (this.luBar.current) this.luBar.current.style.width = S.playing && this.lufsS != null ? Math.max(0, Math.min(100, (this.lufsS + 40) / 40 * 100)) + '%' : '0%';
+      if (this.luNote.current) { const tg = this.TG[S.target][1]; if (!S.playing || this.lufsS == null) this.luNote.current.textContent = 'Press play to measure against ' + this.TG[S.target][0] + '.'; else { const d = this.lufsS - tg; this.luNote.current.textContent = Math.abs(d) < 0.8 ? 'On target for ' + this.TG[S.target][0] + '.' : (d > 0 ? d.toFixed(1) + ' LU louder' : (-d).toFixed(1) + ' LU quieter') + ' than ' + this.TG[S.target][0] + '. Match adjusts the master fader.'; } }
+    }
+    const cv = this.scopeCv.current; if (cv && cv.offsetWidth) { const x = cv.getContext('2d'), W = cv.width, H = cv.height; x.clearRect(0, 0, W, H); const N = 56, bw = W / N;
+      if (ac && S.playing) { const fb = this._fb || (this._fb = new Uint8Array(1024)); this.anM.getByteFrequencyData(fb); for (let i = 0; i < N; i++) { const lo = Math.floor(Math.pow(1024, i / N)), hi = Math.max(lo + 1, Math.floor(Math.pow(1024, (i + 1) / N))); let v = 0; for (let k = lo; k < hi && k < 1024; k++) v = Math.max(v, fb[k]); const pv = (this._sp = this._sp || new Float32Array(N))[i] = Math.max(v / 255, (this._sp[i] || 0) * 0.9); x.fillStyle = 'rgba(255,194,75,' + (0.35 + pv * 0.65).toFixed(2) + ')'; x.fillRect(i * bw + 2, H - pv * H * 0.92, bw - 4, pv * H * 0.92); }
+        this.anM.getFloatTimeDomainData(buf); x.strokeStyle = 'rgba(255,240,210,.85)'; x.lineWidth = 2; x.beginPath(); for (let i = 0; i < W; i += 2) { const y = H * 0.4 - buf[Math.floor(i / W * 2048)] * H * 0.35; i ? x.lineTo(i, y) : x.moveTo(i, y); } x.stroke(); }
+      else { const tt = performance.now() / 900; for (let i = 0; i < N; i++) { const v = 0.05 + 0.05 * (1 + Math.sin(tt + i * 0.35)); x.fillStyle = 'rgba(255,194,75,.28)'; x.fillRect(i * bw + 2, H - v * H, bw - 4, v * H); } x.fillStyle = 'rgba(255,194,75,.7)'; x.font = '500 22px "IBM Plex Mono", monospace'; x.fillText('Press play', 20, 44); } }
+  };
+  TG = [['Streaming · −14 LUFS', -14], ['Podcast · −16 LUFS', -16], ['Broadcast · EBU R128 −23 LUFS', -23]];
+  launch(tk, s) { const cur = Object.assign({}, this.state.cur); if (tk === 'all') { cur.drums = cur.bass = cur.keys = s; } else cur[tk] = s; if (this.state.arrPlay) this.setState({ arrPlay: false }); if (this.state.playing) { this.pending = Object.assign(this.pending || {}, tk === 'all' ? { drums: s, bass: s, keys: s } : { [tk]: s }); this.setState({ queued: Date.now() }); } else { this.applyClips(cur); this.start(); } }
+  AP = [
+    { label: 'Make the drums punchier', tag: '2 tools', calls: [['add_effect', 'track: "Drums", type: "compressor"', s => { s.mix.drums.comp = true; }], ['set_track_volume', 'track: "Drums", gain: +2 dB', s => { s.mix.drums.vol = Math.min(6, s.mix.drums.vol + 2); }]] },
+    { label: 'Slow it down to 96 BPM', tag: '1 tool', calls: [['set_tempo', 'bpm: 96', s => { s.bpm = 96; }]] },
+    { label: 'Put the keys in a big room', tag: '2 tools', calls: [['add_effect', 'track: "Keys", type: "reverb"', s => { s.mix.keys.rev = true; s.mix.keys.dly = true; }], ['set_track_volume', 'track: "Keys", gain: −2 dB', s => { s.mix.keys.vol = Math.max(-30, s.mix.keys.vol - 2); }]] },
+    { label: 'Separate the vocals', tag: 'declines', calls: [['separate_stems', 'track: "Vocals"', null, 'Declined. This needs demucs_hybrid.onnx in ~/.xeno-lib/models, so the menu item stays greyed until the model is there. Nothing was changed.']] }];
+  runAgent(i) {
+    if (this.state.agBusy) return; clearInterval(this._agT); clearTimeout(this._agT2);
+    this.setState({ ag: i, agTyped: 0, agDoneN: 0, agBusy: true });
+    const txt = this.AP[i].label;
+    this._agT = setInterval(() => { const n = this.state.agTyped + 1; this.setState({ agTyped: n }); if (n >= txt.length) { clearInterval(this._agT); this.agCall(i, 0); } }, 26);
+  }
+  agCall(i, k) {
+    const calls = this.AP[i].calls; if (k >= calls.length) { this.setState({ agBusy: false }); return; }
+    this._agT2 = setTimeout(() => { const c = calls[k]; if (c[2]) { if (!this.agSnap) this.agSnap = { mix: JSON.parse(JSON.stringify(this.state.mix)), bpm: this.state.bpm }; const s = { mix: JSON.parse(JSON.stringify(this.state.mix)), bpm: this.state.bpm }; c[2](s); this.setState({ mix: s.mix, bpm: s.bpm, hasSnap: true }); } this.setState({ agDoneN: k + 1 }); this.agCall(i, k + 1); }, 750);
+  }
+  onKey = e => { const tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'BUTTON') return; { const kk = e.key.toLowerCase(); if (!e.ctrlKey && !e.metaKey && this.instVis()) { if (kk in this.KMAP) { e.preventDefault(); if (!e.repeat) this.noteOn(48 + (this.state.oct || 0) * 12 + this.KMAP[kk]); return; } if (kk === 'z') { this.setState(s => ({ oct: Math.max(-2, (s.oct || 0) - 1) })); return; } if (kk === 'x') { this.setState(s => ({ oct: Math.min(2, (s.oct || 0) + 1) })); return; } } }
+    if (this.appOn && /^[1-8]$/.test(e.key)) { e.preventDefault(); this.playSlice(+e.key - 1 + (e.shiftKey ? 8 : 0)); return; }
+    if (e.key === ' ') { const h = this.h1El.current; if (h && h.getBoundingClientRect().bottom > -700) { e.preventDefault(); this.onPlay(); } } };
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); this.pinTick(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; this._col = -1;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw); window.addEventListener('keydown', this.onKey); window.addEventListener('keyup', this.onKeyUp);
+    this.ro = new ResizeObserver(() => { this.syncVw(); this.pinTick(); this.drawSlicer(); }); this.ro.observe(document.documentElement); setTimeout(this.pinTick, 60); setTimeout(this.pinTick, 400); if (document.fonts && document.fonts.ready) document.fonts.ready.then(this.pinTick); this.raf = requestAnimationFrame(this.frame);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    const ua = navigator.userAgent || ''; this.setState({ vw: window.innerWidth, vh: window.innerHeight, osName: /Windows/i.test(ua) ? 'windows' : /Mac/i.test(ua) ? 'mac' : /Linux|X11/i.test(ua) ? 'linux' : '' });
+  }
+  componentDidUpdate(pp, ps) {
+    if (ps.vw !== this.state.vw || ps.vh !== this.state.vh) requestAnimationFrame(this.pinTick);
+    if ((ps.pat !== this.state.pat || ps.mute !== this.state.mute || ps.bpm !== this.state.bpm) && this.slBuf) { clearTimeout(this._bT); this._bT = setTimeout(this.bounce, 450); }
+    if (ps.crush !== this.state.crush && this.crWet) { const n = this.ac.currentTime; this.crWet.gain.setTargetAtTime(this.state.crush ? 0.75 : 0, n, 0.02); this.crDry.gain.setTargetAtTime(this.state.crush ? 0.35 : 1, n, 0.02); } if (ps.mix !== this.state.mix || ps.bpm !== this.state.bpm) this.applyMix(); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); window.removeEventListener('keydown', this.onKey); window.removeEventListener('keyup', this.onKeyUp); this.ro && this.ro.disconnect(); cancelAnimationFrame(this.raf); clearInterval(this.schT); clearInterval(this._agT); clearTimeout(this._agT2); clearTimeout(this._revSafe); if (this.ac) this.ac.close(); }
+  setMix(k, patch) { const mix = Object.assign({}, this.state.mix); mix[k] = Object.assign({}, mix[k], patch); this.setState({ mix }); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000, playing = S.playing;
+    const ROWS = [['kick', 'Kick', '#E8A317'], ['snare', 'Snare', '#D9573B'], ['hat', 'Hat', '#3E9C8A'], ['bass', 'Bass', '#5A67D8']];
+    const TK = ['drums', 'bass', 'keys'], TKN = { drums: 'Drums', bass: 'Bass', keys: 'Keys' }, ses = S.mode === 'ses';
+    const mClips = []; TK.forEach((tk, t) => [0, 1, 2].forEach(s => { const on = playing && S.cur[tk] === s, pend = this.pending && this.pending[tk] === s; const p = this.mkPat(s), dots = tk === 'drums' ? p.kick.map((v, k) => ({ h: v ? '100%' : p.snare[k] ? '70%' : p.hat[k] ? '35%' : '10%', a: v || p.snare[k] ? '.8' : '.45' })) : tk === 'bass' ? p.bass.map(v => ({ h: v ? (30 + (v - 26) * 3.5) + '%' : '8%', a: v ? '.75' : '.3' })) : Array.from({ length: 16 }, (_, k) => ({ h: k % 8 < 7 ? '60%' : '10%', a: '.45' }));
+      mClips.push({ key: tk + '-' + s, name: this.CLIPN[tk][s], bg: this.TC[tk], dots, op: ses ? (on ? 1 : 0.78) : (S.arrPlay && S.cur[tk] !== s ? 0.6 : 1), sh: on ? '0 0 0 2px #FFC24B, 0 8px 20px -8px rgba(255,194,75,.6)' : pend ? '0 0 0 2px rgba(255,194,75,.5)' : 'none',
+        x: ses ? (t * 24.5) + '%' : (12 + s * 29.333) + '%', w: ses ? '23.5%' : '28.8%', y: (40 + (ses ? s : t) * 84) + 'px', h: '76px', on: () => { if (ses) this.launch(tk, s); } }); }));
+    const FAQ = [['Can it replace my DAW today?', 'For beat-making, arranging and mixing, it covers a lot: an arrangement timeline, a session clip grid, a step sequencer and piano roll with a built-in synth, a 16-pad drum machine, MIDI file import and export, per-track EQ, compression, reverb and delay, LUFS metering and WAV export. Recording, sends and returns, and more instruments are built and tested but still being wired into the app.'], ['What does the agent actually do?', 'It runs a real tool-calling loop against the DAW: adding and removing tracks, volume, pan, mute and solo, adding and adjusting effects, tempo and export. Every change goes through undo. Denoise runs natively; stem separation and transcription decline and name the model file they need.'], ['Does it export MP3?', 'Not yet. Export is WAV today, plus MIDI for patterns. MP3, FLAC and OGG encoding is on the list of built-and-tested features still to be wired up.'], ['Which platforms will it run on?', 'Windows x64 first. macOS and Linux builds are on the roadmap, along with signed installers.'], ['Does it work with XENO Motion?', 'Sound is designed to take audio from XENO Motion for mixing and send the master back, as part of the XENO creative suite.']];
+    const STAT = [['Shipping in 0.2.0', '#2FA36B', ['Arrangement timeline with clip move, trim, split, duplicate and delete', 'Session clip grid with scene launch', 'Step sequencer, piano roll and a built-in synth with 8 presets', '16-pad drum machine with your own samples', 'EQ, compressor, reverb and delay, live and on export', 'EBU R128 LUFS, true-peak and correlation metering', 'Save, autosave and crash recovery', 'AI agent with undoable DAW tools']], ['Built, not wired yet', '#C9962E', ['Standalone sampler instrument', 'Hardware MIDI controllers', 'Recording and live looping', 'Track freeze, sends and returns', 'Wavetable, FM and granular instruments', 'Spatial audio, spectral editing, MP3/FLAC/OGG export']], ['Roadmap', '#8C96E8', ['Real-time worklet and WASM engine as the default', 'Audio plugin hosting', 'Real-time spectrogram', 'Stem separation and transcription models', 'Signed installers, macOS and Linux']]];
+    return {
+      productSlug: String(this.props.product ?? 'Sound').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      hWrap: this.hWrap, hInner: this.hInner, textRow: this.textRow, devEl: this.devEl, dawEl: this.dawEl, appBg: this.appBg, appBar: this.appBar, slCv: this.slCv, xyEl: this.xyEl, xyDot: this.xyDot, xyLab: this.xyLab, luApp: this.luApp, xyDown: this.xyDown, doBounce: this.bounce,
+      h1Ws: wide ? 'nowrap' : 'normal', heroCols: wide ? 'minmax(0,1.05fr) minmax(0,.95fr)' : 'minmax(0,1fr)', outD: wide ? 'flex' : 'none', h1Fs: wide ? 'max(40px, min(88px, 9vh, calc((min(100vw, 1368px) - 96px) * 0.525 / 8.2)))' : 'clamp(40px, 10vw, 72px)', kbdD: S.vw >= 1000 ? 'inline' : 'none', dawCols: S.vw >= 900 ? 'minmax(0,1.6fr) minmax(0,1fr)' : 'minmax(0,1fr)',
+      slInfo: S.slBusy ? 'bouncing…' : this.slBuf ? '1 bar · ' + S.bpm + ' BPM · 16 slices' : 'bounces when the demo opens',
+      slices: Array.from({ length: 16 }, (_, i) => ({ i, n: String(i + 1), on: () => this.playSlice(i) })),
+      slFx: [['Reverse', 'slRev'], ['Stutter', 'slStut']].map(([l, k]) => ({ label: l, bg: S[k] ? '#FFC24B' : '#2E2B26', fg: S[k] ? '#1B1A17' : '#EFE9DD', on: () => this.setState({ [k]: !S[k] }) })).concat([-12, 0, 12].map(v => ({ label: (v > 0 ? '+' : '') + v + ' st', bg: (S.slPitch || 0) === v ? '#FFC24B' : '#2E2B26', fg: (S.slPitch || 0) === v ? '#1B1A17' : '#EFE9DD', on: () => this.setState({ slPitch: v }) }))),
+      mfx: [{ label: 'Crush', bg: S.crush ? '#FFC24B' : '#2E2B26', fg: S.crush ? '#1B1A17' : '#EFE9DD', on: () => { this.ensureAudio(); this.setState({ crush: !S.crush }); } }, { label: S.xyHold ? 'XY hold · on' : 'XY hold · off', bg: S.xyHold ? '#FFC24B' : '#2E2B26', fg: S.xyHold ? '#1B1A17' : '#EFE9DD', on: () => { if (S.xyHold) this.setXY(0.5, 0.5); this.setState({ xyHold: !S.xyHold }); } }],
+      fdCols: S.vw >= 980 ? 'minmax(0,.8fr) minmax(0,1.2fr)' : 'minmax(0,1fr)',
+      fdTabs: this.FD.map((d, i) => ({ name: d[0], known: d[1], bar: i === (S.fd || 0) ? '#E8A317' : 'transparent', c: i === (S.fd || 0) ? '#1D1B18' : '#9A948A', on: () => this.setState({ fd: i }) })),
+      fdTitle: 'Coming from ' + this.FD[S.fd || 0][0], fdCount: this.FD[S.fd || 0][2].filter(r => r[1] === 's').length + ' of ' + this.FD[S.fd || 0][2].length + ' ship today',
+      fdRows: this.FD[S.fd || 0][2].map(r => ({ t: r[0], s: r[1] === 's' ? 'ships today' : r[1] === 'b' ? 'built, being wired' : 'roadmap', bg: r[1] === 's' ? '#E4F2E8' : r[1] === 'b' ? '#FBF0D9' : '#EEF0FB', fg: r[1] === 's' ? '#1F6A3A' : r[1] === 'b' ? '#6B4700' : '#3C47A0' })),
+      instRef: this.instRef, prCv: this.prCv,
+      ipres: this.IP.map((p, i) => ({ label: p, bg: i === (S.ip || 0) ? '#FFC24B' : '#2E2B26', fg: i === (S.ip || 0) ? '#1B1A17' : '#EFE9DD', on: () => this.setState({ ip: i }) })),
+      octL: 'C' + (3 + (S.oct || 0)) + ' – C' + (5 + (S.oct || 0)), octDn: () => this.setState({ oct: Math.max(-2, (S.oct || 0) - 1) }), octUp: () => this.setState({ oct: Math.min(2, (S.oct || 0) + 1) }),
+      wKeys: Array.from({ length: 15 }, (_, i) => { const m = 48 + (S.oct || 0) * 12 + Math.floor(i / 7) * 12 + [0, 2, 4, 5, 7, 9, 11][i % 7], kb = Object.keys(this.KMAP).find(k => 48 + (S.oct || 0) * 12 + this.KMAP[k] === m); return { m, lab: kb ? kb.toUpperCase() : (i % 7 === 0 ? this.nn(m) : ''), down: e => { e.preventDefault(); this.noteOn(m); }, up: () => this.noteOff(m) }; }),
+      bKeys: [0, 1].flatMap(o => [[1, 0], [3, 1], [6, 3], [8, 4], [10, 5]].map(([sem, wi]) => { const m = 48 + (S.oct || 0) * 12 + o * 12 + sem, kb = Object.keys(this.KMAP).find(k => 48 + (S.oct || 0) * 12 + this.KMAP[k] === m); return { m, lab: kb ? kb.toUpperCase() : '', x: 'calc(' + ((o * 7 + wi + 1) / 15 * 100) + '% - 2.2%)', w: '4.4%', down: e => { e.preventDefault(); this.noteOn(m); }, up: () => this.noteOff(m) }; })),
+      h1El: this.h1El, scopeCv: this.scopeCv, lcdStep: this.lcdStep, lcdLufs: this.lcdLufs, arrHead: this.arrHead, luM: this.luM, luS: this.luS, luBar: this.luBar, luNote: this.luNote,
+      onPlay: this.onPlay, playIcon: playing ? 'M2 2h8v8H2z' : 'M2 1l9 5-9 5z', playLabel: playing ? 'Stop' : 'Hear it', playBg: playing ? '#E8A317' : '#1D1B18', playFg: playing ? '#1D1B18' : '#FFC24B',
+      bpm: S.bpm, bpmDn: () => this.setState({ bpm: Math.max(70, S.bpm - 4) }), bpmUp: () => this.setState({ bpm: Math.min(170, S.bpm + 4) }),
+      presets: this.PRE.map((p, i) => ({ name: String(i + 1), on: () => this.setState({ preset: i, pat: this.mkPat(i), cur: { drums: i, bass: i, keys: S.cur.keys } }), bg: i === S.preset ? '#1D1B18' : '#D8D3CA', fg: i === S.preset ? '#FFC24B' : '#1D1B18' })),
+      lcdPat: 'PATTERN ' + (S.preset >= 0 ? (S.preset + 1) + ' · ' + this.PRE[S.preset].name.toUpperCase() : 'CUSTOM') + ' · ' + S.bpm + ' BPM',
+      devTop: wide ? 'minmax(0,1fr) minmax(0,1.1fr)' : 'minmax(0,1fr)', rowLab: S.vw >= 700 ? '120px' : '92px', padH: S.vw >= 700 ? '40px' : '32px',
+      rows: ROWS.map(([k, name, c]) => ({ name, c, mBg: S.mute[k] ? '#D9573B' : '#D8D3CA', mFg: S.mute[k] ? '#FFFFFF' : '#1D1B18', mute: () => this.setState(s => ({ mute: Object.assign({}, s.mute, { [k]: !s.mute[k] }) })),
+        pads: Array.from({ length: 16 }, (_, col) => { const v = S.pat[k][col], g = Math.floor(col / 4); return { col, ml: col && col % 4 === 0 ? '6px' : '0px', bg: v ? c : (g % 2 ? '#D6D1C8' : '#DCD7CE'), n: k === 'bass' && v ? this.nn(v) : '', on: () => this.setState(s => { const pat = Object.assign({}, s.pat), arr = pat[k].slice(); arr[col] = k === 'bass' ? (arr[col] ? null : 33) : !arr[col]; pat[k] = arr; return { pat, preset: -1 }; }) }; }) })),
+      soundNote: S.noAudio ? 'This browser has no Web Audio support.' : playing ? 'Playing live in your browser' : 'Sound on · nothing plays until you press play',
+      toArr: () => this.setState({ mode: 'arr' }), toSes: () => this.setState({ mode: 'ses' }), arrBg: ses ? 'transparent' : '#FFFFFF', sesBg: ses ? '#FFFFFF' : 'transparent', arrSh: ses ? 'none' : '0 1px 3px rgba(0,0,0,.12)', sesSh: ses ? '0 1px 3px rgba(0,0,0,.12)' : 'none',
+      modePlay: () => { if (ses) { this.onPlay(); return; } if (S.arrPlay) { this.stop(); return; } this.arrBar = -1; this.setState({ arrPlay: true }); if (!S.playing) this.start(); },
+      modeIcon: (ses ? playing : S.arrPlay) ? 'M2 2h8v8H2z' : 'M2 1l9 5-9 5z', modePlayLabel: ses ? (playing ? 'Stop' : 'Play') : (S.arrPlay ? 'Stop arrangement' : 'Play arrangement'),
+      modeHint: ses ? 'Click a clip or a scene to launch it. While playing, launches wait for the next bar.' : 'Plays scenes 1, 2 and 3, two bars each, then loops.',
+      arrOp: ses ? 0 : 1, sesOp: ses ? 1 : 0, sesPe: ses ? 'auto' : 'none', mdH: '300px', arrLeft: '12%',
+      bars: [0, 1, 2, 3, 4, 5].map(b => ({ x: (12 + b * 14.666) + '%', l: 'Bar ' + (b + 1) })), colHeads: TK.map((tk, t) => ({ x: (t * 24.5) + '%', l: TKN[tk], c: this.TC[tk] })),
+      rowHeads: TK.map((tk, t) => ({ y: (40 + t * 84) + 'px', h: '76px', l: TKN[tk], c: this.TC[tk] })),
+      scenes: [0, 1, 2].map(s => ({ n: s + 1, y: (40 + s * 84) + 'px', h: '76px', w: '23%', bg: playing && S.cur.drums === s && S.cur.bass === s && S.cur.keys === s ? '#3A3226' : '#26231E', on: () => this.launch('all', s) })),
+      mClips,
+      mxCols: S.vw >= 1060 ? 'minmax(0,1.5fr) minmax(0,1fr)' : 'minmax(0,1fr)',
+      strips: TK.concat(['master']).map(k => { const m = S.mix[k], isM = k === 'master'; return { key: k, name: isM ? 'Master' : TKN[k], c: isM ? '#EFE9DD' : this.TC[k], bg: isM ? '#26231E' : '#211F1B', vol: m.vol, volL: (m.vol > 0 ? '+' : m.vol < 0 ? '−' : '') + Math.abs(m.vol).toFixed(1) + ' dB', setVol: e => this.setMix(k, { vol: +e.target.value }),
+        fx: isM ? [{ label: 'Limiter · on', bg: '#3A3226', fg: '#FFC24B', cur: 'default', on: () => {} }, { label: 'LUFS meter', bg: '#3A3226', fg: '#FFC24B', cur: 'default', on: () => {} }] : [['EQ', 'eq'], ['Comp', 'comp'], ['Reverb', 'rev'], ['Delay', 'dly']].map(([l, f]) => ({ label: (m[f] ? '● ' : '○ ') + l, bg: m[f] ? '#3A3226' : '#2A2722', fg: m[f] ? '#FFC24B' : '#8F887C', cur: 'pointer', on: () => this.setMix(k, { [f]: !m[f] }) })),
+        msD: isM ? 'none' : 'flex', mBg: m.m ? '#D9573B' : '#2E2B26', mFg: m.m ? '#FFFFFF' : '#ADA597', sBg: m.s ? '#E8A317' : '#2E2B26', sFg: m.s ? '#1B1A17' : '#ADA597', onM: () => this.setMix(k, { m: !m.m }), onS: () => this.setMix(k, { s: !m.s }) }; }),
+      targets: this.TG.map((t, i) => ({ label: t[0], on: () => this.setState({ target: i }), bg: i === S.target ? '#FFC24B' : 'transparent', fg: i === S.target ? '#1B1A17' : '#EFE9DD', bd: i === S.target ? '#FFC24B' : '#3A362F' })), tgX: ((this.TG[S.target][1] + 40) / 40 * 100) + '%',
+      matchLoud: () => { if (!S.playing || this.lufsS == null || this.lufsS < -60) { if (this.luNote.current) this.luNote.current.textContent = 'Press play first, so there is something to measure.'; return; } const d = this.TG[S.target][1] - this.lufsS; this.setMix('master', { vol: Math.max(-30, Math.min(6, Math.round((S.mix.master.vol + d) * 2) / 2)) }); },
+      agCols: S.vw >= 980 ? 'minmax(0,.9fr) minmax(0,1.1fr)' : 'minmax(0,1fr)',
+      agPrompts: this.AP.map((p, i) => ({ label: p.label, tag: p.tag, bg: i === S.ag ? '#FBF0D9' : '#FFFFFF', bd: i === S.ag ? '#E8A317' : '#E2DDD5', on: () => this.runAgent(i) })),
+      agState: S.ag < 0 ? 'pick a request' : S.agBusy ? 'working' : 'done', agTyped: S.ag < 0 ? 'Pick a request on the left.' : this.AP[S.ag].label.slice(0, S.agTyped), agCaretD: S.agBusy && S.ag >= 0 && S.agTyped < this.AP[S.ag].label.length ? 'inline-block' : 'none',
+      agCalls: S.ag < 0 ? [] : this.AP[S.ag].calls.map((c, k) => { const done = k < S.agDoneN, dec = !c[2]; return { fn: c[0], arg: c[1], mark: done ? (dec ? '×' : '✓') : '◌', dot: done ? (dec ? '#F4A193' : '#8FD9A8') : '#FFC24B', note: c[3] || '', noteD: done && c[3] ? 'block' : 'none', bg: '#26231E', op: done || (k === S.agDoneN && S.agTyped >= this.AP[S.ag].label.length) ? 1 : 0.3 }; }),
+      agUndo: () => { if (!this.agSnap) return; this.setState({ mix: this.agSnap.mix, bpm: this.agSnap.bpm, hasSnap: false }); this.agSnap = null; }, agUndoC: S.hasSnap ? '#EFE9DD' : '#5A554C',
+      statusCols: STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      faqs: FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#8A5A00' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

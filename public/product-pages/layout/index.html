@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Layout — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#BE123C}
+input[type=range]{accent-color:#E11D48}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&amp;display=swap" rel="stylesheet"></helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="padding:clamp(40px,7vh,80px) 24px 90px; background:#EFEAE3">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE123C">Desktop publishing</div>
+        <h1 style="margin:0; font-family:'Newsreader',Georgia,serif; font-weight:400; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.035em">Every page,<br><em style="color:#E11D48">on the grid.</em></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">XENO Layout is planned as a multi-page publishing tool with master pages, baseline grids, linked text frames and colour-managed PDF export, built on Pixel’s vector engine. In this concept, the story flows through every column on the spread. Edit the text or change the grid.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:12px 18px; border-radius:8px">Get notified</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">scaffold · v0.0.1 · .xlayout</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; display:grid; grid-template-columns:{{ lCols }}; gap:16px; align-items:start">
+      <div style="background:#D5CFC6; border-radius:14px; padding:clamp(14px,3vw,36px); box-shadow:inset 0 0 0 1px rgba(29,27,24,.08)">
+        <div style="position:relative; width:100%; aspect-ratio:420 / 297; container-type:inline-size; background:#FFFFFF; box-shadow:0 2px 4px rgba(0,0,0,.1), 0 30px 50px -25px rgba(0,0,0,.35)">
+          <span style="position:absolute; left:50%; top:0; bottom:0; width:6cqw; transform:translateX(-50%); background:linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,.07) 50%, rgba(0,0,0,0)); pointer-events:none"></span>
+          <span style="position:absolute; left:{{ gm }}; right:{{ gm }}; top:6cqw; bottom:5cqw; display:{{ gridD }}; pointer-events:none; background-image:{{ baseBg }}; background-size:100% {{ lead }}"></span>
+          <sc-for list="{{ guides }}" as="g"><span style="position:absolute; top:6cqw; bottom:5cqw; left:{{ g.l }}; width:{{ g.w }}; display:{{ gridD }}; background:rgba(225,29,72,.05); box-shadow:inset 1px 0 0 rgba(225,29,72,.35), inset -1px 0 0 rgba(225,29,72,.35); pointer-events:none"></span></sc-for>
+          <div ref="{{ story }}" contentEditable="{{ true }}" suppressContentEditableWarning="{{ true }}" onInput="{{ onEdit }}" spellCheck="false" style="position:absolute; left:{{ gm }}; right:{{ gm }}; top:6cqw; bottom:5cqw; overflow:hidden; column-count:{{ cc }}; column-gap:2.4cqw; column-fill:auto; font-family:'Newsreader',Georgia,serif; font-size:{{ fs }}; line-height:{{ lead }}; color:#1D1B18; text-align:{{ ta }}; hyphens:{{ hy }}; outline:none; caret-color:#E11D48">
+            <h2 style="column-span:all; margin:0 0 2.2cqw; font-family:'Newsreader',Georgia,serif; font-weight:400; font-size:5.6cqw; line-height:1; letter-spacing:-.03em">The water keeps its own calendar</h2>
+            <p style="margin:0; text-indent:0"><span style="float:{{ dcF }}; font-size:{{ dcS }}; line-height:.8; padding:.06em .08em 0 0; color:#E11D48">T</span>he first thing you learn on the estuary is that the water keeps its own calendar. Twice a day it leaves, and twice a day it comes back a little later than it did the day before, so that a week of mornings walks the whole tide around the clock.</p><p style="margin:0; text-indent:1.4em">Mara Okafor has fished this stretch for nineteen years. She keeps the tables pinned inside the wheelhouse, but she rarely reads them now. The birds tell her first, she says: the oystercatchers lift off the mud a quarter of an hour before the channel starts to fill.</p><p style="margin:0; text-indent:1.4em">In the village the tide shapes everything that is not bolted down. The café opens at low water, when the walkers come across the flats, and closes when the causeway goes under. The school bus has two timetables. The post arrives by road or by boat depending on the month.</p><p style="margin:0; text-indent:1.4em">None of this feels like hardship to the people who live here. It feels like attention. You cannot plan a week without looking at the water, and after a while you stop wanting to. The days arrange themselves around a rhythm older than any of the buildings.</p><p style="margin:0; text-indent:1.4em">The harbourmaster keeps a ledger of every spring tide since 1952, written in four different hands. The highest mark is from a February night when the sea came up the high street and stood a foot deep outside the chapel. Nobody talks about it much. The line is painted on the wall, and that is enough.</p><p style="margin:0; text-indent:1.4em">By late afternoon the light goes flat and silver and the far bank disappears. The boats swing on their moorings to face the incoming water, all at once, like a crowd turning towards a sound. Then the channel fills, the mud becomes a mirror, and for an hour the whole estuary holds still.</p><p style="margin:0; text-indent:1.4em">Mara ties up at the quay as the last of the ebb runs out. Tomorrow she will leave fifty minutes later than today. She already knows what the birds will do.</p>
+          </div>
+          <span style="position:absolute; right:calc({{ gm }} - 1.4cqw); bottom:4.2cqw; display:{{ ovD }}; width:1.6cqw; height:1.6cqw; background:#E11D48; color:#FFFFFF; font-size:1.3cqw; line-height:1.6cqw; text-align:center; font-family:'IBM Plex Mono',monospace">+</span>
+          <span style="position:absolute; left:4.5cqw; bottom:2cqw; font-family:'IBM Plex Mono',monospace; font-size:1cqw; color:#8C867C">24</span><span style="position:absolute; right:4.5cqw; bottom:2cqw; font-family:'IBM Plex Mono',monospace; font-size:1cqw; color:#8C867C">25</span>
+        </div>
+      </div>
+      <div style="background:#FFFFFF; border-radius:14px; padding:16px; box-shadow:0 0 0 1px rgba(29,27,24,.1); display:flex; flex-direction:column; gap:14px">
+        <span style="font-weight:600; font-size:14px">Grid & type</span>
+        <div style="display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">COLUMNS PER PAGE</span><div style="display:flex; gap:4px"><sc-for list="{{ colsB }}" as="c"><button onClick="{{ c.on }}" style="flex:1; height:32px; border-radius:7px; border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font:inherit; font-size:13px; cursor:pointer">{{ c.l }}</button></sc-for></div></div>
+        <sc-for list="{{ tsl }}" as="s"><label style="display:flex; flex-direction:column; gap:4px"><span style="display:flex; justify-content:space-between; font-size:12.5px"><span>{{ s.l }}</span><span style="font-family:'IBM Plex Mono',monospace; color:#BE123C">{{ s.vt }}</span></span><input type="range" min="{{ s.min }}" max="{{ s.max }}" step="{{ s.step }}" value="{{ s.v }}" onInput="{{ s.set }}" onChange="{{ s.set }}" style="width:100%; accent-color:#E11D48"></label></sc-for>
+        <div style="display:flex; flex-wrap:wrap; gap:6px"><sc-for list="{{ tg }}" as="t"><button onClick="{{ t.on }}" style="height:30px; padding:0 11px; border-radius:999px; border:1px solid {{ t.bd }}; background:{{ t.bg }}; color:{{ t.fg }}; font:inherit; font-size:12.5px; cursor:pointer">{{ t.l }}</button></sc-for></div>
+        <div style="border-top:1px solid #EEEAE4; padding-top:12px; display:flex; flex-direction:column; gap:8px"><span style="display:flex; justify-content:space-between; font-weight:600; font-size:13px"><span>Preflight</span><span style="font-family:'IBM Plex Mono',monospace; font-weight:400; font-size:11px; color:{{ pfC }}">{{ pfSum }}</span></span><sc-for list="{{ pf }}" as="p"><div style="display:grid; grid-template-columns:16px minmax(0,1fr); gap:8px; font-size:12.5px; line-height:1.4"><span style="color:{{ p.c }}">{{ p.m }}</span><span style="color:#3F3B35">{{ p.t }}</span></div></sc-for></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Replaces</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Adobe InDesign</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Engine</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Pixel’s vector core</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Output</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Colour-managed print and PDF</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Format</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">.xlayout</div></div></div></section>
+<section id="plan" data-screen-label="Plan" style="background:#1D1B18; color:#F6F4F0; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#FDA4AF">What it is for</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">Magazines, books, reports and print-ready PDFs.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#B8B1A6; text-wrap:pretty">Type and graphics are planned to sit on Pixel’s vector core, so they stay crisp at any size, and components and tokens come from XENO Assets.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px 28px; margin-top:44px"><div data-reveal="" style="border-top:1px solid #F6F4F0; padding-top:14px"><div style="font-weight:600; font-size:17px">Master pages</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#B8B1A6">Headers, folios and grids set once and inherited by every page.</p></div><div data-reveal="" style="border-top:1px solid #F6F4F0; padding-top:14px"><div style="font-weight:600; font-size:17px">Linked text frames</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#B8B1A6">Stories thread from frame to frame and page to page.</p></div><div data-reveal="" style="border-top:1px solid #F6F4F0; padding-top:14px"><div style="font-weight:600; font-size:17px">Baseline grids</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#B8B1A6">Text across columns and pages sits on the same lines.</p></div><div data-reveal="" style="border-top:1px solid #F6F4F0; padding-top:14px"><div style="font-weight:600; font-size:17px">Colour-managed export</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#B8B1A6">Print and PDF output with the right colour profile.</p></div></div>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE123C">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">A scaffold. The spread above is a concept.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Layout.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">XENO Layout is scaffolded and nothing ships yet. Leave your email and we’ll tell you when there is a first build.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><sc-if value="{{ getNotSent }}" hint-placeholder-val="{{ true }}"><form onSubmit="{{ getSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap"><input type="email" value="{{ getEmail }}" onChange="{{ getSet }}" placeholder="you@company.com" style="flex:1 1 220px; height:48px; padding:0 14px; border:1px solid #D6D0C7; border-radius:8px; font:inherit; font-size:15px; background:#F6F4F0; color:#1D1B18"><button type="submit" style="height:48px; padding:0 18px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:15px; font-weight:500; cursor:pointer">Notify me</button></form></sc-if><sc-if value="{{ getSent }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 16px; border-radius:10px; background:#F4F2EE; font-size:15px">Thanks. We’ll email {{ getEmail }} when it’s out.</div></sc-if><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Desktop</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">first build</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">not yet available</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#BE123C">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#FDA4AF">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Layout&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Today","#C9962E",["A scaffolded repository, v0.0.1","Product surface and architecture being defined"]],["Planned","#8C867C",["Multi-page document model with master pages, grids and baselines","Linked text frames and a typographic engine on Pixel’s vector core","The .xlayout format","Colour-managed print and PDF export","Components and tokens reused from XENO Assets"]],["Not decided yet","#8C867C",["InDesign file import","Long-document features such as indexes and cross-references"]]];
+  FAQ = [["Can I use it today?","No. XENO Layout is a scaffold and nothing ships yet. The spread above is a concept of the planned tool."],["How is it different from XENO Docs?","Docs is a word processor for writing and editing documents. Layout is for designing pages: precise grids, linked frames and print production."],["Will it open InDesign files?","That has not been decided yet."],["What is it built on?","The plan is to build it on XENO Pixel’s vector engine, so type and graphics stay crisp at any size."],["Will it export print-ready PDFs?","Colour-managed print and PDF export is on the early roadmap."]];
+
+  story = React.createRef();
+  chk = () => { const el = this.story.current; if (!el) return; const ov = el.scrollWidth > el.clientWidth + 2; if (ov !== this.state.ov) this.setState({ ov }); const w = (el.innerText || '').trim().split(/\s+/).filter(Boolean).length; if (w !== this.state.words) this.setState({ words: w }); };
+  onEdit = () => { clearTimeout(this._ck); this._ck = setTimeout(this.chk, 60); };
+  mountX() { this.setState({ cols: 2, fs: 10, ld: 13, grid: true, dc: true, just: true, ov: false, words: 0 }); setTimeout(this.chk, 400); }
+  updateX(pp, ps) { const S = this.state; if (ps.cols !== S.cols || ps.fs !== S.fs || ps.ld !== S.ld || ps.vw !== S.vw || ps.dc !== S.dc || ps.just !== S.just) requestAnimationFrame(this.chk); }
+  resizeX() { this.chk(); }
+  unmountX() { clearTimeout(this._ck); }
+  valsX(S, wide) { const k = 0.135, cols = S.cols || 2, fs = S.fs || 10, ld = S.ld || 13, gm = 4.5, pageW = 50, colW = (pageW - gm - 1.2 - (cols - 1) * 2.4) / cols, colPt = colW / 50 * 595, cpl = Math.round(colPt / (fs * 0.47));
+    const guides = []; for (let p = 0; p < 2; p++) for (let c = 0; c < cols; c++) { const left = p === 0 ? gm + c * (colW + 2.4) : 50 + 1.2 + c * (colW + 2.4); guides.push({ l: left + 'cqw', w: colW + 'cqw' }); }
+    const pf = [[S.ov ? '✕' : '✓', S.ov ? 'Overset text: the story does not fit. Cut copy, shrink the type or add a page.' : 'All text fits in the linked frames', S.ov ? '#E11D48' : '#1F6A3A'], [ld < fs * 1.15 ? '!' : '✓', ld < fs * 1.15 ? 'Leading is tight for ' + fs + ' pt type' : 'Leading ' + ld + ' pt on ' + fs + ' pt type', ld < fs * 1.15 ? '#B45309' : '#1F6A3A'], [cpl < 35 || cpl > 80 ? '!' : '✓', (cpl < 35 ? 'Short' : cpl > 80 ? 'Long' : 'Comfortable') + ' measure: about ' + cpl + ' characters per line', cpl < 35 || cpl > 80 ? '#B45309' : '#1F6A3A']];
+    const bad = pf.filter(p => p[0] !== '✓').length;
+    return { story: this.story, onEdit: this.onEdit, lCols: S.vw >= 1080 ? 'minmax(0,1fr) 290px' : 'minmax(0,1fr)', gm: gm + 'cqw', cc: cols * 2, fs: (fs * k).toFixed(3) + 'cqw', lead: (ld * k).toFixed(3) + 'cqw', ta: S.just ? 'justify' : 'left', hy: S.just ? 'auto' : 'manual', gridD: S.grid ? 'block' : 'none', baseBg: 'linear-gradient(180deg, rgba(0,0,0,0) calc(100% - 1px), rgba(59,130,246,.28) calc(100% - 1px))', guides,
+      dcF: S.dc ? 'left' : 'none', dcS: S.dc ? '3.1em' : '1em', ovD: S.ov ? 'block' : 'none',
+      colsB: [1, 2, 3].map(c => ({ l: String(c), on: () => this.setState({ cols: c }), bg: cols === c ? '#1D1B18' : '#FFFFFF', fg: cols === c ? '#FFFFFF' : '#1D1B18', bd: cols === c ? '#1D1B18' : '#DDD8D0' })),
+      tsl: [['Size', 8, 14, 0.5, fs, fs + ' pt', 'fs'], ['Leading', 9, 20, 0.5, ld, ld + ' pt', 'ld']].map(s => ({ l: s[0], min: s[1], max: s[2], step: s[3], v: s[4], vt: s[5], set: e => this.setState({ [s[6]]: +e.target.value }) })),
+      tg: [['grid', 'Baseline grid'], ['dc', 'Drop cap'], ['just', 'Justify + hyphenate']].map(t => ({ l: t[1], on: () => this.setState({ [t[0]]: !S[t[0]] }), bg: S[t[0]] ? '#FCE7EB' : '#FFFFFF', fg: S[t[0]] ? '#BE123C' : '#1D1B18', bd: S[t[0]] ? '#FDA4AF' : '#DDD8D0' })),
+      pf: pf.map(p => ({ m: p[0], t: p[1], c: p[2] })), pfSum: bad ? bad + ' issue' + (bad > 1 ? 's' : '') : 'ready for print', pfC: bad ? '#E11D48' : '#1F6A3A' };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Layout').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#BE123C' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>

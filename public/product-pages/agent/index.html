@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Agent — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#A16207}
+input[type=range]{accent-color:#FACC15}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="background:#0C0C0E; color:#EDEDF0; padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#FACC15">Agent workspace for software</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">The agent writes.<br><span style="color:#FACC15">You keep the last word.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#A1A1AA; text-wrap:pretty">XENO Agent is a desktop workspace where coding agents edit, run and test your project, and every change arrives as a reviewable diff with a checkpoint behind it. Give it a task below.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="#get" style="background:#FACC15; color:#0C0C0E; font-size:15px; font-weight:600; padding:12px 18px; border-radius:8px">Get XENO Agent</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#71717A">desktop · also inside XENO Hub</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; border-radius:14px; overflow:hidden; background:#131316; box-shadow:0 0 0 1px #27272A, 0 40px 80px -40px rgba(0,0,0,.9)">
+      <div style="height:40px; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid #27272A; overflow:hidden">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><span style="display:flex; align-items:center; gap:7px; height:30px; padding:0 12px; border-radius:7px; background:{{ t.bg }}; font-size:12.5px; white-space:nowrap"><span style="width:7px; height:7px; border-radius:50%; background:{{ t.c }}"></span>{{ t.l }}</span></sc-for>
+        <span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#71717A; white-space:nowrap">{{ prov }}</span>
+      </div>
+      <div style="display:grid; grid-template-columns:{{ gCols }}; min-height:540px">
+        <div style="display:flex; flex-direction:column; min-width:0; border-right:1px solid #27272A">
+          <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #27272A; font-family:'IBM Plex Mono',monospace; font-size:12px"><span>src/cart/total.ts</span><span style="color:{{ fileC }}">{{ fileSt }}</span><span style="margin-left:auto; display:{{ revD }}; gap:6px"><button onClick="{{ acceptAll }}" style="height:26px; padding:0 10px; border:none; border-radius:6px; background:#FACC15; color:#0C0C0E; font:inherit; font-size:11.5px; font-weight:600; cursor:pointer">Accept all</button><button onClick="{{ restore }}" style="height:26px; padding:0 10px; border:1px solid #3F3F46; border-radius:6px; background:transparent; color:#EDEDF0; font:inherit; font-size:11.5px; cursor:pointer">Restore checkpoint</button></span></div>
+          <div style="flex:1; padding:10px 0; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.7; overflow:auto">
+            <sc-for list="{{ lines }}" as="l" hint-placeholder-count="14"><div style="display:grid; grid-template-columns:44px 18px minmax(0,1fr) auto; background:{{ l.bg }}; transition:background .3s"><span style="text-align:right; padding-right:10px; color:#52525B">{{ l.n }}</span><span style="color:{{ l.sc }}">{{ l.s }}</span><span style="white-space:pre; color:{{ l.fg }}; text-decoration:{{ l.td }}; overflow:hidden; text-overflow:ellipsis">{{ l.t }}</span><span style="display:{{ l.hD }}; gap:4px; padding-right:10px"><button onClick="{{ l.ok }}" style="height:20px; padding:0 7px; border:none; border-radius:4px; background:#14532D; color:#86EFAC; font:inherit; font-size:10.5px; cursor:pointer">Keep</button><button onClick="{{ l.no }}" style="height:20px; padding:0 7px; border:none; border-radius:4px; background:#450A0A; color:#FCA5A5; font:inherit; font-size:10.5px; cursor:pointer">Undo</button></span></div></sc-for>
+          </div>
+          <div style="border-top:1px solid #27272A; background:#0C0C0E; padding:8px 12px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.6; min-height:112px">
+            <div style="color:#71717A; margin-bottom:4px">terminal</div>
+            <sc-for list="{{ term }}" as="t"><div style="color:{{ t.c }}; white-space:pre-wrap">{{ t.t }}</div></sc-for>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; min-width:0">
+          <div style="flex:1; display:flex; flex-direction:column; gap:8px; padding:12px; overflow:hidden; justify-content:flex-end">
+            <sc-for list="{{ chat }}" as="m" hint-placeholder-count="2"><div style="display:flex; flex-direction:column; gap:6px; align-items:{{ m.al }}"><div style="max-width:92%; padding:9px 12px; border-radius:10px; background:{{ m.bg }}; color:{{ m.fg }}; font-size:13.5px; line-height:1.5">{{ m.t }}</div><sc-for list="{{ m.steps }}" as="s"><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:{{ s.c }}">{{ s.t }}</span></sc-for></div></sc-for>
+            <sc-if value="{{ ask }}" hint-placeholder-val="{{ false }}"><div style="padding:10px 12px; border-radius:10px; border:1px solid #A16207; background:#1C1A0E; display:flex; flex-direction:column; gap:8px"><span style="font-size:13px">Run <span style="font-family:'IBM Plex Mono',monospace; color:#FACC15">npm test -- cart</span>? It executes code in your project.</span><div style="display:flex; gap:6px"><button onClick="{{ allow }}" style="height:28px; padding:0 11px; border:none; border-radius:6px; background:#FACC15; color:#0C0C0E; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer">Allow once</button><button onClick="{{ deny }}" style="height:28px; padding:0 11px; border:1px solid #3F3F46; border-radius:6px; background:transparent; color:#EDEDF0; font:inherit; font-size:12.5px; cursor:pointer">Deny</button></div></div></sc-if>
+          </div>
+          <div style="padding:10px 12px; border-top:1px solid #27272A; display:flex; flex-direction:column; gap:8px">
+            <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.on }}" style="text-align:left; padding:9px 11px; border-radius:8px; border:1px solid {{ t.bd }}; background:{{ t.bg }}; color:#EDEDF0; font:inherit; font-size:13px; cursor:{{ t.cur }}; opacity:{{ t.op }}">{{ t.l }}</button></sc-for>
+            <div style="display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#71717A"><span>Permissions</span><sc-for list="{{ perms }}" as="p"><button onClick="{{ p.on }}" style="height:24px; padding:0 8px; border-radius:5px; border:1px solid {{ p.bd }}; background:{{ p.bg }}; color:{{ p.fg }}; font:inherit; font-size:11px; cursor:pointer">{{ p.l }}</button></sc-for></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Surfaces</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Desktop app and XENO Hub</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Execution</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">ACP agents, SDK-native and XENO Cloud</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Workspace</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Terminal, code intelligence, review, checkpoints</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Verification</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Hermetic parity harness across surfaces</div></div></div></section>
+<section id="surfaces" data-screen-label="Surfaces" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#A16207">One implementation</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">The same agent, wherever you open it.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">The standalone desktop app and the Agent inside XENO Hub mount the same interface over the same versioned host contract, so a change lands in both at once.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-top:40px">
+      <div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:10px"><span style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:#2FA36B"></span><span style="font-weight:600; font-size:17px">Standalone desktop</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">Electron app</span><span style="font-size:15px; line-height:1.5; color:#3F3B35">Ready for local development and product testing</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:10px"><span style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:#2FA36B"></span><span style="font-weight:600; font-size:17px">Inside XENO Hub</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">Shared source mounted in Hub</span><span style="font-size:15px; line-height:1.5; color:#3F3B35">Integrated and covered by Hub’s quality gate</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:10px"><span style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:#8C867C"></span><span style="font-weight:600; font-size:17px">Inside XENO Shell</span></span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">Same embed contract</span><span style="font-size:15px; line-height:1.5; color:#3F3B35">Planned, not yet integrated</span></div>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px 28px; margin-top:44px"><div data-reveal="" style="border-top:1px solid #1D1B18; padding-top:14px"><div style="font-weight:600; font-size:16px">Providers from live descriptors</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#5F5A52">Model and reasoning controls come from the providers you have, not a hard-coded list.</p></div><div data-reveal="" style="border-top:1px solid #1D1B18; padding-top:14px"><div style="font-weight:600; font-size:16px">Checkpoints</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#5F5A52">Every agent turn can be rewound to the state before it.</p></div><div data-reveal="" style="border-top:1px solid #1D1B18; padding-top:14px"><div style="font-weight:600; font-size:16px">Review</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#5F5A52">Changes arrive as diffs you keep or undo hunk by hunk.</p></div><div data-reveal="" style="border-top:1px solid #1D1B18; padding-top:14px"><div style="font-weight:600; font-size:16px">Session tabs</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#5F5A52">Conversations persist, restore after restarts and reorder like browser tabs.</p></div><div data-reveal="" style="border-top:1px solid #1D1B18; padding-top:14px"><div style="font-weight:600; font-size:16px">Policy</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#5F5A52">Commands, file access and network use follow the permission mode you set.</p></div><div data-reveal="" style="border-top:1px solid #1D1B18; padding-top:14px"><div style="font-weight:600; font-size:16px">Plugins, MCP and subagents</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#5F5A52">Extend the workspace through the same host services.</p></div></div>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#A16207">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Implemented. Not cleared for public release yet.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Agent.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">XENO Agent runs today for local development and inside XENO Hub. A public, signed release is not out yet. Leave your email and we’ll tell you when it is.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><sc-if value="{{ getNotSent }}" hint-placeholder-val="{{ true }}"><form onSubmit="{{ getSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap"><input type="email" value="{{ getEmail }}" onChange="{{ getSet }}" placeholder="you@company.com" style="flex:1 1 220px; height:48px; padding:0 14px; border:1px solid #D6D0C7; border-radius:8px; font:inherit; font-size:15px; background:#F6F4F0; color:#1D1B18"><button type="submit" style="height:48px; padding:0 18px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:15px; font-weight:500; cursor:pointer">Notify me</button></form></sc-if><sc-if value="{{ getSent }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 16px; border-radius:10px; background:#F4F2EE; font-size:15px">Thanks. We’ll email {{ getEmail }} when it’s out.</div></sc-if><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Inside XENO Hub</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">mounted in the Hub desktop app</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">with Hub</span></div><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Standalone desktop</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">signed installer</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">not released yet</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#A16207">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#FDE68A">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Agent&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Implemented","#2FA36B",["Standalone desktop app for local development and product testing","The same interface mounted inside XENO Hub","ACP, SDK-native and XENO Cloud execution adapters","Workspace, terminal, code intelligence, review and checkpoints","Policy, plugins, MCP and subagents","Durable session tabs that survive restarts"]],["Before public release","#C9962E",["Installer signing","Production sign-in, updates and deep links","macOS and Linux packaged certification","The remaining harness certification matrix"]],["Planned","#8C867C",["XENO Shell integration through the same embed contract"]]];
+  FAQ = [["Which models does it use?","Whichever providers you have. Model and reasoning controls are built from live provider descriptors, so nothing is hard-coded, and engineering turns refuse to run on a text-only path."],["Can it run commands on my machine?","Only within the permission mode you choose. In Ask mode every command needs your approval, and read-only mode lets it read and propose but not change anything."],["What happens if I don’t like a change?","Every change arrives as a diff you can keep or undo hunk by hunk, and each turn saves a checkpoint you can restore."],["Is it the same as the Agent in XENO Hub?","Yes. Both mount the same interface over the same host contract, so there is one implementation."],["Can I download it?","It runs today inside XENO Hub and for local development. A signed public release is not out yet."]];
+
+  C0 = ['export function cartTotal(items, coupon) {', '  let total = 0', '  for (const item of items) {', '    total += item.price', '  }', '  if (coupon) total = total - coupon.amount', '  return total', '}'];
+  TK = [{ l: 'Fix the cart total: it ignores quantity and can go negative', tab: 'Fix cart total', h: [[3, '    total += item.price * item.qty'], [5, '  if (coupon) total = Math.max(0, total - coupon.amount)']], test: '6 passed · quantity and coupon floor covered', say: 'Two fixes: multiply by quantity, and floor the coupon at zero.' },
+    { l: 'Round the total to whole cents', tab: 'Round to cents', h: [[6, '  return Math.round(total * 100) / 100']], test: '7 passed · 1 new rounding case', say: 'Rounded the return value to two decimals.' },
+    { l: 'Rename items to lineItems', tab: 'Rename items', h: [[0, 'export function cartTotal(lineItems, coupon) {'], [2, '  for (const item of lineItems) {']], test: '7 passed · no callers broken', say: 'Renamed the parameter and its one use. No callers pass it by name.' }];
+  wait(ms) { return new Promise(r => { this._to = setTimeout(r, ms); }); }
+  step(t, c) { this.setState(s => { const ch = s.chat.slice(), m = Object.assign({}, ch[ch.length - 1]); m.steps = (m.steps || []).concat([{ t, c: c || '#A1A1AA' }]); ch[ch.length - 1] = m; return { chat: ch }; }); }
+  run = async (i) => { const S = this.state; if (S.busy || (S.done || []).includes(i)) return; const T = this.TK[i], id = ++this._rid;
+    this.setState(s => ({ busy: true, chat: s.chat.concat([{ me: true, t: T.l }, { me: false, t: 'Working on it.', steps: [] }]).slice(-6), tabs: s.tabs.concat([{ l: T.tab, st: 'run' }]), ckpt: s.code.slice(), pend: [], term: [{ t: '$ ', c: '#52525B' }] }));
+    await this.wait(600); this.step('✓ read_file src/cart/total.ts', '#86EFAC'); await this.wait(500);
+    if (this.state.perm === 'ro') { this.step('✕ edit_file blocked · read-only mode', '#FCA5A5'); await this.wait(300); this.say('Read-only mode is on, so I only described the change: ' + T.say.charAt(0).toLowerCase() + T.say.slice(1)); this.finish(i, 'idle'); return; }
+    this.step('✓ edit_file · ' + T.h.length + ' hunk' + (T.h.length > 1 ? 's' : '') + ' · checkpoint saved', '#86EFAC'); this.setState({ pend: T.h.map(h => ({ ln: h[0], nw: h[1] })) }); await this.wait(500);
+    if (this.state.perm === 'ask') { this.setState({ ask: true, askI: i }); return; } await this.tests(i); };
+  tests = async (i) => { const T = this.TK[i]; this.setState({ ask: false }); this.step('◌ run_command npm test -- cart', '#FDE68A'); this.setState({ term: [{ t: '$ npm test -- cart', c: '#EDEDF0' }] }); await this.wait(700); this.setState(s => ({ term: s.term.concat([{ t: '  cart/total.test.ts', c: '#A1A1AA' }]) })); await this.wait(600); this.setState(s => ({ term: s.term.concat([{ t: '  ✓ ' + T.test, c: '#86EFAC' }]) })); this.step('✓ tests passed', '#86EFAC'); this.say(T.say + ' Review the diff and keep what you want.'); this.finish(i, 'ok'); };
+  say(t) { this.setState(s => ({ chat: s.chat.concat([{ me: false, t, steps: [] }]).slice(-6) })); }
+  finish(i, st) { this.setState(s => { const tb = s.tabs.slice(); tb[tb.length - 1] = Object.assign({}, tb[tb.length - 1], { st }); return { busy: false, tabs: tb, done: (s.done || []).concat([i]) }; }); }
+  deny = () => { this.setState({ ask: false }); this.step('– run_command denied by you', '#A1A1AA'); this.say('Skipped the tests. The edit is ready for review.'); this.finish(this.state.askI, 'ok'); };
+  resolve(ln, keep) { this.setState(s => { const p = s.pend.find(x => x.ln === ln), code = s.code.slice(); if (keep && p) code[ln] = p.nw; return { code, pend: s.pend.filter(x => x.ln !== ln) }; }); }
+  acceptAll = () => { this.setState(s => { const code = s.code.slice(); s.pend.forEach(p => { code[p.ln] = p.nw; }); return { code, pend: [] }; }); };
+  restore = () => { const S = this.state; if (!S.ckpt) return; this.setState({ code: S.ckpt.slice(), pend: [], term: [{ t: '$ xeno checkpoint restore · files back to before this turn', c: '#FDE68A' }] }); };
+  mountX() { this._rid = 0; this.setState({ code: this.C0.slice(), pend: [], chat: [{ me: false, t: 'I can read, edit and test this project. Pick a task.', steps: [] }], tabs: [{ l: 'cart-service', st: 'idle' }], term: [{ t: '$ ', c: '#52525B' }], perm: 'ask', done: [] }); }
+  unmountX() { clearTimeout(this._to); }
+  valsX(S, wide) { const code = S.code || this.C0, pend = S.pend || [], hl = [];
+    const kw = t => t; let n = 0;
+    code.forEach((ln, i) => { const p = pend.find(x => x.ln === i); if (p) { hl.push({ n: '', s: '−', sc: '#FCA5A5', t: ln, fg: '#FCA5A5', td: 'line-through', bg: 'rgba(127,29,29,.28)', hD: 'none' }); hl.push({ n: String(++n), s: '+', sc: '#86EFAC', t: p.nw, fg: '#BBF7D0', td: 'none', bg: 'rgba(20,83,45,.35)', hD: 'flex', ok: () => this.resolve(i, true), no: () => this.resolve(i, false) }); } else hl.push({ n: String(++n), s: '', sc: '#52525B', t: ln, fg: '#D4D4D8', td: 'none', bg: 'transparent', hD: 'none' }); });
+    hl.forEach(l => { if (!l.ok) { l.ok = () => {}; l.no = () => {}; } });
+    const done = S.done || [];
+    return { gCols: S.vw >= 980 ? 'minmax(0,1.35fr) minmax(0,1fr)' : 'minmax(0,1fr)', lines: hl, term: S.term || [], fileSt: pend.length ? pend.length + ' change' + (pend.length > 1 ? 's' : '') + ' to review' : 'saved', fileC: pend.length ? '#FACC15' : '#71717A', revD: pend.length ? 'flex' : 'none', acceptAll: this.acceptAll, restore: this.restore,
+      tabs: (S.tabs || []).slice(-4).map((t, i, a) => ({ l: t.l, c: t.st === 'run' ? '#FACC15' : t.st === 'ok' ? '#86EFAC' : '#52525B', bg: i === a.length - 1 ? '#27272A' : 'transparent' })), prov: 'provider · from your registry',
+      chat: (S.chat || []).map(m => ({ t: m.t, steps: m.steps || [], al: m.me ? 'flex-end' : 'flex-start', bg: m.me ? '#27272A' : 'transparent', fg: m.me ? '#EDEDF0' : '#D4D4D8' })),
+      ask: !!S.ask, allow: () => this.tests(S.askI), deny: this.deny,
+      tasks: this.TK.map((t, i) => { const d = done.includes(i), off = S.busy || d; return { l: (d ? '✓ ' : '') + t.l, on: () => this.run(i), bg: 'transparent', bd: '#3F3F46', cur: off ? 'default' : 'pointer', op: off ? 0.45 : 1 }; }).concat(done.length === 3 ? [{ l: 'Start over', on: () => this.mountX(), bg: '#FACC15', bd: '#FACC15', cur: 'pointer', op: 1 }] : []).map(t => t.l === 'Start over' ? Object.assign(t, { bg: '#27272A' }) : t),
+      perms: [['ask', 'Ask'], ['auto', 'Auto'], ['ro', 'Read-only']].map(p => ({ l: p[1], on: () => this.setState({ perm: p[0] }), bg: S.perm === p[0] ? '#FACC15' : 'transparent', fg: S.perm === p[0] ? '#0C0C0E' : '#A1A1AA', bd: S.perm === p[0] ? '#FACC15' : '#3F3F46' })) };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Agent').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#A16207' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>

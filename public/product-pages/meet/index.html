@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Meet — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#0F766E}
+input[type=range]{accent-color:#2DD4BF}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="background:#081110; color:#E0F2EF; padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2DD4BF">Peer-to-peer screen transport</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">Your other screen,<br><span style="color:#2DD4BF">at full rate.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#8FAAA5; text-wrap:pretty">XENO Meet streams one machine’s display to another at native resolution and frame rate, over your private Tailscale mesh, at a bitrate you choose. It is for two computers, not for meetings. Change the link below and see why a fixed bitrate matters.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="#get" style="background:#2DD4BF; color:#081110; font-size:15px; font-weight:600; padding:12px 18px; border-radius:8px">Get notified</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#58716C">pre-release · name not final</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; border-radius:14px; overflow:hidden; background:#0E1817; box-shadow:0 0 0 1px #1C2D2A, 0 40px 80px -40px rgba(0,0,0,.9)">
+      <div style="display:grid; grid-template-columns:{{ mCols }}">
+        <sc-for list="{{ sides }}" as="s"><div style="padding:14px; display:flex; flex-direction:column; gap:10px; border-right:1px solid #1C2D2A; min-width:0">
+          <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font-weight:600; font-size:14px">{{ s.t }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8FAAA5">{{ s.sub }}</span></div>
+          <canvas ref="{{ s.ref }}" width="480" height="270" style="width:100%; height:auto; display:block; border-radius:8px; background:#000000"></canvas>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:{{ s.c }}">{{ s.stat }}</span>
+        </div></sc-for>
+      </div>
+      <div style="display:grid; grid-template-columns:{{ cCols }}; gap:14px 24px; padding:14px; border-top:1px solid #1C2D2A">
+        <label style="display:flex; flex-direction:column; gap:6px; font-size:13px">Bitrate <span style="display:flex; gap:10px; align-items:center"><input type="range" min="20" max="200" step="10" value="{{ br }}" onInput="{{ setBr }}" onChange="{{ setBr }}" style="flex:1; accent-color:#2DD4BF"><span style="font-family:'IBM Plex Mono',monospace; min-width:78px">{{ br }} Mbit/s</span></span></label>
+        <label style="display:flex; flex-direction:column; gap:6px; font-size:13px">Network headroom <span style="display:flex; gap:10px; align-items:center"><input type="range" min="40" max="300" step="10" value="{{ net }}" onInput="{{ setNet }}" onChange="{{ setNet }}" style="flex:1; accent-color:#2DD4BF"><span style="font-family:'IBM Plex Mono',monospace; min-width:78px">{{ net }} Mbit/s</span></span></label>
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:13px">Rate control<div style="display:flex; padding:3px; border-radius:8px; background:#081110"><sc-for list="{{ modes }}" as="m"><button onClick="{{ m.on }}" style="flex:1; height:28px; border:none; border-radius:6px; background:{{ m.bg }}; color:{{ m.fg }}; font:inherit; font-size:12px; cursor:pointer">{{ m.l }}</button></sc-for></div></div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 14px"><sc-for list="{{ pipe }}" as="p"><span style="display:flex; flex-direction:column; gap:2px; padding:8px 12px; border-radius:8px; background:#132220; min-width:130px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:{{ p.c }}">{{ p.st }}</span><span style="font-size:13px; font-weight:600">{{ p.l }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#58716C">{{ p.d }}</span></span></sc-for></div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Compares to</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Parsec, Sunshine + Moonlight</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Network</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Tailscale, paced UDP with FEC</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Codec</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">NVENC and NVDEC through xeno-lib</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Reserved</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">.xmeet session profiles</div></div></div></section>
+<section id="requirements" data-screen-label="Requirements" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0F766E">What you’ll need</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">Two Windows PCs, two NVIDIA GPUs, one tailnet.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Version 0.1 captures with DXGI and encodes and decodes on NVIDIA hardware through xeno-lib. macOS and Linux are out of scope for 0.1.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:40px"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:6px"><span style="font-weight:600; font-size:17px">Windows 11</span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">On the host and the viewer</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:6px"><span style="font-weight:600; font-size:17px">NVIDIA GPU</span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">With NVENC and NVDEC; the driver is enough, no CUDA toolkit</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:6px"><span style="font-weight:600; font-size:17px">Tailscale</span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">Both machines on the same tailnet</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:6px"><span style="font-weight:600; font-size:17px">Two peers</span><span style="font-size:14.5px; line-height:1.5; color:#5F5A52">One screen, direct. No rooms, invites or presence</span></div></div>
+    <p data-reveal="" style="margin:28px 0 0; font-size:15.5px; line-height:1.55; color:#5F5A52; max-width:720px">Looking for video calls? That’s <a href="/product/comms" style="color:#0F766E; font-weight:600">XENO Comms</a>. If Meet ever grows rooms or a third participant, the two merge.</p>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0F766E">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Pre-release. Capture, transport and present are being built.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Meet.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">Nothing has shipped yet, and the name may change before it does. Leave your email to hear when there’s a build.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><sc-if value="{{ getNotSent }}" hint-placeholder-val="{{ true }}"><form onSubmit="{{ getSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap"><input type="email" value="{{ getEmail }}" onChange="{{ getSet }}" placeholder="you@company.com" style="flex:1 1 220px; height:48px; padding:0 14px; border:1px solid #D6D0C7; border-radius:8px; font:inherit; font-size:15px; background:#F6F4F0; color:#1D1B18"><button type="submit" style="height:48px; padding:0 18px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:15px; font-weight:500; cursor:pointer">Notify me</button></form></sc-if><sc-if value="{{ getSent }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 16px; border-radius:10px; background:#F4F2EE; font-size:15px">Thanks. We’ll email {{ getEmail }} when it’s out.</div></sc-if><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Windows 11</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">host and viewer</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">not yet available</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#0F766E">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#99F6E4">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Meet&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Ready","#2FA36B",["NVENC encode through xeno-lib","NVDEC decode through xeno-lib"]],["Building","#C9962E",["DXGI desktop-duplication capture","Paced UDP transport with forward error correction","D3D11 flip-model presentation"]],["Open","#8C867C",["The product name: “Meet” suggests video calls, which is Comms","macOS and Linux, out of scope for 0.1"]]];
+  FAQ = [["Is this a video-call app?","No. It streams one computer’s screen to another, direct, at full rate. Video calls belong to XENO Comms."],["Why a fixed bitrate?","So the picture stays at the quality you chose instead of being lowered by a congestion controller. Choose a bitrate your link can carry."],["What do I need?","Two Windows 11 machines with NVIDIA GPUs that have NVENC and NVDEC, both on the same Tailscale network."],["Is it available?","Not yet. It is pre-release and nothing has shipped."],["Will the name change?","Probably. “Beam” or “Cast” have been suggested."]];
+
+  hostCv = React.createRef(); viewCv = React.createRef();
+  scene(x, t, W, H) { const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0F172A'); g.addColorStop(1, '#134E4A'); x.fillStyle = g; x.fillRect(0, 0, W, H); x.fillStyle = '#1E293B'; x.fillRect(0, 0, W, 18); x.fillStyle = '#2DD4BF'; x.fillRect(10, 30, 120, H - 40); for (let i = 0; i < 9; i++) { x.fillStyle = i % 3 ? '#334155' : '#475569'; x.fillRect(146, 34 + i * 24, 180 + ((i * 53) % 120), 10); }
+    const bx = 150 + (Math.sin(t / 700) * 0.5 + 0.5) * (W - 230), by = 60 + (Math.cos(t / 900) * 0.5 + 0.5) * (H - 130); x.fillStyle = '#F472B6'; x.beginPath(); x.arc(bx, by, 22, 0, 7); x.fill(); x.fillStyle = '#FFFFFF'; x.font = '600 12px IBM Plex Mono, monospace'; x.fillText(new Date(t).toISOString().slice(17, 23), W - 76, 12); }
+  loop = t => { this._r = requestAnimationFrame(this.loop); const h = this.hostCv.current, v = this.viewCv.current; if (!h || !v) return; const r = h.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) return; const W = 480, H = 270, S = this.state, hx = h.getContext('2d'), vx = v.getContext('2d'); this.scene(hx, t, W, H);
+    const br = S.br, net = S.net, fixed = S.mode === 'fixed', eff = fixed ? br : Math.min(br, net * 0.7 * (0.6 + 0.4 * Math.abs(Math.sin(t / 1300)))), over = fixed && br > net, q = Math.max(0.05, Math.min(1, eff / 150)), block = Math.round(2 + (1 - q) * 22);
+    if (over && Math.random() < 0.18) { this._lost = (this._lost || 0) + 1; } else { const lag = over ? 0 : 0; this.scene(vx, t - (fixed ? 8 : 20) - lag, W, H); if (block > 3) { const img = vx.getImageData(0, 0, W, H), d = img.data; for (let y = 0; y < H; y += block) for (let x2 = 0; x2 < W; x2 += block) { const i = (y * W + x2) * 4; vx.fillStyle = 'rgb(' + d[i] + ',' + d[i + 1] + ',' + d[i + 2] + ')'; vx.fillRect(x2, y, block, block); } } }
+    if ((this._f = (this._f || 0) + 1) % 15 === 0) this.setState({ eff: Math.round(eff), q: Math.round(q * 100), stall: over }); };
+  mountX() { this.setState({ br: 120, net: 200, mode: 'fixed', eff: 120, q: 80 }); this._r = requestAnimationFrame(this.loop); }
+  unmountX() { cancelAnimationFrame(this._r); }
+  valsX(S, wide) { const fixed = S.mode === 'fixed';
+    return { mCols: S.vw >= 860 ? 'repeat(2, minmax(0,1fr))' : 'minmax(0,1fr)', cCols: S.vw >= 860 ? 'repeat(3, minmax(0,1fr))' : 'minmax(0,1fr)',
+      sides: [{ t: 'Host · studio-pc', sub: 'publishes display 1', ref: this.hostCv, stat: '2560 × 1440 · 144 Hz · DXGI capture', c: '#8FAAA5' }, { t: 'Viewer · laptop', sub: 'over tailnet', ref: this.viewCv, stat: S.stall ? '⚠ bitrate above what the link carries: frames dropping' : (fixed ? 'native rate · ' : 'rate varying · ') + (S.eff || 0) + ' Mbit/s · quality ' + (S.q || 0) + '%', c: S.stall ? '#FCA5A5' : '#99F6E4' }],
+      br: S.br || 120, net: S.net || 200, setBr: e => this.setState({ br: +e.target.value }), setNet: e => this.setState({ net: +e.target.value }),
+      modes: [['fixed', 'Fixed (Meet)'], ['cc', 'Congestion-controlled']].map(m => ({ l: m[1], on: () => this.setState({ mode: m[0] }), bg: S.mode === m[0] ? '#2DD4BF' : 'transparent', fg: S.mode === m[0] ? '#081110' : '#E0F2EF' })),
+      pipe: [['Capture', 'DXGI Desktop Duplication', 'building'], ['Encode', 'xeno-lib NVENC', 'exists'], ['Transport', 'paced UDP + FEC', 'building'], ['Decode', 'xeno-lib NVDEC', 'exists'], ['Present', 'D3D11 flip model', 'building']].map(p => ({ l: p[0], d: p[1], st: p[2] === 'exists' ? '✓ DEPENDENCY EXISTS' : '◌ BUILDING', c: p[2] === 'exists' ? '#99F6E4' : '#FBBF24' })) };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Meet').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#0F766E' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>

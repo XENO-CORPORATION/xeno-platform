@@ -132,6 +132,17 @@ homepage stays at `/v3`. `/home-v21/` is `no-cache`, never the 1y immutable rule
 when a host provides it and otherwise toast that no model is reachable — that degradation
 is the prototype's own, not a bug.
 
+**Product pages are the v2 designs (owner, 2026-10-22).** `/products` and bare
+`/product/<slug>` serve the owner's XO PRODUCTS designs as static documents
+(`public/product-pages/…`, runtime under `public/products-v2/`), forked verbatim
+like the homepage; spec + falsification record: `specs/products-pages-v2.md`.
+Re-import with `node scripts/import-products-v2.mjs <extracted zip dir>` — it
+regenerates `src/lib/productDesigns.ts`, rewrites design cross-links and forces
+downloads through `/product/<slug>/download/win` (raw R2 installer URLs in a
+design are a gate bypass, never shipped). `sdk`, `acp`, `research`, `use`, `audio`
+have no design and keep their React pages; sub-addresses (download/releases/docs)
+are untouched. `npm run test:products-v2` pins all of it.
+
 
 ⚠️ **De-indexed ≠ inaccessible, and that distinction is deliberate.** Every page still returns
 200 to anyone with the URL — a YC reviewer clicking the link in the application sees the full

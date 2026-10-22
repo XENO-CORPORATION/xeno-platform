@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Motion — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#C8321F}
+input[type=range]{accent-color:#E5483A}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#download" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+<section data-screen-label="Hero" ref="{{ hWrap }}" style="position:relative; height:calc(250vh - 60px)">
+  <div ref="{{ hInner }}" style="position:sticky; top:60px; height:calc(100vh - 60px); overflow:hidden; display:flex; flex-direction:column; padding:clamp(18px,5vh,56px) 24px clamp(14px,3vh,28px); gap:clamp(14px,3vh,30px)">
+    <div style="flex:1; min-height:0; width:100%; max-width:1320px; margin:0 auto; display:grid; grid-template-columns:{{ heroCols }}; gap:clamp(16px,3vh,28px) 56px; align-items:center; align-content:center">
+      <div style="display:flex; flex-direction:column; gap:clamp(12px,2.4vh,22px); min-width:0">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#C8321F">Video editor + motion graphics</span><span ref="{{ tcEl }}" style="font-family:'IBM Plex Mono',monospace; font-size:12px; padding:3px 8px; background:#FFFFFF; border:1px solid #E2DDD5; border-radius:4px">00:00:00:00</span></div>
+        <h1 ref="{{ h1El }}" style="margin:0; display:flex; flex-direction:column; font-size:{{ h1Fs }}; line-height:.96; letter-spacing:-.05em; font-weight:700">
+          <span style="display:block; white-space:nowrap"><sc-for list="{{ hL1 }}" as="c" hint-placeholder-count="1"><span data-ch="{{ c.i }}" style="display:inline-block; white-space:pre; will-change:transform">{{ c.ch }}</span></sc-for></span>
+          <span style="display:block; white-space:nowrap; color:#8C867C"><sc-for list="{{ hL2 }}" as="c" hint-placeholder-count="1"><span data-ch="{{ c.i }}" style="display:inline-block; white-space:pre; will-change:transform">{{ c.ch }}</span></sc-for></span>
+        </h1>
+        <p style="margin:0; max-width:520px; font-size:clamp(15px,2.2vh,18px); line-height:1.5; color:#5F5A52; text-wrap:pretty; display:{{ heroPD }}">XENO Motion is a video editor and motion-graphics tool in one app. Cut, composite, grade, mix and export from a single timeline.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center">
+          <a href="#download" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:12px 18px; border-radius:7px">Download</a>
+          <a href="#edit" style="border:1px solid #D6D0C7; font-size:15px; font-weight:500; padding:11px 17px; border-radius:7px">See the edit tools ↓</a>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">v0.10.1 · Windows x64 · Linux AppImage</span>
+        </div>
+      </div>
+      <div style="display:{{ monD }}; min-width:0; background:#16161A; color:#E7E5EA; border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 34px 60px -30px rgba(29,27,24,.6); font-size:11px">
+        <div style="height:32px; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid #2A2A30"><span style="font-weight:600; font-size:12px">Program</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">Sequence 01</span><span ref="{{ tc3El }}" style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#FF8A73">00:00:00:00</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">Fit</span></div>
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 34px; gap:10px; padding:10px">
+          <div style="position:relative; aspect-ratio:16/9; border-radius:4px; overflow:hidden; background:#0E0E11">
+            <canvas ref="{{ monCv }}" width="640" height="360" style="position:absolute; inset:0; width:100%; height:100%; display:block"></canvas>
+            <span style="position:absolute; inset:5%; border:1px dashed rgba(255,255,255,.22); pointer-events:none"></span>
+            <span style="position:absolute; inset:10%; border:1px dashed rgba(255,255,255,.14); pointer-events:none"></span>
+            <span ref="{{ monShot }}" style="position:absolute; left:8px; top:8px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#E7E5EA; background:rgba(14,14,17,.7); padding:2px 6px; border-radius:3px">V1 · Dusk.mp4</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px">
+            <div style="flex:1; width:100%; display:flex; gap:4px; justify-content:center">
+              <div style="position:relative; width:9px; border-radius:2px; background:#232329; overflow:hidden"><span ref="{{ mtL }}" style="position:absolute; left:0; right:0; bottom:0; height:40%; background:linear-gradient(0deg, #2FA36B 0%, #2FA36B 62%, #E8C547 80%, #FF5A3C 100%); background-size:100% var(--mh, 200px); background-position:bottom"></span></div>
+              <div style="position:relative; width:9px; border-radius:2px; background:#232329; overflow:hidden"><span ref="{{ mtR }}" style="position:absolute; left:0; right:0; bottom:0; height:40%; background:linear-gradient(0deg, #2FA36B 0%, #2FA36B 62%, #E8C547 80%, #FF5A3C 100%)"></span></div>
+            </div>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:9px; color:#8A8792">L R</span>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:12px; padding:0 12px 10px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792"><span ref="{{ monLufs }}">−14.0 LUFS</span><span>1920×1080 · 30 fps · Rec.709</span></div>
+      </div>
+    </div>
+    <div style="flex:none; width:100%; max-width:1320px; margin:0 auto; background:#16161A; color:#E7E5EA; border-radius:12px; overflow:hidden; font-size:11.5px; box-shadow:0 30px 60px -30px rgba(29,27,24,.55)">
+      <div style="min-height:40px; display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:6px 10px; border-bottom:1px solid #2A2A30">
+        <button onClick="{{ onPlay }}" title="Play / pause (Space)" style="width:30px; height:26px; border:none; border-radius:5px; background:#E5483A; color:#FFFFFF; display:grid; place-items:center; cursor:pointer; padding:0"><svg width="11" height="11" viewBox="0 0 12 12"><path d="{{ playIcon }}" fill="#FFFFFF"></path></svg></button>
+        <span ref="{{ tc2El }}" style="font-family:'IBM Plex Mono',monospace; font-size:12px; min-width:86px">00:00:00:00</span>
+        <span style="width:1px; height:18px; background:#2A2A30"></span>
+        <button onClick="{{ toolSel }}" title="Selection (V)" style="width:28px; height:26px; border:none; border-radius:5px; background:{{ tSelBg }}; color:{{ tSelFg }}; display:grid; place-items:center; cursor:pointer; padding:0" style-hover="background:#2E2E36"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 5-4 1.2L6.5 13z"></path></svg></button>
+        <button onClick="{{ toolRaz }}" title="Razor (C)" style="width:28px; height:26px; border:none; border-radius:5px; background:{{ tRazBg }}; color:{{ tRazFg }}; display:grid; place-items:center; cursor:pointer; padding:0" style-hover="background:#2E2E36"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14L10 6M9 3l4 4-3 3-4-4zM4 12l-2 2"></path></svg></button>
+        <button onClick="{{ toolSnap }}" title="Snapping (S)" style="width:28px; height:26px; border:none; border-radius:5px; background:{{ tSnapBg }}; color:{{ tSnapFg }}; display:grid; place-items:center; cursor:pointer; padding:0" style-hover="background:#2E2E36"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v6a4 4 0 0 0 8 0V2M4 5h3M9 5h3"></path></svg></button>
+        <span style="width:1px; height:18px; background:#2A2A30"></span>
+        <button onClick="{{ doUndo }}" title="Undo (Ctrl+Z)" style="width:28px; height:26px; border:none; border-radius:5px; background:{{ tUndoBg }}; color:{{ tUndoFg }}; display:grid; place-items:center; cursor:pointer; padding:0" style-hover="background:#2E2E36"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4L2 7l3 3M2 7h8a4 4 0 0 1 0 8H7"></path></svg></button>
+        <button onClick="{{ doRedo }}" title="Redo (Ctrl+Shift+Z)" style="width:28px; height:26px; border:none; border-radius:5px; background:{{ tRedoBg }}; color:{{ tRedoFg }}; display:grid; place-items:center; cursor:pointer; padding:0" style-hover="background:#2E2E36"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3-3 3M14 7H6a4 4 0 0 0 0 8h3"></path></svg></button>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:{{ tlMsgC }}; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 200px; transition:color .3s">{{ tlMsg }}</span>
+        <button onClick="{{ doReset }}" style="height:26px; padding:0 10px; border:1px solid #3A3A42; border-radius:5px; background:transparent; color:#B5B2BC; font:inherit; font-size:11px; cursor:pointer; display:{{ resetD }}">Reset edit</button>
+      </div>
+      <div style="display:grid; grid-template-columns:{{ tlHeadW }} minmax(0,1fr)">
+        <div style="border-right:1px solid #2A2A30; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">
+          <div style="height:24px; border-bottom:1px solid #2A2A30"></div>
+          <sc-for list="{{ tracks }}" as="tk" hint-placeholder-count="4">
+            <div style="height:{{ tk.h }}; display:flex; align-items:center; justify-content:space-between; gap:4px; padding:0 6px 0 10px">
+              <span style="color:{{ tk.nameC }}">{{ tk.name }}</span>
+              <button onClick="{{ tk.toggle }}" title="{{ tk.tip }}" style="width:20px; height:18px; border:none; border-radius:3px; background:{{ tk.bBg }}; color:{{ tk.bFg }}; display:{{ tk.bD }}; place-items:center; cursor:pointer; padding:0; font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:500">{{ tk.icon }}</button>
+            </div>
+          </sc-for>
+        </div>
+        <div ref="{{ tlArea }}" onPointerDown="{{ tlDown }}" onPointerMove="{{ tlHover }}" onPointerLeave="{{ tlLeave }}" style="position:relative; touch-action:none; user-select:none">
+          <div style="position:relative; height:24px; border-bottom:1px solid #2A2A30; cursor:ew-resize">
+            <sc-for list="{{ rTicks }}" as="k" hint-placeholder-count="10"><span style="position:absolute; left:{{ k.x }}; bottom:0; height:{{ k.h }}; border-left:1px solid #3A3A42"><span style="position:absolute; left:4px; bottom:4px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:#8A8792; display:{{ k.lD }}">{{ k.l }}</span></span></sc-for>
+          </div>
+          <sc-for list="{{ tracks }}" as="tk" hint-placeholder-count="4">
+            <div style="position:relative; height:{{ tk.h }}; border-bottom:1px solid #1E1E24; opacity:{{ tk.op }}; transition:opacity .2s">
+              <sc-for list="{{ tk.clips }}" as="c">
+                <div data-clip="{{ c.id }}" data-s="{{ c.s }}" data-e="{{ c.e }}" style="position:absolute; left:{{ c.x }}; width:{{ c.w }}; top:2px; bottom:{{ c.bot }}; border-radius:4px; background:{{ c.bg }}; overflow:hidden; outline:{{ c.ol }}; outline-offset:-2px; transition:outline-color .15s">
+                  <svg viewBox="0 0 1000 30" preserveAspectRatio="none" style="position:absolute; top:0; height:100%; left:{{ c.wl }}; width:{{ c.ww }}; display:{{ c.waveD }}; pointer-events:none"><path d="{{ c.wave }}" fill="rgba(255,255,255,.5)"></path></svg>
+                  <span style="position:relative; display:flex; align-items:center; gap:6px; height:100%; padding:0 8px; white-space:nowrap; pointer-events:none"><span style="font-weight:600; color:#FFFFFF; font-size:{{ c.fs }}">{{ c.label }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:rgba(255,255,255,.72)">{{ c.sub }}</span></span>
+                  <span style="position:absolute; left:0; top:0; bottom:0; width:5px; background:{{ c.hBg }}; pointer-events:none"></span><span style="position:absolute; right:0; top:0; bottom:0; width:5px; background:{{ c.hBg }}; pointer-events:none"></span>
+                </div>
+              </sc-for>
+              <sc-for list="{{ tk.kfs }}" as="k"><span style="position:absolute; left:{{ k.x }}; bottom:0; width:5px; height:5px; margin-left:-2.5px; background:#FFD9CF; transform:rotate(45deg); pointer-events:none"></span></sc-for>
+            </div>
+          </sc-for>
+          <div ref="{{ snapEl }}" style="position:absolute; top:24px; bottom:0; left:0; width:1px; background:#FFD9CF; box-shadow:0 0 6px #FF8A73; opacity:0; pointer-events:none"></div>
+          <div ref="{{ razEl }}" style="position:absolute; top:24px; bottom:0; left:0; width:1px; border-left:1px dashed #FFFFFF; opacity:0; pointer-events:none"></div>
+          <div ref="{{ phEl }}" style="position:absolute; left:0; top:0; bottom:0; width:2px; margin-left:-1px; background:#FF5A3C; pointer-events:none"><span style="position:absolute; left:-5px; top:0; width:12px; height:12px; background:#FF5A3C; clip-path:polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%)"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5">
+  <div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px">
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Platforms</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Windows x64, Linux AppImage</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Decodes</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">H.264, H.265, VP9, AV1</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Exports</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">MP4, WebM · ProRes 422 with the native addon</div></div>
+    <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">No FFmpeg</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">WebCodecs and Motion’s own muxer</div></div>
+  </div>
+</section>
+
+<section id="edit" data-screen-label="Edit tools" ref="{{ trRef }}" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#C8321F">Editing</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:720px">Premiere-style trims, frame-accurate.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Every edit point lands on a whole frame. Linked audio moves with its video, and one undo stack covers your edits and the agent’s.</p>
+    </div>
+    <div style="display:grid; grid-template-columns:{{ trCols }}; gap:28px 48px; margin-top:44px; align-items:start">
+      <div style="display:flex; flex-direction:column; border-top:1px solid #1D1B18">
+        <sc-for list="{{ trOps }}" as="o" hint-placeholder-count="7">
+          <button data-reveal="" onClick="{{ o.on }}" style="display:grid; grid-template-columns:3px minmax(0,1fr) auto; gap:14px; align-items:center; padding:14px 0; border:none; border-bottom:1px solid #E2DDD5; background:transparent; font:inherit; text-align:left; cursor:pointer">
+            <span style="align-self:stretch; border-radius:2px; background:{{ o.bar }}; transition:background .25s"></span>
+            <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; color:{{ o.c }}; transition:color .25s">{{ o.name }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8C867C">{{ o.key }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div data-reveal="" style="background:#16161A; color:#E7E5EA; border-radius:14px; padding:18px 18px 20px; box-shadow:0 30px 60px -30px rgba(29,27,24,.5)">
+        <div style="display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between">
+          <span style="font-size:17px; font-weight:600">{{ trName }}</span>
+          <span style="display:flex; gap:4px; font-family:'IBM Plex Mono',monospace; font-size:11px"><span style="padding:3px 8px; border-radius:4px; background:{{ trB0 }}; transition:background .25s">before</span><span style="padding:3px 8px; border-radius:4px; background:{{ trB1 }}; transition:background .25s">after</span></span>
+        </div>
+        <div style="position:relative; height:150px; margin-top:16px">
+          <div style="position:absolute; left:0; right:0; top:0; height:18px; border-bottom:1px solid #2A2A30">
+            <sc-for list="{{ trTicks }}" as="k"><span style="position:absolute; left:{{ k.x }}; bottom:0; height:6px; border-left:1px solid #3A3A42"><span style="position:absolute; left:3px; bottom:5px; font-family:'IBM Plex Mono',monospace; font-size:9px; color:#8A8792">{{ k.l }}</span></span></sc-for>
+          </div>
+          <sc-for list="{{ trGaps }}" as="g"><span style="position:absolute; left:{{ g.x }}; width:{{ g.w }}; top:28px; height:98px; border-radius:4px; background:repeating-linear-gradient(135deg, rgba(255,90,60,.22) 0 5px, transparent 5px 10px); box-shadow:inset 0 0 0 1px rgba(255,90,60,.5); opacity:{{ g.op }}; transition:opacity .4s"></span></sc-for>
+          <sc-for list="{{ trV }}" as="c">
+            <div style="position:absolute; left:{{ c.x }}; width:{{ c.w }}; top:28px; height:52px; padding:0 1px; opacity:{{ c.op }}; transition:left .7s cubic-bezier(.2,.8,.2,1), width .7s cubic-bezier(.2,.8,.2,1), opacity .4s">
+              <div style="height:100%; border-radius:4px; overflow:hidden; background:repeating-linear-gradient(90deg, rgba(255,255,255,.16) 0 1px, transparent 1px 22px), {{ c.bg }}; background-position:{{ c.bp }} 0; transition:background-position .7s cubic-bezier(.2,.8,.2,1); display:flex; flex-direction:column; justify-content:center; gap:3px; padding:0 8px; white-space:nowrap">
+                <span style="font-weight:600; font-size:12.5px">{{ c.name }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:rgba(255,255,255,.75)">{{ c.src }}</span>
+              </div>
+            </div>
+          </sc-for>
+          <sc-for list="{{ trA }}" as="c">
+            <div style="position:absolute; left:{{ c.x }}; width:{{ c.w }}; top:88px; height:38px; padding:0 1px; opacity:{{ c.op }}; transition:left .7s cubic-bezier(.2,.8,.2,1), width .7s cubic-bezier(.2,.8,.2,1), opacity .4s">
+              <div style="height:100%; border-radius:4px; overflow:hidden; background:#1F7A4F; position:relative"><svg viewBox="0 0 1000 30" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%"><path d="{{ waveA }}" fill="rgba(255,255,255,.45)"></path></svg></div>
+            </div>
+          </sc-for>
+          <div style="position:absolute; top:22px; bottom:12px; left:{{ trMX }}; width:2px; margin-left:-1px; background:#FF5A3C; opacity:{{ trMOp }}; transition:left .7s cubic-bezier(.2,.8,.2,1), opacity .3s"><span style="position:absolute; left:6px; bottom:-2px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#FF8A73; white-space:nowrap">{{ trMLabel }}</span></div>
+        </div>
+        <p style="margin:12px 0 0; font-size:14.5px; line-height:1.5; color:#B5B2BC; min-height:2.9em; text-wrap:pretty">{{ trDesc }}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="animate" data-screen-label="Motion graphics" ref="{{ kfRef }}" style="background:#111114; color:#E7E5EA; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#FF8A73">Motion graphics</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:720px">Animate anything, down to the letter.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#A9A6B0; text-wrap:pretty">Keyframes with bezier easing and AE-style expressions, per-character text animators, shape layers, masks, motion tracking and a 3D camera.</p>
+    </div>
+    <div style="display:grid; grid-template-columns:{{ kfCols }}; gap:16px; margin-top:44px">
+      <div data-reveal="" style="background:#1A1A1F; border-radius:14px; padding:16px; box-shadow:0 0 0 1px #2A2A30">
+        <div style="display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between"><span style="font-weight:600; font-size:14px">Graph editor · Position X</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8A8792">drag the handles</span></div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:12px">
+          <sc-for list="{{ ezPresets }}" as="p" hint-placeholder-count="4"><button onClick="{{ p.on }}" style="height:28px; padding:0 11px; border-radius:999px; border:1px solid {{ p.bd }}; background:{{ p.bg }}; color:{{ p.fg }}; font:inherit; font-size:12.5px; cursor:pointer">{{ p.label }}</button></sc-for>
+        </div>
+        <svg ref="{{ kfSvg }}" onPointerDown="{{ kfDown }}" viewBox="0 0 400 260" style="display:block; width:100%; height:auto; margin-top:12px; touch-action:none; user-select:none">
+          <rect x="30" y="20" width="340" height="220" rx="6" fill="#141418"></rect>
+          <path d="M30 50H370M30 90H370M30 130H370M30 170H370M30 210H370M115 20V240M200 20V240M285 20V240" stroke="#24242A" stroke-width="1"></path>
+          <path d="M30 210 L370 50" stroke="#3A3A42" stroke-width="1" stroke-dasharray="4 4"></path>
+          <path d="{{ ezCurve }}" fill="none" stroke="#FF5A3C" stroke-width="2.5"></path>
+          <path d="{{ ezH1L }}" stroke="#8A8792" stroke-width="1"></path><path d="{{ ezH2L }}" stroke="#8A8792" stroke-width="1"></path>
+          <rect x="25" y="205" width="10" height="10" transform="rotate(45 30 210)" fill="#FFD9CF"></rect><rect x="365" y="45" width="10" height="10" transform="rotate(45 370 50)" fill="#FFD9CF"></rect>
+          <circle data-h="1" cx="{{ ezH1x }}" cy="{{ ezH1y }}" r="8" fill="#16161A" stroke="#FFFFFF" stroke-width="2" style="cursor:grab"></circle>
+          <circle data-h="2" cx="{{ ezH2x }}" cy="{{ ezH2y }}" r="8" fill="#16161A" stroke="#FFFFFF" stroke-width="2" style="cursor:grab"></circle>
+        </svg>
+        <div style="margin-top:8px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#B5B2BC">{{ ezLabel }}</div>
+      </div>
+      <div data-reveal="" style="background:#1A1A1F; border-radius:14px; padding:16px; box-shadow:0 0 0 1px #2A2A30; display:flex; flex-direction:column; gap:14px">
+        <div style="display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between"><span style="font-weight:600; font-size:14px">Preview</span>
+          <button onClick="{{ wigToggle }}" style="height:28px; padding:0 11px; border-radius:6px; border:1px solid {{ wigBd }}; background:{{ wigBg }}; color:#E7E5EA; font-family:'IBM Plex Mono',monospace; font-size:11.5px; cursor:pointer">expression: wiggle(3, 18)</button>
+        </div>
+        <div style="position:relative; height:120px; border-radius:10px; background:#141418; overflow:hidden">
+          <span style="position:absolute; left:40px; right:40px; top:60px; height:1px; background:#2A2A30"></span>
+          <sc-for list="{{ onion }}" as="o"><span style="position:absolute; left:{{ o.x }}; top:56px; width:8px; height:8px; margin-left:-4px; border-radius:50%; background:#FF5A3C; opacity:.35"></span></sc-for>
+          <div ref="{{ kfObj }}" style="position:absolute; left:40px; top:36px; width:48px; height:48px; margin-left:-24px; border-radius:10px; background:#FF5A3C; box-shadow:0 10px 24px -8px rgba(255,90,60,.6); will-change:transform"></div>
+          <span ref="{{ kfFrame }}" style="position:absolute; right:10px; top:8px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">frame 00</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#8A8792">Text animator · per character · same curve</span>
+          <div ref="{{ kfText }}" style="font-size:clamp(30px,3.6vw,48px); font-weight:700; letter-spacing:-.035em; line-height:1.1; white-space:nowrap; overflow:hidden">
+            <sc-for list="{{ kfChars }}" as="c"><span data-k="{{ c.i }}" style="display:inline-block; white-space:pre; will-change:transform">{{ c.ch }}</span></sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="color" data-screen-label="Colour" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#C8321F">Colour</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:720px">Grade against broadcast scopes.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">1D and 3D LUTs, including .cube files, checked on a BT.709 vectorscope, waveform, RGB parade and histogram. The scopes below are computed from the frame as you change it.</p>
+    </div>
+    <div data-reveal="" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:36px">
+      <sc-for list="{{ luts }}" as="l" hint-placeholder-count="5"><button onClick="{{ l.on }}" style="height:36px; padding:0 14px; border-radius:999px; border:1px solid {{ l.bd }}; background:{{ l.bg }}; color:{{ l.fg }}; font:inherit; font-size:14px; cursor:pointer">{{ l.label }}</button></sc-for>
+      <label style="margin-left:auto; display:flex; align-items:center; gap:10px; font-size:13.5px; color:#5F5A52">Intensity<input type="range" min="0" max="100" value="{{ lutK }}" onInput="{{ setLutK }}" onChange="{{ setLutK }}" style="width:140px"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; width:34px">{{ lutK }}%</span></label>
+    </div>
+    <div style="display:grid; grid-template-columns:{{ coCols }}; gap:14px; margin-top:16px">
+      <div data-reveal="" style="position:relative; aspect-ratio:16/9; border-radius:12px; overflow:hidden; background:#0E0E11"><canvas ref="{{ coFrame }}" width="480" height="270" style="position:absolute; inset:0; width:100%; height:100%; display:block"></canvas><span style="position:absolute; left:10px; top:10px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#E7E5EA; background:rgba(14,14,17,.7); padding:2px 7px; border-radius:3px">{{ lutName }}</span></div>
+      <div style="display:grid; grid-template-rows:auto auto; gap:14px">
+        <div data-reveal="" style="background:#16161A; border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">Waveform · luma</span><canvas ref="{{ coWave }}" width="480" height="200" style="width:100%; height:auto; display:block; border-radius:4px"></canvas></div>
+        <div data-reveal="" style="background:#16161A; border-radius:12px; padding:10px; display:flex; gap:12px; align-items:center"><canvas ref="{{ coVec }}" width="220" height="220" style="width:44%; max-width:200px; height:auto; display:block"></canvas><div style="display:flex; flex-direction:column; gap:4px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">Vectorscope · BT.709</span><span style="font-size:13px; line-height:1.45; color:#B5B2BC">Hue sits around the centre by angle, saturation by distance. Targets mark 75% colour bars.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="agent" data-screen-label="Agent" ref="{{ agRef }}" style="background:#111114; color:#E7E5EA; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#FF8A73">Agent</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:780px">It edits between your edits, not over them.</h2></div>
+      <p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#A9A6B0; text-wrap:pretty">An agent calls the same operations you use, locally or as a hosted run on your XENO account. Before each turn it checks what you changed, so it builds on your work instead of restoring its own.</p>
+    </div>
+    <div data-reveal="" style="margin-top:40px; background:#1A1A1F; border-radius:14px; overflow:hidden; box-shadow:0 0 0 1px #2A2A30, 0 40px 80px -30px rgba(0,0,0,.7); font-size:12px">
+      <div style="min-height:46px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; padding:8px 16px; border-bottom:1px solid #2A2A30">
+        <span style="font-weight:600; font-size:13px">Agent</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#A9A6B0">“Cut this interview into a highlight reel”</span>
+        <span style="display:flex; align-items:center; gap:7px; height:24px; padding:0 9px; border-radius:999px; background:#26262C; color:{{ agStC }}; font-size:11.5px"><span style="width:7px; height:7px; border-radius:50%; background:{{ agStC }}"></span>{{ agStatus }}</span>
+        <button onClick="{{ agReplay }}" style="margin-left:auto; height:28px; padding:0 11px; border:1px solid #3A3A42; border-radius:6px; background:transparent; color:#E7E5EA; font:inherit; cursor:pointer">Replay</button>
+      </div>
+      <div style="display:grid; grid-template-columns:{{ agCols }}">
+        <div style="padding:18px; min-width:0; display:flex; flex-direction:column; gap:12px">
+          <div style="position:relative; height:132px">
+            <span style="position:absolute; left:0; top:0; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">V2</span><span style="position:absolute; left:0; top:40px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">V1</span><span style="position:absolute; left:0; top:96px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">A1</span>
+            <div style="position:absolute; left:28px; right:0; top:0; bottom:0">
+              <sc-for list="{{ agClips }}" as="c"><div style="position:absolute; left:{{ c.x }}; width:{{ c.w }}; top:{{ c.y }}; height:{{ c.h }}; padding:0 1px; opacity:{{ c.op }}; transition:left .7s cubic-bezier(.2,.8,.2,1), width .7s cubic-bezier(.2,.8,.2,1), opacity .4s"><div style="height:100%; border-radius:4px; background:{{ c.bg }}; box-shadow:{{ c.sh }}; display:flex; align-items:center; padding:0 7px; overflow:hidden; white-space:nowrap; font-weight:600; font-size:11px; transition:box-shadow .3s">{{ c.label }}</div></div></sc-for>
+              <span style="position:absolute; left:0; top:126px; height:4px; width:{{ agExpW }}; border-radius:2px; background:#FF5A3C; transition:width .9s linear"></span>
+              <div style="position:absolute; top:-4px; bottom:-4px; left:{{ agCutX }}; width:2px; margin-left:-1px; background:#FFFFFF; opacity:{{ agCutOp }}; transition:left .5s, opacity .3s"></div>
+            </div>
+          </div>
+          <div style="display:{{ agNoteD }}; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:8px; background:#26203A; color:#E7E5EA; font-size:13px; line-height:1.45"><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#C4B5FD; flex:none; margin-top:2px">changes_since</span>You trimmed the last clip by 12 frames between turns. The agent keeps your trim and carries on from there.</div>
+        </div>
+        <div style="padding:14px; border-left:1px solid #2A2A30; display:flex; flex-direction:column; gap:4px; font-family:'IBM Plex Mono',monospace; min-width:0">
+          <sc-for list="{{ agRows }}" as="r" hint-placeholder-count="7">
+            <div style="display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:8px; align-items:start; padding:8px; border-radius:6px; background:{{ r.bg }}; opacity:{{ r.op }}; transition:opacity .3s, background .3s">
+              <span style="font-size:10.5px; color:{{ r.whoC }}">{{ r.who }}</span>
+              <span style="display:flex; flex-direction:column; gap:2px; min-width:0"><span style="color:{{ r.fnC }}; font-size:12px">{{ r.fn }}</span><span style="color:#A9A6B0; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ r.arg }}</span></span>
+              <span style="font-size:10px; padding:2px 6px; border-radius:4px; background:{{ r.cBg }}; color:{{ r.cFg }}; display:{{ r.cD }}">{{ r.cls }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="padding:9px 16px; border-top:1px solid #2A2A30; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">Capabilities are named motion.&lt;domain&gt;.&lt;verb&gt;. This run is illustrative.</div>
+    </div>
+  </div>
+</section>
+
+<dc-import name="SuiteLoop" current="motion" hint-size="100%,640px"></dc-import>
+
+<section id="status" data-screen-label="Status" style="padding:110px 24px">
+  <div style="max-width:1180px; margin:0 auto">
+    <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#C8321F">Where it stands</div>
+    <h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Honest about what ships and what doesn’t yet.</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px">
+      <sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3">
+        <div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px">
+          <div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div>
+          <sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section id="download" data-screen-label="Download" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start">
+    <div>
+      <h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Motion.</h2>
+      <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:440px; text-wrap:pretty">Version 0.10.1 for Windows and Linux.</p>
+      <div data-reveal="" style="margin-top:18px; padding:14px 16px; border-radius:10px; background:#FBF3E2; color:#6B5212; font-size:14px; line-height:1.5; max-width:460px">Installers are unsigned for now. Windows shows a SmartScreen “unknown publisher” warning, and the app shows an UNSIGNED BUILD badge in its title bar.</div>
+      <sc-if value="{{ osShow }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px; display:inline-flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; color:{{ osC }}; background:{{ osBg }}; border-radius:6px; padding:6px 10px"><span style="width:7px; height:7px; border-radius:50%; background:{{ osC }}"></span>{{ osNote }}</div></sc-if>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px">
+      <div data-reveal="" style="border:1px solid {{ dlWinBd }}; border-radius:10px; padding:20px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Windows x64</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">Installer · 0.10.1</div></div><a href="/" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">Download</a></div>
+      <div data-reveal="" style="border:1px solid {{ dlLinBd }}; border-radius:10px; padding:20px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Linux x64</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">AppImage · 0.10.1</div></div><a href="/" style="border:1px solid #1D1B18; color:#1D1B18; font-size:15px; font-weight:500; padding:10px 15px; border-radius:7px">Download</a></div>
+      <div data-reveal="" style="border:1px solid #E2DDD5; border-radius:10px; padding:20px; display:flex; justify-content:space-between; gap:14px; align-items:center; color:#5F5A52"><div style="font-weight:600; font-size:17px; color:#1D1B18">macOS</div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px">not yet available</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="releases" data-screen-label="Releases" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1180px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#C8321F">Releases</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance">Seven releases in three weeks.</h2></div>
+      <span data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">markers on the release timeline · click one</span>
+    </div>
+    <div data-reveal="" style="position:relative; margin-top:44px; height:86px">
+      <span style="position:absolute; left:0; right:0; top:44px; height:1px; background:#1D1B18"></span>
+      <sc-for list="{{ relTicks }}" as="k"><span style="position:absolute; left:{{ k.x }}; top:38px; height:12px; border-left:1px solid #B3ADA3"></span></sc-for>
+      <sc-for list="{{ rels }}" as="r" hint-placeholder-count="7">
+        <button onClick="{{ r.on }}" style="position:absolute; left:{{ r.x }}; top:0; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; padding:0; border:none; background:transparent; font:inherit; cursor:pointer">
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ r.c }}; white-space:nowrap">v{{ r.v }}</span>
+          <span style="width:{{ r.s }}; height:{{ r.s }}; margin-top:{{ r.m }}; background:{{ r.bg }}; clip-path:polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%); transition:background .25s"></span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C867C; white-space:nowrap; margin-top:10px; display:{{ r.dD }}">{{ r.d }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div data-reveal="" style="margin-top:28px; display:grid; grid-template-columns:{{ relCols }}; gap:14px 48px; padding:26px 28px; background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px">
+      <div style="display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:#C8321F">v{{ rel.v }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">{{ rel.d }}</span></div>
+      <div style="display:flex; flex-direction:column; gap:8px"><span style="font-size:22px; font-weight:600; letter-spacing:-.015em; line-height:1.2">{{ rel.t }}</span><p style="margin:0; font-size:15.5px; line-height:1.55; color:#5F5A52; max-width:720px; text-wrap:pretty">{{ rel.b }}</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px">
+  <div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start">
+    <div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#C8321F">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div>
+    <div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18">
+      <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5">
+        <div data-reveal="" style="border-bottom:1px solid #E2DDD5">
+          <button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6">
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span>
+            <span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span>
+            <span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span>
+          </button>
+          <div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#FF8A73">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Motion&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = { clips: null, sel: null, tool: 'select', snap: true, off: {}, msg: '', msgAt: 0, hN: 0, fN: 0, vw: 1400, vh: 900, playing: false, trOp: 0, trPh: 0, ez: [0.16, 1, 0.3, 1], ezP: 1, wig: false, lut: 2, lutK: 100, agN: 0, agDone: false, rel: 6, faq: 0, nlEmail: '', nlSent: false, osName: '' };
+  hWrap = React.createRef(); hInner = React.createRef(); h1El = React.createRef(); tcEl = React.createRef(); tc2El = React.createRef(); tc3El = React.createRef(); monShot = React.createRef(); mtL = React.createRef(); mtR = React.createRef(); monLufs = React.createRef(); monCv = React.createRef(); tlArea = React.createRef(); phEl = React.createRef();
+  trRef = React.createRef(); kfRef = React.createRef(); kfSvg = React.createRef(); kfObj = React.createRef(); kfFrame = React.createRef(); kfText = React.createRef();
+  coFrame = React.createRef(); coWave = React.createRef(); coVec = React.createRef(); agRef = React.createRef();
+
+  snapEl = React.createRef(); razEl = React.createRef();
+  SRC = { title: [10, 'Title', 'per-character animator', '#B8323F'], dusk: [6, 'Dusk.mp4', 'H.264', '#4C63D9'], shapes: [6, 'Shapes', 'shape layer', '#5B4BC4'], bars: [6, 'Bars', 'audio-reactive', '#3F7FB0'], vo: [10, 'VO.wav', '', '#1F7A4F'], music: [10, 'Music.wav', '', '#165C3C'] };
+  TRK = [['V2', 32], ['V1', 44], ['A1', 38], ['A2', 32]];
+  DEF = [{ id: 'c1', tr: 'V2', src: 'title', s: 0.3, e: 9.8, in: 0 }, { id: 'c2', tr: 'V1', src: 'dusk', s: 0, e: 3.4, in: 0 }, { id: 'c3', tr: 'V1', src: 'shapes', s: 3.4, e: 6.6, in: 0 }, { id: 'c4', tr: 'V1', src: 'bars', s: 6.6, e: 10, in: 0 }, { id: 'c5', tr: 'A1', src: 'vo', s: 0.5, e: 9.4, in: 0.5 }, { id: 'c6', tr: 'A2', src: 'music', s: 0, e: 10, in: 0 }];
+  hist = []; fut = []; nid = 7;
+  clipsNow() { return this.state.clips || this.DEF; }
+  at(tr, t) { return this.clipsNow().find(c => c.tr === tr && t >= c.s && t < c.e && !this.state.off[tr]); }
+  say(msg) { this.setState({ msg, msgAt: Date.now() }); clearTimeout(this._msgT); this._msgT = setTimeout(() => this.setState({ msg: '' }), 3200); }
+  commit(before, next, msg) { this.hist.push(before); if (this.hist.length > 60) this.hist.shift(); this.fut = []; this.setState({ clips: next, hN: this.hist.length, fN: 0 }); if (msg) this.say(msg); }
+  doUndo = () => { const p = this.hist.pop(); if (!p) return; this.fut.push(this.clipsNow()); this.setState({ clips: p, hN: this.hist.length, fN: this.fut.length }); this.say('Undo'); };
+  doRedo = () => { const n = this.fut.pop(); if (!n) return; this.hist.push(this.clipsNow()); this.setState({ clips: n, hN: this.hist.length, fN: this.fut.length }); this.say('Redo'); };
+  doReset = () => { this.commit(this.clipsNow(), this.DEF.map(c => Object.assign({}, c)), 'Edit reset'); this.setState({ sel: null, off: {} }); };
+  split(c, t) {
+    t = Math.round(t * 30) / 30; if (t <= c.s + 0.1 || t >= c.e - 0.1) return false;
+    const cs = this.clipsNow(), a = Object.assign({}, c, { e: t }), b = Object.assign({}, c, { id: 'c' + (this.nid++), s: t, in: c.in + (t - c.s) });
+    this.commit(cs, cs.filter(x => x.id !== c.id).concat([a, b]), 'Razor · split ' + this.SRC[c.src][1] + ' at ' + this.fmt(t)); this.setState({ sel: b.id }); return true;
+  }
+  lift(ripple) {
+    const cs = this.clipsNow(), c = cs.find(x => x.id === this.state.sel); if (!c) return;
+    const d = c.e - c.s, next = cs.filter(x => x.id !== c.id).map(x => ripple && x.tr === c.tr && x.s >= c.e ? Object.assign({}, x, { s: x.s - d, e: x.e - d }) : x);
+    this.commit(cs, next, (ripple ? 'Ripple delete · ' : 'Lift · ') + this.SRC[c.src][1] + (ripple ? ' · gap closed' : ' · gap left')); this.setState({ sel: null });
+  }
+  snapTo(v, excl, pxPerSec) {
+    if (!this.state.snap) return [v, null]; const th = 8 / pxPerSec; let best = null, bd = th;
+    const T = [0, this.DUR, this.t]; this.clipsNow().forEach(c => { if (c.id !== excl) { T.push(c.s, c.e); } });
+    T.forEach(x => { const d = Math.abs(x - v); if (d < bd) { bd = d; best = x; } });
+    return best == null ? [v, null] : [best, best];
+  }
+  showLine(el, t) { if (!el) return; if (t == null) { el.style.opacity = '0'; return; } el.style.opacity = '1'; el.style.left = (t / this.DUR * 100) + '%'; }
+  tlDown = e => {
+    if (e.button !== 0) return; const area = this.tlArea.current, r = area.getBoundingClientRect(), pps = r.width / this.DUR, tx = this.cl((e.clientX - r.left) / r.width) * this.DUR;
+    const cEl = e.target.closest && e.target.closest('[data-clip]');
+    if (!cEl || e.clientY - r.top < 24) { if (!cEl) this.setState({ sel: null }); this.scrubDown(e); return; }
+    this.stop(); this.autoRunning = false;
+    const c = this.clipsNow().find(x => x.id === cEl.dataset.clip); if (!c) return;
+    if (this.state.tool === 'razor') { const sp = this.snapTo(tx, null, pps); this.split(c, sp[0]); return; }
+    const cr = cEl.getBoundingClientRect(), edge = e.clientX - cr.left < 8 ? 'L' : cr.right - e.clientX < 8 ? 'R' : 'M';
+    this.setState({ sel: c.id });
+    const before = this.clipsNow(), same = before.filter(x => x.tr === c.tr && x.id !== c.id), prevE = Math.max(0, ...same.filter(x => x.e <= c.s + 1e-6).map(x => x.e)), nextS = Math.min(this.DUR, ...same.filter(x => x.s >= c.e - 1e-6).map(x => x.s)), srcLen = this.SRC[c.src][0];
+    let moved = false;
+    const mv = ev => {
+      const dt = (ev.clientX - e.clientX) / pps; if (Math.abs(ev.clientX - e.clientX) > 2) moved = true; if (!moved) return;
+      let s = c.s, en = c.e, inn = c.in, snapT = null;
+      if (edge === 'M') { const len = c.e - c.s; s = c.s + dt; const a = this.snapTo(s, c.id, pps), b2 = this.snapTo(s + len, c.id, pps); if (a[1] != null) { s = a[0]; snapT = a[1]; } else if (b2[1] != null) { s = b2[0] - len; snapT = b2[1]; } s = Math.max(prevE, Math.min(nextS - len, s)); en = s + len; }
+      else if (edge === 'L') { s = c.s + dt; const a = this.snapTo(s, c.id, pps); if (a[1] != null) { s = a[0]; snapT = a[1]; } s = Math.max(prevE, c.s - c.in, Math.min(c.e - 0.2, s)); inn = c.in + (s - c.s); }
+      else { en = c.e + dt; const a = this.snapTo(en, c.id, pps); if (a[1] != null) { en = a[0]; snapT = a[1]; } en = Math.min(nextS, c.s + (srcLen - c.in), Math.max(c.s + 0.2, en)); }
+      s = Math.round(s * 30) / 30; en = Math.round(en * 30) / 30;
+      this.showLine(this.snapEl.current, snapT);
+      this.setState({ clips: before.map(x => x.id === c.id ? Object.assign({}, x, { s, e: en, in: inn }) : x) });
+    };
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); this.showLine(this.snapEl.current, null);
+      if (moved) { const now = this.clipsNow().find(x => x.id === c.id); this.hist.push(before); this.fut = []; this.setState({ hN: this.hist.length, fN: 0 }); this.say((edge === 'M' ? 'Move · ' : 'Trim · ') + this.SRC[c.src][1] + ' · ' + this.fmt(now.s) + ' → ' + this.fmt(now.e)); } };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  };
+  tlHover = e => {
+    const area = this.tlArea.current; if (!area) return; const r = area.getBoundingClientRect(), y = e.clientY - r.top, cEl = e.target.closest && e.target.closest('[data-clip]');
+    let cur = 'default';
+    if (y < 24) cur = 'ew-resize';
+    else if (cEl) { if (this.state.tool === 'razor') cur = 'crosshair'; else { const cr = cEl.getBoundingClientRect(); cur = e.clientX - cr.left < 8 || cr.right - e.clientX < 8 ? 'col-resize' : 'grab'; } }
+    area.style.cursor = cur;
+    if (this.state.tool === 'razor' && cEl && y >= 24) { const pps = r.width / this.DUR, t = this.snapTo(this.cl((e.clientX - r.left) / r.width) * this.DUR, null, pps)[0]; this.showLine(this.razEl.current, t); } else this.showLine(this.razEl.current, null);
+  };
+  tlLeave = () => this.showLine(this.razEl.current, null);
+  DUR = 10; T0 = 4.6; t = 0; dir = 1;
+  L1 = 'Cut. Composite.'; L2 = 'One timeline.'; KT = 'Down to the letter.';
+  cl(x) { return Math.min(1, Math.max(0, x)); }
+  sm(x) { x = this.cl(x); return x * x * (3 - 2 * x); }
+  bump(x) { return x > 0 && x < 1 ? Math.sin(Math.PI * x) : 0; }
+  fmt(t) { const f = Math.round(t * 30), s = Math.floor(f / 30), p = n => String(n).padStart(2, '0'); return '00:00:' + p(s) + ':' + p(f % 30); }
+  charK(i, t) {
+    const n1 = this.L1.length, st = i < n1 ? 0.35 + i * 0.06 : 3.3 + (i - n1) * 0.05, k = this.sm((t - st) / 0.55);
+    const w = i < n1 ? this.bump((t - (6.9 + i * 0.07)) / 0.5) : this.bump((t - (8.3 + (i - n1) * 0.05)) / 0.5);
+    return { k, w, r: (i % 2 ? 6 : -6) * (1 - k) };
+  }
+  applyT(t) {
+    const h1 = this.h1El.current;
+    if (h1) h1.querySelectorAll('[data-ch]').forEach(el => {
+      const i = +el.dataset.ch, c = this.charK(i, t);
+      el.style.opacity = c.k.toFixed(3);
+      el.style.transform = 'translateY(' + ((1 - c.k) * 0.45 - c.w * 0.12).toFixed(3) + 'em) rotate(' + c.r.toFixed(1) + 'deg)';
+      el.style.filter = c.k < 0.999 ? 'blur(' + ((1 - c.k) * 10).toFixed(1) + 'px)' : 'none';
+      el.style.color = c.w > 0.35 ? '#C8321F' : '';
+    });
+    const tc = this.fmt(t);
+    if (this.tcEl.current) this.tcEl.current.textContent = tc;
+    if (this.tc2El.current) this.tc2El.current.textContent = tc;
+    if (this.tc3El.current) this.tc3El.current.textContent = tc;
+    const cv1 = this.at('V1', t); if (this.monShot.current) this.monShot.current.textContent = cv1 ? 'V1 · ' + this.SRC[cv1.src][1] + ' · ' + this.fmt(cv1.in + t - cv1.s) : 'V1 · empty';
+    const lv = (s) => 0.28 + 0.62 * Math.abs(Math.sin(t * 7.3 + s) * Math.sin(t * 2.1 + s * 2));
+    const aud = (this.at('A1', t) ? 0.7 : 0) + (this.at('A2', t) ? 0.45 : 0), lL = Math.min(1, lv(0) * aud), lR = Math.min(1, lv(1.3) * aud);
+    if (this.mtL.current) this.mtL.current.style.height = (lL * 100).toFixed(1) + '%';
+    if (this.mtR.current) this.mtR.current.style.height = (lR * 100).toFixed(1) + '%';
+    if (this.monLufs.current) this.monLufs.current.textContent = aud ? '−' + (18 - (lL + lR) * 3.2).toFixed(1) + ' LUFS' : '−∞ LUFS';
+    if (this.phEl.current) this.phEl.current.style.left = (t / this.DUR * 100) + '%';
+    const ar = this.tlArea.current;
+    if (ar) ar.querySelectorAll('[data-clip]').forEach(el => { const on = t >= +el.dataset.s && t < +el.dataset.e; el.style.boxShadow = on ? 'inset 0 0 0 1.5px rgba(255,255,255,.9)' : 'none'; });
+    this.drawMon(t);
+  }
+  drawMon(t) {
+    const c = this.monCv.current; if (!c || !c.offsetWidth) return; const x = c.getContext('2d'), W = 640, H = 360;
+    const A = u => { const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1E1B4B'); g.addColorStop(0.55, '#7A3FD1'); g.addColorStop(0.85, '#F07A62'); g.addColorStop(1, '#FCC98A'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+      const sx = 140 + u * 70, sy = 250 - u * 18; const sg = x.createRadialGradient(sx, sy, 0, sx, sy, 160); sg.addColorStop(0, 'rgba(255,236,190,.95)'); sg.addColorStop(1, 'rgba(255,200,150,0)'); x.fillStyle = sg; x.fillRect(0, 0, W, H);
+      x.fillStyle = '#FFF1D6'; x.beginPath(); x.arc(sx, sy, 34, 0, 7); x.fill();
+      ['#3A2470', '#1E1640'].forEach((col, j) => { x.fillStyle = col; x.beginPath(); x.moveTo(0, H); for (let px = 0; px <= W; px += 10) x.lineTo(px, H * (0.72 + j * 0.1) - 26 * Math.sin(px * 0.012 + j * 2 + u * 0.15)); x.lineTo(W, H); x.fill(); }); };
+    const B = u => { x.fillStyle = '#E5483A'; x.fillRect(0, 0, W, H);
+      for (let i = 0; i < 6; i++) { x.save(); x.translate(90 + i * 95, 180 + Math.sin(u * 2 + i) * 40); x.rotate(u * 1.2 + i * 0.6); x.fillStyle = i % 2 ? '#1D1B18' : '#FFD9CF'; const s = 46 + (i % 3) * 14; x.fillRect(-s / 2, -s / 2, s, s); x.restore(); }
+      x.strokeStyle = '#FFFFFF'; x.lineWidth = 3; x.beginPath(); x.arc(W / 2, H / 2, 60 + u * 40, 0, 7); x.stroke(); };
+    const C = u => { x.fillStyle = '#0F0F13'; x.fillRect(0, 0, W, H); const n = 32, bw = W / n;
+      for (let i = 0; i < n; i++) { const v = 0.18 + 0.82 * Math.abs(Math.sin(u * 3 + i * 0.7) * Math.sin(u * 1.3 + i * 0.31)); x.fillStyle = i % 5 === 0 ? '#FF5A3C' : '#5B7CFA'; x.fillRect(i * bw + 3, H * 0.9 - v * H * 0.62, bw - 6, v * H * 0.62); } };
+    const v1 = this.at('V1', t);
+    if (!v1) { x.fillStyle = '#0B0B0E'; x.fillRect(0, 0, W, H); x.fillStyle = 'rgba(255,255,255,.35)'; x.font = '500 16px "IBM Plex Mono", monospace'; x.fillText('No clip on V1', 24, 40); }
+    else { const u = v1.in + (t - v1.s); if (v1.src === 'dusk') A(u); else if (v1.src === 'shapes') B(u); else C(u); }
+    const v2 = this.at('V2', t); if (!v2) return;
+    const lt = v2.in + (t - v2.s);
+    x.font = '700 40px "Schibsted Grotesk", sans-serif'; x.textBaseline = 'alphabetic';
+    const lines = [[this.L1, 0, '#FFFFFF'], [this.L2, this.L1.length, 'rgba(255,255,255,.72)']];
+    lines.forEach((L, li) => { let px = 30; for (let j = 0; j < L[0].length; j++) { const ch = L[0][j]; const c3 = this.charK(L[1] + j, lt); x.globalAlpha = c3.k; x.fillStyle = c3.w > 0.35 ? '#FFD9CF' : L[2]; x.fillText(ch, px, H - 72 + li * 44 + (1 - c3.k) * 18 - c3.w * 5); px += x.measureText(ch).width - 1.2; } });
+    x.globalAlpha = 1;
+  }
+  setT(t) { this.t = Math.min(this.DUR, Math.max(0, t)); this.applyT(this.t); }
+  play(d) { this.dir = d || 1; this.autoStop = null; if (this.t >= this.DUR - 0.01 && this.dir > 0) this.t = 0; this.playing = true; this.setState({ playing: true }); }
+  stop() { if (!this.playing) return; this.playing = false; this.setState({ playing: false }); }
+  onPlay = () => { this.playing ? this.stop() : this.play(1); };
+  heroP() { const w = this.hWrap.current, i = this.hInner.current; if (!w || !i) return 0; return this.cl(-(w.getBoundingClientRect().top - 60) / Math.max(1, w.offsetHeight - i.clientHeight)); }
+  heroVis() { const i = this.hInner.current; if (!i) return false; const r = i.getBoundingClientRect(); return r.bottom > 80 && r.top < window.innerHeight - 80; }
+  scrubAt(e) { const a = this.tlArea.current; if (!a) return; const r = a.getBoundingClientRect(); this.setT(this.cl((e.clientX - r.left) / r.width) * this.DUR); }
+  scrubDown = e => { this.stop(); this.scrubAt(e); const mv = ev => this.scrubAt(ev), up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); };
+  onKey = e => {
+    const tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || !this.heroVis()) return;
+    const k = e.key.toLowerCase();
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? this.doRedo() : this.doUndo(); return; }
+    if (mod && k === 'y') { e.preventDefault(); this.doRedo(); return; }
+    if (mod && k === 'k') { e.preventDefault(); const cs = this.clipsNow().filter(c => this.t > c.s + 0.1 && this.t < c.e - 0.1 && (!this.state.sel || c.id === this.state.sel)); if (cs.length) { const before = this.clipsNow(); let next = before.slice(); cs.forEach(c => { const t = Math.round(this.t * 30) / 30; next = next.filter(x => x.id !== c.id).concat([Object.assign({}, c, { e: t }), Object.assign({}, c, { id: 'c' + (this.nid++), s: t, in: c.in + (t - c.s) })]); }); this.commit(before, next, 'Split ' + cs.length + (cs.length > 1 ? ' clips' : ' clip') + ' at the playhead'); } return; }
+    if (mod) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.state.sel) { e.preventDefault(); this.lift(e.shiftKey); return; }
+    if (k === 'v') { this.setState({ tool: 'select' }); return; } if (k === 'c') { this.setState({ tool: 'razor' }); return; } if (k === 's') { this.setState(s => ({ snap: !s.snap })); this.say(this.state.snap ? 'Snapping off' : 'Snapping on'); return; }
+    if (e.key === 'Home') { e.preventDefault(); this.stop(); this.setT(0); return; } if (e.key === 'End') { e.preventDefault(); this.stop(); this.setT(this.DUR); return; }
+    if (e.key === 'Escape') { this.setState({ sel: null }); return; }
+    if (k === ' ') { e.preventDefault(); this.onPlay(); } else if (k === 'k') this.stop(); else if (k === 'l') this.play(1); else if (k === 'j') this.play(-1);
+    else if (e.key === 'ArrowRight') { e.preventDefault(); this.stop(); this.setT(this.t + 1 / 30); } else if (e.key === 'ArrowLeft') { e.preventDefault(); this.stop(); this.setT(this.t - 1 / 30); }
+  };
+  frame = now => {
+    this.raf = requestAnimationFrame(this.frame);
+    const dt = this.lastNow ? Math.min(0.05, (now - this.lastNow) / 1000) : 0; this.lastNow = now;
+    if (this.playing) {
+      let t = this.t + dt * this.dir;
+      if (this.autoStop != null && t >= this.autoStop) { t = this.autoStop; this.autoStop = null; this.stop(); }
+      if (t >= this.DUR) { t = this.DUR; this.stop(); } if (t <= 0) { t = 0; this.stop(); }
+      this.setT(t);
+    }
+    this.kfTick(now);
+  };
+  ezAt(x, p) {
+    const bx = (s, a, b) => 3 * a * s * (1 - s) * (1 - s) + 3 * b * s * s * (1 - s) + s * s * s;
+    let lo = 0, hi = 1, s = x; for (let i = 0; i < 24; i++) { s = (lo + hi) / 2; if (bx(s, p[0], p[2]) < x) lo = s; else hi = s; }
+    return bx(s, p[1], p[3]);
+  }
+  kfTick(now) {
+    const sec = this.kfRef.current; if (!sec) return; const r = sec.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) return;
+    const L = 2.2, ph = (now / 1000) % L, u = this.cl(ph / 1.6), p = this.state.ez, v = this.ezAt(u, p);
+    const o = this.kfObj.current;
+    if (o) { const w = o.parentElement.clientWidth - 80, wig = this.state.wig && !this.reduce ? Math.sin(now / 1000 * 3 * 6.283) * 9 + Math.sin(now / 1000 * 7.1) * 5 : 0; o.style.transform = 'translate(' + (v * w).toFixed(1) + 'px,' + wig.toFixed(1) + 'px) rotate(' + (v * 180).toFixed(1) + 'deg)'; }
+    if (this.kfFrame.current) this.kfFrame.current.textContent = 'frame ' + String(Math.min(48, Math.round(u * 48))).padStart(2, '0') + ' / 48';
+    const tx = this.kfText.current;
+    if (tx) tx.querySelectorAll('[data-k]').forEach(el => { const i = +el.dataset.k, uu = this.cl((ph - i * 0.045) / 0.9), vv = this.ezAt(uu, p); el.style.transform = 'translateY(' + ((1 - vv) * 0.9).toFixed(3) + 'em)'; el.style.opacity = this.cl(vv * 1.4).toFixed(3); el.style.color = vv > 1.02 ? '#FF8A73' : ''; });
+  }
+  EZ = [['Linear', [0, 0, 1, 1]], ['Ease out', [0.16, 1, 0.3, 1]], ['Ease in-out', [0.65, 0, 0.35, 1]], ['Overshoot', [0.34, 1.56, 0.64, 1]]];
+  kfPt(e) { const s = this.kfSvg.current, r = s.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * 400, sy = (e.clientY - r.top) / r.height * 260; return [this.cl((sx - 30) / 340), Math.max(-0.6, Math.min(1.6, (210 - sy) / 160))]; }
+  kfDown = e => {
+    const hnd = e.target && e.target.getAttribute && e.target.getAttribute('data-h'); if (!hnd) return; e.preventDefault();
+    const mv = ev => { const q = this.kfPt(ev), z = this.state.ez.slice(); if (hnd === '1') { z[0] = q[0]; z[1] = q[1]; } else { z[2] = q[0]; z[3] = q[1]; } this.setState({ ez: z, ezP: -1 }); };
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+  };
+  TR = [
+    ['Razor', 'C', 'Split a clip at the playhead, on one track or across all of them.', [['A', 0, 100], ['B', 100, 220], ['B2', 160, 160, 0], ['C', 220, 300]], [['A', 0, 100], ['B', 100, 160], ['B2', 160, 220], ['C', 220, 300]], 160, 'cut'],
+    ['Ripple trim', 'Q / W', 'Trim to the playhead and close the gap in the same move.', [['A', 0, 100], ['B', 100, 220], ['C', 220, 300]], [['A', 0, 100], ['B', 100, 190], ['C', 190, 270]], 190, 'trim'],
+    ['Roll', '', 'Move the edit point between two clips. The total length stays the same.', [['A', 0, 100], ['B', 100, 220], ['C', 220, 300]], [['A', 0, 130], ['B', 130, 220], ['C', 220, 300]], 130, 'edit point'],
+    ['Slip', '', 'Change which part of the source a clip shows. Its place on the timeline stays fixed.', [['A', 0, 100], ['B', 100, 220, 1, 'src 04:00 → 08:00', 0], ['C', 220, 300]], [['A', 0, 100], ['B', 100, 220, 1, 'src 05:10 → 09:10', -44], ['C', 220, 300]], null, ''],
+    ['Slide', '', 'Move a clip along the timeline while its neighbours trim to make room.', [['A', 0, 100], ['B', 100, 220], ['C', 220, 300]], [['A', 0, 130], ['B', 130, 250], ['C', 250, 300]], null, ''],
+    ['Lift', '', 'Remove the range between In and Out and leave a gap.', [['A', 0, 100], ['B', 100, 220], ['C', 220, 300]], [['A', 0, 100], ['B', 100, 220, 0], ['C', 220, 300]], null, '', [100, 220]],
+    ['Extract', '', 'Remove the range between In and Out and close the gap.', [['A', 0, 100], ['B', 100, 220], ['C', 220, 300]], [['A', 0, 100], ['B', 100, 100, 0], ['C', 100, 180]], null, '']];
+  CLIPC = { A: '#4C63D9', B: '#5B4BC4', B2: '#6E5BD6', C: '#3F7FB0' };
+  trVals(S) {
+    const op = this.TR[S.trOp], st = S.trPh ? op[4] : op[3], pct = f => (f / 3) + '%';
+    const mk = c => ({ x: pct(c[1]), w: pct(c[2] - c[1]), op: c[3] === 0 ? 0 : 1, name: c[0] === 'B2' ? 'B' : c[0], src: c[4] || ((c[2] - c[1]) + ' frames'), bp: (c[5] || 0) + 'px', bg: this.CLIPC[c[0]] });
+    const gap = op[7] && S.trPh ? [{ x: pct(op[7][0]), w: pct(op[7][1] - op[7][0]), op: 1 }] : [{ x: '0%', w: '0%', op: 0 }];
+    return { trName: op[0], trDesc: op[2], trV: st.map(mk), trA: st.map(mk), trGaps: gap, trMX: pct(op[5] == null ? 0 : op[5]), trMOp: op[5] != null && S.trPh ? 1 : 0, trMLabel: op[6], trB0: S.trPh ? 'transparent' : '#3A3A42', trB1: S.trPh ? '#E5483A' : 'transparent',
+      trTicks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => ({ x: (i * 10) + '%', l: String(i * 30) })),
+      trOps: this.TR.map((o, i) => ({ name: o[0], key: o[1], bar: i === S.trOp ? '#E5483A' : 'transparent', c: i === S.trOp ? '#1D1B18' : '#8C867C', on: () => { this.trUser = Date.now(); this.trE = 0; this.trN = 0; this.setState({ trOp: i, trPh: 0 }); } })) };
+  }
+  AGR = [['Agent', 'motion.timeline.info', 'Interview.mp4 · 1 clip', 'safe', 0], ['Agent', 'motion.timeline.split', 'at 4 points', 'undoable', 1], ['Agent', 'motion.timeline.ripple_delete', '2 segments · gaps closed', 'undoable', 2], ['Agent', 'motion.title.add', '“Highlights” · per-character animator', 'undoable', 3], ['You', 'trimmed the last clip', '−12 frames, by hand', '', 4], ['Agent', 'motion.session.changes_since', '1 change by you · kept', 'safe', 4], ['Agent', 'motion.render.export', 'range: work-area · WebM', 'safe', 5]];
+  CLS = { safe: ['#1F3A2A', '#8FD9A8'], undoable: ['#2E2757', '#C4B5FD'] };
+  agLayout(s) {
+    const V = (id, a, b, op, lab) => ({ id, a, b, op: op == null ? 1 : op, y: 34, h: 40, lab: lab || id, bg: '#4C63D9' });
+    let c;
+    if (s <= 0) c = [V('s1', 0, 300, 1, 'Interview.mp4'), V('s2', 60, 60, 0), V('s3', 110, 110, 0), V('s4', 170, 170, 0), V('s5', 230, 230, 0)];
+    else if (s === 1) c = [V('s1', 0, 60, 1, '1'), V('s2', 60, 110, 1, '2'), V('s3', 110, 170, 1, '3'), V('s4', 170, 230, 1, '4'), V('s5', 230, 300, 1, '5')];
+    else { const e5 = s >= 4 ? 178 : 190; c = [V('s1', 0, 60, 1, '1'), V('s2', 60, 60, 0, '2'), V('s3', 60, 120, 1, '3'), V('s4', 120, 120, 0, '4'), V('s5', 120, e5, 1, '5')]; }
+    c.push({ id: 't', a: 0, b: s >= 3 ? 60 : 0, op: s >= 3 ? 1 : 0, y: 0, h: 26, lab: 'Highlights', bg: '#B8323F' });
+    const aud = c.filter(x => x.id[0] === 's').map(x => Object.assign({}, x, { id: 'a' + x.id, y: 88, h: 30, lab: '', bg: '#1F7A4F' }));
+    return c.concat(aud);
+  }
+  agTick = () => {
+    const S = this.state, now = Date.now();
+    const tr = this.trRef.current;
+    if (tr) { const r = tr.getBoundingClientRect(), vis = r.top < window.innerHeight * 0.85 && r.bottom > window.innerHeight * 0.15; if (vis) { this.trE = (this.trE || 0) + 250; if (this.trE >= 1800) { this.trE = 0; this.trN = (this.trN || 0) + 1; if (this.trN >= 4 && now - (this.trUser || 0) > 15000) { this.trN = 0; this.setState({ trOp: (S.trOp + 1) % this.TR.length, trPh: 0 }); } else this.setState({ trPh: S.trPh ? 0 : 1 }); } } }
+    const a = this.agRef.current; if (!a) return; const r = a.getBoundingClientRect(); if (!(r.top < window.innerHeight * 0.85 && r.bottom > 0)) return;
+    this.agE = (this.agE || 0) + 250;
+    if (S.agDone) { if (this.agE > 8000) { this.agE = 0; this.setState({ agN: 0, agDone: false }); } return; }
+    if (this.agE >= 1150) { this.agE = 0; if (S.agN >= this.AGR.length) this.setState({ agDone: true }); else this.setState({ agN: S.agN + 1 }); }
+  };
+  LUTS = [['None', null], ['Warm', (r, g, b) => [r * 1.08 + 0.02, g * 1.01, b * 0.86]], ['Teal & orange', (r, g, b) => { const l = 0.2126 * r + 0.7152 * g + 0.0722 * b, d = l - 0.45; return [r + d * 0.28 + 0.02, g + d * 0.04, b - d * 0.3 + 0.03]; }], ['Bleach bypass', (r, g, b) => { const l = 0.2126 * r + 0.7152 * g + 0.0722 * b, m = x => (x * 0.45 + l * 0.55 - 0.5) * 1.3 + 0.5; return [m(r), m(g), m(b)]; }], ['Mono', (r, g, b) => { const l = 0.2126 * r + 0.7152 * g + 0.0722 * b; return [l, l, l]; }]];
+  drawScopes() {
+    const fc = this.coFrame.current, wc = this.coWave.current, vc = this.coVec.current; if (!fc || !wc || !vc) return;
+    if (!this.coBase) { const c = document.createElement('canvas'); c.width = 480; c.height = 270; const x = c.getContext('2d'), sv = this.monCv.current;
+      const g = x.createLinearGradient(0, 0, 0, 270); g.addColorStop(0, '#2A3C6B'); g.addColorStop(0.5, '#C98A6A'); g.addColorStop(1, '#F2D0A4'); x.fillStyle = g; x.fillRect(0, 0, 480, 270);
+      x.fillStyle = 'rgba(255,240,210,.9)'; x.beginPath(); x.arc(330, 150, 36, 0, 7); x.fill();
+      x.fillStyle = '#2F5E4E'; x.beginPath(); x.moveTo(0, 270); for (let px = 0; px <= 480; px += 8) x.lineTo(px, 200 - 24 * Math.sin(px * 0.018)); x.lineTo(480, 270); x.fill();
+      x.fillStyle = '#B8323F'; x.fillRect(60, 150, 70, 90); x.fillStyle = '#E8C547'; x.fillRect(150, 170, 50, 70); x.fillStyle = '#1E6FB0'; x.fillRect(220, 185, 44, 55);
+      x.fillStyle = '#1D1B18'; x.fillRect(0, 240, 480, 30); this.coBase = x.getImageData(0, 0, 480, 270); }
+    const S = this.state, L = this.LUTS[S.lut][1], k = S.lutK / 100, src = this.coBase.data, out = new ImageData(480, 270), d = out.data;
+    for (let i = 0; i < src.length; i += 4) { let r = src[i] / 255, g = src[i + 1] / 255, b = src[i + 2] / 255; if (L) { const o = L(r, g, b); r += (o[0] - r) * k; g += (o[1] - g) * k; b += (o[2] - b) * k; } d[i] = Math.max(0, Math.min(255, r * 255)); d[i + 1] = Math.max(0, Math.min(255, g * 255)); d[i + 2] = Math.max(0, Math.min(255, b * 255)); d[i + 3] = 255; }
+    fc.getContext('2d').putImageData(out, 0, 0);
+    const wx = wc.getContext('2d'), W = 480, H = 200, wi = wx.createImageData(W, H), wd = wi.data;
+    for (let y = 0; y < 270; y += 1) for (let x = 0; x < 480; x += 1) { const i = (y * 480 + x) * 4, l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2], yy = Math.round((1 - l / 255) * (H - 1)), j = (yy * W + x) * 4; wd[j] = Math.min(255, wd[j] + 6); wd[j + 1] = Math.min(255, wd[j + 1] + 22); wd[j + 2] = Math.min(255, wd[j + 2] + 10); wd[j + 3] = 255; }
+    for (let j = 3; j < wd.length; j += 4) if (!wd[j]) { wd[j - 3] = 12; wd[j - 2] = 12; wd[j - 1] = 15; wd[j] = 255; }
+    wx.putImageData(wi, 0, 0); wx.strokeStyle = 'rgba(255,255,255,.12)'; [0.25, 0.5, 0.75].forEach(f => { wx.beginPath(); wx.moveTo(0, H * f); wx.lineTo(W, H * f); wx.stroke(); });
+    const vx = vc.getContext('2d'), N = 220, cx = N / 2, R = N / 2 - 10, vi = vx.createImageData(N, N), vd = vi.data;
+    for (let i = 0; i < d.length; i += 8) { const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, cb = (b - Y) / 1.8556, cr = (r - Y) / 1.5748, px = Math.round(cx + cb * 2 * R), py = Math.round(cx - cr * 2 * R); if (px < 0 || py < 0 || px >= N || py >= N) continue; const j = (py * N + px) * 4; vd[j] = Math.min(255, vd[j] + 30); vd[j + 1] = Math.min(255, vd[j + 1] + 60); vd[j + 2] = Math.min(255, vd[j + 2] + 40); vd[j + 3] = 255; }
+    for (let j = 3; j < vd.length; j += 4) if (!vd[j]) { vd[j - 3] = 12; vd[j - 2] = 12; vd[j - 1] = 15; vd[j] = 255; }
+    vx.putImageData(vi, 0, 0); vx.strokeStyle = 'rgba(255,255,255,.18)'; vx.beginPath(); vx.arc(cx, cx, R, 0, 7); vx.stroke(); vx.beginPath(); vx.moveTo(cx - R, cx); vx.lineTo(cx + R, cx); vx.moveTo(cx, cx - R); vx.lineTo(cx, cx + R); vx.stroke();
+    [[0.75, 0, 0, 'R'], [0.75, 0.75, 0, 'Yl'], [0, 0.75, 0, 'G'], [0, 0.75, 0.75, 'Cy'], [0, 0, 0.75, 'B'], [0.75, 0, 0.75, 'Mg']].forEach(t => { const Y = 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2], px = cx + (t[2] - Y) / 1.8556 * 2 * R, py = cx - (t[0] - Y) / 1.5748 * 2 * R; vx.strokeStyle = 'rgba(255,138,115,.8)'; vx.strokeRect(px - 5, py - 5, 10, 10); vx.fillStyle = 'rgba(255,255,255,.55)'; vx.font = '9px monospace'; vx.fillText(t[3], px + 7, py + 3); });
+  }
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => {
+    this.revealCheck();
+    if (this.autoRunning && window.scrollY < 4) return;
+    const p = this.heroP(), nt = this.T0 + p * (this.DUR - this.T0);
+    if (Math.abs(window.scrollY - (this._lastSY || 0)) > 1) { this._lastSY = window.scrollY; this.autoRunning = false; this.stop(); this.autoStop = null; this.setT(nt); }
+  };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw); window.addEventListener('keydown', this.onKey);
+    this.ro = new ResizeObserver(() => { this.syncVw(); this.applyT(this.t); }); this.ro.observe(document.documentElement);
+    this.raf = requestAnimationFrame(this.frame); this.agT = setInterval(this.agTick, 250);
+    this._lastSY = window.scrollY;
+    if (window.scrollY < 4 && !this.reduce) { this.t = 0; this.applyT(0); this.autoRunning = true; this.playing = true; this.dir = 1; this.autoStop = this.T0; this._autoSafe = setTimeout(() => { if (this.t < 0.5) { this.autoRunning = false; this.playing = false; this.autoStop = null; this.setState({ playing: false }); this.setT(this.T0); } }, 1500); }
+    else this.setT(this.T0 + this.heroP() * (this.DUR - this.T0));
+    this._rev = [];
+    if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    const ua = navigator.userAgent || '';
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight, osName: /Windows/i.test(ua) ? 'windows' : /Mac/i.test(ua) ? 'mac' : /Linux|X11/i.test(ua) ? 'linux' : '' });
+    setTimeout(() => { this.syncVw(); this.drawScopes(); this.applyT(this.t); }, 120);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.applyT(this.t));
+  }
+  componentDidUpdate(pp, ps) {
+    if (ps.clips !== this.state.clips || ps.off !== this.state.off) this.applyT(this.t); if (ps.lut !== this.state.lut || ps.lutK !== this.state.lutK) this.drawScopes(); if (ps.vw !== this.state.vw) this.applyT(this.t); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); window.removeEventListener('keydown', this.onKey); this.ro && this.ro.disconnect(); cancelAnimationFrame(this.raf); clearInterval(this.agT); clearTimeout(this._revSafe); clearTimeout(this._autoSafe); }
+  wave(seed, amp) { let s = seed, d = 'M0 15'; const top = [], rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; for (let x = 0; x <= 1000; x += 8) top.push([x, 15 - (2 + rnd() * amp) * (0.5 + 0.5 * Math.abs(Math.sin(x * 0.013 + seed)))]); top.forEach(p => { d += ' L' + p[0] + ' ' + p[1].toFixed(1); }); for (let i = top.length - 1; i >= 0; i--) d += ' L' + top[i][0] + ' ' + (30 - top[i][1]).toFixed(1); return d + ' Z'; }
+  WA = this.wave(3, 11); WB = this.wave(7, 8);
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000, ez = S.ez, X = v => 30 + v * 340, Y = v => 210 - v * 160;
+    const n = S.agN, stIdx = n === 0 ? 0 : this.AGR[Math.min(n, this.AGR.length) - 1][4], lay = this.agLayout(stIdx), cutOn = n === 2;
+    const rel = [['0.5.0', '2026-08-14', 'Projects you can generate from code', 'A .xmotion project can be built from a JSON edit spec, and finished movies stream to disk in chunks instead of being held in memory.'], ['0.7.0', '2026-08-20', 'Masks, motion tracking, corner pin and a 3D camera', 'Motion became a compositing tool as well as a cutting tool: mask and animate a mask, drive it from a motion track, pin a picture to four corners, and move layers with a 3D camera.'], ['0.8.0', '2026-08-27', 'Licence checks and an end-to-end product loop', 'Every release now has to import, cut, title, grade, mix, save, reopen and export real footage, with each result measured in the exported file. The loop found six defects, including exports that came out silent.'], ['0.9.0', '2026-08-27', 'Work Area export exports the work area', 'Exporting the Work Area returned the whole timeline. It now uses the timeline’s In and Out points, and agents can export a range too.'], ['0.9.1', '2026-08-27', 'No more black video without a hardware decoder', 'On virtual machines, remote desktops and GPUs without an H.264 decoder, every frame rendered black. Motion now falls back to software decoding.'], ['0.10.0', '2026-08-27', 'Motion runs on Linux', 'A 64-bit AppImage passes the same 32-step edit-to-export check as Windows. Linux exports use Opus audio when AAC is unavailable, and Motion says so.'], ['0.10.1', '2026-09-03', 'ProRes 422 and native AAC, where the native addon ships', 'Writes QuickTime ProRes 422 and encodes AAC natively when the optional addon is present. Third-party licence notices now ship with the app.']];
+    const FAQ = [['Does it replace Premiere Pro and After Effects?', 'It covers cutting and compositing in one timeline: Premiere-style trims, titles with per-character animators, masks, motion tracking, a 3D camera, LUT grading, scopes and a full audio mixer. A few parts are built but not reachable from the app yet, such as EDL export, audio ducking and the warp stabilizer.'], ['Does it need FFmpeg?', 'No. Decoding and encoding use WebCodecs with Motion’s own MP4 and WebM muxer. An optional native addon adds ProRes 422 and native AAC where it ships.'], ['Why does Windows warn me when I install it?', 'XENO ships unsigned builds until code signing is approved. Windows shows a SmartScreen “unknown publisher” warning, and Motion shows an UNSIGNED BUILD badge in its title bar so you always know.'], ['Can an agent edit my timeline?', 'Yes. Motion exposes its operations as capabilities an agent can call, locally or as a hosted run billed to your XENO account. The agent checks what you changed between its turns, and your edits and the agent’s share one undo stack.'], ['Which platforms does it run on?', 'Windows x64 and Linux x64 as an AppImage. On Linux, exports use Opus audio unless the native addon provides AAC. macOS is not available yet.']];
+    const STAT = [['Shipping', '#2FA36B', ['Frame-accurate timeline with Premiere-style trims', 'Titles with per-character animators', 'Masks, motion tracking, corner pin and a 3D camera', '1D and 3D LUT grading with broadcast scopes', 'Audio mixer with EQ, compressor, limiter and LUFS metering', 'MP4 and WebM export with a background render queue', 'Subtitle import and burn-in']], ['Not reachable yet', '#C9962E', ['Node-graph compositor', 'Audio ducking', 'EDL export', 'Warp stabilizer', 'Scene detection and auto-reframe', 'Networked collaboration (review is local-only today)']], ['Needs the native addon', '#E5483A', ['ProRes 422 MOV export', 'Native AAC on Linux', 'Offline loudness measurement', 'Transcription, stem separation, upscaling, denoise, depth and face detection']]];
+    const lutN = this.LUTS[S.lut][0];
+    return Object.assign({
+      productSlug: String(this.props.product ?? 'Motion').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      hWrap: this.hWrap, hInner: this.hInner, h1El: this.h1El, tcEl: this.tcEl, tc2El: this.tc2El, tc3El: this.tc3El, monShot: this.monShot, mtL: this.mtL, mtR: this.mtR, monLufs: this.monLufs,
+      heroCols: wide ? 'minmax(0,1.1fr) minmax(0,.9fr)' : 'minmax(0,1fr)', h1Fs: wide ? 'max(44px, min(100px, 11vh, calc((min(100vw - 48px, 1320px) - 56px) * 0.55 / 7.4)))' : 'clamp(40px, min(11vw, 10vh), 88px)', monCv: this.monCv, tlArea: this.tlArea, phEl: this.phEl,
+      hL1: this.L1.split('').map((ch, i) => ({ ch, i })), hL2: this.L2.split('').map((ch, i) => ({ ch, i: i + this.L1.length })),
+      monD: wide ? 'block' : 'none', heroPD: (S.vh || 900) < 700 && S.vw < 1100 ? 'none' : 'block', kbdD: S.vw >= 1100 ? 'inline' : 'none', tlHeadW: S.vw >= 700 ? '44px' : '34px',
+      snapEl: this.snapEl, razEl: this.razEl, tlDown: this.tlDown, tlHover: this.tlHover, tlLeave: this.tlLeave, doUndo: this.doUndo, doRedo: this.doRedo, doReset: this.doReset,
+      toolSel: () => this.setState({ tool: 'select' }), toolRaz: () => this.setState({ tool: 'razor' }), toolSnap: () => { this.say(S.snap ? 'Snapping off' : 'Snapping on'); this.setState({ snap: !S.snap }); },
+      tSelBg: S.tool === 'select' ? '#3A3A42' : 'transparent', tSelFg: '#E7E5EA', tRazBg: S.tool === 'razor' ? '#3A3A42' : 'transparent', tRazFg: S.tool === 'razor' ? '#FF8A73' : '#E7E5EA', tSnapBg: S.snap ? '#3A2320' : 'transparent', tSnapFg: S.snap ? '#FF8A73' : '#8A8792',
+      tUndoBg: 'transparent', tUndoFg: S.hN ? '#E7E5EA' : '#4A4A52', tRedoBg: 'transparent', tRedoFg: S.fN ? '#E7E5EA' : '#4A4A52',
+      tlMsg: S.msg || (S.vw >= 1100 ? 'V select · C razor · drag clips and edges · Ctrl+K split · Del lift · Shift+Del ripple · S snap · Ctrl+Z undo' : 'Drag clips and edges · C razor · Ctrl+Z undo'), tlMsgC: S.msg ? '#FF8A73' : '#8A8792', resetD: S.clips && S.hN ? 'block' : 'none',
+      tracks: this.TRK.map(([name, hh0]) => { const tall = (S.vh || 900) >= 860, hh = tall ? hh0 : [26, 34, 30, 26][this.TRK.findIndex(x => x[0] === name)]; const off = !!S.off[name], isA = name[0] === 'A'; return { name, h: hh + 'px', op: off ? 0.4 : 1, nameC: off ? '#5A5A62' : '#8A8792', icon: isA ? 'M' : 'V', tip: isA ? (off ? 'Unmute ' : 'Mute ') + name : (off ? 'Show ' : 'Hide ') + name, bBg: off ? '#E5483A' : '#26262C', bFg: off ? '#FFFFFF' : '#8A8792', bD: 'grid', toggle: () => { this.setState(s => ({ off: Object.assign({}, s.off, { [name]: !s.off[name] }) })); this.say((isA ? (off ? 'Unmuted ' : 'Muted ') : (off ? 'Showing ' : 'Hid ')) + name); },
+        kfs: name === 'V2' ? this.clipsNow().filter(c => c.tr === 'V2' && c.src === 'title' && !off).flatMap(c => [0.35, 1.2, 3.3, 4.0, 6.9, 8.3].filter(k => k >= c.in && k <= c.in + (c.e - c.s)).map(k => ({ x: ((c.s + k - c.in) / this.DUR * 100) + '%' }))) : [],
+        clips: this.clipsNow().filter(c => c.tr === name).map(c => { const src = this.SRC[c.src], len = c.e - c.s, sel = S.sel === c.id, audio = name[0] === 'A'; return { id: c.id, s: c.s.toFixed(4), e: c.e.toFixed(4), x: (c.s / this.DUR * 100) + '%', w: (len / this.DUR * 100) + '%', bot: name === 'V2' ? '9px' : '3px', bg: audio ? src[3] : 'repeating-linear-gradient(90deg, rgba(255,255,255,.16) 0 1px, transparent 1px 34px), ' + src[3], ol: sel ? '2px solid #FFFFFF' : '2px solid transparent', hBg: sel ? 'rgba(255,255,255,.85)' : 'transparent', label: src[1], sub: len > 1.4 ? src[2] : '', fs: audio ? '10.5px' : '11.5px', waveD: audio ? 'block' : 'none', wave: c.src === 'vo' ? this.WA : this.WB, wl: (-(c.in / len) * 100) + '%', ww: (src[0] / len * 100) + '%',
+          kfs: c.src === 'title' ? [0.35, 1.2, 3.3, 4.0, 6.9, 8.3].filter(k => k >= c.in && k <= c.in + len).map(k => ({ x: ((k - c.in) / len * 100) + '%' })) : [] }; }) }; }),
+      onPlay: this.onPlay, playIcon: S.playing ? 'M2 1h3v10H2zM7 1h3v10H7z' : 'M2 1l9 5-9 5z', scrubDown: this.scrubDown,
+      rTicks: Array.from({ length: 21 }, (_, i) => ({ x: (i * 5) + '%', h: i % 2 ? '5px' : '9px', l: '00:' + String(i / 2).padStart(2, '0'), lD: i % 2 || i === 20 ? 'none' : 'inline' })),
+      kfs: [0.35, 1.2, 3.3, 4.0, 6.9, 8.3].map(s => ({ x: (s * 10) + '%' })), waveA: this.WA, waveB: this.WB,
+      trRef: this.trRef, trCols: S.vw >= 980 ? 'minmax(0,.7fr) minmax(0,1.3fr)' : 'minmax(0,1fr)',
+      kfRef: this.kfRef, kfSvg: this.kfSvg, kfObj: this.kfObj, kfFrame: this.kfFrame, kfText: this.kfText, kfDown: this.kfDown, kfCols: S.vw >= 980 ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)',
+      ezCurve: 'M30 210 C ' + X(ez[0]) + ' ' + Y(ez[1]) + ', ' + X(ez[2]) + ' ' + Y(ez[3]) + ', 370 50', ezH1L: 'M30 210 L' + X(ez[0]) + ' ' + Y(ez[1]), ezH2L: 'M370 50 L' + X(ez[2]) + ' ' + Y(ez[3]),
+      ezH1x: X(ez[0]), ezH1y: Y(ez[1]), ezH2x: X(ez[2]), ezH2y: Y(ez[3]), ezLabel: 'cubic-bezier(' + ez.map(v => v.toFixed(2)).join(', ') + ')',
+      ezPresets: this.EZ.map((p, i) => ({ label: p[0], on: () => this.setState({ ez: p[1].slice(), ezP: i }), bg: i === S.ezP ? '#E7E5EA' : 'transparent', fg: i === S.ezP ? '#16161A' : '#E7E5EA', bd: i === S.ezP ? '#E7E5EA' : '#3A3A42' })),
+      onion: Array.from({ length: 16 }, (_, i) => ({ x: 'calc(40px + (100% - 80px) * ' + this.ezAt(i / 15, ez).toFixed(4) + ')' })),
+      wigToggle: () => this.setState(s => ({ wig: !s.wig })), wigBg: S.wig ? '#3A2320' : 'transparent', wigBd: S.wig ? '#FF5A3C' : '#3A3A42',
+      kfChars: this.KT.split('').map((ch, i) => ({ ch, i })),
+      coFrame: this.coFrame, coWave: this.coWave, coVec: this.coVec, coCols: S.vw >= 980 ? 'minmax(0,1.35fr) minmax(0,1fr)' : 'minmax(0,1fr)', lutName: 'LUT · ' + lutN + (S.lut ? ' · ' + S.lutK + '%' : ''),
+      luts: this.LUTS.map((l, i) => ({ label: l[0], on: () => this.setState({ lut: i }), bg: i === S.lut ? '#1D1B18' : '#FFFFFF', fg: i === S.lut ? '#FFFFFF' : '#1D1B18', bd: i === S.lut ? '#1D1B18' : '#DDD8D0' })),
+      lutK: S.lutK, setLutK: e => this.setState({ lutK: +e.target.value }),
+      agRef: this.agRef, agCols: S.vw >= 980 ? 'minmax(0,1.3fr) minmax(0,1fr)' : 'minmax(0,1fr)',
+      agStatus: S.agDone ? 'Done' : n === 5 ? 'Reading your changes' : 'Running', agStC: S.agDone ? '#8FD9A8' : n === 5 ? '#C4B5FD' : '#F0C987',
+      agReplay: () => { this.agE = 0; this.setState({ agN: 0, agDone: false }); },
+      agClips: lay.map(c => ({ x: (c.a / 3) + '%', w: ((c.b - c.a) / 3) + '%', y: c.y + 'px', h: c.h + 'px', op: c.op, bg: c.bg, label: c.lab, sh: n === 5 && (c.id === 's5' || c.id === 'as5') ? '0 0 0 2px #C4B5FD' : 'none' })),
+      agExpW: stIdx >= 5 ? (178 / 3) + '%' : '0%', agCutX: '36.6%', agCutOp: cutOn ? 1 : 0, agNoteD: n >= 6 ? 'flex' : 'none',
+      agRows: this.AGR.map((r, i) => { const done = i < n, cur = i === n && !S.agDone, c = this.CLS[r[3]] || ['transparent', 'transparent']; return { who: r[0], whoC: r[0] === 'You' ? '#FF8A73' : '#8A8792', fn: r[1], fnC: r[0] === 'You' ? '#FFD9CF' : '#F0C987', arg: r[2], cls: r[3], cD: r[3] ? 'inline' : 'none', cBg: c[0], cFg: c[1], op: done ? 1 : cur ? 0.7 : 0.3, bg: cur ? '#26262C' : 'transparent' }; }),
+      statusCols: STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      osShow: !!S.osName, osNote: S.osName === 'windows' ? 'You’re on Windows. The installer is for you.' : S.osName === 'linux' ? 'You’re on Linux. Get the AppImage.' : 'You’re on macOS. Motion isn’t available for Mac yet.', osC: S.osName === 'mac' ? '#8A6A1F' : '#B0301E', osBg: S.osName === 'mac' ? '#FBF3E2' : '#FBE4DF',
+      dlWinBd: S.osName === 'windows' ? '#1D1B18' : '#E2DDD5', dlLinBd: S.osName === 'linux' ? '#1D1B18' : '#E2DDD5',
+      relTicks: Array.from({ length: 25 }, (_, i) => ({ x: (4 + i * 3.83) + '%' })),
+      rels: rel.map((r, i) => { const on = i === S.rel; return { v: r[0], d: r[1].slice(5), x: (6 + i * 14.66) + '%', c: on ? '#C8321F' : '#1D1B18', bg: on ? '#E5483A' : '#1D1B18', s: on ? '16px' : '12px', m: on ? '0px' : '2px', dD: S.vw >= 760 ? 'inline' : 'none', on: () => this.setState({ rel: i }) }; }),
+      rel: { v: rel[S.rel][0], d: rel[S.rel][1], t: rel[S.rel][2], b: rel[S.rel][3] }, relCols: S.vw >= 760 ? '140px minmax(0,1fr)' : 'minmax(0,1fr)',
+      faqs: FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#C8321F' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); }
+    }, this.trVals(S));
+  }
+}
+</script>
+</body>
+</html>

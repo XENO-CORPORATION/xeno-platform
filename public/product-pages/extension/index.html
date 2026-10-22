@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Extension — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#6D28D9}
+input[type=range]{accent-color:#A78BFA}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="/" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#6D28D9">Browser extension</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">Keep your browser.<br><span style="color:#A78BFA">Add the agent.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">XENO Extension puts an agent in Chrome’s side panel. It reads, navigates, clicks, types and fills forms using the page’s accessibility tree, and asks before anything risky. Give it the task below and approve its steps.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:12px 18px; border-radius:8px">Get notified</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">scaffolded · Chrome side panel</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; border-radius:14px; overflow:hidden; background:#DEE1E6; box-shadow:0 0 0 1px rgba(29,27,24,.12), 0 30px 60px -34px rgba(29,27,24,.45)">
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 10px"><span style="width:11px; height:11px; border-radius:50%; background:#FF5F57"></span><span style="width:11px; height:11px; border-radius:50%; background:#FEBC2E"></span><span style="width:11px; height:11px; border-radius:50%; background:#28C840"></span><span style="flex:1; height:28px; margin-left:8px; display:flex; align-items:center; padding:0 12px; border-radius:14px; background:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#3F3B35">shop.harbourgoods.co/orders/48213/return</span><span style="width:26px; height:26px; border-radius:6px; background:#A78BFA; display:grid; place-items:center; color:#FFFFFF; font-size:12px; font-weight:700">X</span></div>
+      <div style="display:grid; grid-template-columns:{{ eCols }}; background:#FFFFFF">
+        <div ref="{{ pg }}" style="position:relative; padding:24px clamp(16px,4vw,40px); min-height:460px; min-width:0">
+          <div style="font-weight:700; font-size:22px; letter-spacing:-.02em">Return an item</div><div style="font-size:13.5px; color:#6A655D; margin-top:4px">Order #48213 · delivered 21 Sep</div>
+          <div style="margin-top:18px; display:flex; flex-direction:column; gap:12px; max-width:460px">
+            <sc-for list="{{ items }}" as="i"><label data-a="{{ i.k }}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1.5px solid {{ i.bd }}; transition:border-color .2s"><span style="width:18px; height:18px; border-radius:4px; border:1.5px solid #8C867C; background:{{ i.cb }}; display:grid; place-items:center; color:#FFFFFF; font-size:11px">{{ i.tk }}</span><span style="width:40px; height:40px; border-radius:6px; background:{{ i.c }}"></span><span style="display:flex; flex-direction:column"><span style="font-size:14px; font-weight:600">{{ i.n }}</span><span style="font-size:12px; color:#6A655D">{{ i.p }}</span></span></label></sc-for>
+            <label data-a="reason" style="display:flex; flex-direction:column; gap:5px; font-size:12.5px; font-weight:600">Reason<span style="height:38px; display:flex; align-items:center; padding:0 10px; border-radius:7px; border:1.5px solid {{ rBd }}; font-weight:400; font-size:14px">{{ reason }}</span></label>
+            <div data-a="submit" style="align-self:flex-start; height:40px; display:flex; align-items:center; padding:0 18px; border-radius:8px; background:{{ subBg }}; color:#FFFFFF; font-weight:600; font-size:14px">{{ subL }}</div>
+          </div>
+          <span style="position:absolute; left:{{ hx }}; top:{{ hy }}; width:{{ hw }}; height:{{ hh }}; border:2px solid #A78BFA; border-radius:8px; background:rgba(167,139,250,.12); pointer-events:none; display:{{ hD }}; transition:left .45s, top .45s, width .45s, height .45s"><span style="position:absolute; left:-2px; top:-20px; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:1px 6px; border-radius:4px 4px 0 0; background:#A78BFA; color:#FFFFFF; white-space:nowrap">{{ hLabel }}</span></span>
+        </div>
+        <div style="border-left:1px solid #E6E1D9; background:#FAF9FE; display:flex; flex-direction:column; min-width:0">
+          <div style="padding:10px 12px; border-bottom:1px solid #E6E1D9; display:flex; flex-direction:column; gap:6px"><span style="font-weight:600; font-size:13.5px">XENO agent</span><div style="display:flex; gap:4px; flex-wrap:wrap"><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C867C; align-self:center">inference</span><sc-for list="{{ inf }}" as="f"><button onClick="{{ f.on }}" style="height:24px; padding:0 8px; border-radius:5px; border:1px solid {{ f.bd }}; background:{{ f.bg }}; color:{{ f.fg }}; font:inherit; font-size:11px; cursor:pointer">{{ f.l }}</button></sc-for></div></div>
+          <div style="flex:1; padding:12px; display:flex; flex-direction:column; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.5"><sc-for list="{{ steps }}" as="s"><span style="display:grid; grid-template-columns:16px minmax(0,1fr); gap:6px; color:{{ s.c }}"><span>{{ s.m }}</span><span>{{ s.t }}</span></span></sc-for>
+            <sc-if value="{{ ask }}" hint-placeholder-val="{{ false }}"><div style="margin-top:6px; padding:10px; border-radius:10px; background:#FFFFFF; box-shadow:0 0 0 1.5px #A78BFA; display:flex; flex-direction:column; gap:8px; font-family:'Schibsted Grotesk',sans-serif"><span style="font-size:13px; font-weight:600">Approve: submit the return?</span><span style="font-size:12.5px; color:#5F5A52">This sends a request to the shop. The agent never submits without asking.</span><div style="display:flex; gap:6px"><button onClick="{{ approve }}" style="height:28px; padding:0 12px; border:none; border-radius:6px; background:#6D28D9; color:#FFFFFF; font:inherit; font-size:12.5px; cursor:pointer">Approve</button><button onClick="{{ decline }}" style="height:28px; padding:0 12px; border:1px solid #DDD8D0; border-radius:6px; background:#FFFFFF; font:inherit; font-size:12.5px; cursor:pointer">Decline</button></div></div></sc-if>
+          </div>
+          <div style="padding:10px 12px; border-top:1px solid #E6E1D9"><button onClick="{{ go }}" style="width:100%; text-align:left; padding:10px 12px; border-radius:9px; border:1px solid #DDD6FE; background:#FFFFFF; font:inherit; font-size:13.5px; cursor:pointer; line-height:1.4">{{ goL }}</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Runs in</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Chrome’s side panel</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Targets</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">The accessibility tree</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Safety</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Approvals and code-level guardrails</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Keys</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">None shipped</div></div></div></section>
+<section id="safety" data-screen-label="Safety" style="background:#130F1C; color:#EDE9F6; padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#DDD6FE">Safe by construction</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">It targets what’s there, and asks before it acts.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#A59EB8; text-wrap:pretty">The agent finds elements through the accessibility tree rather than guessing from pixels, keeps a person in the loop for approvals, and has guardrails enforced in code.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px 28px; margin-top:44px"><div data-reveal="" style="border-top:1px solid #EDE9F6; padding-top:14px"><div style="font-weight:600; font-size:16px">Accessibility tree</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#A59EB8">Reliable targets: the real button, the real field.</p></div><div data-reveal="" style="border-top:1px solid #EDE9F6; padding-top:14px"><div style="font-weight:600; font-size:16px">Human in the loop</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#A59EB8">Approval before anything consequential.</p></div><div data-reveal="" style="border-top:1px solid #EDE9F6; padding-top:14px"><div style="font-weight:600; font-size:16px">No shipped secret</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#A59EB8">The extension holds no API key of its own; you choose where inference runs.</p></div><div data-reveal="" style="border-top:1px solid #EDE9F6; padding-top:14px"><div style="font-weight:600; font-size:16px">One contract</div><p style="margin:6px 0 0; font-size:14.5px; line-height:1.5; color:#A59EB8">Implements xeno-use’s web driver, like XENO Browser.</p></div></div>
+    <p data-reveal="" style="margin:28px 0 0; font-size:15.5px; color:#A59EB8">Want the agent to handle file uploads too? That needs a browser that owns its engine: <a href="/product/browser" style="color:#DDD6FE; font-weight:600">XENO Browser</a>.</p>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#6D28D9">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Scaffolded, on the same contract as XENO Browser.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Extension.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">The extension is not in the Chrome Web Store yet. Leave your email to hear when it is.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><sc-if value="{{ getNotSent }}" hint-placeholder-val="{{ true }}"><form onSubmit="{{ getSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap"><input type="email" value="{{ getEmail }}" onChange="{{ getSet }}" placeholder="you@company.com" style="flex:1 1 220px; height:48px; padding:0 14px; border:1px solid #D6D0C7; border-radius:8px; font:inherit; font-size:15px; background:#F6F4F0; color:#1D1B18"><button type="submit" style="height:48px; padding:0 18px; border:none; border-radius:8px; background:#1D1B18; color:#F6F4F0; font:inherit; font-size:15px; font-weight:500; cursor:pointer">Notify me</button></form></sc-if><sc-if value="{{ getSent }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 16px; border-radius:10px; background:#F4F2EE; font-size:15px">Thanks. We’ll email {{ getEmail }} when it’s out.</div></sc-if><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Chrome</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">side panel extension</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">not published</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#6D28D9">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#DDD6FE">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Extension&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Scaffolded","#C9962E",["A Chrome side-panel agent that reads, navigates, clicks, types and fills forms","Accessibility-tree targeting","Human-in-the-loop approvals and code-level guardrails","No API key shipped in the extension"]],["Not yet","#8C867C",["A Chrome Web Store release","Edge and Firefox"]],["Shares","#8C867C",["xeno-use’s web driver contract with XENO Browser"]]];
+  FAQ = [["Why not just use XENO Browser?","If you don’t want to switch browsers. The extension brings the same kind of agent to Chrome. XENO Browser can do more, such as attaching files, because it owns its engine."],["How does it find things on the page?","Through the accessibility tree, the same structure screen readers use, so it targets real buttons and fields."],["Will it do things without asking?","No. Consequential actions need your approval, and guardrails are enforced in code."],["Does it contain an API key?","No. The extension ships with no key of its own; you choose where inference runs."],["When can I install it?","It is scaffolded and not in the Chrome Web Store yet."]];
+
+  pg = React.createRef();
+  wait(ms) { return new Promise(r => { this._to = setTimeout(r, ms); }); }
+  aim(k, label) { const p = this.pg.current, el = p && p.querySelector('[data-a="' + k + '"]'); if (!el) return; const a = el.getBoundingClientRect(), b = p.getBoundingClientRect(); this.setState({ hx: (a.left - b.left - 4) + 'px', hy: (a.top - b.top - 4) + 'px', hw: (a.width + 8) + 'px', hh: (a.height + 8) + 'px', hl: label, hD: true }); }
+  step(m, t, c) { this.setState(s => ({ steps: s.steps.concat([{ m, t, c }]) })); }
+  go = async () => { const S = this.state; if (S.run) return; if (S.done) { this.reset(); return; } const id = ++this._rid; this.setState({ run: true, steps: [] });
+    this.step('✓', 'read accessibility tree · 2 checkboxes, 1 combobox, 1 button', '#15803D'); await this.wait(600); if (id !== this._rid) return;
+    this.aim('mug', 'checkbox "Stoneware mug"'); await this.wait(700); this.setState({ pick: { mug: true } }); this.step('✓', 'click checkbox "Stoneware mug"', '#15803D'); await this.wait(500);
+    this.aim('reason', 'combobox "Reason"'); await this.wait(700); this.setState({ reason: 'Arrived damaged' }); this.step('✓', 'select "Arrived damaged"', '#15803D'); await this.wait(500);
+    this.aim('submit', 'button "Request return"'); await this.wait(700); this.step('◆', 'waiting for your approval', '#6D28D9'); this.setState({ ask: true }); };
+  approve = () => { this.setState({ ask: false, sent: true, run: false, done: true, hD: false }); this.step('✓', 'click "Request return" · approved by you', '#15803D'); };
+  decline = () => { this.setState({ ask: false, run: false, done: true, hD: false }); this.step('–', 'declined · nothing was submitted', '#8C867C'); };
+  reset() { this._rid++; clearTimeout(this._to); this.setState({ run: false, done: false, steps: [], pick: {}, reason: 'Choose a reason', sent: false, ask: false, hD: false }); }
+  mountX() { this._rid = 0; this.setState({ inf: 'account', steps: [], pick: {}, reason: 'Choose a reason' }); }
+  unmountX() { this._rid++; clearTimeout(this._to); }
+  valsX(S, wide) { const pick = S.pick || {};
+    return { pg: this.pg, eCols: S.vw >= 940 ? 'minmax(0,1fr) 320px' : 'minmax(0,1fr)', items: [['mug', 'Stoneware mug', '£18 · qty 1', '#C2410C'], ['vase', 'Bud vase', '£24 · qty 1', '#0EA5E9']].map(i => ({ k: i[0], n: i[1], p: i[2], c: i[3], bd: S.hl && S.hl.includes(i[1]) ? '#A78BFA' : '#E6E1D9', cb: pick[i[0]] ? '#6D28D9' : '#FFFFFF', tk: pick[i[0]] ? '✓' : '' })),
+      reason: S.reason || 'Choose a reason', rBd: S.reason && S.reason !== 'Choose a reason' ? '#A78BFA' : '#DDD8D0', subBg: S.sent ? '#15803D' : '#1D1B18', subL: S.sent ? 'Return requested ✓' : 'Request return',
+      hx: S.hx || '0px', hy: S.hy || '0px', hw: S.hw || '0px', hh: S.hh || '0px', hD: S.hD ? 'block' : 'none', hLabel: S.hl || '',
+      inf: [['account', 'XENO account'], ['local', 'Local model'], ['key', 'Your key']].map(f => ({ l: f[1], on: () => this.setState({ inf: f[0] }), bg: S.inf === f[0] ? '#6D28D9' : '#FFFFFF', fg: S.inf === f[0] ? '#FFFFFF' : '#1D1B18', bd: S.inf === f[0] ? '#6D28D9' : '#DDD8D0' })),
+      steps: S.steps || [], ask: !!S.ask, approve: this.approve, decline: this.decline, go: this.go, goL: S.done ? '↺ Run it again' : S.run ? 'Working…' : '“Return the damaged mug from my last order”' };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Extension').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#6D28D9' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>
