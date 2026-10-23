@@ -53,7 +53,7 @@ async function main() {
       { id: 'l', type: 'link', url: 'https://jsoncanvas.org/spec/1.0/', x: 400, y: 200, width: 260, height: 80 },
     ], edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', toEnd: 'arrow', xeno: { link: 'blocks' } }, { id: 'e2', fromNode: 'n', toNode: 'a' }] };
     const refused = await bob('PUT', `/canvases/${cv.id}`, { content, revision: cv.revision });
-    check(refused.s === 403 && refused.j.code === 'not_allowed', 'a wire that would link tasks follows the TASK rules: an editor who neither made nor works on them cannot link them');
+    check(refused.s === 403 && refused.j.code === 'not_your_task', 'a wire that would link tasks follows the TASK rules: an editor who neither made nor works on them cannot link them');
     check((await pool.query('SELECT revision FROM canvases WHERE id = $1', [cv.id])).rows[0].revision === '1', 'and the refused save wrote nothing');
     const saved = await ada('PUT', `/canvases/${cv.id}`, { content, revision: cv.revision });
     check(saved.s === 200 && saved.j.canvas.revision === '2', `saving bumps the revision (${saved.s} ${JSON.stringify(saved.j).slice(0,300)})`);

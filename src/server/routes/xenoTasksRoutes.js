@@ -194,6 +194,8 @@ router.get('/:key', handled(async (req, res) => { res.json({ success: true, task
 router.patch('/:key', handled(async (req, res) => { res.json({ success: true, task: await tasks.updateTask(req.db, req.me, req.params.key, req.body || {}) }); }));
 router.post('/:key/transition', handled(async (req, res) => { res.json({ success: true, task: await tasks.transitionTask(req.db, req.me, req.params.key, { to: req.body?.to, note: req.body?.note, from: req.body?.from }) }); }));
 router.post('/:key/claim', handled(async (req, res) => { res.json({ success: true, task: await tasks.claimTask(req.db, req.me, req.params.key, { runId: req.body?.runId }) }); }));
+// owner, 2026-10-23: someone who may not work a task another person holds asks whoever may assign it
+router.post('/:key/ask-assignment', handled(async (req, res) => { res.json({ success: true, ...(await tasks.requestAssignment(req.db, req.me, req.params.key)) }); }));
 router.post('/:key/heartbeat', handled(async (req, res) => { res.json({ success: true, ...(await tasks.heartbeatTask(req.db, req.me, req.params.key, { runId: req.body?.runId })) }); }));
 router.post('/:key/release', handled(async (req, res) => { res.json({ success: true, ...(await tasks.releaseTask(req.db, req.me, req.params.key, { runId: req.body?.runId })) }); }));
 router.post('/:key/comments', handled(async (req, res) => { res.json({ success: true, task: await tasks.commentTask(req.db, req.me, req.params.key, { body: req.body?.body }) }); }));

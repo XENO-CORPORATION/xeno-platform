@@ -239,6 +239,7 @@ Rules that are easy to break:
 - **Never add a second code path.** REST, MCP tools and screens all call `xenoTasks.js`; an MCP tool that queries on its own will drift.
 - **A self-registered client's token is `aud: xeno-tasks` and must stay refused by every other API.** `authMiddleware` requires `xeno-api`; do not widen it.
 - **An OAuth sign-in acts as the person's own per-app agent (`agent_origin='mcp'`), never as the person.**
+- **Only whoever holds a task works on it** (owner, 2026-10-23; `../xeno-tasks/SPEC.md` §3a): anyone who can see it reads it and may take it; comment, images, sub-tasks, links, folders, moves and copy for agent need `mayWork` (assignee, agent delegate, creator, project admin) — the reviewer only reviews. New task actions go through `mayWork`/`mayComment` in `xenoTasks.js`, and screens read `can.work`/`can.comment`/`can.take`.
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
 

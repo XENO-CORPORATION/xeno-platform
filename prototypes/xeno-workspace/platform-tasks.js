@@ -582,8 +582,11 @@
         <div class="tk-state-a">${err ? `<button class="tk-act tk-act--main" data-tk="refresh" data-arg="${esc(key)}">Try again</button>` : ''}<button class="tk-act" data-tk="board">Back to tasks</button></div></div>`;
     }
     const can = t.can || { moves: [] }, k = KIND[t.kind] || KIND.task;
-    const mineIt = !!(t.assignee && t.assignee.id === me()), editAny = can.edit || mineIt;
-    const canClaim = !t.assignee && !CLOSED.includes(t.status);
+    // owner, 2026-10-23: only whoever holds a task (or manages it) works on it; everyone else reads it and may take
+    // it, or ask to be assigned. `can` is the server's answer, so the page offers exactly what will be accepted.
+    const editAny = !!can.work;
+    const canClaim = can.take !== undefined ? !!can.take : !t.assignee && !CLOSED.includes(t.status);
+    const canAsk = !can.work && !canClaim && !!t.assignee && !CLOSED.includes(t.status) && !(t.reviewer && t.reviewer.id === me());
     const ns = nextStep(t);
     const mv = (m, main) => `<button class="tk-act${main ? ' tk-act--main' : ''}" data-tk="move" data-arg="${esc(t.key)}|${m}|${t.status}" data-tk-move="${m}">${m === 'done' ? ic('check') : ''}${esc(moveLabel(t.status, m))}</button>`;
     const prop = (id, label, value, editable, kbd) => `<div class="tk-prop"><span class="tk-prop-l">${label}</span>${editable ? `<button class="tk-prop-v" data-tk="prop" data-arg="${esc(t.key)}|${id}" data-tk-prop="${id}"${kbd ? ` title="${label} · ${kbd}"` : ''}>${value}</button>` : `<span class="tk-prop-v tk-prop-v--ro">${value}</span>`}</div>`;
@@ -599,7 +602,7 @@
     return `<div class="tk-page">
       <div class="tk-main"><div class="tk-main-in">
         ${t.parent ? `<a class="tk-parent" data-tk="open" data-arg="${esc(t.parent.key)}">${ic('layers')}<span>Sub-task of <b>${esc(t.parent.key)}</b> ${esc(t.parent.title)}</span></a>` : ''}
-        <div class="tk-titlerow"><span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small class="tk-key">${esc(t.key)}</small>${t.project ? `<span class="tk-crumb">${esc(t.project.name)}</span>` : ''}<span class="tk-sp"></span><span class="tk-tools"><button class="tk-ib" data-tk="prompt" data-arg="${esc(t.key)}" title="${can.edit ? 'Copy for agent — hands the task to your agent with a credential for this task only' : 'Copy for agent — a markdown brief for an agent CLI'}" aria-label="Copy for agent">${ic('bot')}</button><button class="tk-ib" data-tk="copylink" data-arg="${esc(t.key)}" title="Copy link" aria-label="Copy link">${ic('share')}</button><button class="tk-ib" data-tk="menu" data-arg="${esc(t.key)}" title="More actions" aria-label="More actions">${ic('more')}</button></span></div>
+        <div class="tk-titlerow"><span class="tk-kind" title="${k[1]}">${ic(k[0])}</span><small class="tk-key">${esc(t.key)}</small>${t.project ? `<span class="tk-crumb">${esc(t.project.name)}</span>` : ''}<span class="tk-sp"></span><span class="tk-tools">${can.work ? `<button class="tk-ib" data-tk="prompt" data-arg="${esc(t.key)}" title="Copy for agent — hands the task to your agent with a credential for this task only" aria-label="Copy for agent">${ic('bot')}</button>` : ''}<button class="tk-ib" data-tk="copylink" data-arg="${esc(t.key)}" title="Copy link" aria-label="Copy link">${ic('share')}</button><button class="tk-ib" data-tk="menu" data-arg="${esc(t.key)}" title="More actions" aria-label="More actions">${ic('more')}</button></span></div>
         ${can.edit ? `<h2 class="tk-title tk-title--edit" role="button" tabindex="0" data-tk="rename" data-arg="${esc(t.key)}" title="Rename · F2">${esc(t.title)}</h2>` : `<h2 class="tk-title">${esc(t.title)}</h2>`}
         ${t.readiness && !['done', 'wont_do'].includes(t.status) && (t.links || []).some((l) => l.kind === 'blocks') ? `<p class="tk-ready" data-tk-ready="${t.readiness.ready ? 'yes' : 'no'}">${t.readiness.ready ? `${ic('check')}Ready — every task blocking this one is done` : `${ic('clock')}Waiting on ${t.readiness.openBlockers} unfinished blocker${t.readiness.openBlockers === 1 ? '' : 's'}`}</p>` : ''}
         <section class="tk-sec tk-sec--desc">${desc}</section>
@@ -611,11 +614,11 @@
           ${imgs.length ? `<div class="tk-imgs">${imgs.map((a) => `<figure class="tk-img" data-tk-img="${esc(a.id)}"><a href="${imgUrl(t.key, a.id)}" target="_blank" rel="noopener" title="${esc(a.filename)}"><img src="${imgUrl(t.key, a.id)}" alt="${esc(a.filename)}" loading="lazy"></a><figcaption>${esc(a.filename)}</figcaption>${can.edit || (a.uploader && a.uploader.id === me()) ? `<button class="tk-img-x" data-tk="unattach" data-arg="${esc(t.key)}|${esc(a.id)}" aria-label="Remove ${esc(a.filename)}">${ic('x')}</button>` : ''}</figure>`).join('')}</div>` : ''}
           ${can.attach ? `<div class="tk-drop${imgs.length ? ' tk-drop--slim' : ''}" data-tk="attach" data-arg="${esc(t.key)}" role="button" tabindex="0">${ic('image')}<span>Drop images here, paste them anywhere on the page, or <u>choose files</u></span></div>` : (imgs.length ? '' : '<p class="tk-dim">No images.</p>')}</section>
         <section class="tk-sec"><h3>Activity</h3><div class="tk-activity" data-tk-history>${activity(t)}</div>
-          <form class="tk-compose" data-tk-comment="${esc(t.key)}">${face({ name: myName() }, true)}<div class="tk-compose-b"><textarea rows="2" data-tk-keep="comment:${esc(t.key)}" data-tk-mention="${esc(t.project ? t.project.id : '')}" placeholder="Leave a comment — @ to mention, paste images, Ctrl+Enter to send" aria-label="Comment"></textarea><div class="tk-compose-f"><small class="tk-dim">Markdown works. Everyone on the task sees this.</small><span class="tk-sp"></span><button class="pg-btn" type="submit">${ic('send')}<span>Comment</span></button></div></div></form></section>
+          ${can.comment === false ? `<p class="tk-dim tk-locked" data-tk-locked="${esc(t.key)}">${ic('user')}<span>${canClaim ? 'Take this task to comment and work on it.' : 'Take this task or ask to be assigned to work on it.'}</span></p>` : `<form class="tk-compose" data-tk-comment="${esc(t.key)}">${face({ name: myName() }, true)}<div class="tk-compose-b"><textarea rows="2" data-tk-keep="comment:${esc(t.key)}" data-tk-mention="${esc(t.project ? t.project.id : '')}" placeholder="Leave a comment — @ to mention, paste images, Ctrl+Enter to send" aria-label="Comment"></textarea><div class="tk-compose-f"><small class="tk-dim">Markdown works. Everyone on the task sees this.</small><span class="tk-sp"></span><button class="pg-btn" type="submit">${ic('send')}<span>Comment</span></button></div></div></form>`}</section>
       </div></div>
       <aside class="tk-side" aria-label="Task details"><div class="tk-side-in">
         <section class="tk-next" data-tk-next><p class="tk-next-h">${esc(ns.hint || '')}</p>
-          ${ns.primary || canClaim ? `<div class="tk-next-main">${canClaim ? `<button class="tk-act${ns.primary ? '' : ' tk-act--main'}" data-tk="claim" data-arg="${esc(t.key)}">${ic('user')}Take it</button>` : ''}${ns.primary ? mv(ns.primary, true) : ''}</div>` : ''}
+          ${ns.primary || canClaim || canAsk ? `<div class="tk-next-main">${canClaim ? `<button class="tk-act${ns.primary ? '' : ' tk-act--main'}" data-tk="claim" data-arg="${esc(t.key)}">${ic('user')}Take it</button>` : ''}${canAsk ? `<button class="tk-act${ns.primary ? '' : ' tk-act--main'}" data-tk="ask-assign" data-arg="${esc(t.key)}">${ic('user')}Ask to be assigned</button>` : ''}${ns.primary ? mv(ns.primary, true) : ''}</div>` : ''}
           ${ns.rest.length ? `<div class="tk-next-rest"><small class="tk-dim">Or</small>${ns.rest.map((m) => mv(m, false)).join('')}</div>` : ''}</section>
         ${t.delegate ? sessionCard(t) : ''}
         <section class="tk-sgroup"><h4>Properties</h4>
@@ -830,6 +833,11 @@
     await after(key, r.d.task);
     hist(`You took ${key}`, () => patchTask(key, { assigneeId: null }, 'Undone', { undo: false }));
   }
+  async function askAssign(key) {
+    const r = await api('POST', `/api/tasks/${encodeURIComponent(key)}/ask-assignment`).catch(() => null);
+    if (!r || !r.ok) return toast(said(r, 'The request couldn’t be sent.'));
+    toast(r.d.repeated ? 'You already asked today' : 'Asked to be assigned');
+  }
   async function remove(key, { confirm = true } = {}) {
     const t = findTask(key);
     if (confirm && !(await D().confirm({ title: `Delete ${key}?`, body: `<b>${esc(t ? t.title : key)}</b> disappears from every board. You can undo this, and its history is kept.`, action: 'Delete task' }))) return false;
@@ -961,8 +969,9 @@
     let t = T.task.get(key);
     if (!t || t.missing || !t.events) { await loadTask(key); t = T.task.get(key); }
     if (!t || t.missing) return toast('The task couldn’t be loaded');
+    if (t.can && t.can.work === false) return toast('Take this task or ask to be assigned to work on it.');
     let hand = null;
-    if (!plain && t.can && t.can.edit) {
+    if (!plain && t.can && t.can.work) {
       const res = await api('POST', `/api/tasks/${encodeURIComponent(key)}/handoff`).catch(() => null);
       if (res && res.ok) { hand = res.d; fresh(res.d.task); t = { ...t, ...res.d.task, events: res.d.task.events || t.events }; patch(); }
     }
@@ -1039,14 +1048,15 @@
   function menuFor(key) {
     const t = findTask(key); if (!t) return [[{ label: 'Open', icon: 'open', run: () => go(key) }]];
     const can = t.can || { moves: [] }, H2 = window.XCM.H, hash = `#/${P.area() || 'overview'}/g/tasks/${key}`;
-    const mineIt = !!(t.assignee && t.assignee.id === me()), editAny = can.edit || mineIt;
+    const mineIt = !!(t.assignee && t.assignee.id === me()), editAny = can.edit || mineIt, mayWork = !!can.work;
     if (!T.people.has(pkey(t))) people(t.project ? t.project.id : null);
     // Grouped by what the person is doing — open it, work it, change it, share it, remove it — and only the
     // actions THIS person can take. The list was twenty-one items with six of them greyed out; a greyed item
     // still costs a read, and the rule it hides is already shown where it applies (the task page's hint).
     const open = !CLOSED.includes(t.status);
     const work = [
-      !t.assignee && open ? { label: 'Take it', icon: 'user', run: () => claim(key) } : null,
+      (can.take !== undefined ? can.take : !t.assignee && open) ? { label: 'Take it', icon: 'user', run: () => claim(key) } : null,
+      !mayWork && t.assignee && open && !mineIt && !(t.reviewer && t.reviewer.id === me()) ? { label: 'Ask to be assigned', icon: 'user', run: () => askAssign(key) } : null,
       can.moves.length ? { label: 'Move to', icon: 'flow', sub: can.moves.map((m) => ({ label: LABEL[m], run: () => move(key, m, t.status) })) } : null,
       // Built when the submenu OPENS, not when the menu opens: the people request (started above) has
       // landed by then. Building it here froze "Loading people…" into the submenu for good.
@@ -1056,16 +1066,16 @@
     ];
     const change = [
       can.edit ? { label: 'Rename', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(key) } : null,
-      can.edit ? { label: 'Add sub-task', icon: 'layers', run: () => newTask(t.project ? t.project.id : null, { parentKey: key }) } : null,
-      t.canLink !== false && (can.edit || mineIt) ? { label: 'Link a task…', icon: 'share', run: () => { if (!T.task.get(key)) loadTask(key).then(() => addLink(key)); else addLink(key); } } : null,
+      mayWork ? { label: 'Add sub-task', icon: 'layers', run: () => newTask(t.project ? t.project.id : null, { parentKey: key }) } : null,
+      t.canLink !== false && mayWork ? { label: 'Link a task…', icon: 'share', run: () => { if (!T.task.get(key)) loadTask(key).then(() => addLink(key)); else addLink(key); } } : null,
       can.attach ? { label: 'Add images…', icon: 'image', run: () => chooseFiles(key) } : null,
     ];
     const share = [
-      { label: can.edit || mineIt ? 'Hand to an agent' : 'Copy as agent prompt', icon: 'bot', run: () => copyPrompt(key) },
+      mayWork ? { label: 'Hand to an agent', icon: 'bot', run: () => copyPrompt(key) } : null,
       { label: 'Copy', icon: 'copy', sub: [
         { label: 'Link', icon: 'share', run: () => H2.copyLink(hash) },
         { label: 'Key  ' + key, icon: 'hash', run: () => H2.copy(key, 'Key copied') },
-        ...(can.edit ? [{ label: 'Brief', icon: 'doc', run: () => copyPrompt(key, { plain: true }) }] : []),
+        ...(mayWork ? [{ label: 'Brief', icon: 'doc', run: () => copyPrompt(key, { plain: true }) }] : []),
       ] },
     ];
     return [
@@ -1273,7 +1283,7 @@
   const toggledShut = (el) => { if (!el || el !== wasOpen) return false; wasOpen = null; closePick(false); try { window.XCM?.close?.(false); } catch {} el.removeAttribute('data-menu-open'); return true; };
   const ACT = {
     board: () => go(null), retry: () => { T.status = 'loading'; patch(); load(); }, 'retry-project': (id) => { T.byProject.set(id, 'loading'); patch(); loadProject(id); },
-    open: (k) => go(k), new: (pid) => newTask(pid || null), rename, describe: (k) => editDescription(k), claim, attach: (k) => chooseFiles(k),
+    open: (k) => go(k), new: (pid) => newTask(pid || null), rename, describe: (k) => editDescription(k), claim, 'ask-assign': (k) => askAssign(k), attach: (k) => chooseFiles(k),
     refresh: (k) => { T.task.delete(k); patch(); loadTask(k); },
     'kid-open': (k) => { T.kidOpen = k; patch(); setTimeout(() => document.querySelector(`[data-tk-kidadd="${CSS.escape(k)}"] input`)?.focus(), 0); },
     menu: (k, el) => { const r = el.getBoundingClientRect(); window.XCM?.show(menuFor(k).map((s) => s.filter(Boolean)).filter((s) => s.length), { x: r.left, y: r.bottom + 4, opener: el }); },
