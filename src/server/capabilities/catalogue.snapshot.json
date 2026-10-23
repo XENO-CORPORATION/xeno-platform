@@ -1710,6 +1710,188 @@
    ]
   },
   {
+   "name": "mail.thread.search",
+   "wire": "mail__thread__search",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_search_mail"
+   ]
+  },
+  {
+   "name": "mail.thread.get",
+   "wire": "mail__thread__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_read_thread"
+   ]
+  },
+  {
+   "name": "mail.thread.mark_read",
+   "wire": "mail__thread__mark_read",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_mark_read"
+   ]
+  },
+  {
+   "name": "mail.thread.star",
+   "wire": "mail__thread__star",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_star_threads"
+   ]
+  },
+  {
+   "name": "mail.thread.label",
+   "wire": "mail__thread__label",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_label_threads"
+   ]
+  },
+  {
+   "name": "mail.thread.archive",
+   "wire": "mail__thread__archive",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_archive_threads"
+   ]
+  },
+  {
+   "name": "mail.label.list",
+   "wire": "mail__label__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_list_labels"
+   ]
+  },
+  {
+   "name": "mail.draft.list",
+   "wire": "mail__draft__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_list_drafts"
+   ]
+  },
+  {
+   "name": "mail.draft.get",
+   "wire": "mail__draft__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_read_draft"
+   ]
+  },
+  {
+   "name": "mail.draft.save",
+   "wire": "mail__draft__save",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_draft_mail"
+   ]
+  },
+  {
+   "name": "mail.thread.to_task",
+   "wire": "mail__thread__to_task",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_thread_to_task"
+   ]
+  },
+  {
+   "name": "mail.thread.to_ticket",
+   "wire": "mail__thread__to_ticket",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_thread_to_ticket"
+   ]
+  },
+  {
+   "name": "mail.thread.to_contact",
+   "wire": "mail__thread__to_contact",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_thread_to_contact"
+   ]
+  },
+  {
    "name": "support.ticket.create",
    "wire": "support__ticket__create",
    "version": "1.0.0",

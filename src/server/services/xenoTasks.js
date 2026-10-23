@@ -35,7 +35,7 @@ export class TaskError extends Error {
 export const STATUSES = ['raised', 'todo', 'in_progress', 'blocked', 'in_review', 'done', 'wont_do'];
 export const KINDS = ['task', 'bug', 'feature', 'question'];
 export const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'];
-const SOURCES = ['manual', 'chat', 'forum_ticket', 'forum_thread', 'agent'];
+const SOURCES = ['manual', 'chat', 'forum_ticket', 'forum_thread', 'agent', 'mail'];
 const AREA = /^[a-z][a-z0-9_-]{0,39}$/, UUID = /^[0-9a-f-]{36}$/i;
 const MOVES = {
   raised: ['todo', 'in_progress', 'wont_do'],

@@ -27,6 +27,7 @@ import * as supportMcp from '../services/supportMcp.js';
 import * as releasesMcp from '../services/releasesMcp.js';
 import * as customersMcp from '../services/customersMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
+import * as mailMcp from '../services/mailMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
@@ -36,7 +37,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -159,6 +160,21 @@ const ROWS = [
   ['publish.post.draft', 'publish', 'draft_post', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ post: { type: 'object', description: 'The draft: id, state (draft), text, media, targets.' } }, ['post']) }],
   ['publish.post.propose_schedule', 'publish', 'propose_schedule', 'undoable', { idempotency: NAT('one pending proposal per post; proposing again replaces the time'), reply: obj({ needsConfirmation: { type: 'boolean', description: 'Always true: a person confirms before anything is scheduled.' }, confirmationId: { type: 'string' }, proposedFor: { type: 'string' } }, ['needsConfirmation']) }],
   ['publish.approval.list', 'publish', 'list_approvals', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'kind (approval|proposal), id, postId, proposedFor, requestedAt.' } }, ['items']) }],
+  // ── mail (Office › Mail = XENO Mail, server-to-server, services/xenoMail.js). Mail is third-party text: reads are
+  //    untrusted. There is no send capability and no discard: sending is irreversible and a person confirms it on screen.
+  ['mail.thread.search', 'mail', 'search_mail', 'safe', { provenance: 'untrusted', reply: obj({ folder: { type: 'string' }, labelId: { type: 'string' }, threads: { type: 'array', description: 'thread_id, subject, from, received_at, snippet, unread — written by other people.' } }, ['threads']) }],
+  ['mail.thread.get', 'mail', 'read_thread', 'safe', { provenance: 'untrusted', reply: obj({ thread: { type: 'object', description: 'thread_id, unread, messages (message_id, from, to, subject, received_at, text).' } }, ['thread']) }],
+  ['mail.thread.mark_read', 'mail', 'mark_read', 'undoable', { idempotency: NAT('marking read twice is the same state; undo with unread: true'), reply: obj({ result: { type: 'object', description: 'updated, requested (read back by XENO Mail).' } }, ['result']) }],
+  ['mail.thread.star', 'mail', 'star_threads', 'undoable', { idempotency: NAT('starring a starred thread changes nothing; undo with starred: false'), reply: obj({ result: { type: 'object', description: 'updated, requested, starred.' } }, ['result']) }],
+  ['mail.thread.label', 'mail', 'label_threads', 'undoable', { idempotency: NAT('applying a label twice is not an error; undo by removing it'), reply: obj({ result: { type: 'object', description: 'updated, requested.' } }, ['result']) }],
+  ['mail.thread.archive', 'mail', 'archive_threads', 'undoable', { idempotency: NAT('archiving an archived thread changes nothing; undo with undo: true'), reply: obj({ result: { type: 'object', description: 'updated, requested.' } }, ['result']) }],
+  ['mail.label.list', 'mail', 'list_labels', 'safe', { provenance: 'trusted', reply: obj({ labels: { type: 'array', description: 'id, name, color.' } }, ['labels']) }],
+  ['mail.draft.list', 'mail', 'list_drafts', 'safe', { provenance: 'untrusted', reply: obj({ drafts: { type: 'array', description: 'draft_id, to, cc, subject, updated_at, byAgent (set when an agent wrote it).' } }, ['drafts']) }],
+  ['mail.draft.get', 'mail', 'read_draft', 'safe', { provenance: 'untrusted', reply: obj({ draft: { type: 'object', description: 'draft_id, to, cc, bcc, subject, body, byAgent.' } }, ['draft']) }],
+  ['mail.draft.save', 'mail', 'draft_mail', 'undoable', { idempotency: NONE('without draft_id each call writes a new draft; pass draft_id to update one. Nothing is sent'), reply: obj({ sent: { type: 'boolean', description: 'Always false: a person sends.' }, draft: { type: 'object', description: 'draft_id.' } }, ['sent']) }],
+  ['mail.thread.to_task', 'mail', 'thread_to_task', 'undoable', { idempotency: NONE('no request key yet: each call creates one task; undo by closing it as won’t do'), reply: obj({ task: TASK }, ['task']) }],
+  ['mail.thread.to_ticket', 'mail', 'thread_to_ticket', 'undoable', { idempotency: NONE('no request key yet: each call opens one support request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, url.' } }, ['ticket']) }],
+  ['mail.thread.to_contact', 'mail', 'thread_to_contact', 'undoable', { idempotency: NAT('one contact per address per workspace: saving again reuses it and adds a timeline entry'), reply: obj({ contact: { type: 'object', description: 'id, name, email, url (XENO Customers).' }, created: { type: 'boolean' }, activity: { type: 'object', description: 'The timeline entry (a draft when an agent made it).' } }, ['contact']) }],
   // ── support (Help ▸ Contact support). Sending a reply to a customer is a person's act: there is no capability for it.
   ['support.ticket.create', 'support', 'create_ticket', 'undoable', { provenance: 'trusted', idempotency: NONE('no request key yet: a retried call raises a second request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, priority, sla, url.' } }, ['ticket']) }],
   ['support.ticket.list', 'support', 'list_tickets', 'safe', { reply: obj({ tickets: { type: 'array', description: 'key, title, kind, status, priority, sla, updatedAt of each request.' } }, ['tickets']) }],

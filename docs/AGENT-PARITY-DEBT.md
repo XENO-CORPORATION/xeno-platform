@@ -4,22 +4,22 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1675 actions · 168 agent capability · 1264 planned (debt) · 243 excluded · **coverage 11.7%** of the 1432 owed.
+**Total:** 1705 actions · 182 agent capability · 1275 planned (debt) · 248 excluded · **coverage 12.5%** of the 1457 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 302 | 53 | 244 | 5 | 17.8% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
-| agents | 122 | 0 | 112 | 10 | 0% |
+| agents | 125 | 0 | 115 | 10 | 0% |
 | workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | workspace | 155 | 23 | 97 | 35 | 19.2% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| tasks | 105 | 13 | 84 | 8 | 13.4% |
+| tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
-| forum | 51 | 8 | 41 | 2 | 16.3% |
-| platform | 69 | 0 | 36 | 33 | 0% |
+| forum | 54 | 8 | 44 | 2 | 15.4% |
+| platform | 70 | 0 | 37 | 33 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
@@ -30,6 +30,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 | releases | 19 | 9 | 4 | 6 | 69.2% |
+| mail | 21 | 14 | 2 | 5 | 87.5% |
 | docs | 10 | 10 | 0 | 0 | 100% |
 
 ## account — 60 planned
@@ -95,7 +96,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:settings.js:data-set=route`
 - `ui:settings.js:data-set=shortcuts`
 
-## agents — 112 planned
+## agents — 115 planned
 
 - `route:agentRoutes.js:DELETE /:handle`
 - `route:agentRoutes.js:GET /`
@@ -135,6 +136,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:platformAgentRoutes.js:PUT /:id/division`
 - `route:platformAgentRoutes.js:PUT /:id/projects/:projectId`
 - `route:platformAgentRoutes.js:PUT /:id/webhook`
+- `route:spawnProfileRoutes.js:DELETE /:profileId`
+- `route:spawnProfileRoutes.js:GET /`
+- `route:spawnProfileRoutes.js:PUT /:profileId`
 - `route:xenoMcpRoutes.js:DELETE /connections/:id (management)`
 - `route:xenoMcpRoutes.js:GET /activity (management)`
 - `route:xenoMcpRoutes.js:GET /connections (management)`
@@ -477,7 +481,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:customersRoutes.js:POST /contacts/:id/task`
 - `route:customersRoutes.js:POST /stages`
 
-## forum — 41 planned
+## forum — 44 planned
 
 - `route:forumRoutes.js:DELETE /posts/:id`
 - `route:forumRoutes.js:DELETE /posts/:id/accept`
@@ -490,6 +494,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:forumRoutes.js:GET /moderation-log`
 - `route:forumRoutes.js:GET /notifications`
 - `route:forumRoutes.js:GET /predicate`
+- `route:forumRoutes.js:GET /report/evidence/:id`
+- `route:forumRoutes.js:GET /report/mine`
+- `route:forumRoutes.js:GET /report/submissions/:submissionId`
 - `route:forumRoutes.js:GET /spaces`
 - `route:forumRoutes.js:GET /subscriptions`
 - `route:forumRoutes.js:GET /tags`
@@ -536,6 +543,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
 
+## mail — 2 planned
+
+- `route:mailRoutes.js:DELETE /drafts/:id`
+- `route:mailRoutes.js:POST /labels`
+
 ## places — 4 planned
 
 - `route:placesRoutes.js:GET /:placeId/agents/:pid`
@@ -543,7 +555,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:placesRoutes.js:GET /:placeId/occupants/:pid/computer`
 - `route:placesRoutes.js:GET /needs-you`
 
-## platform — 36 planned
+## platform — 37 planned
 
 - `route:analyticsRoutes.js:GET /active-users`
 - `route:analyticsRoutes.js:GET /api-usage`
@@ -573,6 +585,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:learnRoutes.js:GET /`
 - `route:learnRoutes.js:GET /:slug`
 - `route:learnRoutes.js:GET /categories`
+- `route:oauth2Routes.js:POST /device/deny`
 - `route:siteGateRoutes.js:GET /codes`
 - `route:siteGateRoutes.js:GET /codes/:id/events`
 - `route:webhookRoutes.js:DELETE /:id`
@@ -824,7 +837,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-support.js:data-sp-form=delegate`
 - `ui:platform-support.js:data-sp-form=merge`
 
-## tasks — 84 planned
+## tasks — 86 planned
 
 - `route:xenoTasksRoutes.js:DELETE /:key`
 - `route:xenoTasksRoutes.js:DELETE /:key/attachments/:id`
@@ -842,6 +855,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:xenoTasksRoutes.js:GET /folders/linkable`
 - `route:xenoTasksRoutes.js:GET /views`
 - `route:xenoTasksRoutes.js:PATCH /:key/comments/:id`
+- `route:xenoTasksRoutes.js:POST /:key/ask-assignment`
 - `route:xenoTasksRoutes.js:POST /:key/attachments`
 - `route:xenoTasksRoutes.js:POST /:key/delegate`
 - `route:xenoTasksRoutes.js:POST /:key/folders`
@@ -875,6 +889,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=agent-token`
 - `ui:platform-tasks.js:data-tk=agent-unhook`
 - `ui:platform-tasks.js:data-tk=agents-retry`
+- `ui:platform-tasks.js:data-tk=ask-assign`
 - `ui:platform-tasks.js:data-tk=attach`
 - `ui:platform-tasks.js:data-tk=board`
 - `ui:platform-tasks.js:data-tk=bulk`
