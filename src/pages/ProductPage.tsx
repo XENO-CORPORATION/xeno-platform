@@ -139,6 +139,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                     <button onClick={copyInstall} className="shrink-0 text-[#827b71] transition-colors hover:text-white">{copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}</button>
                   </div>
                   {product.repo && product.repoPublic && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] text-[#827b71] transition-colors hover:text-white"><Github className="h-3.5 w-3.5" />View on GitHub</a>}
+                  {product.slug === 'spawn' && <Link to="/overview/spawn-profiles" className="mt-3 ml-4 inline-flex items-center gap-1.5 text-[12.5px] text-[#827b71] transition-colors hover:text-white"><Terminal className="h-3.5 w-3.5" />Manage Spawn profiles</Link>}
                 </div>
               )}
 
