@@ -129,6 +129,7 @@ import siteGateRoutes from './routes/siteGateRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import shellSessionRoutes from './routes/shellSessionRoutes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
+import spawnProfileRoutes from './routes/spawnProfileRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
@@ -741,6 +742,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   // Mounted under /api/* because the edge only routes /api to the backend.
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
+  app.use('/api/v2/spawn/profiles', databaseMiddleware, oidcAuth, spawnProfileRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
   // Per-product inference routing + the provider-key vault.
   // 🔴 POST /api/v2/inference/credentials CARRIES A USER'S PROVIDER KEY.
