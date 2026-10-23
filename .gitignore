@@ -73,3 +73,7 @@ secrets/
 # hand-rolled equivalents. Large, regenerated every deploy, and never source.
 # Ignored because `git add -A` has swept foreign files into a commit twice here.
 deploy*.tar
+
+# Local QA browser download and consent-design screenshots (scripts/auth-consent-design.test.mjs)
+.qa-browsers/
+.xeno/auth-design-evidence/

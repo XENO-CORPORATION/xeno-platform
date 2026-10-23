@@ -190,11 +190,35 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
 .as-o:hover{border-color:#4a4a52}.as-o[aria-checked="true"]{border-color:#ededed;background:#16161a}
 .as-o i{flex:none;width:14px;height:14px;margin-top:2px;border:1.5px solid #6a6a72;border-radius:50%}.as-o[aria-checked="true"] i{border-color:#ededed;box-shadow:inset 0 0 0 3px #0c0c0e;background:#ededed}
 .as-o span{display:flex;flex-direction:column;gap:2px;min-width:0}.as-o b{font-size:13.5px;font-weight:500}.as-o small{font-size:12px;color:#8a8a93}
+/* XENO account connection surface: original ink, bone and signal-orange palette. */
+:root{color-scheme:light dark;--bg:#f3f2ee;--panel:#fffefa;--border:#deddd5;--muted:#65665f;--text:#191b17;--accent:#b53c17;--accent2:#ee5a2a}
+body{padding:40px 20px;background:var(--bg);line-height:1.6}
+.card{width:min(520px,calc(100vw - 24px));box-sizing:border-box;padding:40px;border-radius:24px;box-shadow:0 2px 6px #1c201008,0 20px 70px #1c20100a}
+.logo{justify-content:center;gap:12px;margin-bottom:30px}.logo .name{font-size:13px;letter-spacing:.22em}
+.logo .dot{border-radius:0;width:40px;height:34px;background:var(--accent2);clip-path:polygon(30% 0,70% 0,70% 12%,90% 12%,90% 25%,100% 25%,100% 70%,75% 70%,75% 100%,60% 100%,60% 78%,40% 78%,40% 100%,25% 100%,25% 70%,0 70%,0 25%,10% 25%,10% 12%,30% 12%);position:relative}
+.logo .dot:after{content:'';position:absolute;left:10px;top:13px;width:6px;height:6px;background:#191b17;box-shadow:14px 0 #191b17}
+h1,.consent h1{font-size:27px;line-height:1.25;letter-spacing:-.035em;text-align:center;margin-bottom:18px;font-weight:650;overflow-wrap:anywhere}
+.sub{font-size:14px;text-align:center;margin-bottom:24px}.consent .can{background:var(--bg);padding:22px 22px 22px 32px;border-radius:14px;gap:14px;font-size:14px;margin:24px 0}
+.consent .can li{padding-left:20px}.consent .can li:before{background:var(--accent2);width:6px;height:6px;top:.65em}
+.consent .warn{line-height:1.6;font-size:12px;padding-top:18px}.consent .row{display:flex;flex-direction:column-reverse;gap:8px;margin-top:24px}
+.consent .row button{width:100%;min-height:46px;border-radius:10px}.consent #cAllow,button{background:var(--text);color:var(--panel)}
+.consent .ghost{border-color:transparent;color:var(--muted)}.consent .ghost:hover{background:var(--bg);opacity:1}
+input{background:var(--bg);border-color:var(--border);color:var(--text)}input:focus{outline:2px solid var(--accent2);outline-offset:2px}
+button:focus-visible,a:focus-visible{outline:3px solid var(--accent2);outline-offset:4px}
+.as-o{border-color:var(--border)}.as-o[aria-checked="true"]{border-color:var(--accent2);background:var(--bg)}.as-o small{color:var(--muted)}
+.as-o[aria-checked="true"] i{border-color:var(--accent2);background:var(--accent2);box-shadow:inset 0 0 0 3px var(--panel)}
+.loader{width:520px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:24px;padding:60px 24px}
+.loader .msg{color:var(--text)}.spin{border-color:var(--border);border-bottom-color:var(--accent2);width:32px;height:32px}
+.foot{color:var(--muted);font-size:11px;letter-spacing:.03em}.err{color:#b53023}.account-switch{display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:13px}
+@media(prefers-color-scheme:dark){:root{--bg:#11130f;--panel:#1b1e18;--border:#34382e;--muted:#a7ad9e;--text:#eeeee6;--accent:#ff916a}.err{color:#ff9c8e}}
+@media(max-width:560px){body{padding:20px 12px}.card{padding:28px 22px;border-radius:18px}.consent h1,h1{font-size:23px}.consent .can{padding:18px}.loader{padding:40px 20px}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}*{transition:none!important}}
 </style></head>
 <body>
   <div id="loader" class="loader">
-    <div class="spin"></div>
-    <div class="msg" id="status">Checking your XENO session…</div>
+    <div class="logo"><div class="dot" aria-hidden="true"></div><div class="name">XENO</div></div>
+    <div class="spin" aria-hidden="true"></div>
+    <div class="msg" id="status" role="status" aria-live="polite">Checking your XENO session…</div>
     <div class="who">Continue to <b id="app">${app}</b></div>
   </div>
   <div id="consent" class="hide"><div class="card consent" role="dialog" aria-labelledby="cTitle">
@@ -204,7 +228,9 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     <div id="cAs" class="as hide"><div class="as-h">Act as</div><div id="cAsList" class="as-list" role="radiogroup" aria-label="Which agent it acts as"></div></div>
     <ul class="can"><li>See the tasks you can see, and the projects they are in</li><li id="cWrite">Take tasks, comment, report what it is doing, and send work for review — never accept its own work</li><li class="no">Nothing else: no chats, files, billing or account settings</li></ul>
     <p class="warn">This app registered itself and has not been reviewed by XENO. Only continue if you started this sign-in from <span id="cApp"></span>. You will be sent back to <b id="cWhere"></b>.</p>
-    <div class="row"><button id="cDeny" type="button" class="ghost">Cancel</button><button id="cAllow" type="button">Allow</button></div>
+    <div class="row"><button id="cDeny" type="button" class="ghost">Decline connection</button><button id="cAllow" type="button">Authorize connection</button></div>
+    <p id="cAccount" class="account-switch"></p>
+    <a id="cSwitch" class="account-switch" href="#">Use a different account</a>
     <div class="foot">Secured by XENO</div>
   </div></div>
   <div id="cardWrap" class="hide"><div class="card">
@@ -219,7 +245,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
       <button id="submit" type="submit">Sign in &amp; continue</button>
       <p class="muted"><span id="toggleText">New to XENO?</span> <a id="toggle">Create an account</a></p>
     </form>
-    <div class="foot">Secured by XENO · xenostudio.ai</div>
+    <div class="foot">XENO Account · xenosystem.ai</div>
   </div></div>
 <script>
 (function(){
@@ -255,6 +281,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function showConsent(c){
     var w=$('consent'); var tx=function(id,v){$(id).textContent=v};
     var ags=c.agents||[];
+    tx('cAccount',c.accountLabel?'Signed in as '+c.accountLabel:'Signed in to your XENO account');
     if(ags.length){
       var list=$('cAsList'); list.textContent='';
       var opts=[{id:'',name:'Its own agent',description:'A new agent named after '+c.name+', made for this app'}].concat(ags);
@@ -290,6 +317,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   }
   $('cAllow').onclick=function(){ $('cAllow').disabled=true; continueWith({consent:true,actAs:actAs}); };
   $('cDeny').onclick=function(){ continueWith({deny:true}); };
+  $('cSwitch').onclick=function(event){event.preventDefault();var resume=new URL(location.href);resume.searchParams.set('prompt','login');resume.searchParams.delete('stepup_complete');location.href=resume.pathname+resume.search;};
   $('toggle').onclick=function(){
     mode=mode==='signin'?'signup':'signin';
     show($('nameRow'),mode==='signup');
