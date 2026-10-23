@@ -37,7 +37,7 @@
     "test:workspace-docs": "cd src/server && node tests/workspace-docs.test.mjs",
     "test:docs-ui": "node prototypes/xeno-workspace/tests/docs-test.mjs",
     "test:workspace-docs-bundle": "node --test scripts/workspace-docs-bundle.test.mjs",
-    "build:workspace-docs": "node scripts/build-workspace-docs.mjs",
+    "build:workspace-docs": "npm ci --prefix scripts/workspace-docs-source --ignore-scripts --no-audit --no-fund && node scripts/build-workspace-docs.mjs",
     "mutation:workspace-docs": "node scripts/workspace-docs-mutation-check.mjs",
     "migrate:workspace-docs": "node src/server/scripts/migrate-workspace-docs-to-xdoc.mjs",
     "test:orchestrator": "node src/server/tests/orchestrator.test.mjs",
