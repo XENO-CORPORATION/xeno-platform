@@ -59,6 +59,7 @@ const ShareToolsInterface = lazyRoute(() => import('../components/playground/Too
 const DownloadToolsInterface = lazyRoute(() => import('../components/playground/Download/DownloadToolsInterface'));
 // Import Account pages
 import ProfilePage from '../components/account/ProfilePage';
+import SpawnProfilesPage from '../components/account/SpawnProfilesPage';
 import SettingsPage from '../components/account/SettingsPage';
 import UsageAnalyticsPage from '../components/account/UsageAnalyticsPage';
 import BillingPage from '../components/account/BillingPage';
@@ -406,6 +407,7 @@ const OverviewContent: React.FC = () => {
             <Route path="content-creation/scheduler" element={<CapabilityHandoff title="Scheduling belongs to XENO Post" detail="This route does not persist or publish scheduled posts. Open XENO Post for server-backed scheduling." productPath="/products/post" />} />
             {/* Account settings routes */}
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="spawn-profiles" element={<SpawnProfilesPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="usage-analytics" element={<UsageAnalyticsPage />} />
             {/* Provider keys are managed on the API platform, not here. */}
