@@ -272,6 +272,9 @@ services:
       # XENO Publish (services/xenoPost.js): xeno-post API base, https://post.xenosystem.ai/api/v1.
       # Unset = every Publish route answers publish_not_configured (fail closed).
       - XENO_POST_API_URL=${XENO_POST_API_URL:-}
+      # Dev › Automate = XENO Workflow (services/xenoWorkflow.js): the headless runner's base URL, e.g.
+      # http://xeno-workflow-runner:8790 on the backend's private network. Unset = runs stay queued (fail closed).
+      - XENO_WORKFLOW_RUNNER_URL=${XENO_WORKFLOW_RUNNER_URL:-}
       - REGISTRATION_OPEN=${REGISTRATION_OPEN:-}
       - REGISTRATION_OPEN_UNTIL=${REGISTRATION_OPEN_UNTIL:-}
       - REGISTRATION_ALLOWLIST=${REGISTRATION_ALLOWLIST:-}

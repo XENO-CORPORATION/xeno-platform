@@ -143,7 +143,9 @@
   "releaseRoutes.js": "releases",
   "platform-releases.js": "releases",
   "researchRoutes.js": "workspace",
-  "platform-research.js": "workspace"
+  "platform-research.js": "workspace",
+  "automateRoutes.js": "automate",
+  "platform-automate.js": "automate"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -9227,6 +9229,128 @@
    "class": "irreversible",
    "scope": "none",
    "because": "the screen for the same route"
+  },
+  "route:automateRoutes.js:GET /status": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "automate:read"
+  },
+  "route:automateRoutes.js:GET /catalogue": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "automate:read"
+  },
+  "route:automateRoutes.js:GET /runs": {
+   "status": "capability",
+   "capability": "automate.run.list",
+   "class": "safe",
+   "scope": "automate:read"
+  },
+  "route:automateRoutes.js:GET /runs/:runId": {
+   "status": "capability",
+   "capability": "automate.run.list",
+   "class": "safe",
+   "scope": "automate:read"
+  },
+  "route:automateRoutes.js:POST /runs/:runId/retry": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "a person decides whether a failed run acts again with the workflow’s authority"
+  },
+  "route:automateRoutes.js:POST /runs/:runId/discard": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "a person decides about a failed run"
+  },
+  "route:automateRoutes.js:GET /": {
+   "status": "capability",
+   "capability": "automate.workflow.list",
+   "class": "safe",
+   "scope": "automate:read"
+  },
+  "route:automateRoutes.js:POST /": {
+   "status": "capability",
+   "capability": "automate.workflow.draft",
+   "class": "reversible",
+   "scope": "automate:write"
+  },
+  "route:automateRoutes.js:GET /:id": {
+   "status": "capability",
+   "capability": "automate.workflow.get",
+   "class": "safe",
+   "scope": "automate:read"
+  },
+  "route:automateRoutes.js:PUT /:id": {
+   "status": "capability",
+   "capability": "automate.workflow.edit",
+   "class": "reversible",
+   "scope": "automate:write"
+  },
+  "route:automateRoutes.js:DELETE /:id": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "irreversible",
+   "scope": "none",
+   "because": "deleting a workflow is a human admin’s act; an agent turns one off instead"
+  },
+  "route:automateRoutes.js:POST /:id/enable": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "turning a workflow on grants its agent the capabilities it calls: a person ratifies it, never an agent"
+  },
+  "route:automateRoutes.js:POST /:id/disable": {
+   "status": "capability",
+   "capability": "automate.workflow.disable",
+   "class": "reversible",
+   "scope": "automate:write"
+  },
+  "route:automateRoutes.js:POST /:id/run": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "starting a run by hand acts with the workflow’s granted authority; a person starts it"
+  },
+  "route:automateRoutes.js:POST /:id/webhook-secret": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "a webhook secret is a credential shown once to a person"
+  },
+  "route:automateRoutes.js:POST /:id (hooksRouter)": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the signed webhook trigger: an inbound HMAC-verified delivery, not a person’s action"
+  },
+  "ui:platform-automate.js:data-au-builder": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "marks the builder being edited; saving is decided on PUT /:id"
+  },
+  "ui:platform-automate.js:data-au-f": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "edits a step in the unsaved draft on screen; saving is decided on PUT /:id"
+  },
+  "ui:platform-automate.js:data-au-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
   }
  }
 }

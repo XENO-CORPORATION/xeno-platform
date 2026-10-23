@@ -20,6 +20,8 @@ import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
+import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
+import { startAutomateWorker } from './workers/automateWorker.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import workspaceDocsRoutes from './routes/workspaceDocsRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
@@ -531,6 +533,8 @@ app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), (req,
 console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pre-json)');
 // Mail delivery events (Resend, Svix-signed) — same raw-body, pre-json contract.
 app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
+// Dev › Automate's signed webhook trigger (services/xenoWorkflow.js): the HMAC covers the raw body, so it is read before the JSON parser
+app.use('/api/automate/hooks', express.raw({ type: '*/*', limit: '256kb' }), (req, res, next) => { req.db = pool; next(); }, automateHooksRoutes);
 
 // ULTRA HIGH LIMITS for base64 image data processing
 // Bound evidence requests before the general 100 MB parser allocates their body.
@@ -660,6 +664,7 @@ app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceI
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
+app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
 app.use('/api/workspace-analytics', databaseMiddleware, authMiddleware, requireActivated, workspaceAnalyticsRoutes);
 app.use('/api/workspace-docs', databaseMiddleware, authMiddleware, requireActivated, workspaceDocsRoutes);   // Office › Write and Notes: documents that are Storage files (services/workspaceDocs.js)   // Corpo › Analytics: a workspace's own dashboards (services/analytics.js)   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
@@ -4210,6 +4215,8 @@ backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, del
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
+// Dev › Automate: the ONE delivery loop for workspace workflows (schedules due → runs queued → the XENO Workflow runner)
+backgroundLeader.whenLeader(() => startAutomateWorker(pool));
 // Invitation mail is CLAIMED durably before it is dispatched, so a crash between the
 // commit and the send cannot lose an invitation — which the previous inline send could.
 // Leader-elected because two replicas draining one queue would double-send: the claim

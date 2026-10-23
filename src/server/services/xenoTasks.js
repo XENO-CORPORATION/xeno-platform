@@ -347,7 +347,9 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   const backTo = to === 'in_review' && !t.reviewer_id ? await creatorOf(db, t) : null;
   const done = (await db.query(`UPDATE tasks SET status = $2, updated_at = now(), closed_at = CASE WHEN $2 IN ('done', 'wont_do') THEN now() ELSE NULL END, reviewer_id = COALESCE(reviewer_id, $4::uuid) WHERE id = $1 AND status = $3 RETURNING id`, [t.id, to, t.status, backTo])).rowCount;
   if (!done) throw new TaskError('Someone moved this task first. Reload it and try again.', 'conflict', 409);
-  await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null);
+  const moved = (await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null)).rows[0];
+  // Dev › Automate: workspace workflows listening for task moves hear it (idempotent by this event's id; never throws)
+  await (await import('./xenoWorkflow.js')).onTaskStatus(db, { task: t, from: t.status, to, eventId: moved && moved.id, actorId: me.id });
   if (backTo) await event(db, t, me, 'edited', null, backTo, null, 'reviewer');
   const fresh = await loadByKey(db, key), label = { raised: 'Triage', todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'In review', done: 'Done', wont_do: 'Won’t do' };
   const told = new Set();
