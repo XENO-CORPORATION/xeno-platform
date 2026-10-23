@@ -24,3 +24,22 @@
 @media (min-width:1800px){
   [data-panels]{grid-auto-rows:minmax(276px,1fr)!important}
 }
+/* Section widths by job (owner, 2026-10-23: "which ones should have what kind of margin, some more some less").
+   One 1360px column for every section left 2000px+ screens with huge empty sides around the demos. The column
+   stays 1360px up to 1600px wide; above that each section takes the width its content needs:
+     showcase (live demos, 3D, scrollers)  up to 1760px, gutter up to 64px
+     plans (cards that must not stretch)   up to 1440px
+     reading (FAQ, final call)              1200px — lines stay readable
+     statement (beliefs) keeps 1360px: big type beside its artwork
+   The hero stays full-bleed. */
+@media (min-width:1600px){
+  #scene [style*="max-width: 1360px"],
+  #job [style*="max-width: 1360px"],
+  #stack [style*="max-width: 1360px"],
+  #uses [style*="max-width: 1360px"],
+  section[aria-label="At a glance"] [style*="max-width: 1360px"]{max-width:1760px!important;padding-left:clamp(40px,3.2vw,64px)!important;padding-right:clamp(40px,3.2vw,64px)!important}
+  section[aria-label="Plans"] [style*="max-width: 1360px"],
+  #pricing [style*="max-width: 1360px"]{max-width:1440px!important}
+  section[aria-label="FAQ"] [style*="max-width: 1360px"],
+  section[aria-label="Get started"] [style*="max-width: 1360px"]{max-width:1200px!important}
+}

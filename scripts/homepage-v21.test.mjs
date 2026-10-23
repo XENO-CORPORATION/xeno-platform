@@ -98,3 +98,14 @@ test('nginx serves v21 at exactly / behind the site gate, and the SPA hands / to
   assert.match(app, /<Route path="\/" element=\{<HomeV21Redirect \/>\} \/>/);
   assert.match(app, /<Route path="\/v3" element=\{<Home3 \/>\} \/>/, 'the previous homepage stays at /v3');
 });
+
+test('wide screens give each section the width its job needs (owner, 2026-10-23)', () => {
+  const css = read('public/home-v21/homepage.css').replace(/\r\n/g, '\n');
+  const block = css.slice(css.indexOf('@media (min-width:1600px)'));
+  for (const id of ['#scene', '#job', '#stack', '#uses']) assert.ok(block.includes(`${id} [style*="max-width: 1360px"]`), `${id} is a showcase section`);
+  assert.ok(block.includes('max-width:1760px!important'), 'showcase sections widen to 1760px');
+  assert.match(block, /aria-label="Plans"[\s\S]*?max-width:1440px!important/, 'plan cards stop at 1440px');
+  assert.match(block, /aria-label="FAQ"[\s\S]*?max-width:1200px!important/, 'the FAQ stays a reading width');
+  // the runtime writes the inline style WITH spaces; a selector without them matches nothing
+  assert.ok(!block.includes('max-width:1360px"]'), 'selectors must match the rendered style');
+});
