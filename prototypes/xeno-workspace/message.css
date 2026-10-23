@@ -1,0 +1,29 @@
+/* message.css — Social › Message (platform-message.js), a front-end to XENO Comms. Workspace tokens only; emphasis by
+   surface and text brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens. */
+.ms-wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;min-height:60vh}
+.ms-wrap.with-thread{grid-template-columns:240px minmax(0,1fr) 320px}
+.ms-side,.ms-main,.ms-thread{background:var(--n20);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column}
+.ms-sec{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:10px 6px 4px}
+.ms-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ms-ch a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:13px}
+.ms-ch a:hover{background:var(--n26);color:var(--text)}
+.ms-ch.on a{background:var(--n30);color:var(--text)}
+.ms-n{color:var(--text);font-size:14px}
+.ms-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 6px 10px}
+.ms-head h2,.ms-head h3{margin:0;font-size:15px;color:var(--text)}
+.ms-head small{color:var(--muted);font-size:12px}
+.ms-msgs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;overflow:auto;flex:1}
+.ms-msg{padding:8px 10px;border-radius:6px;background:var(--n24)}
+.ms-meta{font-size:13px;color:var(--text)}
+.ms-meta small{color:var(--muted);font-size:11px}
+.ms-agent{padding:0 5px;border-radius:3px;background:var(--n38);color:var(--text)}
+.ms-body{font-size:13px;line-height:1.5;color:var(--text);margin-top:3px;overflow-wrap:anywhere}
+.ms-body a{color:var(--text);text-decoration:underline}
+.ms-gone{color:var(--muted);font-size:12px}
+.ms-acts{display:flex;gap:6px;margin-top:4px}
+.ms-acts .btn{padding:2px 8px;font-size:12px}
+.ms-compose{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.ms-row{display:flex;justify-content:flex-end;gap:6px}
+[data-ms-page] .in{padding:7px 10px;border-radius:6px;background:var(--n26);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none;resize:vertical}
+[data-ms-page] .in:focus{border-color:var(--n58);outline:0}
+@media (max-width:900px){.ms-wrap,.ms-wrap.with-thread{grid-template-columns:1fr}}

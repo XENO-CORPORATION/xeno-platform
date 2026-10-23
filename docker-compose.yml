@@ -272,6 +272,10 @@ services:
       # XENO Publish (services/xenoPost.js): xeno-post API base, https://post.xenosystem.ai/api/v1.
       # Unset = every Publish route answers publish_not_configured (fail closed).
       - XENO_POST_API_URL=${XENO_POST_API_URL:-}
+      # XENO Message (services/xenoComms.js): the XENO Comms API base (no /v1) and its realtime gateway socket.
+      # Unset API = every Message route answers message_not_configured (fail closed); unset gateway = no live updates.
+      - XENO_COMMS_API_URL=${XENO_COMMS_API_URL:-}
+      - XENO_COMMS_GATEWAY_URL=${XENO_COMMS_GATEWAY_URL:-}
       # XENO Mail (services/xenoMail.js): mail-core base, e.g. https://mail-api.xenostudio.ai.
       # Unset = every Mail route answers mail_not_configured (fail closed).
       - XENO_MAIL_API_URL=${XENO_MAIL_API_URL:-}
