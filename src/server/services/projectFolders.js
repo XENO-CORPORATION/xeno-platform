@@ -17,7 +17,7 @@ import { registerManagedLibraryFile } from './libraryAssets.js';
 import { addVersion } from './storageVersions.js';
 import { storeFileObject } from './storageObjects.js';
 import { cleanLibraryName, trashLibraryItem } from './libraryOrganise.js';
-import { reconcileShares } from './storageShares.js';
+import { reconcileShares, sharedFolderAccess } from './storageShares.js';
 
 export class ProjectFolderError extends Error { constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,14 +47,24 @@ async function binding(db, app, projectId) {
   return (await db.query('SELECT folder_id FROM project_folders WHERE app = $1 AND project_id = $2', [app, projectId])).rows[0] || null;
 }
 
-/** The project's folder if `userId` may use it as `need`; ProjectFolderError otherwise. Unknown and forbidden look alike. */
+/**
+ * The project's folder if `userId` may use it as `need`; ProjectFolderError otherwise. Unknown and forbidden look alike.
+ * `edit` here means editing the project's FILES. A personal folder shared with someone as `editor` is view-only in
+ * Storage's own folder check (they may not rearrange someone else's folders), but writing the project's files is what
+ * that share is for, so it is honoured here — and every change it makes is made as the folder's OWNER (`actor`), so the
+ * files stay the owner's, count toward the owner's storage, and stay readable by the owner and every other collaborator.
+ */
 export async function projectFolder(db, userId, app, projectId, need = 'view') {
   checkIds(app, projectId);
   const b = await binding(db, app, projectId);
-  const folder = b && await folderAccess(db, userId, b.folder_id, need);
+  let folder = b && await folderAccess(db, userId, b.folder_id, need);
+  if (!folder && b && need === 'edit' && (await sharedFolderAccess(db, userId, b.folder_id)) === 'edit') folder = await folderAccess(db, userId, b.folder_id, 'view');
   if (!folder) throw new ProjectFolderError('Project not found', 'project_not_found', 404);
   return folder;
 }
+
+/** Who a change in the project folder is made as: the workspace member themselves in a team folder, else the owner. */
+const actorFor = (folder, userId) => (folder.workspace_id ? userId : folder.owner_user_id);
 
 /** A folder named `name` in `parentId` (or at the top of the scope), made if missing. Same name, any case, is the same folder. */
 async function folderNamed(db, userId, { name, parentId = null, workspaceId = null }) {
@@ -126,10 +136,12 @@ export async function readProjectFile(db, userId, app, projectId, rawPath) {
   return row;
 }
 
-/** The Storage folder a path's file sits in: its directories, made as sub-folders of the project folder. */
+/** The Storage folder a path's file sits in: its directories, made as sub-folders of the project folder.
+ *  Storage folder names compare without case and project paths do not, so `Src/a` and `src/b` share one sub-folder.
+ *  Harmless: the sub-folders are for a person browsing Storage; `project_files` is what maps a path to its file. */
 async function folderFor(db, userId, folder, p) {
   let at = folder.id;
-  for (const dir of p.split('/').slice(0, -1)) at = await folderNamed(db, userId, { name: dir, parentId: at });
+  for (const dir of p.split('/').slice(0, -1)) at = await folderNamed(db, actorFor(folder, userId), { name: dir, parentId: at });
   return at;
 }
 
@@ -156,11 +168,11 @@ export async function writeProjectFile(db, userId, app, projectId, rawPath, { by
   try {
     let versionId;
     if (before) {
-      const out = await addVersion(db, userId, String(before.id), stored, registerManagedLibraryFile);
+      const out = await addVersion(db, actorFor(folder, userId), String(before.id), stored, registerManagedLibraryFile);
       if (out.notFound) throw new ProjectFolderError('You cannot change this file', 'not_allowed', 403);
       versionId = out.file.id;
     } else {
-      const created = await registerManagedLibraryFile(db, { userId, workspaceId: folder.workspace_id || null, enforceAllowance: true, area: null,
+      const created = await registerManagedLibraryFile(db, { userId: actorFor(folder, userId), workspaceId: folder.workspace_id || null, enforceAllowance: true, area: null,
         filename: stored.filename, originalName: name, mimeType, fileSize: bytes.length, storagePath, metadata: { source: 'project', app, projectId, path: p } });
       const won = (await db.query(`INSERT INTO project_files (app, project_id, path, file_id) VALUES ($1, $2, $3, $4)
          ON CONFLICT (app, project_id, path) DO NOTHING RETURNING file_id`, [app, projectId, p, created.file_id])).rows[0];
@@ -187,12 +199,13 @@ export async function writeProjectFile(db, userId, app, projectId, rawPath, { by
 
 /** Take a path out of the project. Its file goes to the Storage trash, restorable for the trash period. */
 export async function removeProjectFile(db, userId, app, projectId, rawPath) {
-  await projectFolder(db, userId, app, projectId, 'edit');
+  const folder = await projectFolder(db, userId, app, projectId, 'edit');
   const p = projectPath(rawPath);
   if (!p) throw new ProjectFolderError('Not a valid project path', 'invalid_path');
   const row = await current(db, app, projectId, p);
   if (!row) throw new ProjectFolderError('No such file in the project', 'file_not_found', 404);
-  const out = await trashLibraryItem(db, { type: 'user', id: userId }, 'file', String(row.id));
+  // the one access check has run; the trash is entered on the owner's behalf, so a collaborator can remove a path too
+  const out = await trashLibraryItem(db, { type: 'user', id: actorFor(folder, userId) }, 'file', String(row.id));
   if (out.forbidden || out.notFound) throw new ProjectFolderError('You cannot remove this file', 'not_allowed', 403);
   await db.query('DELETE FROM project_files WHERE app = $1 AND project_id = $2 AND path = $3', [app, projectId, p]);
   return { removed: true, path: p, fileId: String(row.file_id) };

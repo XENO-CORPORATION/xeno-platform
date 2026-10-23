@@ -20,7 +20,12 @@ export default function projectFolderRoutes({ uploadsDir }) {
   const router = express.Router();
   router.use(authMiddleware);
   router.use('/:app', (req, res, next) => {
-    if (req.auth?.kind === 'oidc' && req.auth.clientId !== req.params.app) return res.status(403).json({ success: false, code: 'wrong_app', error: 'This app can only reach its own projects' });
+    if (req.auth?.kind === 'oidc') {
+      if (req.auth.clientId !== req.params.app) return res.status(403).json({ success: false, code: 'wrong_app', error: 'This app can only reach its own projects' });
+      // an app's token carries what the person consented to: reading needs storage:read, any change storage:write
+      const need = req.method === 'GET' || req.method === 'HEAD' ? 'storage:read' : 'storage:write';
+      if (!String(req.auth.scope || '').split(/\s+/).includes(need)) return res.status(403).json({ success: false, code: 'scope_missing', error: `This sign-in lacks ${need}; sign in again to allow it` });
+    }
     next();
   });
   const fail = (res, error) => {
