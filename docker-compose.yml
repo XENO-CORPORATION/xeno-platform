@@ -689,6 +689,32 @@ services:
       timeout: 10s
       retries: 3
 
+  # Dev › Automate engine: the XENO Workflow headless runner (docs/AUTOMATE-XENO-WORKFLOW.md).
+  # The image is built on the box from xeno-workflow's own repo (origin/main):
+  #   docker build -f docker/headless/Dockerfile -t xeno-workflow-runner:<sha> -t xeno-workflow-runner:latest .
+  # 🔴 NO `ports:` — it must never be reachable from outside the private network. The backend reaches it as
+  # http://xeno-workflow-runner:8790 (XENO_WORKFLOW_RUNNER_URL) and it reaches the backend at http://backend:8080.
+  # ⚠️ XENO_PLATFORM_ISSUER must be the issuer the backend SIGNS with (config/hosts.js issuer(), published at
+  # /api/oauth2/.well-known/openid-configuration — https://xenostudio.ai, measured 2026-10-24), not the site host.
+  xeno-workflow-runner:
+    image: xeno-workflow-runner:latest
+    container_name: xeno-workflow-runner
+    environment:
+      - XENO_PLATFORM_URL=http://backend:8080
+      - XENO_WORKFLOW_ALLOW_HTTP_PLATFORM=1
+      - XENO_PLATFORM_ISSUER=${XENO_WORKFLOW_PLATFORM_ISSUER:-https://xenostudio.ai}
+      - XENO_WORKFLOW_RUNNER_DATA=/data
+    volumes:
+      - xeno_workflow_runner_data:/data
+    networks:
+      - xenostudio-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
   # LaTeX Compilation Service (Full TeX Live)
   latex:
     build:
@@ -883,6 +909,8 @@ volumes:
   chat_extractor_jobs:
     driver: local
   clamav_db:
+    driver: local
+  xeno_workflow_runner_data:
     driver: local
 
 networks:
