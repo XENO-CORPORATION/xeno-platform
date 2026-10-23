@@ -227,7 +227,7 @@ xeno auth      # inspect the current auth state
 xeno logout    # clear stored credentials
 \`\`\`
 
-On SSH, starting \`xeno\` automatically starts device-code sign-in in that running process. Open [xenosystem.ai/activate](https://xenosystem.ai/activate) on your own device, enter the code, check the registered client and requested access, then approve or decline. Login, signup and email activation return to the original device authorization. Never approve a code you did not start.
+On SSH, starting \`xeno\` automatically starts device-code sign-in in that running process. Open [xenosystem.ai/device](https://xenosystem.ai/device) on your own device, enter the code, check the registered client and requested access, then approve or decline. Login, signup and email activation return to the original device authorization. Never approve a code you did not start.
 
 On Linux without a Secret Service keyring, account sign-in lasts only for the running process. Sign in inside \`xeno\`; a separate \`xeno login --device\` cannot persist that account session without a keyring. Configure an OS keyring to retain account sign-in between launches.
 
