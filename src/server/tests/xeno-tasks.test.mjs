@@ -145,18 +145,22 @@ async function main() {
     check(pe && pe.from === 'none' && pe.to === 'high', 'the history records which field changed, from what, to what');
     const ra = (await ada('PATCH', `/tasks/${ct.key}`, { reviewerId: ids.ada, reviewRequired: true })).j.task;
     check(ra.events.some((e) => e.field === 'reviewer' && e.toName), 'a reviewer change names the person');
-    const cm = (await cyd('POST', `/tasks/${ct.key}/comments`, { body: `please check @${bobName} thanks` })).j.task;
+    // owner, 2026-10-23: only whoever works a task comments on it. Cyd can see it and watch it; she cannot talk on it.
+    const outsider = await cyd('POST', `/tasks/${ct.key}/comments`, { body: 'drive-by' });
+    check(outsider.s === 403 && outsider.j.code === 'not_your_task' && /Take this task or ask to be assigned/.test(outsider.j.error), 'someone who can see a task but does not hold it cannot comment on it');
+    check((await cyd('PUT', `/tasks/${ct.key}/watch`)).j.task.watching === true, 'they can still watch it');
+    const cm = (await ada('POST', `/tasks/${ct.key}/comments`, { body: `please check @${bobName} thanks` })).j.task;
     check((await inbox('bob')).some((n) => n.kind === 'mentioned' && n.ref === ct.key) && !(await inbox('bob')).some((n) => n.kind === 'commented' && n.ref === ct.key), 'an @mention tells that person once (as a mention, not also as a comment)');
-    check((await inbox('ada')).some((n) => n.kind === 'commented' && n.ref === ct.key), 'other watchers hear about the comment');
+    check((await inbox('cyd')).some((n) => n.kind === 'commented' && n.ref === ct.key), 'other watchers hear about the comment');
     check((await eve('POST', `/tasks/${ct.key}/comments`, { body: 'x' })).s === 404 && !(await inbox('eve')).length, 'someone outside the project is never notified');
     const cid = cm.events.filter((e) => e.kind === 'comment').at(-1).id;
     check((await bob('PATCH', `/tasks/${ct.key}/comments/${cid}`, { body: 'hijack' })).s === 403, 'only the author edits a comment');
-    const ed = (await cyd('PATCH', `/tasks/${ct.key}/comments/${cid}`, { body: 'please check, updated' })).j.task;
+    const ed = (await ada('PATCH', `/tasks/${ct.key}/comments/${cid}`, { body: 'please check, updated' })).j.task;
     check(ed.events.find((e) => e.id === cid).note === 'please check, updated' && ed.events.find((e) => e.id === cid).editedAt, 'the author edits it and it shows as edited');
-    const rm = (await cyd('DELETE', `/tasks/${ct.key}/comments/${cid}`)).j.task;
+    const rm = (await ada('DELETE', `/tasks/${ct.key}/comments/${cid}`)).j.task;
     check(rm.events.find((e) => e.id === cid).removed && rm.events.find((e) => e.id === cid).note === null, 'a removed comment keeps its place but loses its words');
     // watching
-    check((await cyd('GET', `/tasks/${ct.key}`)).j.task.watching === true && (await cyd('DELETE', `/tasks/${ct.key}/watch`)).j.task.watching === false, 'commenting makes you a watcher; you can stop watching');
+    check((await cyd('GET', `/tasks/${ct.key}`)).j.task.watching === true && (await cyd('DELETE', `/tasks/${ct.key}/watch`)).j.task.watching === false, 'a watcher can stop watching');
     const before = (await inbox('cyd')).length; await bob('POST', `/tasks/${ct.key}/comments`, { body: 'more' });
     check((await inbox('cyd')).length === before, 'someone who stopped watching hears nothing more');
     // transitions: review requested, changes requested
@@ -309,6 +313,68 @@ async function main() {
     check((await pool.query('SELECT 1 FROM relationship_tuples WHERE object_id = $1 AND subject_id = $2', [String(proj.id), ho.agent.id])).rowCount === 0, 'handing off does not share the whole project with the agent');
     const ho2 = (await bob('POST', `/tasks/${other.key}/handoff`)).j;
     check(ho2.agent.id === ho.agent.id, 'the same hand-off agent is reused, not a new one each time');
+
+    // ── WHO MAY INTERACT (owner, 2026-10-23): "only when he took the task or it was assigned to him". Anyone who can
+    // see a task reads it and may take it; working on it — comment, images, sub-tasks, links, folders, moves, copy
+    // for agent — is the assignee's (and its delegate's), the creator's or a project admin's; the reviewer reviews.
+    {
+      const NOT = /Take this task or ask to be assigned/;
+      ids.rex = await mk('tk-rex'); const rex = as('rex');
+      await ada('PUT', `/chat/projects/${proj.id}/access/user/by-email`, { email: await email(ids.rex), relation: 'viewer' });
+      const wk = (await bob('POST', '/tasks', { title: 'Who may work this', projectId: proj.id })).j.task;
+      await bob('POST', `/tasks/${wk.key}/transition`, { to: 'todo' });
+      const seen = (await cyd('GET', `/tasks/${wk.key}`)).j.task;
+      check(seen.can.work === false && seen.can.comment === false && seen.can.take === true && seen.can.attach === false && seen.canLink === false, 'someone who can see an open, unheld task reads it and may take it — the server says so in `can`');
+      const refused = [
+        ['comment', await cyd('POST', `/tasks/${wk.key}/comments`, { body: 'hi' })],
+        ['image', await up('cyd', wk.key, PNG)],
+        ['link', await cyd('POST', `/tasks/${wk.key}/links`, { kind: 'relates', to: t2.key })],
+        ['sub-task', await cyd('POST', '/tasks', { title: 'x', parentKey: wk.key })],
+        ['copy for agent', await cyd('POST', `/tasks/${wk.key}/handoff`)],
+        ['move', await cyd('POST', `/tasks/${wk.key}/transition`, { to: 'in_progress', from: 'todo' })],
+        ['edit', await cyd('PATCH', `/tasks/${wk.key}`, { title: 'mine now' })],
+        ['folder', await cyd('POST', `/tasks/${wk.key}/folders`, { folderId: '00000000-0000-4000-8000-000000000000' })],
+      ];
+      const edFolder = await bob('POST', `/tasks/${t1.key}/folders`, { folderId: '00000000-0000-4000-8000-000000000000' });
+      check(edFolder.s === 403 && edFolder.j.code === 'not_your_task', 'a project editor who neither made nor holds a task cannot link folders to it');
+      check(refused.every(([, r]) => r.s === 403 && NOT.test(r.j.error)), `before taking it, every interaction is refused with "take it or ask to be assigned" (${refused.map(([n, r]) => `${n}:${r.s}`).join(' ')})`);
+      check((await cyd('GET', `/tasks/${wk.key}`)).j.task.events.every((e) => e.kind !== 'comment' && e.kind !== 'attached'), 'nothing a refused call tried landed on the task');
+      // take it: now it is hers to work
+      const took = (await cyd('POST', `/tasks/${wk.key}/claim`)).j.task;
+      check(took.assignee.id === String(ids.cyd) && took.can.work && took.can.comment && !took.can.take && took.can.attach, 'taking it makes her the assignee, and `can` now says she may work it');
+      check((await cyd('POST', `/tasks/${wk.key}/comments`, { body: 'On it' })).s === 200 && (await up('cyd', wk.key, PNG)).s === 201
+        && (await cyd('POST', '/tasks', { title: 'Part one', parentKey: wk.key })).s === 201 && (await cyd('POST', `/tasks/${wk.key}/links`, { kind: 'relates', to: t2.key })).s === 200
+        && (await cyd('POST', `/tasks/${wk.key}/transition`, { to: 'in_progress', from: 'todo' })).s === 200, 'once she holds it she comments, adds images, sub-tasks and links, and moves it');
+      check((await cyd('PATCH', `/tasks/${wk.key}`, { title: 'mine now' })).j.code === 'not_allowed', 'holding it is not owning it: renaming stays the creator’s (2026-10-14)');
+      check((await bob('POST', `/tasks/${wk.key}/claim`)).j.code === 'already_claimed' && (await bob('GET', `/tasks/${wk.key}`)).j.task.can.take === false, 'a held task cannot be taken from under its assignee');
+      // the reviewer: review moves and review comments, nothing else
+      await bob('PATCH', `/tasks/${wk.key}`, { reviewerId: ids.rex, reviewRequired: true });
+      const rv = (await rex('GET', `/tasks/${wk.key}`)).j.task;
+      check(rv.can.comment && !rv.can.work && !rv.can.attach && !rv.can.review, 'the reviewer may comment but not work the task; reviewing opens when it is sent for review');
+      check((await rex('PATCH', `/tasks/${wk.key}`, { priority: 'high' })).s === 403 && (await up('rex', wk.key, PNG)).s === 403 && (await rex('POST', `/tasks/${wk.key}/links`, { kind: 'relates', to: t1.key })).s === 403
+        && (await rex('POST', `/tasks/${wk.key}/transition`, { to: 'blocked', from: 'in_progress' })).s === 403, 'the reviewer cannot edit it, add images, link it or make working moves');
+      await cyd('POST', `/tasks/${wk.key}/transition`, { to: 'in_review', from: 'in_progress' });
+      check((await rex('GET', `/tasks/${wk.key}`)).j.task.can.review === true && (await rex('POST', `/tasks/${wk.key}/comments`, { body: 'One nit' })).s === 200, 'in review, the reviewer reviews and leaves review comments');
+      check((await rex('POST', `/tasks/${wk.key}/transition`, { to: 'done', from: 'in_review' })).j.task.status === 'done', 'the reviewer accepts it');
+      // a project admin manages any task, so none is ever stranded — and every act is in the history
+      const ow = (await bob('POST', '/tasks', { title: 'Orphan me', projectId: proj.id, assigneeId: ids.bob })).j.task;
+      const am = await ada('PATCH', `/tasks/${ow.key}`, { title: 'Rescued', assigneeId: ids.cyd });
+      check(am.s === 200 && am.j.task.title === 'Rescued' && am.j.task.assignee.id === String(ids.cyd) && (await ada('POST', `/tasks/${ow.key}/comments`, { body: 'Taking over the triage' })).s === 200, 'a project admin may still edit, reassign and comment on any task (a task is never orphaned)');
+      check((await bob('GET', `/tasks/${ow.key}`)).j.task.can.work === true && (await bob('POST', `/tasks/${ow.key}/comments`, { body: 'still mine to run' })).s === 200, 'its creator still manages it after it is reassigned');
+      check((await bob('GET', '/tasks?projectId=' + proj.id)).j.tasks.find((x) => x.key === wk.key).can.work === true && (await rex('GET', '/tasks?projectId=' + proj.id)).j.tasks.find((x) => x.key === ow.key).can.work === false, 'the board rows carry the same `can.work` the task page does');
+      // ask to be assigned: tells the creator once, changes nothing
+      const ask = await rex('POST', `/tasks/${ow.key}/ask-assignment`);
+      const asks = async () => (await inbox('bob')).filter((n) => n.kind === 'assignment_requested' && n.ref === ow.key).length;
+      check(ask.s === 200 && ask.j.repeated === false && await asks() === 1 && (await bob('GET', `/tasks/${ow.key}`)).j.task.assignee.id === String(ids.cyd), 'asking to be assigned tells the creator, and changes nothing on the task');
+      check((await rex('POST', `/tasks/${ow.key}/ask-assignment`)).j.repeated === true && await asks() === 1, 'asking again the same day tells nobody twice');
+      const free = (await bob('POST', '/tasks', { title: 'Nobody holds me', projectId: proj.id })).j.task;
+      check((await rex('POST', `/tasks/${free.key}/ask-assignment`)).j.code === 'take_it' && (await cyd('POST', `/tasks/${ow.key}/ask-assignment`)).j.code === 'already_yours', 'nobody asks for an unheld task (take it) or for one they already hold');
+      // MCP: the tools call the same service, so an agent follows the same rule
+      const mc = (await mW('tools/call', { name: 'comment', arguments: { key: free.key, body: 'drive-by' } })).result;
+      check(mc.isError && NOT.test(JSON.stringify(mc)), 'over MCP, an agent that has not taken the task cannot comment on it');
+      await mW('tools/call', { name: 'claim_task', arguments: { key: free.key } });
+      check(!(await mW('tools/call', { name: 'comment', arguments: { key: free.key, body: 'Picked it up' } })).result.isError, 'once it is delegated to the agent (it took it), the agent comments');
+    }
 
     }
     console.log(`xeno-tasks: ${passed} checks passed`);

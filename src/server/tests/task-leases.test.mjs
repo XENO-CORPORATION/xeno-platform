@@ -163,6 +163,8 @@ async function main() {
     const [botAgt, bot2Agt] = [await agt(U.bot), await agt(U.bot2)];
     const mark = (await svc.agentEvents(pool, bot, { after: '0', limit: 200 })).cursor;
     await svc.reportActivity(pool, bot, t1.key, { kind: 'handover', data: { state: 'mine', nextStep: 'n' } });
+    // only whoever works a task comments on it (owner, 2026-10-23): the other agent speaks as the reviewer
+    await svc.updateTask(pool, ada, t1.key, { reviewerId: U.bot2.id });
     await svc.commentTask(pool, bot2, t1.key, { body: 'from the other agent' });
     await svc.commentTask(pool, ada, t1.key, { body: 'from a person' });
     const fresh = (await svc.agentEvents(pool, bot, { after: mark, limit: 50 })).events;
