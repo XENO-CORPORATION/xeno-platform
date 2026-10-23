@@ -128,3 +128,7 @@ export async function moveItemToFolder(db, principal, source, id, folderId) {
   if (!folder.workspace_id) await reconcileShares(db, folder.owner_user_id);   // into or out of a shared folder: access follows
   return { ok: true, folderId };
 }
+
+/** The folder, if `userId` may use it at least as `need` ('view' or 'edit'); else null. Storage's one access check, for
+ *  modules that bind a folder to something else (project folders) and must not grow a second one. */
+export const folderAccess = (db, userId, id, need = 'view') => reach(db, userId, id, need);

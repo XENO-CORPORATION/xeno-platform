@@ -22,6 +22,7 @@ import { assertAvailableOrOverridden, workspaceOfProject, AwayError } from './wo
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createAgent, DEFAULT_AGENT_CAP } from './agentIdentity.js';
 import * as agentAccess from './agentAccess.js';
+import { readinessOf, closesLoop } from './orchestratorEngine.js';
 // agent-identity errors carry statusCode; Tasks errors carry status
 const asTaskError = (e) => (e && e.code && (e.status || e.statusCode) ? new TaskError(e.message, e.code, e.status || e.statusCode) : e);
 // MCP sign-in agents (one per app name, reused) may go past the general cap by this much, so a person who
@@ -35,7 +36,7 @@ export class TaskError extends Error {
 export const STATUSES = ['raised', 'todo', 'in_progress', 'blocked', 'in_review', 'done', 'wont_do'];
 export const KINDS = ['task', 'bug', 'feature', 'question'];
 export const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'];
-const SOURCES = ['manual', 'chat', 'forum_ticket', 'forum_thread', 'agent'];
+const SOURCES = ['manual', 'chat', 'forum_ticket', 'forum_thread', 'agent', 'mail'];
 const AREA = /^[a-z][a-z0-9_-]{0,39}$/, UUID = /^[0-9a-f-]{36}$/i;
 const MOVES = {
   raised: ['todo', 'in_progress', 'wont_do'],
@@ -347,7 +348,9 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   const backTo = to === 'in_review' && !t.reviewer_id ? await creatorOf(db, t) : null;
   const done = (await db.query(`UPDATE tasks SET status = $2, updated_at = now(), closed_at = CASE WHEN $2 IN ('done', 'wont_do') THEN now() ELSE NULL END, reviewer_id = COALESCE(reviewer_id, $4::uuid) WHERE id = $1 AND status = $3 RETURNING id`, [t.id, to, t.status, backTo])).rowCount;
   if (!done) throw new TaskError('Someone moved this task first. Reload it and try again.', 'conflict', 409);
-  await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null);
+  const moved = (await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null)).rows[0];
+  // Dev › Automate: workspace workflows listening for task moves hear it (idempotent by this event's id; never throws)
+  await (await import('./xenoWorkflow.js')).onTaskStatus(db, { task: t, from: t.status, to, eventId: moved && moved.id, actorId: me.id });
   if (backTo) await event(db, t, me, 'edited', null, backTo, null, 'reviewer');
   const fresh = await loadByKey(db, key), label = { raised: 'Triage', todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'In review', done: 'Done', wont_do: 'Won’t do' };
   const told = new Set();
@@ -598,13 +601,15 @@ async function extrasFor(db, me, t, s) {
   }
   const w = (await db.query(`SELECT w.user_id, w.muted, COALESCE(u.display_name, u.username) AS name FROM task_watchers w JOIN users u ON u.id = w.user_id WHERE w.task_id = $1`, [t.id])).rows;
   const me_ = w.find((x) => String(x.user_id) === String(me.id));
-  // the Orchestrator's readiness rule (workforceOrchestrator.taskReadiness): ready when every blocker is done. Counted over
-  // ALL blockers, including ones the caller cannot see — the count reveals no task, only that something is unfinished.
-  const open = (await db.query(`SELECT (SELECT count(*) FROM task_links l JOIN tasks f ON f.id = l.from_task WHERE l.to_task = $1 AND l.kind = 'blocks' AND f.status NOT IN ('done','wont_do'))::int
-      + (SELECT count(*) FROM orchestrator_edges e LEFT JOIN project_goals g ON e.from_kind = 'goal' AND g.id = e.from_id LEFT JOIN project_objectives o ON e.from_kind = 'objective' AND o.id = e.from_id
-         WHERE e.to_kind = 'task' AND e.to_id = $1 AND COALESCE(g.status, o.status, 'completed') <> 'completed')::int AS n`, [t.id]).catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n;
+  // readiness is the Orchestrator ENGINE's decision (orchestratorEngine.readinessOf): Tasks only reads its blockers' done
+  // flags. Over ALL blockers, including ones the caller cannot see — the count reveals no task, only that something is
+  // unfinished.
+  const blockers = (await db.query(`SELECT f.status IN ('done','wont_do') AS done FROM task_links l JOIN tasks f ON f.id = l.from_task WHERE l.to_task = $1 AND l.kind = 'blocks'
+      UNION ALL SELECT COALESCE(g.status, o.status, 'completed') = 'completed' FROM orchestrator_edges e LEFT JOIN project_goals g ON e.from_kind = 'goal' AND g.id = e.from_id
+        LEFT JOIN project_objectives o ON e.from_kind = 'objective' AND o.id = e.from_id WHERE e.to_kind = 'task' AND e.to_id = $1`, [t.id]).catch(() => ({ rows: [] }))).rows;
+  const readiness = readinessOf({ done: ['done', 'wont_do'].includes(t.status), blockers });
   return { children, links, watching: !!(me_ && !me_.muted), watchers: w.filter((x) => !x.muted).map((x) => ({ id: String(x.user_id), name: x.name })), canLink: mayWork(me, t, s),
-    readiness: { openBlockers: open, ready: open === 0 && !['done', 'wont_do'].includes(t.status) } };
+    readiness };
 }
 
 export async function editComment(db, me, key, eventId, { body } = {}) {
@@ -636,7 +641,11 @@ export async function addLink(db, me, key, { kind, to } = {}) {
   const { t: o } = await readable(db, me, to).catch(() => { throw new TaskError('That task was not found', 'link_target_not_found', 404); });
   if (String(o.id) === String(t.id)) throw new TaskError('A task cannot link to itself', 'link_self', 409);
   const [from, dest] = k[1] ? [o, t] : [t, o];
-  // a `blocks` link is a dependency edge of the Orchestrator graph: the database refuses one that closes a loop
+  // a `blocks` link is a dependency edge of the Orchestrator graph: the ENGINE refuses one that closes a loop, and the
+  // database refuses it again under a lock (a concurrent writer)
+  if (k[0] === 'blocks' && await closesLoop(db, { kind: 'task', id: from.id }, { kind: 'task', id: dest.id })) {
+    throw new TaskError(`That would make a loop: T-${dest.number} already blocks T-${from.number}, directly or through other tasks`, 'link_cycle', 409);
+  }
   const ins = await db.query('INSERT INTO task_links (from_task, to_task, kind, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id', [from.id, dest.id, k[0], me.id])
     .catch((e) => { if (e && e.code === '23514' && /orchestrator_cycle/.test(String(e.message))) throw new TaskError(`That would make a loop: T-${dest.number} already blocks T-${from.number}, directly or through other tasks`, 'link_cycle', 409); throw e; });
   if (ins.rowCount) { await event(db, t, me, 'linked', kind, `T-${o.number}`, null); await db.query('UPDATE tasks SET updated_at = now() WHERE id = ANY($1::uuid[])', [[t.id, o.id]]); }
