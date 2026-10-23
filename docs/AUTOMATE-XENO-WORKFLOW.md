@@ -60,7 +60,7 @@ Automate is a **front-end to XENO Workflow**. No engine lives in xeno-platform.
 Run `xeno-workflow-runner` beside the platform backend on `xeno-platform-001`, on the backend's private Docker
 network. It must never have a public port. Use a named volume on `/data`, with
 `XENO_PLATFORM_URL=http://backend:<port>`, `XENO_WORKFLOW_ALLOW_HTTP_PLATFORM=1` and
-`XENO_PLATFORM_ISSUER=https://xenosystem.ai`. Build it from the xeno-workflow repo:
+`XENO_PLATFORM_ISSUER` = the issuer the backend signs with (`issuer()` in `config/hosts.js`, published at `/api/oauth2/.well-known/openid-configuration`; `https://xenostudio.ai` as of 2026-10-24, not the site host — a wrong value makes the runner refuse every assertion). The service is declared in `docker-compose.yml` as `xeno-workflow-runner` (no `ports:`). Build it from the xeno-workflow repo:
 `docker build -f docker/headless/Dockerfile -t xeno-workflow-runner .`. Then set
 `XENO_WORKFLOW_RUNNER_URL=http://xeno-workflow-runner:8790` in the box `.env`. It is already passed through
 `docker-compose.yml`. Check it with `docker exec xenostudio-backend printenv | grep XENO_WORKFLOW_RUNNER_URL`.
