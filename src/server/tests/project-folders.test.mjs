@@ -33,7 +33,7 @@ async function main() {
   const user = async (name) => (await pool.query(
     `INSERT INTO users (username, email, display_name, email_verified, is_active, password_hash) VALUES ($1, $2, $1, true, true, 'x') RETURNING id`,
     [`${name}_${process.pid}`, `${name}_${process.pid}@xeno.test`])).rows[0].id;
-  const owner = await user('pf_owner'), mate = await user('pf_mate'), stranger = await user('pf_stranger'), guest = await user('pf_guest'), looker = await user('pf_looker');
+  const owner = await user('pf_owner'), mate = await user('pf_mate'), stranger = await user('pf_stranger'), guest = await user('pf_guest'), looker = await user('pf_looker'), wide = await user('pf_wide');
   const company = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Acme', $2) RETURNING id`, [owner, `acme-pf-${process.pid}`])).rows[0].id;
   await writeTuples(pool, { writes: [
     { object: `workspace:${company}`, relation: 'owner', subject: `user:${owner}` },
@@ -48,7 +48,7 @@ async function main() {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/api/storage/projects`;
   const bearer = (userId) => `Bearer ${jwt.sign({ userId, email: 'x@xeno.test', username: 'x' }, JWT_SECRET, { expiresIn: '1h' })}`;
-  const O = bearer(owner), M = bearer(mate), S = bearer(stranger), G = bearer(guest), L = bearer(looker);
+  const O = bearer(owner), M = bearer(mate), S = bearer(stranger), G = bearer(guest), L = bearer(looker), WI = bearer(wide);
   const call = async (method, url, auth, { json, bytes, type, headers = {} } = {}) => {
     const res = await fetch(`${base}${url}`, { method, headers: { authorization: auth, ...(json ? { 'content-type': 'application/json' } : {}), ...(bytes ? { 'content-type': type || 'application/octet-stream' } : {}), ...headers }, body: json ? JSON.stringify(json) : bytes });
     const text = Buffer.from(await res.arrayBuffer());
@@ -134,6 +134,18 @@ async function main() {
     assert.equal((await pool.query('SELECT owner_user_id FROM user_files WHERE id = $1', [gv.body.versionId])).rows[0].owner_user_id, owner, 'a collaborator’s version is the owner’s');
     const gd = await call('DELETE', `${W}/files?path=notes/guest.md`, G);
     assert.equal(gd.status, 200, `a collaborator can remove a path: ${JSON.stringify(gd.body)}`);
+
+    // ── shared one level up (the whole "XENO Workshop" folder as editor): what does a project under it allow? Pinned,
+    //    whichever way Storage materialises inherited access (review of #921) ──
+    const appFolder = (await pool.query('SELECT parent_id FROM storage_folders WHERE id = $1', [made.body.folder.id])).rows[0].parent_id;
+    assert.equal((await shareWithPerson(pool, owner, { folderId: appFolder }, `pf_wide_${process.pid}`, 'editor')).ok, true);
+    assert.equal((await call('GET', `${W}/files`, WI)).status, 200, 'sharing the app folder lets them see the projects in it');
+    const ww = await call('PUT', `${W}/files/content?path=wide.txt`, WI, { bytes: Buffer.from('from one level up') });
+    // measured 2026-10-24: Storage materialises a folder share onto the folders inside it, so an editor share on the
+    // app folder is an editor share on every project in it — the same as sharing any folder in Storage
+    assert.equal(ww.status, 201, 'an editor share one level up lets them write the project');
+    assert.equal((await pool.query('SELECT owner_user_id FROM user_files WHERE id = $1', [ww.body.versionId])).rows[0].owner_user_id, owner, 'and what they write is the owner’s');
+    assert.equal((await call('DELETE', `${W}/files?path=wide.txt`, WI)).status, 200);
 
     // ── an app's own token reaches only that app's projects ──
     await migrateAccountV2(pool);   // the OIDC provider's tables (a separate migration, as in auth-token-confusion.test)
