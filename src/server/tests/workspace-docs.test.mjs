@@ -1,7 +1,11 @@
 /**
  * Office › Write and Notes (services/workspaceDocs.js + docsMcp.js) on real Postgres and a real upload folder.
  *
- *   - a document IS a Storage file: one user_files row per version, one stable file id, text/markdown bytes;
+ *   - a document IS a Storage file: one user_files row per version, one stable file id, XENO Docs' .xdoc bytes;
+ *   - the FORMAT is enforced on every write and every read: a script link, an unsafe image, an unknown block, an
+ *     attribute the schema would not render are refused (an API caller or an agent cannot skip the editor's rules);
+ *   - a document saved as Markdown before the shared format still reads, migrates to .xdoc as a new version, and
+ *     restoring the previous version undoes the migration;
  *   - §8.11: an editor writes, a viewer reads, a stranger is refused; Personal documents are the owner's alone;
  *   - a save is a new version; a stale expectedVersion is refused; restoring the earlier version undoes it;
  *   - backlinks follow [label](xeno-doc:<id>), are rewritten on save, and never show a document the reader cannot see;
@@ -12,6 +16,7 @@
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import pg from 'pg';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { writeTuples } from '../utils/authzReBAC.js';
@@ -45,10 +50,47 @@ async function main() {
   const row = (await pool.query('SELECT file_id, mime_type, storage_path, workspace_id, owner_user_id FROM user_files WHERE id = $1', [a.versionId])).rows[0];
   written.push(row.storage_path);
   assert.equal(String(row.file_id), a.id); assert.equal(String(row.workspace_id), ws); assert.equal(row.owner_user_id, null, 'a team document belongs to the workspace');
-  assert.equal(fs.readFileSync(row.storage_path, 'utf8'), '# Q4 planning\n\nShip the **ledger** migration first.', 'the bytes are the Markdown, verbatim');
+  const onDisk = JSON.parse(fs.readFileSync(row.storage_path, 'utf8'));
+  assert.equal(onDisk.format, 'xeno.xdoc', 'the bytes are a XENO Docs .xdoc file'); assert.equal(onDisk.title, 'Q4 planning');
+  assert.equal(onDisk.content.content[0].type, 'heading'); assert.equal(row.mime_type, 'application/json');
+  assert.equal(a.format, 'xdoc'); assert.equal(a.markdown, '# Q4 planning\n\nShip the **ledger** migration first.', 'Markdown in, the same Markdown back out');
+  assert.equal(a.text, 'Q4 planning Ship the ledger migration first.');
   assert.equal(a.canEdit, true);
   const asViewer = await D.getDoc(pool, V, { id: a.id });
   assert.equal(asViewer.doc.markdown.startsWith('# Q4'), true); assert.equal(asViewer.doc.canEdit, false);
+
+  // ── the format, on every write: what the editor would not render, nobody can store
+  const P = (...c) => ({ type: 'doc', content: [{ type: 'paragraph', content: c }] });
+  const hostile = {
+    'a javascript: link': P({ type: 'text', text: 'x', marks: [{ type: 'link', attrs: { href: 'javascript:alert(document.cookie)' } }] }),
+    'a data:text/html link': P({ type: 'text', text: 'x', marks: [{ type: 'link', attrs: { href: 'data:text/html,<script>alert(1)</script>' } }] }),
+    'an svg image': { type: 'doc', content: [{ type: 'image', attrs: { src: 'data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+' } }] },
+    'an onerror attribute': { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://a.example/x.png', onerror: 'alert(1)' } }] },
+    'an html node': { type: 'doc', content: [{ type: 'html', attrs: { html: '<img src=x onerror=alert(1)>' } }] },
+    'a page link whose id is markup': P({ type: 'text', text: 'x', marks: [{ type: 'wikiLink', attrs: { pageId: '"><script>alert(1)</script>' } }] }),
+  };
+  for (const [what, content] of Object.entries(hostile)) {
+    await refuses(D.createDoc(pool, E, { ...w, kind: 'doc', title: 'X', content }), 'invalid_document');
+    await refuses(D.saveDoc(pool, E, { id: a.id, content }), 'invalid_document');
+    await refuses(D.saveDoc(pool, E, { id: a.id, xdoc: JSON.stringify({ format: 'xeno.xdoc', version: 1, title: 'x', content }) }), 'invalid_document');
+    assert.ok(what);
+  }
+  await refuses(D.createDoc(pool, E, { ...w, kind: 'doc', title: 'X', xdoc: '<html><script>alert(1)</script>' }), 'invalid_document');
+  await refuses(D.createDoc(pool, E, { ...w, kind: 'doc', title: 'X', markdown: 'a', content: P({ type: 'text', text: 'b' }) }), 'invalid_document');
+  const fromMd = (await D.createDoc(pool, E, { ...w, kind: 'doc', title: 'Links', markdown: '[ok](https://xenosystem.ai) [bad](javascript:alert(1)) <script>alert(1)</script>' })).doc;
+  const marks = JSON.stringify(fromMd.content);
+  assert.ok(marks.includes('https://xenosystem.ai') && !marks.includes('javascript:'), 'Markdown keeps a safe link and drops a script one');
+  assert.ok(fromMd.text.includes('<script>'), 'markup in Markdown is TEXT — the editor shows the characters, never runs them');
+  const viaXdoc = (await D.saveDoc(pool, E, { id: fromMd.id, xdoc: JSON.stringify({ format: 'xeno.xdoc', version: 1, title: 'Links', content: P({ type: 'text', text: 'from a file' }) }) })).doc;
+  assert.equal(viaXdoc.text, 'from a file', 'an .xdoc file is accepted as is');
+  written.push((await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [viaXdoc.versionId])).rows[0].storage_path);
+  // a file changed BEHIND this module (on disk) is refused on read, not shown
+  const tamper = (await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [viaXdoc.versionId])).rows[0].storage_path;
+  const good = fs.readFileSync(tamper, 'utf8');
+  fs.writeFileSync(tamper, JSON.stringify({ format: 'xeno.xdoc', version: 1, title: 'x', content: hostile['a javascript: link'] }));
+  await refuses(D.getDoc(pool, V, { id: fromMd.id }), 'invalid_document');
+  fs.writeFileSync(tamper, good);
+  await D.trashDoc(pool, O, { id: fromMd.id });
   await refuses(D.getDoc(pool, S, { id: a.id }), 'not_found');
 
   // ── save = a new version; stale is refused; restore undoes it
@@ -111,6 +153,28 @@ async function main() {
   const ms = (await Mcp.callTool(pool, AG, 'save_doc', { id: a.id, markdown: got.markdown + '\n\nAdded by an agent.', expected_version: got.versionId })).structuredContent;
   const undo = (await Mcp.callTool(pool, AG, 'restore_version', { id: a.id, version_id: ms.previousVersion })).structuredContent;
   assert.equal(undo.doc.markdown, got.markdown, 'an agent undoes its own save');
+
+  // ── a document saved as Markdown before the shared format (2026-10-20 → 10-23): reads, migrates, undoes
+  const old = (await D.createDoc(pool, E, { ...w, kind: 'note', title: 'Old note', markdown: 'x' })).doc;
+  const oldRow = (await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [old.versionId])).rows[0];
+  const legacyMd = `# Old note\n\nWritten in **Markdown**, linking [the plan](xeno-doc:${a.id}).`;
+  fs.writeFileSync(oldRow.storage_path, legacyMd);   // exactly what the first Write/Notes stored: the Markdown, verbatim
+  const sha = crypto.createHash('sha256').update(legacyMd).digest('hex');
+  await pool.query(`UPDATE user_files SET mime_type = 'text/markdown', content_sha256 = $2, file_size = $3, metadata = jsonb_set(metadata, '{xeno_doc}', (metadata->'xeno_doc') - 'format') WHERE id = $1`, [old.versionId, sha, Buffer.byteLength(legacyMd)]);
+  await pool.query('DELETE FROM storage_objects WHERE file_id = $1', [old.versionId]).catch(() => {});
+  const legacy = (await D.getDoc(pool, V, { id: old.id })).doc;
+  assert.equal(legacy.format, 'markdown', 'a pre-format document says what it is');
+  assert.ok(JSON.stringify(legacy.content).includes('"wikiLink"'), 'its page link reads as the wikiLink mark');
+  assert.deepEqual(legacy.links, [a.id]);
+  const pending = await D.legacyDocs(pool);
+  assert.ok(pending.some((r) => String(r.file_id) === old.id), 'the migration finds it');
+  const migrated = await D.migrateLegacyDoc(pool, pending.find((r) => String(r.file_id) === old.id));
+  assert.equal(migrated.doc.format, 'xdoc'); assert.equal(migrated.doc.text, legacy.text, 'the same words, now in the shared format');
+  assert.equal(JSON.parse(fs.readFileSync((await pool.query('SELECT storage_path FROM user_files WHERE id = $1', [migrated.doc.versionId])).rows[0].storage_path, 'utf8')).format, 'xeno.xdoc');
+  assert.ok(!(await D.legacyDocs(pool)).some((r) => String(r.file_id) === old.id), 'migrating twice finds nothing to do');
+  const undone = await D.restoreDocVersion(pool, E, { id: old.id, versionId: migrated.previousVersion });
+  assert.equal(undone.doc.format, 'markdown', 'restoring the previous version undoes the migration');
+  assert.equal(undone.doc.text, legacy.text);
 
   for (const r of (await pool.query(`SELECT storage_path FROM user_files WHERE metadata->>'source' = 'xeno-docs'`)).rows) written.push(r.storage_path);
   console.log('workspace-docs: all checks passed');
