@@ -144,6 +144,10 @@
   "platform-releases.js": "releases",
   "researchRoutes.js": "workspace",
   "platform-research.js": "workspace",
+  "mailRoutes.js": "mail",
+  "platform-mail.js": "mail",
+  "spawnProfileRoutes.js": "agents",
+  "projectFolderRoutes.js": "storage",
   "automateRoutes.js": "automate",
   "platform-automate.js": "automate"
  },
@@ -9229,6 +9233,207 @@
    "class": "irreversible",
    "scope": "none",
    "because": "the screen for the same route"
+  },
+  "route:mailRoutes.js:GET /status": {
+   "status": "capability",
+   "capability": "mail.thread.search",
+   "class": "safe",
+   "scope": "mail:read"
+  },
+  "route:mailRoutes.js:PUT /mailbox": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "which of the person’s own addresses a workspace reads is the person’s choice; an agent must not re-point its owner’s mail"
+  },
+  "route:mailRoutes.js:DELETE /mailbox": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "which of the person’s own addresses a workspace reads is the person’s choice; an agent must not re-point its owner’s mail"
+  },
+  "route:mailRoutes.js:GET /threads": {
+   "status": "capability",
+   "capability": "mail.thread.search",
+   "class": "safe",
+   "scope": "mail:read"
+  },
+  "route:mailRoutes.js:GET /threads/:id": {
+   "status": "capability",
+   "capability": "mail.thread.get",
+   "class": "safe",
+   "scope": "mail:read"
+  },
+  "route:mailRoutes.js:POST /threads/read": {
+   "status": "capability",
+   "capability": "mail.thread.mark_read",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:POST /threads/star": {
+   "status": "capability",
+   "capability": "mail.thread.star",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:POST /threads/label": {
+   "status": "capability",
+   "capability": "mail.thread.label",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:POST /threads/archive": {
+   "status": "capability",
+   "capability": "mail.thread.archive",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:POST /threads/:id/task": {
+   "status": "capability",
+   "capability": "mail.thread.to_task",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:POST /threads/:id/ticket": {
+   "status": "capability",
+   "capability": "mail.thread.to_ticket",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:POST /threads/:id/contact": {
+   "status": "capability",
+   "capability": "mail.thread.to_contact",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "route:mailRoutes.js:GET /labels": {
+   "status": "capability",
+   "capability": "mail.label.list",
+   "class": "safe",
+   "scope": "mail:read"
+  },
+  "route:mailRoutes.js:POST /labels": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "mail:write",
+   "because": "mail-core has mail.label.create; not yet a platform capability (an agent labels with existing labels)"
+  },
+  "route:mailRoutes.js:GET /drafts": {
+   "status": "capability",
+   "capability": "mail.draft.list",
+   "class": "safe",
+   "scope": "mail:read"
+  },
+  "route:mailRoutes.js:GET /drafts/:id": {
+   "status": "capability",
+   "capability": "mail.draft.get",
+   "class": "safe",
+   "scope": "mail:read"
+  },
+  "route:mailRoutes.js:DELETE /drafts/:id": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "mail:write",
+   "because": "discarding a draft cannot be undone: a person’s act on screen; mail-core refuses an agent too. No agent tool by design"
+  },
+  "route:mailRoutes.js:POST /compose": {
+   "status": "capability",
+   "capability": "mail.draft.save",
+   "class": "reversible",
+   "scope": "mail:write"
+  },
+  "ui:platform-mail.js:data-ml-search": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-mail.js:data-ml-label-go": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-mail.js:data-ml-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "route:forumRoutes.js:GET /report/submissions/:submissionId": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:forumRoutes.js:GET /report/evidence/:id": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:forumRoutes.js:GET /report/mine": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "forum:read"
+  },
+  "route:oauth2Routes.js:POST /device/deny": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "workspace:admin"
+  },
+  "route:spawnProfileRoutes.js:GET /": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:spawnProfileRoutes.js:PUT /:profileId": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:spawnProfileRoutes.js:DELETE /:profileId": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "agents:write"
+  },
+  "route:xenoTasksRoutes.js:POST /:key/ask-assignment": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "ui:platform-tasks.js:data-tk=ask-assign": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "tasks:write"
+  },
+  "route:projectFolderRoutes.js:PUT /:app/:projectId": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "storage:write"
+  },
+  "route:projectFolderRoutes.js:GET /:app/:projectId/files": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "storage:read"
+  },
+  "route:projectFolderRoutes.js:GET /:app/:projectId/files/content": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "storage:read"
+  },
+  "route:projectFolderRoutes.js:PUT /:app/:projectId/files/content": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "storage:write"
+  },
+  "route:projectFolderRoutes.js:DELETE /:app/:projectId/files": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "storage:write"
   },
   "route:automateRoutes.js:GET /status": {
    "status": "planned",

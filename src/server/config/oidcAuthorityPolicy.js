@@ -70,8 +70,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-spawn': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
   // XENO Workshop: identity, the credits balance, and gateway inference — an agent turn a person
   // starts in the workshop runs on, and bills, that person's own account (surface-account seam).
-  'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
-  'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
+  // storage:read/write (owner, 2026-10-23): a project's files live in the person's XENO Storage
+  // (/api/storage/projects/xeno-workshop/*, which checks both and reaches only the Workshop's own projects).
+  'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],

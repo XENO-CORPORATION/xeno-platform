@@ -32,6 +32,7 @@ import * as releasesMcp from './releasesMcp.js';
 import * as customersMcp from './customersMcp.js';
 import * as automateMcp from './automateMcp.js';
 import * as publishMcp from './publishMcp.js';
+import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
@@ -125,6 +126,14 @@ export const SERVICES = Object.freeze([
     tools: () => workforceMcp.TOOLS,
     call: (db, actor, name, args) => workforceMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof workforceMcp.WorkforceMcpError,
+  },
+  // XENO Mail (mailMcp.js): the owner's mailbox through the platform. Read, label, draft; a person sends.
+  {
+    category: 'mail', title: 'Mail', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Mail (XENO Mail): search and read your owner’s mail, star, label and archive it, write drafts, turn mail into tasks, support requests and contacts. A person sends.',
+    tools: () => mailMcp.TOOLS,
+    call: (db, actor, name, args) => mailMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof mailMcp.MailMcpError,
   },
   // XENO Publish (publishMcp.js): XENO Post through the platform. Drafts and proposed times; a person publishes.
   {

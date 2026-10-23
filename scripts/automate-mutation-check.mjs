@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SVC = join(ROOT, 'src/server/services/xenoWorkflow.js');
-const MIG = join(ROOT, 'src/server/database/migrations/20261029100000-workspace-workflows.sql');
+const MIG = join(ROOT, 'src/server/database/migrations/20261030100000-workspace-workflows.sql');
 const TEST = join(ROOT, 'src/server/tests/xeno-workflow.test.mjs');
 const MUTATIONS = [
   ['the run assertion no longer binds the body', SVC, `run_id: String(runId), body_sha256: crypto.createHash('sha256').update(body).digest('hex')`, `run_id: String(runId), body_sha256: 'x'`],
