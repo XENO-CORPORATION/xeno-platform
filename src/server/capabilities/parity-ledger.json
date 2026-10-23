@@ -143,7 +143,9 @@
   "releaseRoutes.js": "releases",
   "platform-releases.js": "releases",
   "researchRoutes.js": "workspace",
-  "platform-research.js": "workspace"
+  "platform-research.js": "workspace",
+  "messageRoutes.js": "message",
+  "commsIdentityRoutes.js": "platform"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -9227,6 +9229,68 @@
    "class": "irreversible",
    "scope": "none",
    "because": "the screen for the same route"
+  },
+  "route:commsIdentityRoutes.js:GET /identity": {
+   "status": "excluded",
+   "category": "service",
+   "class": "safe",
+   "scope": "none",
+   "because": "XENO Comms verifies a bearer here (its validation URL); the caller is the Comms service, never a person or an agent"
+  },
+  "route:messageRoutes.js:GET /status": {
+   "status": "capability",
+   "capability": "message.channel.list",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:GET /conversations": {
+   "status": "capability",
+   "capability": "message.channel.list",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:POST /channels/open": {
+   "status": "capability",
+   "capability": "message.channel.read",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:GET /messages": {
+   "status": "capability",
+   "capability": "message.channel.read",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:POST /messages": {
+   "status": "capability",
+   "capability": "message.message.post",
+   "class": "reversible",
+   "scope": "message:write"
+  },
+  "route:messageRoutes.js:POST /direct": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "message:write",
+   "because": "a direct message is between two people: a person starts it; an agent posts in channels it belongs to"
+  },
+  "route:messageRoutes.js:POST /handoff": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "message:write",
+   "because": "handing work to an agent is a person delegating (the chat hand-off): agents reach the same work through tasks.*"
+  },
+  "route:messageRoutes.js:GET /realtime": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "safe",
+   "scope": "none",
+   "because": "a single-use ticket for the browser to join the Comms realtime socket; an agent reads channels through message.channel.read"
+  },
+  "route:messageRoutes.js:GET /directory": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "message:read",
+   "because": "the New message picker for people; agents do not start direct messages"
   }
  }
 }

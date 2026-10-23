@@ -35,10 +35,18 @@ export async function handOff(db, me, conversationId, { agentId, prompt, run = t
   await requireResourceRelation(db, userPrincipal(me.id), 'conversation', conversationId, 'reviewer');
   const convo = (await db.query('SELECT id, project_id, title FROM chat_conversations WHERE id = $1 AND deleted_at IS NULL', [conversationId])).rows[0];
   if (!convo) throw new HandoffError('Conversation not found', 'conversation_not_found', 404);
-  const agent = await agents.get(db, me, String(agentId || ''));          // seen by this person, or agent_not_found
-
   const body = `${text}\n\n— Handed off from the chat "${convo.title || 'Untitled'}" (/workspace/apps/chat/${convo.project_id ? `projects/${convo.project_id}/c/` : ''}${convo.id}).`;
-  let task = await tasks.createTask(db, me, { title: titleOf(text), body, source: 'chat', conversationId: convo.id, ...(convo.project_id ? { projectId: convo.project_id } : {}) });
+  return delegateWork(db, me, { agentId, text, body, task: { source: 'chat', conversationId: convo.id, ...(convo.project_id ? { projectId: convo.project_id } : {}) }, run, folders }, opts);
+}
+
+/**
+ * The one hand-off: a task filed where the work came from, delegated to the agent, and run when the person may run
+ * it. The chat's `@agent` and the workspace Message area's `@agent` (services/xenoComms.js) both come through here,
+ * so everything the task system enforces applies to both unchanged.
+ */
+export async function delegateWork(db, me, { agentId, text, body, task: fields = {}, run = true, folders = [] } = {}, opts = {}) {
+  const agent = await agents.get(db, me, String(agentId || ''));          // seen by this person, or agent_not_found
+  let task = await tasks.createTask(db, me, { title: titleOf(text), body, ...fields });
   // `#folder` in the prompt: the folders its work lives in, linked BEFORE the agent gets it so it can open them at once
   const linked = [], refused = [];
   for (const f of (Array.isArray(folders) ? folders : []).slice(0, 10)) {

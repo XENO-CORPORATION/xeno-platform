@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1675 actions · 168 agent capability · 1264 planned (debt) · 243 excluded · **coverage 11.7%** of the 1432 owed.
+**Total:** 1696 actions · 173 agent capability · 1267 planned (debt) · 245 excluded · **coverage 11.9%** of the 1451 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -15,11 +15,11 @@ Every action a person can take on the platform, and whether an agent can take it
 | workspace | 155 | 23 | 97 | 35 | 19.2% |
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
-| tasks | 105 | 13 | 84 | 8 | 13.4% |
+| tasks | 107 | 13 | 84 | 8 | 13.1% |
 | storage | 82 | 5 | 75 | 2 | 6.3% |
 | account | 86 | 0 | 60 | 26 | 0% |
-| forum | 51 | 8 | 41 | 2 | 16.3% |
-| platform | 69 | 0 | 36 | 33 | 0% |
+| forum | 54 | 8 | 41 | 2 | 15.4% |
+| platform | 71 | 0 | 36 | 34 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
@@ -30,6 +30,8 @@ Every action a person can take on the platform, and whether an agent can take it
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 | releases | 19 | 9 | 4 | 6 | 69.2% |
+| message | 9 | 5 | 3 | 1 | 62.5% |
+| (none) | 5 | 0 | 0 | 0 | 0% |
 | docs | 10 | 10 | 0 | 0 | 100% |
 
 ## account — 60 planned
@@ -535,6 +537,12 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:v2InferenceRoutes.js:POST /resolve`
 - `route:v2InferenceRoutes.js:PUT /credentials/:id/models`
 - `route:v2InferenceRoutes.js:PUT /routes/:surface`
+
+## message — 3 planned
+
+- `route:messageRoutes.js:GET /directory`
+- `route:messageRoutes.js:POST /direct`
+- `route:messageRoutes.js:POST /handoff`
 
 ## places — 4 planned
 

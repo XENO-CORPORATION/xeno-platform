@@ -27,6 +27,7 @@ import * as supportMcp from '../services/supportMcp.js';
 import * as releasesMcp from '../services/releasesMcp.js';
 import * as customersMcp from '../services/customersMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
+import * as messageMcp from '../services/messageMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
@@ -36,7 +37,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -159,6 +160,10 @@ const ROWS = [
   ['publish.post.draft', 'publish', 'draft_post', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ post: { type: 'object', description: 'The draft: id, state (draft), text, media, targets.' } }, ['post']) }],
   ['publish.post.propose_schedule', 'publish', 'propose_schedule', 'undoable', { idempotency: NAT('one pending proposal per post; proposing again replaces the time'), reply: obj({ needsConfirmation: { type: 'boolean', description: 'Always true: a person confirms before anything is scheduled.' }, confirmationId: { type: 'string' }, proposedFor: { type: 'string' } }, ['needsConfirmation']) }],
   ['publish.approval.list', 'publish', 'list_approvals', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'kind (approval|proposal), id, postId, proposedFor, requestedAt.' } }, ['items']) }],
+  // ── message (XENO Comms, server-to-server). One channel per workspace scope; the platform decides who is in it.
+  ['message.channel.list', 'message', 'list_channels', 'safe', { provenance: 'untrusted', reply: obj({ channels: { type: 'array', description: 'key, kind, title, conversationId, lastMessageAt, unread of each channel you belong to.' } }, ['channels']) }],
+  ['message.channel.read', 'message', 'read_channel', 'safe', { provenance: 'untrusted', reply: obj({ conversationId: { type: 'string' }, messages: { type: 'array', description: 'id, author (id, name, kind), text, replyTo, replies, createdAt.' } }, ['messages']) }],
+  ['message.message.post', 'message', 'post_message', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ conversationId: { type: 'string' }, message: { type: 'object', description: 'The posted message: id, author, text, replyTo, createdAt.' } }, ['message']) }],
   // ── support (Help ▸ Contact support). Sending a reply to a customer is a person's act: there is no capability for it.
   ['support.ticket.create', 'support', 'create_ticket', 'undoable', { provenance: 'trusted', idempotency: NONE('no request key yet: a retried call raises a second request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, priority, sla, url.' } }, ['ticket']) }],
   ['support.ticket.list', 'support', 'list_tickets', 'safe', { reply: obj({ tickets: { type: 'array', description: 'key, title, kind, status, priority, sla, updatedAt of each request.' } }, ['tickets']) }],
