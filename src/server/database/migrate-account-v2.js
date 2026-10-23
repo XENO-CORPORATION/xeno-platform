@@ -154,6 +154,9 @@ CREATE TABLE IF NOT EXISTS oauth_device_codes (
   expires_at    timestamptz NOT NULL,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+-- Where the device started the request (RFC 8628 §5.4). Also added by migration 20261028120000.
+ALTER TABLE oauth_device_codes
+  ADD COLUMN IF NOT EXISTS request_country CHAR(2) CHECK (request_country IS NULL OR request_country ~ '^[A-Z]{2}$');
 
 CREATE TABLE IF NOT EXISTS oidc_signing_keys (
   kid         text PRIMARY KEY,

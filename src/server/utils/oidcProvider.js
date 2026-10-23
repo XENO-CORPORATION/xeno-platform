@@ -540,7 +540,11 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
 
 // ── Device Authorization Grant (RFC 8628) ───────────────────────────────────
 
-export async function startDeviceAuthorization(db, { clientId, scope }) {
+export async function startDeviceAuthorization(db, { clientId, scope, requestCountry = null }) {
+  // The page answers at /device (short, like google.com/device) AND /activate. The URI we EMIT stays
+  // /activate for now: shipped CLIs (<= 0.5.131) refuse any other path as a phishing guard
+  // (xeno-agent-cli auth/account-page.ts), so emitting /device would break their sign-in.
+  // Switch to /device once the CLI version floor is past the first release that accepts it.
   const verificationUri = `${authFrontendOrigin()}/activate`;
   const client = await getClient(db, clientId);
   if (!client) throw oauthError('invalid_client', 'unknown client');
@@ -548,9 +552,9 @@ export async function startDeviceAuthorization(db, { clientId, scope }) {
   const deviceCode = crypto.randomBytes(32).toString('base64url');
   const userCode = `${rand4()}-${rand4()}`;
   await db.query(
-    `INSERT INTO oauth_device_codes (device_code, user_code, client_id, scope, interval_secs, expires_at)
-     VALUES ($1,$2,$3,$4,5, now() + interval '${DEVICE_TTL_SEC} seconds')`,
-    [deviceCode, userCode, clientId, grantedScope],
+    `INSERT INTO oauth_device_codes (device_code, user_code, client_id, scope, interval_secs, expires_at, request_country)
+     VALUES ($1,$2,$3,$4,5, now() + interval '${DEVICE_TTL_SEC} seconds', $5)`,
+    [deviceCode, userCode, clientId, grantedScope, requestCountry],
   );
   return {
     device_code: deviceCode,
@@ -566,7 +570,8 @@ export async function startDeviceAuthorization(db, { clientId, scope }) {
 export async function inspectDeviceAuthorization(db, { userCode }) {
   const normalized = String(userCode || '').toUpperCase();
   const r = await db.query(
-    `SELECT dc.client_id, dc.scope, c.name AS client_name, c.dynamic, c.access_audience
+    `SELECT dc.client_id, dc.scope, c.name AS client_name, c.dynamic, c.access_audience,
+            dc.request_country, dc.created_at
        FROM oauth_device_codes dc
        JOIN oauth_clients c ON c.client_id = dc.client_id
       WHERE dc.user_code = $1
@@ -578,7 +583,9 @@ export async function inspectDeviceAuthorization(db, { userCode }) {
   const row = r.rows[0];
   if (!row) throw oauthError('invalid_request', 'invalid or expired user_code');
   // a self-registered app (RFC 7591) is flagged so the approval screen warns that XENO has not reviewed it
-  return { client_id: row.client_id, client_name: row.client_name, scope: row.scope, unverified: row.dynamic === true };
+  // request_country + requested_at let the approval page say where and when the device asked (RFC 8628 §5.4)
+  return { client_id: row.client_id, client_name: row.client_name, scope: row.scope, unverified: row.dynamic === true,
+    request_country: row.request_country ?? null, requested_at: row.created_at ? new Date(row.created_at).toISOString() : null };
 }
 
 /** Approve a device code for an authenticated user (called from the activate UI/API). */

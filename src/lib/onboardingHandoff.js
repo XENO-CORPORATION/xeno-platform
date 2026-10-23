@@ -105,7 +105,7 @@ export function isPrivilegedReturnUrl(raw) {
   return v.startsWith('xeno://')
     || v.startsWith('/cli-auth')
     || v.startsWith('/api/oauth2/')
-    || /^\/activate(?:\?|$)/.test(v);
+    || /^\/(?:device|activate)(?:\?|$)/.test(v);
 }
 
 export function stashReturnUrl(raw) {

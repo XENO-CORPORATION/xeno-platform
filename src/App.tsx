@@ -303,9 +303,10 @@ function App() {
                 redirect away the one page that knows how to finish the job. */}
             <Route path="/download/resume" element={<DownloadResume />} />
 
-            {/* RFC 8628 verification URI. The provider emits /activate, so it
-                must be a real route rather than falling through to home. */}
+            {/* RFC 8628 verification URI. The provider emits /device (short, like
+                google.com/device); /activate is kept for clients that already printed it. */}
             <Route element={<AuthLayout />}>
+              <Route path="/device" element={<DeviceAuthContent protocol="oidc" />} />
               <Route path="/activate" element={<DeviceAuthContent protocol="oidc" />} />
             </Route>
 

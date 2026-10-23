@@ -76,7 +76,7 @@ before(async () => {
           }));
           builder.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path: name }) => {
             const sources = {
-              AuthContext: 'export const useAuth = () => ({ isAuthenticated: true, isLoading: false, user: { id: "test-user" } });',
+              AuthContext: 'export const useAuth = () => ({ isAuthenticated: true, isLoading: false, user: { id: "test-user", email: "you@example.com" }, logout: () => {} });',
               authApps: 'export const getAuthApp = () => ({ displayName: "XENO CLI", slug: "cli" });',
               authRouting: 'export const authPath = (_kind, query = "") => "/login" + query;',
             };
@@ -249,12 +249,16 @@ test('device approval requires inspecting the registered client, then an explici
     await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, '/api/oauth2/device/inspect');
-    assert.ok(container.textContent.includes('Approve XENO Agent CLI'));
+    // Step 2 is the DeviceApproval unit: nothing is granted until the person presses Sign in.
+    assert.ok(container.querySelector('[data-xc="device-approval"]'), 'inspection must show the approval step');
+    assert.ok(container.textContent.includes('Sign in to XENO Agent CLI?'));
     assert.ok(container.textContent.includes('Run AI models on your account'));
-    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    assert.ok(container.textContent.includes('you@example.com'), 'the account being signed in is shown');
+    assert.ok(container.textContent.includes('ABCD-1234'), 'the code is shown again to match against the device');
+    await act(async () => { container.querySelector('[data-intent="approve"]').click(); });
     assert.equal(requests[1].url, '/api/oauth2/device/approve');
     assert.deepEqual(requests[1].body, { user_code: 'ABCD-1234' });
-    assert.ok(container.textContent.includes('Signed in to XENO Agent CLI'));
+    assert.ok(container.textContent.includes('XENO Agent CLI is signed in'));
   } finally { unmount(); globalThis.fetch = originalFetch; }
 });
 
@@ -269,7 +273,7 @@ test('a delayed inspection cannot attach consent to a different edited device co
     await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
     act(() => { setNativeInputValue(container.querySelector('[data-field="code"]'), 'EFGH5678'); });
     await act(async () => { finish(); });
-    assert.equal(container.textContent.includes('Approve Old request'), false);
+    assert.equal(container.textContent.includes('Old request'), false);
     assert.equal(container.querySelector('[data-field="code"]').value, 'EFGH-5678');
   } finally { unmount(); globalThis.fetch = originalFetch; }
 });
@@ -287,12 +291,39 @@ test('device consent can be explicitly declined without approving the grant', as
     { initialEntries: ['/activate?code=ABCD1234'] }, React.createElement(Pages.DeviceAuthContent, { protocol: 'oidc' })));
   try {
     await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
-    const decline = [...container.querySelectorAll('button')].find(button => button.textContent === 'Decline sign-in');
+    const decline = container.querySelector('[data-intent="decline"]');
     assert.ok(decline);
     await act(async () => { decline.click(); });
     assert.deepEqual(requests, ['/api/oauth2/device/inspect', '/api/oauth2/device/deny']);
     assert.ok(container.textContent.includes('Sign-in declined'));
     assert.equal(container.querySelector('form'), null);
+  } finally { unmount(); globalThis.fetch = originalFetch; }
+});
+
+test('a request started in another country is shown with a warning (RFC 8628 §5.4)', async () => {
+  const originalFetch = globalThis.fetch;
+  const at = new Date(Date.now() - 3 * 60000).toISOString();
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ client_id: 'xeno-agent-cli', client_name: 'XENO Agent CLI',
+    scope: 'openid', request_country: 'BR', viewer_country: 'DE', requested_at: at }) });
+  const { container, unmount } = render(React.createElement(Router.MemoryRouter,
+    { initialEntries: ['/device?code=ABCD1234'] }, React.createElement(Pages.DeviceAuthContent, { protocol: 'oidc' })));
+  try {
+    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    assert.ok(container.textContent.includes('3 minutes ago'));
+    assert.ok(container.querySelector('[role="alert"]')?.textContent.includes('different place'), 'a cross-country request must warn');
+  } finally { unmount(); globalThis.fetch = originalFetch; }
+});
+
+test('a request from the same country does not warn', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ client_id: 'xeno-agent-cli', client_name: 'XENO Agent CLI',
+    scope: 'openid', request_country: 'DE', viewer_country: 'DE', requested_at: new Date().toISOString() }) });
+  const { container, unmount } = render(React.createElement(Router.MemoryRouter,
+    { initialEntries: ['/device?code=ABCD1234'] }, React.createElement(Pages.DeviceAuthContent, { protocol: 'oidc' })));
+  try {
+    await act(async () => { container.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); });
+    assert.ok(container.textContent.includes('just now'));
+    assert.equal(container.querySelector('[role="alert"]'), null);
   } finally { unmount(); globalThis.fetch = originalFetch; }
 });
 

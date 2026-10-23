@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { DeviceCodeForm, formatUserCode, userCodeOf, type DeviceCodeStatus } from '@xenosystem/components/auth';
-import { Button } from '@xenosystem/elements-react';
+import { DeviceApproval, DeviceCodeForm, formatUserCode, userCodeOf, type DeviceApprovalStatus, type DeviceCodeStatus } from '@xenosystem/components/auth';
 import AuthMark from '../components/auth/AuthMark';
 import { ArrowLeft } from 'lucide-react';
 import { getAuthApp } from '../lib/authApps';
@@ -9,13 +8,15 @@ import { authPath } from '../lib/authRouting.js';
 import { useAuth } from '../contexts/AuthContext';
 
 /* ──────────────────────────────────────────────────────────────────────
- * /activate is the RFC 8628 verification URI. /auth/:app/device remains a
- * compatibility surface for the pre-OIDC CLI device-code implementation.
+ * /device is the RFC 8628 verification URI (/activate is its old alias).
+ * /auth/:app/device remains a compatibility surface for the pre-OIDC CLI
+ * device-code implementation.
  *
- * The code field, typing rule, connected state and phishing note are
- * `@xenosystem/components/auth` DeviceCodeForm. This page owns the session
- * redirect, the inspect/approve (or legacy verify) calls, and the consent
- * copy for the registered client.
+ * Two steps, both from `@xenosystem/components/auth`: DeviceCodeForm (the
+ * code), then DeviceApproval (what is being let in: app, account, the code to
+ * match, where and when the device asked, permissions — RFC 8628 §5.4). This
+ * page owns the session redirect and the inspect/approve/deny (or legacy
+ * verify) calls.
  * ────────────────────────────────────────────────────────────────────── */
 /* What each scope lets the device do, in the words a person approving it needs. An unknown scope is
  * shown as its id rather than guessed at: describing access we did not define would be a false claim. */
@@ -49,6 +50,29 @@ export function describeScopes(scopes: string[]): string[] {
   return scopes.map((scope) => SCOPE_WORDS[scope] ?? scope);
 }
 
+/** "Germany" for "DE"; the code itself when the runtime has no name for it. */
+function countryName(code: string | null | undefined): string | undefined {
+  if (!code) return undefined;
+  try { return new Intl.DisplayNames(undefined, { type: 'region' }).of(code) ?? code; } catch { return code; }
+}
+
+/** "just now", "3 minutes ago" — the age of the request, from the provider's clock. */
+function startedAgo(iso: string | null | undefined): string | undefined {
+  if (!iso) return undefined;
+  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (!Number.isFinite(minutes)) return undefined;
+  return minutes < 1 ? 'just now' : minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+}
+
+interface Inspected {
+  client_name: string;
+  scope: string[];
+  unverified: boolean;
+  request_country: string | null;
+  viewer_country: string | null;
+  requested_at: string | null;
+}
+
 const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protocol = 'oidc' }) => {
   const { app: appSlug } = useParams();
   const location = useLocation();
@@ -56,17 +80,13 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
   const initialCode = new URLSearchParams(location.search).get('code') || '';
   const [code, setCode] = useState(() => formatUserCode(initialCode));
   const [status, setStatus] = useState<'idle' | 'verifying' | 'connected' | string>('idle');
-  const [authorization, setAuthorization] = useState<{
-    client_id: string;
-    client_name: string;
-    scope: string[];
-    unverified?: boolean;
-  } | null>(null);
-  const [denied, setDenied] = useState(false);
+  const [authorization, setAuthorization] = useState<Inspected | null>(null);
+  const [approval, setApproval] = useState<DeviceApprovalStatus>('review');
   const requestGeneration = useRef(0);
   const [isVisible, setIsVisible] = useState(false);
 
-  const { isAuthenticated: authed, isLoading: authLoading } = useAuth();
+  const { isAuthenticated: authed, isLoading: authLoading, user, logout } = useAuth();
+  const accountLabel = user?.email || user?.display_name || user?.username || 'your XENO account';
 
   useEffect(() => {
     const t = setTimeout(() => setIsVisible(true), 50);
@@ -82,29 +102,29 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     }
   }, [authed, authLoading, appSlug, location.pathname, location.search, protocol]);
 
+  // Signing out sends the effect above to sign-in, which returns here with the code kept in the URL.
+  const switchAccount = () => {
+    const here = new URL(window.location.href);
+    if (userCodeOf(code)) here.searchParams.set('code', code);
+    window.history.replaceState(null, '', `${here.pathname}${here.search}`);
+    logout();
+  };
+
   const onCodeChange = (v: string) => {
     requestGeneration.current++;
-    setDenied(false);
     setCode(v);
     setAuthorization(null);
     if (status !== 'idle') setStatus('idle');
   };
 
-  const deny = async () => {
-    if (status === 'verifying' || !authorization || !authed) return;
-    setStatus('verifying');
-    const generation = ++requestGeneration.current;
-    try {
-      const r = await fetch('/api/oauth2/device/deny', { method: 'POST',
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user_code: code.toUpperCase() }) });
-      if (generation !== requestGeneration.current) return;
-      if (!r.ok) throw new Error('denial failed');
-      setDenied(true);
-      setAuthorization(null);
-      setStatus('idle');
-    } catch { if (generation === requestGeneration.current) setStatus('Could not decline this request. Try again.'); }
-  };
+  const errorText = (d: { error?: string; error_description?: string }) =>
+    d.error === 'invalid_code' ? 'That code is invalid. Check it and try again.'
+      : d.error === 'expired' ? 'That code has expired. Start again from your device.'
+      : d.error === 'already_used' ? 'That code was already used.'
+      : d.error_description === 'invalid or expired user_code' ? 'That code is invalid or expired. Start again from your device.'
+      : (d.error || 'Verification failed — please try again.');
 
+  /** Step 1: the code. OIDC only inspects it (nothing is granted yet); the legacy surface verifies directly. */
   const verify = async () => {
     if (status === 'verifying') return;
     if (!userCodeOf(code)) { setStatus('Enter the full 8-character code.'); return; }
@@ -112,9 +132,7 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
     setStatus('verifying');
     const generation = ++requestGeneration.current;
     try {
-      const endpoint = protocol === 'oidc'
-        ? (authorization ? '/api/oauth2/device/approve' : '/api/oauth2/device/inspect')
-        : '/api/auth/cli/device-code/verify';
+      const endpoint = protocol === 'oidc' ? '/api/oauth2/device/inspect' : '/api/auth/cli/device-code/verify';
       const r = await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -122,36 +140,51 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
       });
       const d = await r.json().catch(() => ({}));
       if (generation !== requestGeneration.current) return;
-      if (protocol === 'oidc' && r.ok && !authorization && d.client_id && d.client_name) {
+      if (protocol === 'oidc' && r.ok && d.client_id && d.client_name) {
         setAuthorization({
-          client_id: d.client_id,
           client_name: d.client_name,
           scope: typeof d.scope === 'string' ? d.scope.split(/\s+/).filter(Boolean) : [],
           unverified: d.unverified === true,
+          request_country: typeof d.request_country === 'string' ? d.request_country : null,
+          viewer_country: typeof d.viewer_country === 'string' ? d.viewer_country : null,
+          requested_at: typeof d.requested_at === 'string' ? d.requested_at : null,
         });
+        setApproval('review');
         setStatus('idle');
         return;
       }
       if (r.ok && (d.status === 'ok' || d.ok === true)) { setStatus('connected'); return; }
-      setStatus(d.error === 'invalid_code' ? 'That code is invalid. Check it and try again.'
-        : d.error === 'expired' ? 'That code has expired. Start again from your terminal.'
-        : d.error === 'already_used' ? 'That code was already used.'
-        : d.error_description === 'invalid or expired user_code' ? 'That code is invalid or expired. Start again from your device.'
-        : (d.error || 'Verification failed — please try again.'));
+      setStatus(errorText(d));
     } catch {
       if (generation === requestGeneration.current) setStatus('Network error — please try again.');
     }
   };
 
+  /** Step 2: approve or decline exactly what step 1 showed. */
+  const decide = async (approve: boolean) => {
+    if (!authorization || approval === 'approving' || approval === 'declining') return;
+    setApproval(approve ? 'approving' : 'declining');
+    try {
+      const r = await fetch(approve ? '/api/oauth2/device/approve' : '/api/oauth2/device/deny', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ user_code: code.toUpperCase() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { setApproval(approve ? 'approved' : 'declined'); return; }
+      setApproval({ error: errorText(d) });
+    } catch {
+      setApproval({ error: 'Network error — please try again.' });
+    }
+  };
+
   if (authLoading || !authed) return null; // checking or redirecting
 
-  const displayName = authorization?.client_name
-    || (protocol === 'legacy' ? legacyAuthApp.displayName : 'your XENO device');
-
+  const displayName = protocol === 'legacy' ? legacyAuthApp.displayName : 'your XENO device';
   const formStatus: DeviceCodeStatus =
-    status === 'idle' || status === 'verifying' || status === 'connected'
-      ? status
-      : { error: status };
+    status === 'idle' || status === 'verifying' || status === 'connected' ? status : { error: status };
+  const mismatch = !!(authorization?.request_country && authorization.viewer_country
+    && authorization.request_country !== authorization.viewer_country);
 
   return (
     <>
@@ -163,39 +196,38 @@ const DeviceAuthContent: React.FC<{ protocol?: 'oidc' | 'legacy' }> = ({ protoco
       </header>
 
       <div className="flex-1 min-h-0 flex flex-col justify-center px-6 pb-6 lg:px-12 xl:px-20 pt-6">
-        <div className={`w-full max-w-[400px] mx-auto transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: '0.15s' }}>
-          {denied ? <div role="status"><h1>Sign-in declined</h1><p>No access was granted. Return to your terminal.</p></div> : <DeviceCodeForm
-            app={{ name: displayName }}
-            code={code}
-            onChange={onCodeChange}
-            onSubmit={() => { void verify(); }}
-            status={formStatus}
-            labels={{
-              hint: authorization ? 'Confirm the registered client and requested access.' : 'Enter the code shown on your device.',
-              submit: authorization ? `Approve ${authorization.client_name}` : 'Continue',
-              busy: 'Checking…',
-              connectedTitle: `Signed in to ${displayName}`,
-              connectedBody: 'You can close this page and return to your device.',
-            }}
-            after={authorization && status !== 'connected' ? (
-              <div className="mt-5 space-y-3 text-sm">
-                <p className="text-white/60">
-                  Approve only if you started <span className="text-white">{authorization.client_name}</span> on your device.
-                  It will be able to:
-                </p>
-                <ul className="space-y-1.5 rounded-lg bg-white/[0.04] px-4 py-3 text-white/80">
-                  {describeScopes(authorization.scope).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-                {authorization.unverified ? (
-                  <p className="text-white/60">This app registered itself and has not been reviewed by XENO. It will act as its own agent of yours, never as you. Actions that cannot be undone ask you to sign in again.</p>
-                ) : null}
-                <p className="text-white/40">You can sign it out at any time from your account.</p>
-                <Button type="button" variant="secondary" disabled={status === 'verifying'} onClick={() => { void deny(); }}>Decline sign-in</Button>
-              </div>
-            ) : undefined}
-          />}
+        <div className={`w-full max-w-[440px] mx-auto transition-all duration-700 ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: '0.15s' }}>
+          {authorization ? (
+            <DeviceApproval
+              app={{ name: authorization.client_name, unverified: authorization.unverified }}
+              account={{ label: accountLabel }}
+              code={code}
+              permissions={describeScopes(authorization.scope)}
+              origin={{ place: countryName(authorization.request_country), startedAgo: startedAgo(authorization.requested_at) }}
+              mismatch={mismatch}
+              status={approval}
+              onApprove={() => { void decide(true); }}
+              onDecline={() => { void decide(false); }}
+              onSwitchAccount={switchAccount}
+            />
+          ) : (
+            <DeviceCodeForm
+              app={{ name: displayName }}
+              code={code}
+              onChange={onCodeChange}
+              onSubmit={() => { void verify(); }}
+              status={formStatus}
+              account={{ label: accountLabel, onSwitch: switchAccount }}
+              labels={{
+                connect: protocol === 'legacy' ? 'Connect {app}' : 'Sign in on a device',
+                hint: 'Enter the code shown on your device.',
+                submit: 'Continue',
+                busy: 'Checking…',
+                connectedTitle: `Signed in to ${displayName}`,
+                connectedBody: 'You can close this page and return to your device.',
+              }}
+            />
+          )}
         </div>
       </div>
     </>
