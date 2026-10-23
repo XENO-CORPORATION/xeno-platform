@@ -50,6 +50,9 @@
     "test:funding-budget-event": "node --test scripts/funding-budget-event.test.mjs",
     "test:customers": "node src/server/tests/customers.test.mjs",
     "test:customers-ui": "node prototypes/xeno-workspace/tests/customers-test.mjs",
+    "test:workspace-mail": "node src/server/tests/workspace-mail.test.mjs",
+    "test:mail-ui": "node prototypes/xeno-workspace/tests/mail-test.mjs",
+    "test:workspace-mail-mutation": "node scripts/workspace-mail-mutation-check.mjs",
     "test:scheduling": "node src/server/tests/scheduling.test.mjs",
     "test:scheduling-ui": "node prototypes/xeno-workspace/tests/scheduling-test.mjs",
     "test:agent-parity": "node --test scripts/agent-parity.test.mjs && node scripts/agent-parity.mjs",
@@ -319,6 +322,7 @@
     "test:workspace-report": "node scripts/build-workspace-report.mjs && node --test scripts/workspace-report.browser.test.mjs",
     "test:marketing-navigation": "node --test scripts/homepage-v21.test.mjs scripts/homepage-v21.browser.test.mjs scripts/products-v2.test.mjs scripts/products-v2.browser.test.mjs",
     "test:spawn-profiles-web": "node --test scripts/spawn-profiles-web.test.mjs",
+    "test:spawn-profiles": "node --test src/server/tests/spawn-profiles.test.mjs",
     "test:project-folders": "node src/server/tests/project-folders.test.mjs"
   },
   "dependencies": {
