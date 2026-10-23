@@ -77,6 +77,15 @@
     return u;
   }
 
+  async function notActivated() {
+    try {
+      const a = await fetch('/api/auth/activation-status', { credentials: 'same-origin', headers: { 'x-xeno-surface': 'xeno-web' } });
+      if (!a.ok) return false;
+      const j = await a.json();
+      return !!j && j.success !== false && j.activated === false;
+    } catch { return false; }
+  }
+
   async function check() {
     let r;
     try { r = await fetch('/api/auth/me', { credentials: 'same-origin', headers: { 'x-xeno-surface': 'xeno-web' } }); }
@@ -84,6 +93,10 @@
     if (r.status === 401 || r.status === 403) return toLogin();
     let d = null; try { d = await r.json(); } catch {}
     if (!r.ok || !d || !d.success || !d.user) { state(`XENO could not open your workspace (${esc(r.status)}).<br><button type="button" id="xp-retry">Try again</button>`); document.getElementById('xp-retry').onclick = () => { opening(); P.ready = check(); }; return null; }
+    // An account that has not confirmed its email is refused by every platform route (account_not_activated), so
+    // the workspace would open looking empty and say nothing (found live, 2026-10-23). Send it to the page that
+    // explains and resends the code. Only an explicit `activated: false` does this: the server stays the gate.
+    if (await notActivated()) { location.replace('/auth/activate'); return null; }
     return adopt(d.user);
   }
   const start = () => { opening(); P.ready = check(); };

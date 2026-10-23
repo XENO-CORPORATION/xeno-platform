@@ -30,6 +30,7 @@ function answer(q) {
   const u = new URL(q.url()), m = q.method(), p = u.pathname; let body = null; try { body = JSON.parse(q.postData() || 'null'); } catch {}
   if (m !== 'GET') db.calls.push({ m, p, body, ws: q.headers()['x-xeno-workspace'] || null, csrf: q.headers()['x-xeno-csrf'] || null });
   if (p === '/api/auth/me') return json(200, { success: true, user: db.user });
+  if (p === '/api/auth/activation-status') return json(200, { success: true, activated: true, delivery: null });
   if (p === '/api/agents/presence/stream') return { status: 200, contentType: 'text/event-stream', body: 'event: ready\ndata: {}\n\n' };
   if (/^\/api\/library\/assets\/file\/[0-9a-f-]{36}\/star$/.test(p)) return json(200, { success: true, starred: true });
   if (p === '/api/agents/presence') return json(200, { success: true, agents: [] });

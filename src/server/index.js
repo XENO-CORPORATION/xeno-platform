@@ -192,6 +192,7 @@ import {
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
+import { globalLimiterSkips } from './utils/globalLimiterSkip.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -354,10 +355,8 @@ const globalLimiter = rateLimit({
   validate: { ip: false }, // custom key (CF-Connecting-IP) — skip the built-in req.ip validator
   keyGenerator: rateLimitKey, // real client IP behind Cloudflare, not the collapsed upstream hop
   message: { success: false, error: 'Too many requests, please try again later.' },
-  skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/api/status' || req.path === '/health';
-  },
+  // Mounted on '/api/', so req.path has '/api' stripped: compare the FULL path, or the skip never matches.
+  skip: (req) => globalLimiterSkips(req.baseUrl + req.path),
 });
 app.use('/api/', globalLimiter);
 

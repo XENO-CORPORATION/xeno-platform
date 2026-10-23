@@ -33,10 +33,10 @@ const video=Buffer.from('000000186674797069736f6d0000000069736f6d6d703432','hex'
 let server,gatewayServer;
 try{
   await pool.query(`CREATE TABLE users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),credits bigint DEFAULT 0);
-    CREATE TABLE credit_accounts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid UNIQUE,balance bigint DEFAULT 0,lifetime_earned bigint DEFAULT 0,lifetime_spent bigint DEFAULT 0,is_frozen boolean DEFAULT false,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
+    CREATE TABLE credit_accounts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid UNIQUE,owner_kind varchar(16) DEFAULT 'user',balance bigint DEFAULT 0,lifetime_earned bigint DEFAULT 0,lifetime_spent bigint DEFAULT 0,is_frozen boolean DEFAULT false,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
     CREATE TABLE credit_transactions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,account_id uuid,type varchar(32),amount bigint,balance_after bigint,reference_type varchar(64),reference_id varchar(128),description text,metadata jsonb,prev_hash text,entry_hash text,created_at timestamptz DEFAULT now());`);
   await pool.query(tablesDDL('api_usage_logs'));await migrateAccountV2(pool);await installUsageCreditFixture(pool);await installMediaIdentityFixture(pool);
-  await pool.query(`CREATE TABLE user_files(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,owner_user_id uuid,workspace_id uuid,created_by_user_id uuid,filename text,original_name text,file_type text,mime_type text,file_size bigint,storage_path text,storage_type text,metadata jsonb,content_sha256 text,created_at timestamptz DEFAULT now(),deleted_at timestamptz);
+  await pool.query(`CREATE TABLE user_files(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,owner_user_id uuid,workspace_id uuid,created_by_user_id uuid,filename text,original_name text,file_type text,mime_type text,file_size bigint,storage_path text,storage_type text,metadata jsonb,content_sha256 text,file_id uuid,created_at timestamptz DEFAULT now(),deleted_at timestamptz);
     CREATE TABLE chat_conversations(id uuid PRIMARY KEY,project_id uuid,deleted_at timestamptz);
     CREATE TABLE api_keys(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,key_hash text,key_prefix text,is_active boolean,expires_at timestamptz);`);
   await pool.query(tablesDDL('library_asset_ingestions','library_item_areas'));
