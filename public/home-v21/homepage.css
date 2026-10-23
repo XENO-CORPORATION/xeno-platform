@@ -17,3 +17,10 @@
   .sys-apps::-webkit-scrollbar{display:none}
   .sys-apps>*{flex:none}
 }
+/* Hero command center on wide screens (owner, 2026-10-23, 4K screenshot): with auto-fill every panel
+   landed in ONE row and 1fr rows stretched each to the full hero height, so eight tall slivers. At most
+   four panels per row; rows share the height, so eight panels make two landscape rows. */
+[data-panels]{grid-template-columns:repeat(auto-fill,minmax(max(250px,calc((100% - 30px) / 4)),1fr))!important}
+@media (min-width:1800px){
+  [data-panels]{grid-auto-rows:minmax(276px,1fr)!important}
+}
