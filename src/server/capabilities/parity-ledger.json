@@ -8613,6 +8613,12 @@
    "class": "safe",
    "scope": "docs:read"
   },
+  "ui:platform-docs.js:data-dc-title": {
+   "status": "capability",
+   "capability": "docs.doc.save",
+   "class": "reversible",
+   "scope": "docs:write"
+  },
   "route:schedulingRoutes.js:DELETE /pages/:id": {
    "status": "planned",
    "class": "irreversible",
