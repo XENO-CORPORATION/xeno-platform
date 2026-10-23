@@ -44,6 +44,7 @@
     "test:site-access-codes": "node src/server/tests/site-access-codes.test.mjs",
     "test:site-access-ui": "node prototypes/xeno-workspace/tests/site-access-test.mjs",
     "test:activation-ui": "node prototypes/xeno-workspace/tests/activation-test.mjs",
+    "test:funding-budget-event": "node --test scripts/funding-budget-event.test.mjs",
     "test:customers": "node src/server/tests/customers.test.mjs",
     "test:customers-ui": "node prototypes/xeno-workspace/tests/customers-test.mjs",
     "test:scheduling": "node src/server/tests/scheduling.test.mjs",
