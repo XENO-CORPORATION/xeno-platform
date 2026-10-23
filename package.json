@@ -315,7 +315,8 @@
     "test:products-v2": "node --test scripts/products-v2.test.mjs",
     "test:workspace-report": "node scripts/build-workspace-report.mjs && node --test scripts/workspace-report.browser.test.mjs",
     "test:marketing-navigation": "node --test scripts/homepage-v21.test.mjs scripts/homepage-v21.browser.test.mjs scripts/products-v2.test.mjs scripts/products-v2.browser.test.mjs",
-    "test:spawn-profiles-web": "node --test scripts/spawn-profiles-web.test.mjs"
+    "test:spawn-profiles-web": "node --test scripts/spawn-profiles-web.test.mjs",
+    "test:project-folders": "node src/server/tests/project-folders.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",
