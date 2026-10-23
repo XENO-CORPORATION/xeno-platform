@@ -47,7 +47,7 @@ p.on('request', (q) => {
   if (u.pathname === '/api/tasks/views') { if (method === 'POST') db.views.push({ id: 'v' + (db.views.length + 1), name: b.name, area: b.area, filters: b.filters }); if (method === 'DELETE') db.views = []; return json(200, { success: true, views: db.views }); }
   if (u.pathname === '/api/tasks' && method === 'GET') { if (fail) return json(500, { success: false }); const a = u.searchParams.get('area'), pid = u.searchParams.get('projectId'); return json(200, { success: true, tasks: db.tasks.filter((t) => (!a || t.area === a) && (!pid || (t.project && t.project.id === pid))).map(view) }); }
   if (u.pathname === '/api/tasks' && method === 'POST') { const t = mk(b); return json(201, { success: true, task: view(t) }); }
-  if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: PEOPLE });
+  if (u.pathname === '/api/tasks/assignees') return new Promise((r) => setTimeout(() => r(json(200, { success: true, assignees: PEOPLE })), 600)); // slow on purpose: the menu must not freeze the first answer
   if (u.pathname === '/api/tasks/folders/linkable') return json(200, { success: true, folders: [{ id: 'f0000000-0000-4000-8000-000000000001', name: 'Weapon renders', path: 'Assets / Weapon renders', team: null }, { id: 'f0000000-0000-4000-8000-000000000002', name: 'Voice lines', path: 'Voice lines', team: null }] });
   { const fm = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/folders$/); if (fm && method === 'POST') { (db.folderLinks ||= []).push({ key: fm[1], ...b }); return json(201, { success: true, folders: [] }); } }
   const am = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/attachments(?:\/([\w-]+))?$/);
@@ -236,12 +236,19 @@ try {
   await p.click('[data-tk="bulk"][data-arg="priority"]'); await p.waitForSelector('.xcm', { timeout: 3000 }); await menuClick(/^Low/); await settle(900);
   ok(db.tasks.find((x) => x.key === 'T-1').priority === 'low' && db.tasks.find((x) => x.key === 'T-4').priority === 'low' && !/selected/.test(await main()), 'one action changes every selected task');
   ok(await renders() === 0, 'the board redrew in place throughout');
-  db.tasks.push({ ...db.tasks[0], key: 'T-9', number: 9, title: 'Raised by Codrin', status: 'raised', assignee: null, priority: 'none', events: [], updatedAt: now() });
+  db.tasks.push({ ...db.tasks[0], project: { id: 'p-fresh', name: 'Fresh' }, key: 'T-9', number: 9, title: 'Raised by Codrin', status: 'raised', assignee: null, priority: 'none', events: [], updatedAt: now() });
   await p.evaluate(() => window.XENO_TASKS.poll()); await settle();
   ok(!!(await p.$('[data-tk-col="raised"] [data-tk-card="T-9"]')), 'a task someone else adds appears on the board without reloading the page');
   await p.click('[data-tk-card="T-9"]', { button: 'right' }); await p.waitForSelector('.xcm', { timeout: 3000 });
   const items = await p.$$eval('.xcm .xcm-i', (els) => els.map((e) => e.textContent.trim()));
   ok(['Open', 'Take it', 'Move to', 'Assign to', 'Priority', 'Rename', 'Add sub-task', 'Select', 'Delete task'].every((w) => items.some((x) => x.startsWith(w))), 'right-clicking a card gives its full menu (' + items.length + ' items)');
+  { // owner, 2026-10-23: hovering "Assign to" sat on "Loading people…" for good
+    const handles = await p.$$('.xcm .xcm-i'); let assign = null;
+    for (const h of handles) if ((await h.evaluate((e) => e.textContent.trim())).startsWith('Assign to')) assign = h;
+    await assign.hover();
+    const shown = await p.waitForFunction(() => [...document.querySelectorAll('.xcm.sub .xcm-i')].some((e) => e.textContent.includes('Codrin')), { timeout: 2000 }).then(() => true, () => false);
+    ok(shown && !(await p.$$eval('.xcm.sub .xcm-i', (els) => els.some((e) => /Loading people/.test(e.textContent)))), 'hovering Assign to lists the people at once, never a stuck "Loading people…"');
+  }
   await p.keyboard.press('Escape');
   await p.evaluate(() => { const card = document.querySelector('[data-tk-card="T-9"]'), col = document.querySelector('[data-tk-col="todo"] .tk-col-b'); const dt = new DataTransfer(); card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt })); col.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); col.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt })); });
   await settle();

@@ -71,12 +71,17 @@
     T.byProject.set(id, r && r.ok ? r.d.tasks : (Array.isArray(T.byProject.get(id)) ? T.byProject.get(id) : 'error'));
     patch();
   }
+  // One request per project at a time, and a failed load is not cached as an empty list (that left
+  // "Assign to" empty for the rest of the session); the next menu open retries.
+  const peopleInflight = new Map();
   async function people(projectId) {
     const k = projectId || 'personal';
     if (T.people.has(k)) return T.people.get(k);
-    const r = await api('GET', '/api/tasks/assignees' + (projectId ? '?projectId=' + encodeURIComponent(projectId) : '')).catch(() => null);
-    const list = r && r.ok ? r.d.assignees : [];
-    T.people.set(k, list); return list;
+    if (!peopleInflight.has(k)) {
+      peopleInflight.set(k, api('GET', '/api/tasks/assignees' + (projectId ? '?projectId=' + encodeURIComponent(projectId) : '')).catch(() => null)
+        .then((r) => { peopleInflight.delete(k); if (r && r.ok) T.people.set(k, r.d.assignees); return r && r.ok ? r.d.assignees : []; }));
+    }
+    return peopleInflight.get(k);
   }
   async function loadViews() { const r = await api('GET', '/api/tasks/views').catch(() => null); T.views = r && r.ok ? r.d.views : []; patch(); }
   const sync = () => { if (T.area !== undefined && !T.loading && P.area() !== T.area) { T.list = null; T.status = 'loading'; T.sel.clear(); load(); } };
@@ -1033,7 +1038,7 @@
   function assignItems(t, field) {
     const cached = T.people.get(pkey(t)), current = t[field] ? t[field].id : null;
     const set = (id) => (field === 'assignee' ? patchTask(t.key, { assigneeId: id }, id ? 'Assigned' : 'Unassigned') : patchTask(t.key, { reviewerId: id, reviewRequired: !!id }, id ? 'Reviewer set' : 'Review removed'));
-    if (!cached) { people(t.project ? t.project.id : null); return [{ label: 'Loading people…', disabled: 'Loading' }]; }
+    if (!cached) { people(t.project ? t.project.id : null).then(() => { if (T.people.has(pkey(t))) window.XCM?.refresh?.(); }); return [{ label: 'Loading people…', disabled: 'Loading' }]; }
     const mineIt = t.assignee && t.assignee.id === me();
     if (field === 'assignee' && !(t.can && t.can.edit)) return mineIt ? [{ label: 'Unassign me', icon: 'x', run: () => set(null) }] : [];
     const list = cached.filter((p) => !(field === 'reviewer' && t.assignee && p.id === t.assignee.id));
@@ -1053,8 +1058,10 @@
       (can.take !== undefined ? can.take : !t.assignee && open) ? { label: 'Take it', icon: 'user', run: () => claim(key) } : null,
       !mayWork && t.assignee && open && !mineIt && !(t.reviewer && t.reviewer.id === me()) ? { label: 'Ask to be assigned', icon: 'user', run: () => askAssign(key) } : null,
       can.moves.length ? { label: 'Move to', icon: 'flow', sub: can.moves.map((m) => ({ label: LABEL[m], run: () => move(key, m, t.status) })) } : null,
-      editAny ? { label: 'Assign to', icon: 'people', sub: assignItems(t, 'assignee') } : null,
-      can.edit ? { label: 'Reviewer', icon: 'check', sub: assignItems(t, 'reviewer') } : null,
+      // Built when the submenu OPENS, not when the menu opens: the people request (started above) has
+      // landed by then. Building it here froze "Loading people…" into the submenu for good.
+      editAny ? { label: 'Assign to', icon: 'people', sub: () => assignItems(t, 'assignee') } : null,
+      can.edit ? { label: 'Reviewer', icon: 'check', sub: () => assignItems(t, 'reviewer') } : null,
       can.edit ? { label: 'Priority', icon: 'up', sub: PRI_ORDER.map((p) => ({ label: PRI[p], checked: t.priority === p, run: () => patchTask(key, { priority: p }, 'Priority set') })) } : null,
     ];
     const change = [
