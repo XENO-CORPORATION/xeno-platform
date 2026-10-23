@@ -2,16 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createRequire } from 'node:module';
-const require = createRequire(resolve('../../package.json'));
-const puppeteer = require('puppeteer-core');
+// puppeteer is this repo's own devDependency (as chat-modal and the other rendered suites use it). The suite used to
+// resolve puppeteer-core from `resolve('../../package.json')` — a path relative to the CWD, which from the repo root
+// is the workspace above it, so `npm test` could never load it.
+const puppeteer = (await import('puppeteer')).default;
 const source = readFileSync(new URL('../src/server/routes/oauth2Routes.js', import.meta.url), 'utf8');
 const html = source.slice(source.indexOf('res.send(`<!doctype html>') + 'res.send(`'.length, source.indexOf('</script></body></html>`)') + '</script></body></html>'.length).replaceAll('${app}', 'XENO Agent CLI');
 
 test('served consent design handles authorize/decline/account-switch, mobile, keyboard and reduced motion', async () => {
-const executablePath = process.env.XENO_BROWSER_EXECUTABLE || ['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
-  assert.ok(executablePath, 'Set XENO_BROWSER_EXECUTABLE to an installed Chromium browser');
-  const browser = await puppeteer.launch({ executablePath, headless:'new', args:['--disable-extensions','--no-first-run','--no-sandbox','--disable-gpu'] });
+  // An explicit browser wins; otherwise puppeteer's own (as every other rendered suite here launches it).
+  const executablePath = process.env.XENO_BROWSER_EXECUTABLE || undefined;
+  const browser = await puppeteer.launch({ executablePath, headless:true, args:['--disable-extensions','--no-first-run','--no-sandbox','--disable-gpu'] });
   const out = resolve('.xeno/auth-design-evidence'); mkdirSync(out, { recursive:true });
   try {
     for (const width of [390,1100]) {

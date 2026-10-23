@@ -1,7 +1,9 @@
 // A funding budget can be written, its event names the CAMPAIGN's project, and the fix rolls back cleanly.
 // 20261022090000 bound workforce_funding_budgets to a trigger that read workforce_funding_pools.project_id (no such
-// column), so every budget INSERT failed with 42703 (found 2026-10-23). Runs on a disposable database:
-//   DATABASE_URL=postgresql://…/<disposable> node --test scripts/funding-budget-event.test.mjs
+// column), so every budget INSERT failed with 42703 (found 2026-10-23). Runs on a disposable database, inside a schema
+// of its own that it drops afterwards (the workforce fixture is shared by several suites):
+//   WORKFORCE_TEST_DATABASE_URL=postgresql://…/workforceproof node --test scripts/funding-budget-event.test.mjs
+// `npm run ci:local` runs it that way in its proofs stage (the variable is one of its DB_PROOF_FIXTURES).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -17,8 +19,15 @@ test('the budgets trigger uses its own function; DOWN restores the old binding',
   assert.match(DOWN, /EXECUTE FUNCTION workforce_event_capture\(\)/);
 });
 
-test('up, down and up again on a real database', { skip: !process.env.DATABASE_URL && 'needs DATABASE_URL (disposable)' }, async () => {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const DB_URL = process.env.WORKFORCE_TEST_DATABASE_URL || process.env.DATABASE_URL;
+const SCHEMA = `funding_budget_event_${process.pid}_${Date.now()}`;
+
+test('up, down and up again on a real database', { skip: !DB_URL && 'needs WORKFORCE_TEST_DATABASE_URL (disposable)' }, async () => {
+  const admin = new pg.Pool({ connectionString: DB_URL });
+  await admin.query(`CREATE SCHEMA ${SCHEMA}`);
+  // Every connection resolves unqualified names in the owned schema, so the migration under test runs exactly as
+  // written and nothing lands in (or reads from) public.
+  const pool = new pg.Pool({ connectionString: DB_URL, options: `-c search_path=${SCHEMA},pg_catalog` });
   try {
     // the smallest schema the trigger touches, shaped as the migrations shape it
     await pool.query(`CREATE TABLE IF NOT EXISTS workforce_funding_campaigns (id uuid PRIMARY KEY, project_id uuid NOT NULL);
@@ -43,5 +52,9 @@ test('up, down and up again on a real database', { skip: !process.env.DATABASE_U
     await assert.rejects(insert(), /column "project_id" does not exist/, 'DOWN restores the previous binding exactly');
     await pool.query(UP);
     await insert();
-  } finally { await pool.end(); }
+  } finally {
+    await pool.end();
+    await admin.query(`DROP SCHEMA ${SCHEMA} CASCADE`);
+    await admin.end();
+  }
 });
