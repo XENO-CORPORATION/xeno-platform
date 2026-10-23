@@ -33,6 +33,7 @@
     "test:workspace-docs": "cd src/server && node tests/workspace-docs.test.mjs",
     "test:docs-ui": "node prototypes/xeno-workspace/tests/docs-test.mjs",
     "test:orchestrator": "node src/server/tests/orchestrator.test.mjs",
+    "test:orchestrator-engine": "node src/server/tests/orchestrator-engine.test.mjs",
     "test:support-tickets": "node src/server/tests/support-tickets.test.mjs",
     "test:support-ui": "node prototypes/xeno-workspace/tests/support-test.mjs",
     "test:release-record": "node src/server/tests/release-record.test.mjs",
