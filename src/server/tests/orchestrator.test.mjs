@@ -15,6 +15,9 @@
  *
  * Mutation-checked 2026-10-20 (each fails the named assertions when the protection is removed; restored passes):
  *   ORCH_MUTATE=cycle-trigger    drop both cycle triggers             -> 6 fail, from "C→A would close A→B→C→A"
+ *     (2026-10-23, engine adoption: the ENGINE now refuses loops on every service path first, so this mutation fails
+ *      only "the DATABASE refuses it from any writer" — the raw-SQL writer — and the run then stops on the loop it let in)
+ *   Engine swap: src/server/tests/orchestrator-engine.test.mjs (ORCH_ENGINE_MUTATE=1 -> 3 fail)
  *   ORCH_MUTATE=attempt-project  drop the attempt guard trigger       -> "the DATABASE refuses an attempt bound to another project’s run"
  *   mayRead() returns true       (workforceEvents.js, edited by hand) -> "never the secret project’s", "counted as hidden"
  *

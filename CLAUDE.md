@@ -274,6 +274,18 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
 - **Dedupe**: one contact per email per workspace (unique index); CSV import is a dry run unless `confirm`, skips or
   fills blanks on an existing email, never overwrites.
 - Proofs: `npm run test:customers` (real Postgres, 60 checks, mutation-checked ×4) and `npm run test:customers-ui`.
+## ✉️ Office › Mail is a FRONT-END to XENO Mail (2026-10-23)
+
+`services/xenoMail.js` (the one service) → xeno-mail's capability surface, server-to-server, with a 60 s platform-signed
+assertion (`aud xeno-mail`, same contract as Publish). Routes `mailRoutes.js` (`/api/mail`), agents `mailMcp.js`
+(`mail.*`), screen `platform-mail.js` at `/workspace/office/spaces/mail/<folder>[/<thread id>]`. Record: `docs/MAIL-XENO-MAIL.md`.
+- **No mail is stored here** — only which of the person's own addresses a workspace reads (`mail_workspace_mailboxes`,
+  carried as `mail_address`; mail-core binds it or refuses, never falls back) and ids of agent drafts.
+- **Sending is a person's, with `confirm: true`** (the screen asks twice). An agent's send becomes a draft; MCP has no
+  send/discard/mailbox tool; mail-core refuses `act` on irreversible capabilities too.
+- Fails closed without `XENO_MAIL_API_URL`. mail-core's VM (132) was STOPPED on 2026-10-23 — see the record's Hosting.
+Proofs: `npm run test:workspace-mail` (real Postgres + fake mail-core), `scripts/workspace-mail-mutation-check.mjs`, `npm run test:mail-ui`.
+
 ## 📅 Corpo › Scheduling lives HERE (2026-10-20)
 
 `services/scheduling.js` is the one service (screen `platform-scheduling.js`, routes `schedulingRoutes.js`, agents
@@ -288,9 +300,19 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
   `workforcePeople.availability*` (`reason: 'in_meeting'`).
 Proofs: `npm run test:scheduling` (real Postgres, 58 checks, mutation-checked ×4), `npm run test:scheduling-ui`.
 
-## 📦 The platform's own release record lives HERE (owner, 2026-10-20)
+## 📦 The release record is XENO Index's governance core — HOSTED here (owner, 2026-10-20; owner moved, 2026-10-23)
 
-One record, three layers: `services/releaseRecord.js` (the one service), `routes/releaseRoutes.js` (`/api/releases`),
+🔴 **The code is OWNED by `xeno-index`** (`packages/index/src/governance/`, `@xenosystem/index/governance`; decision
+`xeno-index/docs/decisions/0001-release-governance-record.md`). This repo HOSTS it: the tables (its migrations), identity,
+entitlements (injected in `services/releaseRecord.js`, fail-closed), `/api/releases`, the MCP transport and the screens —
+which are the Index's UI surface. The code is vendored byte-identical in `src/server/vendor/xeno-index/governance/`
+(+ `SOURCE.json`); `services/release*.js` are re-export shims so every import, URL and tool is unchanged.
+**Never edit the vendored files** — change xeno-index, then `node scripts/index-governance-vendor.mjs --sync --confirm`.
+`npm run test:index-governance-vendor` fails on an edited copy, a stale copy, or a migration that differs from the Index
+schema. A schema change = a new migration here AND the same bytes in `xeno-index/packages/index/schema/`. Never start a
+second release/changelog record.
+
+One record, three layers: the service (vendored, via `services/releaseRecord.js`), `routes/releaseRoutes.js` (`/api/releases`),
 `services/releasesMcp.js` (`releases.*`), screens `prototypes/xeno-workspace/platform-releases.js` at
 `/workspace/releases[/deploys[/<id>]|/features[/<id>]|/notes|/whats-new]`.
 

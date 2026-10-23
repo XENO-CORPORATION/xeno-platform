@@ -1,0 +1,19 @@
+{
+  "owner": "xeno-index",
+  "path": "packages/index/src/governance",
+  "package": "@xenosystem/index/governance",
+  "decision": "xeno-index/docs/decisions/0001-release-governance-record.md",
+  "commit": "529136513c84f25f7e81d0a5247facbd9677b7fd",
+  "note": "Vendored, byte-identical. Never edit these files here: change xeno-index and run scripts/index-governance-vendor.mjs --sync --confirm.",
+  "files": {
+    "index.js": "52e369755f9d48407a02c0effb8dabe08b79196f19061815156a0d10f3b4ce16",
+    "releaseRecord.js": "188d6dc8297930094306d80e6e2fc4fe5fa5116c7d7ad3b67d991533d1019af1",
+    "releaseInternalNotes.js": "cc2c8a93715cb1df1e7a3806815a8e0813095b83237d733408ac8c5efb63ccbe",
+    "releaseInternalNoteTemplate.js": "9c2adfba72c0ff27cc681c63e892509c26a5fa5895e0bdb312ebe4e532e15cb6",
+    "releasesMcp.js": "59088baea488b449ec8dad205f2badfc250c55e3ed62b47468abe0ad2696cc74"
+  },
+  "schema": {
+    "20261023100000-release-record.sql": "6482e5aa3af4df5f4470eb8a7e963be59d0df6c7eb3092340a4aa46ae320ae1a",
+    "20261026090000-release-internal-notes.sql": "7fb89159e5e4dafc0d5fa25d0d90dda17ad4d212b20fbb9f3ddd2178335ccfad"
+  }
+}

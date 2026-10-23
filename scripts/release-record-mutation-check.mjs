@@ -13,9 +13,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SVC = join(ROOT, 'src/server/services/releaseRecord.js');
+// The code that RUNS: the vendored XENO Index governance core (services/release*.js are re-export shims).
+const VENDOR = join(ROOT, 'src/server/vendor/xeno-index/governance');
+const SVC = join(VENDOR, 'releaseRecord.js');
 const MIG = join(ROOT, 'src/server/database/migrations/20261023100000-release-record.sql');
-const INOTES = join(ROOT, 'src/server/services/releaseInternalNotes.js');
+const INOTES = join(VENDOR, 'releaseInternalNotes.js');
 const INOTES_MIG = join(ROOT, 'src/server/database/migrations/20261026090000-release-internal-notes.sql');
 const INOTES_TEST = join(ROOT, 'src/server/tests/release-internal-notes.test.mjs');
 const MUTATIONS = [
