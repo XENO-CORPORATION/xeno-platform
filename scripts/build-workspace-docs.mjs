@@ -13,11 +13,13 @@
  * version and the xeno-blocks commit it was cut from. `scripts/workspace-docs-bundle.test.mjs` fails
  * if they disagree with each other, were edited by hand, or pulled in what they must not.
  *
- * Source, in order:
- *   --from <xeno-blocks/packages/blocks>   build from a checkout (the family's source, committed)
- *   node_modules/@xenosystem/blocks         the published package, once its /docs family is on npm
+ * Source:
+ *   (default) the PUBLISHED package, installed in scripts/workspace-docs-source/ — a build-only install pinned by
+ *             its own lockfile, because the family is built against TipTap 2 and the platform root runs TipTap 3.
+ *             `npm ci --prefix scripts/workspace-docs-source` first; bump the pin there to take a new release.
+ *   --from <xeno-blocks/packages/blocks>   build from a checkout instead (unreleased family work only)
  *
- *   node scripts/build-workspace-docs.mjs --from ../xeno-blocks/packages/blocks
+ *   npm ci --prefix scripts/workspace-docs-source && node scripts/build-workspace-docs.mjs
  */
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
@@ -27,10 +29,10 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 const fromAt = args.indexOf('--from');
 const fromSource = fromAt >= 0;
-const pkgDir = path.resolve(fromSource ? (args[fromAt + 1] || '') : 'node_modules/@xenosystem/blocks');
+const pkgDir = path.resolve(fromSource ? (args[fromAt + 1] || '') : 'scripts/workspace-docs-source/node_modules/@xenosystem/blocks');
 const entryDir = path.join(pkgDir, fromSource ? 'src/docs' : 'dist/docs');
 if (!existsSync(path.join(entryDir, fromSource ? 'index.ts' : 'index.js'))) {
-  throw new Error(fromSource ? `${entryDir}/index.ts not found — pass xeno-blocks/packages/blocks` : '@xenosystem/blocks with the /docs family is not installed — pass --from <xeno-blocks/packages/blocks>');
+  throw new Error(fromSource ? `${entryDir}/index.ts not found — pass xeno-blocks/packages/blocks` : '@xenosystem/blocks is not installed — run npm ci --prefix scripts/workspace-docs-source (or pass --from <xeno-blocks/packages/blocks>)');
 }
 const pkg = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
 if (pkg.name !== '@xenosystem/blocks') throw new Error(`${pkgDir} is ${pkg.name}, not @xenosystem/blocks`);
@@ -49,7 +51,11 @@ const MARKDOWN = ['markdownToDocument', 'documentToMarkdown'];
 const EDITOR = [...FORMAT, ...MARKDOWN, 'DocumentController', 'DOCUMENT_FORMAT_COMMANDS', 'DOCUMENT_TOOLBAR', 'mountDocumentSurface'];
 const STAMP = `export const BUILT_FROM = ${JSON.stringify(stamp)};\n`;
 
-const ix = fromSource ? './index.ts' : './index.js';
+// From the package: `/docs/core` for the editor and `/docs/format` for the server (both ≥ 0.21.0). The `/docs`
+// entry is ONE bundled module that also carries the React panel, so nothing built from it can tree-shake React out
+// (measured on 0.20.0: the guard below refused it).
+const ix = fromSource ? './index.ts' : './core.js';
+if (!fromSource && !['core.js', 'format.js'].every((f) => existsSync(path.join(entryDir, f)))) throw new Error(`@xenosystem/blocks@${pkg.version} has no /docs/core and /docs/format — pin ≥ 0.21.0 in scripts/workspace-docs-source`);
 await build({
   stdin: { contents: `export { ${EDITOR.join(', ')} } from '${ix}';\n${STAMP}`, resolveDir: entryDir, loader: 'ts', sourcefile: 'workspace-docs-entry.ts' },
   outfile: 'prototypes/xeno-workspace/docs-editor.js', bundle: true, format: 'iife', globalName: 'XenoDocs', platform: 'browser', target: 'es2022', minify: true, legalComments: 'eof',
@@ -59,11 +65,11 @@ await build({
 mkdirSync('src/server/vendor', { recursive: true });
 const serverEntry = fromSource
   ? `export { ${FORMAT.join(', ')} } from './document/format.ts';\nexport { ${MARKDOWN.join(', ')} } from './document/markdown.ts';\n${STAMP}`
-  : `export { ${[...FORMAT, ...MARKDOWN].join(', ')} } from './index.js';\n${STAMP}`;
+  : `export { ${[...FORMAT, ...MARKDOWN].join(', ')} } from './format.js';\n${STAMP}`;
 await build({
   stdin: { contents: serverEntry, resolveDir: entryDir, loader: 'ts', sourcefile: 'xdoc-format-entry.ts' },
   outfile: 'src/server/vendor/xdoc-format.mjs', bundle: true, format: 'esm', platform: 'node', target: 'node20',
-  // the published index re-exports the editor too; tree-shaking must leave none of it (checked below)
+  // /docs/format is the pure layer; the check below still refuses anything of the editor
   external: ['react', 'react-dom', '@tiptap/*', '@xenosystem/*'],
   banner: { js: banner('the .xdoc format for the server (no editor, no DOM)') },
 });

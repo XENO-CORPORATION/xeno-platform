@@ -1,6 +1,6 @@
-// GENERATED from @xenosystem/blocks@0.20.0/docs (xeno-blocks b04187be4b88) by scripts/build-workspace-docs.mjs — the .xdoc format for the server (no editor, no DOM). Do not edit; rebuild.
+// GENERATED from @xenosystem/blocks@0.21.0/docs (xeno-blocks npm) by scripts/build-workspace-docs.mjs — the .xdoc format for the server (no editor, no DOM). Do not edit; rebuild.
 
-// ../../../../.worktrees/xeno-blocks-docs/packages/blocks/src/docs/document/format.ts
+// scripts/workspace-docs-source/node_modules/@xenosystem/blocks/dist/chunk-NFOBZJDF.js
 var XDOC_FORMAT = "xeno.xdoc";
 var XDOC_VERSION = 1;
 var XDOC_EXTENSION = ".xdoc";
@@ -239,8 +239,6 @@ function nodeTypesIn(content) {
   walk(content);
   return seen;
 }
-
-// ../../../../.worktrees/xeno-blocks-docs/packages/blocks/src/docs/document/markdown.ts
 var PAGE_LINK = /^xeno-doc:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 function documentToMarkdown(doc) {
   if (!doc.content) return "";
@@ -579,8 +577,8 @@ function parseInlineMarkdown(text) {
   return kept.length > 0 ? kept : text ? [{ type: "text", text }] : [];
 }
 
-// ../../../../.worktrees/xeno-blocks-docs/packages/blocks/src/docs/xdoc-format-entry.ts
-var BUILT_FROM = "@xenosystem/blocks@0.20.0/docs (xeno-blocks b04187be4b88)";
+// scripts/workspace-docs-source/node_modules/@xenosystem/blocks/dist/docs/xdoc-format-entry.ts
+var BUILT_FROM = "@xenosystem/blocks@0.21.0/docs (xeno-blocks npm)";
 export {
   BUILT_FROM,
   DOCUMENT_MARK_TYPES,
