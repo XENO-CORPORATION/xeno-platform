@@ -73,6 +73,7 @@ import videoRoutes from './routes/videoRoutes.js';
 import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import libraryRoutes from './routes/libraryRoutes.js';
+import projectFolderRoutes from './routes/projectFolderRoutes.js';
 import tokenizerRoutes from './routes/tokenizerRoutes.js';
 import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
@@ -532,6 +533,9 @@ app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), (req,
 console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pre-json)');
 // Mail delivery events (Resend, Svix-signed) — same raw-body, pre-json contract.
 app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
+// XENO Storage: an app's project files (services/projectFolders.js). Mounted BEFORE the global body parsers so a
+// project's .json or .txt arrives as its own bytes, not parsed into an object.
+app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploadsDir }));
 
 // ULTRA HIGH LIMITS for base64 image data processing
 // Bound evidence requests before the general 100 MB parser allocates their body.

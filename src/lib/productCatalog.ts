@@ -273,6 +273,9 @@ export const PRODUCTS: Product[] = [
   { slug: 'research', name: 'XENO Research', tagline: 'Reproducible notebooks: run in a sandbox, signed, and re-checked.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-research' },
   { slug: 'spawn', name: 'XENO Spawn', tagline: 'Every coding agent in one place — and your XENO agents, one line away.', category: 'Develop', status: 'beta', delivery: 'cli', installVia: 'script', install: 'irm https://xenosystem.ai/install/spawn.ps1 | iex', operatingSystem: 'Windows', repo: 'xeno-spawn' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop you can share, with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
+  // XENO Storage desktop 0.1.0 (2026-10-21): experimental, unsigned, Windows x64. Drive letters for XENO Storage
+  // and Google Drive (through XENO Connect), each showing its own account's name and space via Dokany.
+  { slug: 'storage', name: 'XENO Storage', tagline: 'Your XENO files and your Google Drive, as drives on this PC.', category: 'Platform', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-storage' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
   // they can install does not exist. It also suppressed an upgrade signal that

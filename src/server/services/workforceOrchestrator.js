@@ -1,21 +1,24 @@
 /**
  * XENO Orchestrator on the platform (xeno-orchestrator/SPEC.md + INTEGRATION.md, owner-approved 2026-10-16;
- * "full development", 2026-10-20). The coordination kernel's logic — dependency edges, plans, attempts and the ready
- * set — ported onto the platform's OWN records. It coordinates THROUGH the existing owners and keeps no second
- * work-item, session or agent-loop store:
+ * "full development", 2026-10-20). A THIN ADAPTER: every decision — readiness, the ready set, dependency order, cycle
+ * refusal, the next attempt — is made by the engine (`@xenosystem/orchestrator`, through ./orchestratorEngine.js, with
+ * the SDK WorkflowPlanner injected). Owner, 2026-10-23: the platform must not re-invent the product; it had. This file
+ * only reads and writes the platform's OWN records through the existing owners and keeps no second work-item, session
+ * or agent-loop store:
  *
  *   work items   are XENO Tasks (tasks), project goals (project_goals) and objectives (project_objectives)
  *   task→task    dependencies are Tasks' own `blocks` links (task_links) — written through xenoTasks.addLink, so the
  *                task page, the canvas and the orchestrator read ONE edge
  *   other edges  (a goal or an objective at one end) are orchestrator_edges
- *   cycles       are refused by the DATABASE on both tables under one lock (orchestrator_refuse_cycle)
+ *   cycles       are refused by the engine (wouldCycle) before a write, and again by the DATABASE on both tables
+ *                under one lock (orchestrator_refuse_cycle) — defence in depth against a concurrent writer
  *   an attempt   is bound to a RUN ADMISSION (workforceRunAdmission) — the run's authority is the run's; the attempt's
  *                state is derived from the run's own rows (result, fence), never stored, so it cannot disagree
  *   execution    stays with the run's runtime and Box; nothing here dispatches
  *
- * Kernel rules kept from xeno-orchestrator/src/index.mjs: a step is ready only when every dependency is accepted
- * (here: done); an attempt number is the previous + 1 and never exceeds the step's ceiling; a live attempt blocks a
- * second one; cancelled/accepted steps take no more attempts.
+ * The rules (ready = every dependency done; next attempt = previous + 1, never past the ceiling, never beside a live
+ * one; closed steps take no more) are the engine's `planGraph` / `attemptDecision`, the same ones its own tick() uses.
+ * Do not restate them here: src/server/tests/orchestrator-engine.test.mjs swaps the engine and fails if you do.
  *
  * Who may do what (each the owning service's own rule, read here, never restated looser):
  *   read a graph / plan     a viewer of the project (or of the objective's workspace)
@@ -26,6 +29,7 @@
 import { check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import { readRunAdmission } from './workforceRunAdmission.js';
+import * as engine from './orchestratorEngine.js';
 
 export class OrchestratorError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'OrchestratorError'; this.code = code; this.status = status; }
@@ -80,6 +84,10 @@ export async function addEdge(db, me, { from, to } = {}) {
     return { edge: { id: String(l.id), store: 'task_links', from: { kind: 'task', id: a.id, key: a.key }, to: { kind: 'task', id: b.id, key: b.key } } };
   }
   if (!a.edit || !b.edit) throw new OrchestratorError('You can only connect work you may change', 'not_allowed', 403);
+  // the engine decides: would a→b close a loop over everything `b` already leads to?
+  if (await engine.closesLoop(db, a, b)) {
+    throw new OrchestratorError('That would make a loop: the other side already depends on this one', 'cycle', 409);
+  }
   try {
     const r = await db.query(`INSERT INTO orchestrator_edges (from_kind, from_id, to_kind, to_id, created_by) VALUES ($1,$2,$3,$4,$5)
       ON CONFLICT (from_kind, from_id, to_kind, to_id) DO UPDATE SET from_kind = EXCLUDED.from_kind RETURNING id`, [a.kind, a.id, b.kind, b.id, me.id]);
@@ -136,19 +144,24 @@ export async function readGraph(db, me, { projectId } = {}) {
     const fk = k(e.from_kind, e.from_id);
     if (!nodes.has(fk) && !external.has(fk)) external.set(fk, await externalDone(db, e.from_kind, e.from_id));
   }
-  const edges = [], blockers = new Map();
+  const edges = [], engineEdges = [];
   for (const e of edgeRows) {
     const fk = k(e.from_kind, e.from_id), tk = k(e.to_kind, e.to_id);
     if (!nodes.has(tk)) continue;
-    const doneFrom = nodes.has(fk) ? nodes.get(fk).done : external.get(fk);
-    if (!blockers.has(tk)) blockers.set(tk, []);
-    blockers.get(tk).push({ ref: nodes.has(fk) ? fk : null, done: doneFrom });
+    engineEdges.push({ from: fk, to: tk });
     if (nodes.has(fk)) edges.push({ id: String(e.id), store: e.store, from: fk, to: tk });
   }
+  // the engine decides readiness; an outside blocker is a node it sees as done or not, shown here as 'outside'
+  let g;
+  try {
+    g = engine.planGraph({ nodes: [...[...nodes].map(([ref, n]) => ({ id: ref, done: n.done })), ...[...external].map(([ref, done]) => ({ id: ref, done: !!done }))], edges: engineEdges });
+  } catch (err) {
+    if (err && err.message === 'GRAPH_CYCLE') throw new OrchestratorError('This project’s dependencies form a loop', 'cycle', 409);
+    throw err;
+  }
   for (const [key, n] of nodes) {
-    const bs = blockers.get(key) || [];
-    n.blockedBy = bs.filter((b) => !b.done).map((b) => b.ref || 'outside');
-    n.ready = !n.done && n.blockedBy.length === 0;
+    n.blockedBy = g.nodes[key].blockedBy.map((ref) => (nodes.has(ref) ? ref : 'outside'));
+    n.ready = g.nodes[key].ready;
   }
   return { projectId: pid, nodes: [...nodes.values()].map((n) => ({ ...n, ref: k(n.kind, n.id) })), edges, ready: [...nodes.values()].filter((n) => n.ready).map((n) => k(n.kind, n.id)) };
 }
@@ -166,12 +179,12 @@ export async function readReady(db, me, { projectId, kind = 'task' } = {}) {
 
 /** Is one task ready (every `blocks` link into it is from a done task)? Used by the task page. */
 export async function taskReadiness(db, taskId) {
-  const r = (await db.query(`SELECT count(*) FILTER (WHERE f.status NOT IN ('done','wont_do'))::int AS open FROM task_links l JOIN tasks f ON f.id = l.from_task
-    WHERE l.to_task=$1 AND l.kind='blocks'`, [taskId])).rows[0];
-  const extra = (await db.query(`SELECT e.from_kind, e.from_id FROM orchestrator_edges e WHERE e.to_kind='task' AND e.to_id=$1`, [taskId])).rows;
-  let open = r.open;
-  for (const e of extra) if (!(await externalDone(db, e.from_kind, e.from_id))) open++;
-  return { openBlockers: open, ready: open === 0 };
+  const blockers = (await db.query(`SELECT f.status IN ('done','wont_do') AS done FROM task_links l JOIN tasks f ON f.id = l.from_task
+    WHERE l.to_task=$1 AND l.kind='blocks'`, [taskId])).rows.map((r) => ({ done: r.done }));
+  for (const e of (await db.query(`SELECT e.from_kind, e.from_id FROM orchestrator_edges e WHERE e.to_kind='task' AND e.to_id=$1`, [taskId])).rows) {
+    blockers.push({ done: await externalDone(db, e.from_kind, e.from_id) });
+  }
+  return engine.readinessOf({ blockers });
 }
 
 // ───────────────────────────── plans and attempts
@@ -236,18 +249,17 @@ export async function getPlan(db, me, { planId } = {}) {
     for (const a of atts.filter((x) => x.step_id === s.id)) attempts.push({ id: String(a.id), attempt: a.attempt, admissionId: String(a.admission_id), startedAt: a.created_at, ...(await attemptState(db, a.admission_id)) });
     const rd = await taskReadiness(db, s.task_id);
     const done = DONE_TASK.has(s.status), live = attempts.some((a) => LIVE.has(a.state));
+    const decision = engine.attemptDecision({ open: !done, live, attempts: attempts.length, maxAttempts: s.max_attempts, dependenciesSatisfied: rd.ready });
     out.push({ id: String(s.id), task: { id: String(s.task_id), key: `T-${s.number}`, title: s.title, status: s.status }, maxAttempts: s.max_attempts,
       done, ready: !done && rd.ready, openBlockers: rd.openBlockers, attempts,
-      canAttempt: role.edit && !done && rd.ready && !live && attempts.length < s.max_attempts });
+      canAttempt: role.edit && decision.allowed });
   }
-  // topological order over the plan's own steps (the graph is acyclic by construction)
-  const ids = new Set(out.map((s) => s.task.id));
-  const deps = (await db.query("SELECT from_task, to_task FROM task_links WHERE kind='blocks' AND from_task = ANY($1::uuid[]) AND to_task = ANY($1::uuid[])", [[...ids]])).rows;
-  const indeg = new Map(out.map((s) => [s.task.id, 0]));
-  for (const d of deps) indeg.set(String(d.to_task), indeg.get(String(d.to_task)) + 1);
-  const order = [], q = out.filter((s) => indeg.get(s.task.id) === 0).map((s) => s.task.id);
-  while (q.length) { const id = q.shift(); order.push(id); for (const d of deps.filter((x) => String(x.from_task) === id)) { const t = String(d.to_task); indeg.set(t, indeg.get(t) - 1); if (!indeg.get(t)) q.push(t); } }
-  out.sort((a, b) => order.indexOf(a.task.id) - order.indexOf(b.task.id));
+  // dependency order over the plan's own steps: the engine's (planner) waves; within a wave, by task number
+  const ids = out.map((s) => s.task.id);
+  const deps = (await db.query("SELECT from_task, to_task FROM task_links WHERE kind='blocks' AND from_task = ANY($1::uuid[]) AND to_task = ANY($1::uuid[])", [ids])).rows;
+  const g = engine.planGraph({ nodes: out.map((s) => ({ id: s.task.id, done: s.done })), edges: deps.map((d) => ({ from: String(d.from_task), to: String(d.to_task) })) });
+  const wave = new Map(); g.waves.forEach((w, i) => w.forEach((id) => wave.set(id, i)));
+  out.sort((a, b) => (wave.get(a.task.id) - wave.get(b.task.id)) || (Number(a.task.key.slice(2)) - Number(b.task.key.slice(2))));
   return { plan: { id: String(p.id), projectId: String(p.project_id), name: p.name, state: p.state, createdAt: p.created_at, canEdit: role.edit,
     complete: out.every((s) => s.done), steps: out } };
 }
@@ -282,14 +294,20 @@ export async function startAttempt(db, me, { planId, task, admissionId } = {}) {
     if (c !== db) await c.query('BEGIN');
     const s = (await c.query('SELECT * FROM orchestrator_plan_steps WHERE plan_id=$1 AND task_id=$2 FOR UPDATE', [p.id, n.id])).rows[0];
     if (!s) throw notFound('That task is not a step of this plan');
-    if (DONE_TASK.has(n.task.status)) throw new OrchestratorError('That step is already done', 'conflict', 409);
     const rd = await taskReadiness(c, n.id);
-    if (!rd.ready) throw new OrchestratorError(`${n.key} is still blocked by ${rd.openBlockers} unfinished item${rd.openBlockers === 1 ? '' : 's'}`, 'blocked', 409);
     const prev = (await c.query('SELECT admission_id, attempt FROM orchestrator_attempts WHERE step_id=$1 ORDER BY attempt', [s.id])).rows;
-    for (const x of prev) if (LIVE.has((await attemptState(c, x.admission_id)).state)) throw new OrchestratorError('An attempt on this step is still running', 'conflict', 409);
-    if (prev.length >= s.max_attempts) throw new OrchestratorError('This step has no attempts left', 'conflict', 409);
+    let live = false;
+    for (const x of prev) if (LIVE.has((await attemptState(c, x.admission_id)).state)) { live = true; break; }
+    // the engine decides whether this step may take its next attempt, and which number it is
+    const d = engine.attemptDecision({ open: !DONE_TASK.has(n.task.status), live, attempts: prev.length, maxAttempts: s.max_attempts, dependenciesSatisfied: rd.ready });
+    if (!d.allowed) {
+      if (d.reason === 'closed') throw new OrchestratorError('That step is already done', 'conflict', 409);
+      if (d.reason === 'blocked') throw new OrchestratorError(`${n.key} is still blocked by ${rd.openBlockers} unfinished item${rd.openBlockers === 1 ? '' : 's'}`, 'blocked', 409);
+      if (d.reason === 'live') throw new OrchestratorError('An attempt on this step is still running', 'conflict', 409);
+      throw new OrchestratorError('This step has no attempts left', 'conflict', 409);
+    }
     const r = (await c.query('INSERT INTO orchestrator_attempts (step_id, attempt, admission_id, started_by) VALUES ($1,$2,$3,$4) RETURNING id, attempt',
-      [s.id, prev.length + 1, adm, me.id])).rows[0];
+      [s.id, d.attempt, adm, me.id])).rows[0];
     if (c !== db) await c.query('COMMIT');
     return { attempt: { id: String(r.id), planId: String(p.id), task: n.key, attempt: r.attempt, admissionId: adm, ...(await attemptState(db, adm)) } };
   } catch (e) {

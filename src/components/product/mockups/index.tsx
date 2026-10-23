@@ -21,6 +21,7 @@ import BrowserSpaces from './BrowserSpaces';
 import WorkflowGraph from './WorkflowGraph';
 import AcpGateway from './AcpGateway';
 import SpawnTerminal from './SpawnTerminal';
+import StorageThisPc from './StorageThisPc';
 import ResearchNotebook from './ResearchNotebook';
 import SdkEmbed from './SdkEmbed';
 import NotesEditor from './NotesEditor';
@@ -77,6 +78,7 @@ const MOCKUPS: Record<string, React.ComponentType> = {
   'anima-hero': AnimaMind,
   'anima-swarm': AnimaSwarm,
   'spawn-hero': SpawnTerminal,
+  'storage-hero': StorageThisPc,
   'research-hero': ResearchNotebook,
   'shell-hero': ShellDesktop,
   'shell-mounts': ShellMounts,

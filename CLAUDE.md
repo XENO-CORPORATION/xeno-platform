@@ -300,9 +300,19 @@ Proofs: `npm run test:workspace-mail` (real Postgres + fake mail-core), `scripts
   `workforcePeople.availability*` (`reason: 'in_meeting'`).
 Proofs: `npm run test:scheduling` (real Postgres, 58 checks, mutation-checked ×4), `npm run test:scheduling-ui`.
 
-## 📦 The platform's own release record lives HERE (owner, 2026-10-20)
+## 📦 The release record is XENO Index's governance core — HOSTED here (owner, 2026-10-20; owner moved, 2026-10-23)
 
-One record, three layers: `services/releaseRecord.js` (the one service), `routes/releaseRoutes.js` (`/api/releases`),
+🔴 **The code is OWNED by `xeno-index`** (`packages/index/src/governance/`, `@xenosystem/index/governance`; decision
+`xeno-index/docs/decisions/0001-release-governance-record.md`). This repo HOSTS it: the tables (its migrations), identity,
+entitlements (injected in `services/releaseRecord.js`, fail-closed), `/api/releases`, the MCP transport and the screens —
+which are the Index's UI surface. The code is vendored byte-identical in `src/server/vendor/xeno-index/governance/`
+(+ `SOURCE.json`); `services/release*.js` are re-export shims so every import, URL and tool is unchanged.
+**Never edit the vendored files** — change xeno-index, then `node scripts/index-governance-vendor.mjs --sync --confirm`.
+`npm run test:index-governance-vendor` fails on an edited copy, a stale copy, or a migration that differs from the Index
+schema. A schema change = a new migration here AND the same bytes in `xeno-index/packages/index/schema/`. Never start a
+second release/changelog record.
+
+One record, three layers: the service (vendored, via `services/releaseRecord.js`), `routes/releaseRoutes.js` (`/api/releases`),
 `services/releasesMcp.js` (`releases.*`), screens `prototypes/xeno-workspace/platform-releases.js` at
 `/workspace/releases[/deploys[/<id>]|/features[/<id>]|/notes|/whats-new]`.
 
