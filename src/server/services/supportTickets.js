@@ -181,6 +181,7 @@ export async function createTicket(db, user, { kind, title, body, workspaceId, a
      VALUES ($1, $2, $3, $4, $5, now() + make_interval(hours => $6), now() + make_interval(hours => $7)) RETURNING *`,
     [requester, workspaceId && UUID.test(String(workspaceId)) ? workspaceId : null, k, text(title, 'title', 200), text(body, 'body', 20000, false), fr, rs])).rows[0];
   if (attachments && [].concat(attachments).length) await attach(db, { id: requester }, t, null, attachments, false);
+  await (await import('./xenoWorkflow.js')).onSupportTicket(db, t, { actorId: user.id });   // Dev › Automate (never throws)
   if (kindOf(user) === 'agent') await db.query(`INSERT INTO support_messages (ticket_id, author_id, author_kind, kind, visibility, body) VALUES ($1,$2,'agent','system','internal',$3)`, [t.id, user.id, 'Raised by an agent on its owner’s behalf']);
   return getTicket(db, user, keyOf(t));
 }

@@ -300,6 +300,22 @@ Proofs: `npm run test:workspace-mail` (real Postgres + fake mail-core), `scripts
   `workforcePeople.availability*` (`reason: 'in_meeting'`).
 Proofs: `npm run test:scheduling` (real Postgres, 58 checks, mutation-checked ×4), `npm run test:scheduling-ui`.
 
+## ⚙️ Dev › Automate IS XENO Workflow — never a second engine here (owner, 2026-10-23)
+
+*"for automate we already have xeno workflow that needs to power this … why are you inventing stuff that we already
+have as products?"* Decision record: `docs/AUTOMATE-XENO-WORKFLOW.md`. The engine is xeno-workflow's own, run by its
+headless runner (`xeno-workflow/src/headless`, `docs/HEADLESS-RUNNER.md`). This repo stores the graphs, delivers the
+triggers and owns the authority: `services/xenoWorkflow.js`, `routes/automateRoutes.js` (`/api/automate`, webhooks
+at `/api/automate/hooks/:id`), `workers/automateWorker.js` (leader only), `services/automateMcp.js`, screens
+`platform-automate.js`.
+- **Never add workflow execution logic here.** A node type, a retry rule or a step runner belongs in xeno-workflow.
+- **A run acts only through `/api/v1`**, with a per-run `xwk_` key for the workflow's OWN agent. That agent is granted
+  exactly the capabilities its graph calls, and only once a PERSON enables the workflow (a DB trigger refuses an
+  agent). Do not hand the runner any other credential.
+- Events are idempotent per `(workflow, event_key)`. A ticket event carries no title or body.
+- Unset `XENO_WORKFLOW_RUNNER_URL` means nothing runs (fail closed). Proofs: `test:xeno-workflow`,
+  `test:xeno-workflow-e2e` (needs the built runner bundle), `test:automate-mutation`, `test:automate-ui`.
+
 ## 📦 The release record is XENO Index's governance core — HOSTED here (owner, 2026-10-20; owner moved, 2026-10-23)
 
 🔴 **The code is OWNED by `xeno-index`** (`packages/index/src/governance/`, `@xenosystem/index/governance`; decision

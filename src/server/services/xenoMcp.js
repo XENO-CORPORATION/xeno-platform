@@ -30,6 +30,7 @@ import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
 import * as releasesMcp from './releasesMcp.js';
 import * as customersMcp from './customersMcp.js';
+import * as automateMcp from './automateMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as messageMcp from './messageMcp.js';
 import * as mailMcp from './mailMcp.js';
@@ -158,6 +159,14 @@ export const SERVICES = Object.freeze([
     tools: () => customersMcp.TOOLS,
     call: (db, actor, name, args) => customersMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof customersMcp.CustomersMcpError,
+  },
+  // XENO Automate (automateMcp.js) = XENO Workflow: read workflows and runs, DRAFT workflows a person turns on, turn one off.
+  {
+    category: 'automate', title: 'Automate', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Automate (XENO Workflow): read the workspace’s workflows and their runs, draft new ones and change them as drafts a person turns on, or turn one off.',
+    tools: () => automateMcp.TOOLS,
+    call: (db, actor, name, args) => automateMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof automateMcp.AutomateMcpError,
   },
   // XENO support (supportMcp.js): ask XENO for your owner, or — delegated — triage and DRAFT replies a person sends.
   {

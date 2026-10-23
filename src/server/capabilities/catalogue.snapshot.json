@@ -2102,6 +2102,90 @@
    ]
   },
   {
+   "name": "automate.workflow.list",
+   "wire": "automate__workflow__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "automate:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_list_workflows"
+   ]
+  },
+  {
+   "name": "automate.workflow.get",
+   "wire": "automate__workflow__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "automate:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_get_workflow"
+   ]
+  },
+  {
+   "name": "automate.run.list",
+   "wire": "automate__run__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "automate:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_list_runs"
+   ]
+  },
+  {
+   "name": "automate.workflow.draft",
+   "wire": "automate__workflow__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "automate:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_draft_workflow"
+   ]
+  },
+  {
+   "name": "automate.workflow.edit",
+   "wire": "automate__workflow__edit",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "automate:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_edit_workflow"
+   ]
+  },
+  {
+   "name": "automate.workflow.disable",
+   "wire": "automate__workflow__disable",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "automate:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_disable_workflow"
+   ]
+  },
+  {
    "name": "docs.doc.list",
    "wire": "docs__doc__list",
    "version": "1.0.0",

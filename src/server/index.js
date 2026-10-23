@@ -20,6 +20,8 @@ import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
+import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
+import { startAutomateWorker } from './workers/automateWorker.js';
 import messageRoutes from './routes/messageRoutes.js';
 import commsIdentityRoutes from './routes/commsIdentityRoutes.js';
 import mailRoutes from './routes/mailRoutes.js';
@@ -535,6 +537,8 @@ app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), (req,
 console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pre-json)');
 // Mail delivery events (Resend, Svix-signed) — same raw-body, pre-json contract.
 app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
+// Dev › Automate's signed webhook trigger (services/xenoWorkflow.js): the HMAC covers the raw body, so it is read before the JSON parser
+app.use('/api/automate/hooks', express.raw({ type: '*/*', limit: '256kb' }), (req, res, next) => { req.db = pool; next(); }, automateHooksRoutes);
 // XENO Storage: an app's project files (services/projectFolders.js). Mounted BEFORE the global body parsers so a
 // project's .json or .txt arrives as its own bytes, not parsed into an object.
 app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploadsDir }));
@@ -667,6 +671,7 @@ app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceI
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
+app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
 // XENO Message = XENO Comms, server-to-server (services/xenoComms.js). The platform keeps no messages.
 app.use('/api/message', databaseMiddleware, authMiddleware, requireActivated, messageRoutes);
 // XENO Comms' validation URL: it asks here about every bearer it receives (the workspace's assertions and app sessions).
@@ -4222,6 +4227,8 @@ backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, del
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
+// Dev › Automate: the ONE delivery loop for workspace workflows (schedules due → runs queued → the XENO Workflow runner)
+backgroundLeader.whenLeader(() => startAutomateWorker(pool));
 // Invitation mail is CLAIMED durably before it is dispatched, so a crash between the
 // commit and the send cannot lose an invitation — which the previous inline send could.
 // Leader-elected because two replicas draining one queue would double-send: the claim

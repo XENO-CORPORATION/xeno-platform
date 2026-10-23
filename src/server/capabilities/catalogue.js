@@ -26,6 +26,7 @@ import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as releasesMcp from '../services/releasesMcp.js';
 import * as customersMcp from '../services/customersMcp.js';
+import * as automateMcp from '../services/automateMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as messageMcp from '../services/messageMcp.js';
 import * as mailMcp from '../services/mailMcp.js';
@@ -38,7 +39,7 @@ import * as workforceMcp from '../services/workforceMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -194,6 +195,13 @@ const ROWS = [
   ['customers.note.draft', 'customers', 'draft_note', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft a person discards'), reply: obj({ activity: { type: 'object', description: 'id, kind, state ("draft" from an agent until a person keeps it).' } }, ['activity']) }],
   ['customers.deal.draft', 'customers', 'draft_deal', 'undoable', { idempotency: NONE('no request key yet: a retried call proposes a second draft deal'), reply: obj({ deal: { type: 'object', description: 'id, title, amountCents, currency, stageName, state ("draft" until a person confirms).' } }, ['deal']) }],
   ['customers.import.preview', 'customers', 'preview_import', 'safe', { reply: obj({ report: { type: 'object', description: 'rows, created, merged, skipped, invalid [{row, reason}] — what an import would do; nothing is written.' } }, ['report']) }],
+  // ── automate (Dev › Automate = XENO Workflow, services/xenoWorkflow.js). Agents read and DRAFT; a person turns a workflow on.
+  ['automate.workflow.list', 'automate', 'list_workflows', 'safe', { provenance: 'untrusted', reply: obj({ workflows: { type: 'array', description: 'id, name, trigger, state, steps, capabilities, lastRun — names are written by people.' } }, ['workflows']) }],
+  ['automate.workflow.get', 'automate', 'get_workflow', 'safe', { provenance: 'untrusted', reply: obj({ workflow: { type: 'object', description: 'The workflow with its xeno-workflow graph, trigger, capabilities, state and revision.' } }, ['workflow']) }],
+  ['automate.run.list', 'automate', 'list_runs', 'safe', { provenance: 'untrusted', reply: obj({ runs: { type: 'array', description: 'id, workflowId, trigger, state, attempt, steps [{nodeId, status, error, outputs}] — outputs are workflow data (untrusted).' } }, ['runs']) }],
+  ['automate.workflow.draft', 'automate', 'draft_workflow', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft (nothing runs until a person turns one on)'), reply: obj({ workflow: { type: 'object', description: 'The new workflow, state "draft".' } }, ['workflow']) }],
+  ['automate.workflow.edit', 'automate', 'edit_workflow', 'undoable', { idempotency: NAT('a repeat carries a revision that is no longer current and is refused as a conflict'), reply: obj({ workflow: { type: 'object', description: 'The workflow after the change; an agent’s change to a running workflow leaves it a draft.' } }, ['workflow']) }],
+  ['automate.workflow.disable', 'automate', 'disable_workflow', 'undoable', { idempotency: NAT('turning off a workflow that is off changes nothing'), reply: obj({ workflow: { type: 'object', description: 'The workflow, state "disabled".' } }, ['workflow']) }],
   // ── docs (Office › Write and Notes, services/workspaceDocs.js). A document is a Storage file; writes are reversible.
   ['docs.doc.list', 'docs', 'list_docs', 'safe', { provenance: 'untrusted', reply: obj({ docs: { type: 'array', description: 'id, versionId, kind, title, excerpt, updatedAt — written by people.' } }, ['docs']) }],
   ['docs.doc.get', 'docs', 'get_doc', 'safe', { provenance: 'untrusted', reply: obj({ doc: { type: 'object', description: 'id, versionId, kind, title, markdown, canEdit, links.' }, backlinks: { type: 'array', description: 'Documents that link to this one.' } }, ['doc']) }],

@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1722 actions · 188 agent capability · 1283 planned (debt) · 251 excluded · **coverage 12.8%** of the 1471 owed.
+**Total:** 1741 actions · 195 agent capability · 1285 planned (debt) · 261 excluded · **coverage 13.2%** of the 1480 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -31,6 +31,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | publish | 13 | 6 | 4 | 3 | 60% |
 | releases | 19 | 9 | 4 | 6 | 69.2% |
 | message | 11 | 6 | 3 | 2 | 66.7% |
+| automate | 19 | 7 | 2 | 10 | 77.8% |
 | mail | 21 | 14 | 2 | 5 | 87.5% |
 | docs | 10 | 10 | 0 | 0 | 100% |
 
@@ -221,6 +222,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workspaceAnalyticsRoutes.js:PATCH /dashboards/:id`
 - `route:workspaceAnalyticsRoutes.js:POST /dashboards`
 - `route:workspaceAnalyticsRoutes.js:POST /dashboards/:id/restore`
+
+## automate — 2 planned
+
+- `route:automateRoutes.js:GET /catalogue`
+- `route:automateRoutes.js:GET /status`
 
 ## browser-shell — 28 planned
 
