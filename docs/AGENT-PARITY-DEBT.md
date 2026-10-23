@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1705 actions · 182 agent capability · 1275 planned (debt) · 248 excluded · **coverage 12.5%** of the 1457 owed.
+**Total:** 1710 actions · 182 agent capability · 1280 planned (debt) · 248 excluded · **coverage 12.4%** of the 1462 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -16,7 +16,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | chat | 97 | 0 | 96 | 1 | 0% |
 | commerce | 112 | 0 | 96 | 16 | 0% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
-| storage | 82 | 5 | 75 | 2 | 6.3% |
+| storage | 87 | 5 | 80 | 2 | 5.9% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 70 | 0 | 37 | 33 | 0% |
@@ -624,7 +624,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:schedulingRoutes.js:PUT /availability`
 - `ui:platform-scheduling.js:data-sc-page`
 
-## storage — 75 planned
+## storage — 80 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -680,6 +680,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:projectDirectoryBindingRoutes.js:POST /directories/:bindingId/revoke`
 - `route:projectDirectoryBindingRoutes.js:POST /directories/resolve`
 - `route:projectDirectoryBindingRoutes.js:POST /projects/:id/directories`
+- `route:projectFolderRoutes.js:DELETE /:app/:projectId/files`
+- `route:projectFolderRoutes.js:GET /:app/:projectId/files`
+- `route:projectFolderRoutes.js:GET /:app/:projectId/files/content`
+- `route:projectFolderRoutes.js:PUT /:app/:projectId`
+- `route:projectFolderRoutes.js:PUT /:app/:projectId/files/content`
 - `route:storageSharedRoutes.js:GET /:token`
 - `route:storageSharedRoutes.js:GET /:token/f/:folderId`
 - `route:storageSharedRoutes.js:GET /:token/files/:fileId`

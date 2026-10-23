@@ -2487,6 +2487,51 @@
    "aliases": [
     "forum_mark_fixed"
    ]
+  },
+  {
+   "name": "forum.report.submit",
+   "wire": "forum__report__submit",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forum:write",
+   "surfaces": [
+    "mcp",
+    "rest",
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_submit_report"
+   ]
+  },
+  {
+   "name": "forum.report.get",
+   "wire": "forum__report__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forum:read",
+   "surfaces": [
+    "mcp",
+    "rest",
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_get_report_submission"
+   ]
+  },
+  {
+   "name": "forum.evidence.get",
+   "wire": "forum__evidence__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forum:read",
+   "surfaces": [
+    "mcp",
+    "rest",
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_get_report_evidence"
+   ]
   }
  ]
 }

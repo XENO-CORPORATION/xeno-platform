@@ -6,7 +6,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 
 | division | actions | capability | planned | excluded | safe | reversible | irreversible | external | planned by scope |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| storage | 82 | 5 | 75 | 2 | 29 | 43 | 10 | 0 | `storage:write` 48, `storage:read` 26, `share:create` 1 |
+| storage | 87 | 5 | 80 | 2 | 31 | 45 | 11 | 0 | `storage:write` 51, `storage:read` 28, `share:create` 1 |
 | studio | 121 | 4 | 117 | 0 | 54 | 54 | 13 | 0 | `library:write` 66, `library:read` 51 |
 | tasks | 107 | 13 | 86 | 8 | 16 | 81 | 10 | 0 | `tasks:write` 79, `tasks:read` 7 |
 | chat | 97 | 0 | 96 | 1 | 28 | 52 | 17 | 0 | `chat:write` 69, `chat:read` 27 |

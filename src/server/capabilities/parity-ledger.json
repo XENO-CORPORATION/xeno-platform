@@ -146,7 +146,8 @@
   "platform-research.js": "workspace",
   "mailRoutes.js": "mail",
   "platform-mail.js": "mail",
-  "spawnProfileRoutes.js": "agents"
+  "spawnProfileRoutes.js": "agents",
+  "projectFolderRoutes.js": "storage"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -9406,6 +9407,31 @@
    "status": "planned",
    "class": "reversible",
    "scope": "tasks:write"
+  },
+  "route:projectFolderRoutes.js:PUT /:app/:projectId": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "storage:write"
+  },
+  "route:projectFolderRoutes.js:GET /:app/:projectId/files": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "storage:read"
+  },
+  "route:projectFolderRoutes.js:GET /:app/:projectId/files/content": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "storage:read"
+  },
+  "route:projectFolderRoutes.js:PUT /:app/:projectId/files/content": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "storage:write"
+  },
+  "route:projectFolderRoutes.js:DELETE /:app/:projectId/files": {
+   "status": "planned",
+   "class": "irreversible",
+   "scope": "storage:write"
   }
  }
 }

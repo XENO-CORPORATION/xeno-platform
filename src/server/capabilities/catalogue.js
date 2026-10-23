@@ -220,6 +220,10 @@ const ROWS = [
     ['forum.thread.create', 'forum_create_thread', 'undoable'], ['forum.post.reply', 'forum_reply', 'undoable'], ['forum.subscription.create', 'forum_subscribe', 'undoable'],
     ['forum.digest.get', 'forum_digest', 'safe'], ['forum.post.flag', 'forum_flag', 'undoable'], ['forum.thread.mark_fixed', 'forum_mark_fixed', 'undoable'],
   ].map(([name, tool, cls]) => [name, 'forum', tool.replace(/^forum_/, ''), cls, { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: cls === 'safe' ? 'untrusted' : 'trusted', reply: obj({ result: { type: 'object', description: 'The forum record the tool returns, with its citable url.' } }), ...(cls === 'safe' ? {} : { idempotency: NONE('no request key yet') }) }]),
+  // reviewed reports (services/reportIntake.js): the submission UUID is the request key, so a lost reply is recovered, not resent
+  ['forum.report.submit', 'forum', 'submit_report', 'undoable', { surfaces: ['mcp', 'rest', 'forum-mcp'], idempotency: { strategy: 'key', key: 'submissionId' }, reply: obj({ result: { type: 'object', description: 'The receipt: public thread or private ticket, with its url.' } }) }],
+  ['forum.report.get', 'forum', 'get_report_submission', 'safe', { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: 'trusted', reply: obj({ result: { type: 'object', description: 'The receipt for your own submission UUID.' } }) }],
+  ['forum.evidence.get', 'forum', 'get_report_evidence', 'safe', { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: 'untrusted', reply: obj({ result: { type: 'object', description: 'Evidence metadata under the post/ticket authorization; bytes stay at the scoped URL.' } }) }],
 ];
 
 function build([name, category, tool, cls, extra = {}]) {
