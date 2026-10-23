@@ -17,6 +17,8 @@ import projectFolderRoutes from '../routes/projectFolderRoutes.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { writeTuples } from '../utils/authzReBAC.js';
+import { shareWithPerson } from '../services/storageShares.js';
+import { scopesForClient } from '../config/oidcAuthorityPolicy.js';
 import { createAuthorizationCode, exchangeAuthorizationCode } from '../utils/oidcProvider.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -31,7 +33,7 @@ async function main() {
   const user = async (name) => (await pool.query(
     `INSERT INTO users (username, email, display_name, email_verified, is_active, password_hash) VALUES ($1, $2, $1, true, true, 'x') RETURNING id`,
     [`${name}_${process.pid}`, `${name}_${process.pid}@xeno.test`])).rows[0].id;
-  const owner = await user('pf_owner'), mate = await user('pf_mate'), stranger = await user('pf_stranger');
+  const owner = await user('pf_owner'), mate = await user('pf_mate'), stranger = await user('pf_stranger'), guest = await user('pf_guest'), looker = await user('pf_looker');
   const company = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Acme', $2) RETURNING id`, [owner, `acme-pf-${process.pid}`])).rows[0].id;
   await writeTuples(pool, { writes: [
     { object: `workspace:${company}`, relation: 'owner', subject: `user:${owner}` },
@@ -46,7 +48,7 @@ async function main() {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/api/storage/projects`;
   const bearer = (userId) => `Bearer ${jwt.sign({ userId, email: 'x@xeno.test', username: 'x' }, JWT_SECRET, { expiresIn: '1h' })}`;
-  const O = bearer(owner), M = bearer(mate), S = bearer(stranger);
+  const O = bearer(owner), M = bearer(mate), S = bearer(stranger), G = bearer(guest), L = bearer(looker);
   const call = async (method, url, auth, { json, bytes, type, headers = {} } = {}) => {
     const res = await fetch(`${base}${url}`, { method, headers: { authorization: auth, ...(json ? { 'content-type': 'application/json' } : {}), ...(bytes ? { 'content-type': type || 'application/octet-stream' } : {}), ...headers }, body: json ? JSON.stringify(json) : bytes });
     const text = Buffer.from(await res.arrayBuffer());
@@ -115,26 +117,54 @@ async function main() {
     const owned = (await pool.query('SELECT workspace_id, owner_user_id FROM user_files WHERE id = $1', [tw.body.versionId])).rows[0];
     assert.equal(owned.workspace_id, company, 'the company owns the company project’s file'); assert.equal(owned.owner_user_id, null);
 
+    // ── a collaborator on a PERSONAL project: an editor share lets them write the files, and everything they write
+    //    stays the owner's — owned by, metered against and readable by the owner (review of #918, Storage session) ──
+    assert.equal((await shareWithPerson(pool, owner, { folderId: made.body.folder.id }, `pf_guest_${process.pid}`, 'editor')).ok, true);
+    assert.equal((await shareWithPerson(pool, owner, { folderId: made.body.folder.id }, `pf_looker_${process.pid}`, 'viewer')).ok, true);
+    const gw = await call('PUT', `${W}/files/content?path=${encodeURIComponent('notes/guest.md')}`, G, { bytes: Buffer.from('from the guest'), type: 'text/markdown' });
+    assert.equal(gw.status, 201, JSON.stringify(gw.body));
+    const gRow = (await pool.query('SELECT owner_user_id, created_by_user_id, workspace_id FROM user_files WHERE id = $1', [gw.body.versionId])).rows[0];
+    assert.equal(gRow.owner_user_id, owner, 'a collaborator’s new file is the owner’s');
+    const oRead = await call('GET', `${W}/files/content?path=notes/guest.md`, O);
+    assert.equal(oRead.status, 200); assert.equal(oRead.raw.toString(), 'from the guest', 'the owner reads what the collaborator wrote');
+    assert.equal((await call('GET', `${W}/files/content?path=notes/guest.md`, L)).status, 200, 'a viewer the folder is shared with reads it too');
+    assert.equal((await call('PUT', `${W}/files/content?path=notes/viewer.md`, L, { bytes: Buffer.from('x') })).status, 404, 'a viewer cannot write');
+    const gv = await call('PUT', `${W}/files/content?path=README.md`, G, { bytes: Buffer.from('# Landing, edited by the guest') });
+    assert.equal(gv.status, 200, JSON.stringify(gv.body));
+    assert.equal((await pool.query('SELECT owner_user_id FROM user_files WHERE id = $1', [gv.body.versionId])).rows[0].owner_user_id, owner, 'a collaborator’s version is the owner’s');
+    const gd = await call('DELETE', `${W}/files?path=notes/guest.md`, G);
+    assert.equal(gd.status, 200, `a collaborator can remove a path: ${JSON.stringify(gd.body)}`);
+
     // ── an app's own token reaches only that app's projects ──
     await migrateAccountV2(pool);   // the OIDC provider's tables (a separate migration, as in auth-token-confusion.test)
     const REDIRECT = 'https://workshop.xenosystem.ai/api/auth/callback';
     for (const id of ['xeno-workshop', 'xeno-post']) {
-      await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface) VALUES ($1, $1, ARRAY[$2], 'xeno_api') ON CONFLICT (client_id) DO NOTHING`, [id, REDIRECT]);
+      // the checked-in authority policy, exactly as migrate-oidc-clients seeds it
+      await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface, allowed_scopes) VALUES ($1, $1, ARRAY[$2], 'xeno_api', $3) ON CONFLICT (client_id) DO UPDATE SET allowed_scopes = EXCLUDED.allowed_scopes`, [id, REDIRECT, scopesForClient(id)]);
     }
-    const appToken = async (clientId) => {
+    const appToken = async (clientId, scope = 'openid profile storage:read storage:write') => {
       const v = crypto.randomBytes(32).toString('base64url'), c = crypto.createHash('sha256').update(v).digest('base64url');
-      const code = await createAuthorizationCode(pool, { clientId, userId: owner, redirectUri: REDIRECT, scope: 'openid profile', codeChallenge: c });
+      const code = await createAuthorizationCode(pool, { clientId, userId: owner, redirectUri: REDIRECT, scope, codeChallenge: c });
       return `Bearer ${(await exchangeAuthorizationCode(pool, { code, clientId, redirectUri: REDIRECT, codeVerifier: v })).access_token}`;
     };
     assert.equal((await call('GET', `${W}/files`, await appToken('xeno-workshop'))).status, 200, 'the Workshop reaches its own project');
     const other = await call('GET', `${W}/files`, await appToken('xeno-post'));
     assert.equal(other.status, 403); assert.equal(other.body.code, 'wrong_app', 'another app cannot reach the Workshop’s projects');
+    // ── an app's token does only what the person consented to ──
+    const none = await call('GET', `${W}/files`, await appToken('xeno-workshop', 'openid profile'));
+    assert.equal(none.status, 403); assert.equal(none.body.code, 'scope_missing', 'reading needs storage:read');
+    const readOnly = await appToken('xeno-workshop', 'openid profile storage:read');
+    assert.equal((await call('GET', `${W}/files`, readOnly)).status, 200);
+    const ro = await call('PUT', `${W}/files/content?path=ro.txt`, readOnly, { bytes: Buffer.from('x') });
+    assert.equal(ro.status, 403); assert.equal(ro.body.code, 'scope_missing', 'writing needs storage:write');
+    assert.equal((await call('DELETE', `${W}/files?path=src/data/site.json`, readOnly)).status, 403, 'removing needs storage:write');
+    assert.equal((await call('PUT', `${W}/files/content?path=rw.txt`, await appToken('xeno-workshop'), { bytes: Buffer.from('x') })).status, 201);
 
     // ── remove: to the trash, restorable; the path is free again ──
     const rm = await call('DELETE', `${W}/files?path=README.md`, O);
     assert.equal(rm.status, 200, JSON.stringify(rm.body));
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM library_trash WHERE source_id = (SELECT id FROM user_files WHERE file_id = $1 ORDER BY created_at DESC LIMIT 1)', [rm.body.fileId])).rows[0].n, 1, 'in the trash, not gone');
-    assert.deepEqual((await call('GET', `${W}/files`, O)).body.files.map((f) => f.path), ['src/data/site.json']);
+    assert.deepEqual((await call('GET', `${W}/files`, O)).body.files.map((f) => f.path), ['rw.txt', 'src/data/site.json']);
     assert.equal((await call('PUT', `${W}/files/content?path=README.md`, O, { bytes: Buffer.from('# Back\n') })).status, 201, 'the path can be written again');
 
     console.log('project-folders: all assertions passed');
