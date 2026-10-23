@@ -32,6 +32,7 @@ import * as releasesMcp from './releasesMcp.js';
 import * as customersMcp from './customersMcp.js';
 import * as automateMcp from './automateMcp.js';
 import * as publishMcp from './publishMcp.js';
+import * as messageMcp from './messageMcp.js';
 import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as docsMcp from './docsMcp.js';
@@ -142,6 +143,14 @@ export const SERVICES = Object.freeze([
     tools: () => publishMcp.TOOLS,
     call: (db, actor, name, args) => publishMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof publishMcp.PublishMcpError,
+  },
+  // XENO Message (messageMcp.js): XENO Comms through the platform. Agents read and post in channels they belong to.
+  {
+    category: 'message', title: 'Message', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Message (XENO Comms): list the workspace channels you belong to, read them, and post.',
+    tools: () => messageMcp.TOOLS,
+    call: (db, actor, name, args) => messageMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof messageMcp.MessageMcpError,
   },
   // XENO Customers (customersMcp.js): the workspace CRM. Agents read and draft; a person keeps, confirms, deletes.
   {

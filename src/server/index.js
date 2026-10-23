@@ -22,6 +22,8 @@ import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
 import { startAutomateWorker } from './workers/automateWorker.js';
+import messageRoutes from './routes/messageRoutes.js';
+import commsIdentityRoutes from './routes/commsIdentityRoutes.js';
 import mailRoutes from './routes/mailRoutes.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import workspaceDocsRoutes from './routes/workspaceDocsRoutes.js';
@@ -670,6 +672,10 @@ app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceI
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
 app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
+// XENO Message = XENO Comms, server-to-server (services/xenoComms.js). The platform keeps no messages.
+app.use('/api/message', databaseMiddleware, authMiddleware, requireActivated, messageRoutes);
+// XENO Comms' validation URL: it asks here about every bearer it receives (the workspace's assertions and app sessions).
+app.use('/api/comms', databaseMiddleware, commsIdentityRoutes);
 app.use('/api/mail', databaseMiddleware, authMiddleware, requireActivated, mailRoutes);   // Office › Mail = XENO Mail, server-to-server (services/xenoMail.js)
 app.use('/api/workspace-analytics', databaseMiddleware, authMiddleware, requireActivated, workspaceAnalyticsRoutes);
 app.use('/api/workspace-docs', databaseMiddleware, authMiddleware, requireActivated, workspaceDocsRoutes);   // Office › Write and Notes: documents that are Storage files (services/workspaceDocs.js)   // Corpo › Analytics: a workspace's own dashboards (services/analytics.js)   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)

@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1729 actions · 189 agent capability · 1282 planned (debt) · 258 excluded · **coverage 12.8%** of the 1471 owed.
+**Total:** 1741 actions · 195 agent capability · 1285 planned (debt) · 261 excluded · **coverage 13.2%** of the 1480 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -19,7 +19,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | storage | 87 | 5 | 80 | 2 | 5.9% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
-| platform | 70 | 0 | 37 | 33 | 0% |
+| platform | 71 | 0 | 37 | 34 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
@@ -30,6 +30,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
 | releases | 19 | 9 | 4 | 6 | 69.2% |
+| message | 11 | 6 | 3 | 2 | 66.7% |
 | automate | 19 | 7 | 2 | 10 | 77.8% |
 | mail | 21 | 14 | 2 | 5 | 87.5% |
 | docs | 10 | 10 | 0 | 0 | 100% |
@@ -553,6 +554,12 @@ Every action a person can take on the platform, and whether an agent can take it
 
 - `route:mailRoutes.js:DELETE /drafts/:id`
 - `route:mailRoutes.js:POST /labels`
+
+## message — 3 planned
+
+- `route:messageRoutes.js:GET /directory`
+- `route:messageRoutes.js:POST /direct`
+- `route:messageRoutes.js:POST /handoff`
 
 ## places — 4 planned
 

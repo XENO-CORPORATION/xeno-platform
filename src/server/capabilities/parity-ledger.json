@@ -148,6 +148,9 @@
   "platform-mail.js": "mail",
   "spawnProfileRoutes.js": "agents",
   "projectFolderRoutes.js": "storage",
+  "messageRoutes.js": "message",
+  "commsIdentityRoutes.js": "platform",
+  "platform-message.js": "message",
   "automateRoutes.js": "automate",
   "platform-automate.js": "automate"
  },
@@ -9434,6 +9437,81 @@
    "status": "planned",
    "class": "irreversible",
    "scope": "storage:write"
+  },
+  "route:commsIdentityRoutes.js:GET /identity": {
+   "status": "excluded",
+   "category": "service",
+   "class": "safe",
+   "scope": "none",
+   "because": "XENO Comms verifies a bearer here (its validation URL); the caller is the Comms service, never a person or an agent"
+  },
+  "route:messageRoutes.js:GET /status": {
+   "status": "capability",
+   "capability": "message.channel.list",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:GET /conversations": {
+   "status": "capability",
+   "capability": "message.channel.list",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:POST /channels/open": {
+   "status": "capability",
+   "capability": "message.channel.read",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:GET /messages": {
+   "status": "capability",
+   "capability": "message.channel.read",
+   "class": "safe",
+   "scope": "message:read"
+  },
+  "route:messageRoutes.js:POST /messages": {
+   "status": "capability",
+   "capability": "message.message.post",
+   "class": "reversible",
+   "scope": "message:write"
+  },
+  "route:messageRoutes.js:POST /direct": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "message:write",
+   "because": "a direct message is between two people: a person starts it; an agent posts in channels it belongs to"
+  },
+  "route:messageRoutes.js:POST /handoff": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "message:write",
+   "because": "handing work to an agent is a person delegating (the chat hand-off): agents reach the same work through tasks.*"
+  },
+  "route:messageRoutes.js:GET /realtime": {
+   "status": "excluded",
+   "category": "protocol",
+   "class": "safe",
+   "scope": "none",
+   "because": "a single-use ticket for the browser to join the Comms realtime socket; an agent reads channels through message.channel.read"
+  },
+  "route:messageRoutes.js:GET /directory": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "message:read",
+   "because": "the New message picker for people; agents do not start direct messages"
+  },
+  "ui:platform-message.js:data-ms-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "the Message page container; its buttons call /api/message, which is decided route by route"
+  },
+  "ui:platform-message.js:data-ms-compose": {
+   "status": "capability",
+   "capability": "message.message.post",
+   "class": "reversible",
+   "scope": "message:write"
   },
   "route:automateRoutes.js:GET /status": {
    "status": "planned",

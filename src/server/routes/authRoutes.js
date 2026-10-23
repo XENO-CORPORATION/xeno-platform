@@ -1157,8 +1157,9 @@ router.post('/browser-session', async (req, res) => {
   }
 });
 
-// GET /api/auth/validate - Validate current session
-router.get('/validate', async (req, res) => {
+// GET /api/auth/validate - Validate current session. Exported so XENO Comms' one validation URL
+// (GET /api/comms/identity, routes/commsIdentityRoutes.js) answers a session token exactly as this does.
+export async function validateSession(req, res) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     
@@ -1230,7 +1231,8 @@ router.get('/validate', async (req, res) => {
       // SECURITY: error.message not exposed to clients
     });
   }
-});
+}
+router.get('/validate', validateSession);
 
 // POST /api/auth/logout - Logout (invalidate session)
 router.post('/logout', async (req, res) => {

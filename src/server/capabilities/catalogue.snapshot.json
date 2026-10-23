@@ -1710,6 +1710,48 @@
    ]
   },
   {
+   "name": "message.channel.list",
+   "wire": "message__channel__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "message:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_list_channels"
+   ]
+  },
+  {
+   "name": "message.channel.read",
+   "wire": "message__channel__read",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "message:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_read_channel"
+   ]
+  },
+  {
+   "name": "message.message.post",
+   "wire": "message__message__post",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "message:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_post_message"
+   ]
+  },
+  {
    "name": "mail.thread.search",
    "wire": "mail__thread__search",
    "version": "1.0.0",
