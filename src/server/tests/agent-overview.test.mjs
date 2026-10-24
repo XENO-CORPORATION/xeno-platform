@@ -117,6 +117,11 @@ async function main() {
     await tasks.transitionTask(pool, actor, work.key, { to: 'in_progress' });
     await tasks.transitionTask(pool, actor, work.key, { to: 'in_review' });
     check((await O()).j.needsYou.some((n) => n.kind === 'review' && n.task === work.key), 'work it sent for review shows in "needs you"');
+    const o4 = (await O()).j;
+    check(o4.queue.some((q) => q.task === work.key && q.status === 'in_review') && !o4.queue.some((q) => q.task === other.key), 'what is waiting for it lists its own tasks, not others');
+    check(o4.today.toolCalls >= 3 && o4.today.taskActions >= 2, 'today counts its XENO tool calls and its task actions');
+    const grouped = (await call('GET', `/api/agents/${ag.id}/activity?grouped=1`, { token: session(ada) })).j.items;
+    check(grouped.some((x) => x.kind === 'calls' && x.count >= 3) && !grouped.some((x) => x.kind === 'call'), 'the Activity list, grouped, folds its calls into sittings');
 
     // 5. pause one place it runs: the next call is refused, resume and it answers
     check((await call('POST', `/api/agents/${ag.id}/connections/${conn.id}/pause`, { token: session(eve) })).s === 404, 'someone else cannot pause it');

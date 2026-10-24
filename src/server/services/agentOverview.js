@@ -105,14 +105,27 @@ async function needsYouOf(db, me, a, pres, spend) {
   return out;
 }
 
+/** The tasks handed to it that are not finished, newest first — only those this person may open. */
+async function queueOf(db, me, agentUserId) {
+  const rows = (await db.query(`SELECT 'T-' || number AS task, title, status, updated_at FROM tasks
+     WHERE delegate_id = $1 AND deleted_at IS NULL AND status IN ('todo', 'in_progress', 'blocked', 'in_review')
+     ORDER BY updated_at DESC LIMIT 12`, [agentUserId])).rows;
+  const ok = await visible(db, me, rows.map((r) => r.task));
+  return rows.filter((r) => ok.has(r.task)).map((r) => ({ task: r.task, title: r.title, status: r.status, at: r.updated_at }));
+}
+
 /** Everything the Overview shows, for a person who may see the agent (agent_not_found otherwise). */
 export async function overview(db, me, publicId) {
   const a = await agents.get(db, me, publicId);
   const pres = await presence.presenceOf(db, a.userId, a.rights);
   const act = await presence.activity(db, me, publicId, { limit: 200 });
   const spend = await spendOf(db, a.userId);
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+  const since = (x) => new Date(x.at) >= today;
   return {
     agentId: a.id, presence: pres,
+    today: { taskActions: act.items.filter((x) => x.kind === 'task' && since(x)).length, toolCalls: act.items.filter((x) => x.kind === 'call' && since(x)).length },
+    queue: await queueOf(db, me, a.userId),
     needsYou: await needsYouOf(db, me, a, pres, spend),
     spend,
     groups: groupActivity(act.items).slice(0, 12),

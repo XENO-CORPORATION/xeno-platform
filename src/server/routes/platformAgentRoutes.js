@@ -62,7 +62,11 @@ router.post('/:id/message', handled(async (req, res) => { res.json({ success: tr
 router.post('/:id/connections/:cid/pause', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, true) }); }));
 router.post('/:id/connections/:cid/resume', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, false) }); }));
 router.put('/:id/spend-cap', handled(async (req, res) => { res.json({ success: true, ...(await overview.setSpendCap(req.db, req.me, req.params.id, req.body || {})) }); }));
-router.get('/:id/activity', handled(async (req, res) => { res.json({ success: true, ...(await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before })) }); }));
+router.get('/:id/activity', handled(async (req, res) => {
+  const out = await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before });
+  // ?grouped=1: XENO tool calls folded into sittings, as the agent page's Activity tab shows them
+  res.json({ success: true, ...out, ...(req.query.grouped === '1' ? { items: overview.groupActivity(out.items) } : {}) });
+}));
 router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null, workspaceId: req.query.workspace ? String(req.query.workspace) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, agent: await agents.create(req.db, req.me, req.body || {}) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.get(req.db, req.me, req.params.id) }); }));
