@@ -17655,7 +17655,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               files of each run the turn made, in order — drawn under the head
                                               like generated images, live and on reload from the turn record. */}
                                           {message.turn?.steps.map(step => step.kind === 'handoff' ? <ChatHandoffCard key={step.id} taskKey={step.taskKey} agentName={step.agentName} /> : null)}
-                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} /> : null)}
+                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} onOpenAsset={(opened, all) => {
+                                              // the conversation's own images, then this generation's results, so the viewer's arrows walk both
+                                              const results: LibraryViewerItem[] = all.map((assetId, index) => ({ id: `generation:${assetId}`, name: `XENO image${all.length > 1 ? ` ${index + 1}` : ''}`, asset: { assetId, name: 'XENO image', mimeType: assetId === opened.assetId ? opened.mime : 'image/png', contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content` }, context: 'Chat' }));
+                                              setLibraryViewerSelection({ items: [...conversationLibraryViewerItems.filter(item => !results.some(r => r.asset?.assetId === item.asset?.assetId)), ...results], activeId: `generation:${opened.assetId}` });
+                                          }} /> : null)}
                                           <ChatCodeExecution
                                               steps={turnCodeSteps(message.turn)}
                                               live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}

@@ -43,6 +43,7 @@ tmp-*
 # being committed. A pattern cannot be forgotten the way a list can.
 scripts/harness/.*.generated.mjs
 scripts/harness/.generation-card/
+scripts/harness/.chat-generation-image/
 
 # DR: Postgres backup dumps live under backups/ on the server checkout — never commit them
 backups/

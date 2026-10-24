@@ -97,11 +97,13 @@ function Player({ url, label }: { url: string; label: string }) {
 }
 
 /** One image of a set. Images come in sets of one to four, so each loads and fails on its own. */
-function Tile({ assetId, alt, onOpen }: { assetId: string; alt: string; onOpen?: () => void }) {
+function Tile({ assetId, alt, onOpen, single = false }: { assetId: string; alt: string; onOpen?: () => void; single?: boolean }) {
   const { media, error, retry } = useResultMedia(assetId);
+  const chat = useContext(ChatResultContext);
   if (error) return <div className="sgf-tile sgf-tile-note"><p role="alert">{error}</p><button type="button" className="sgf-btn" onClick={retry}>Open it again</button></div>;
   if (!media) return <div className="sgf-tile sgf-working"><span className="sgf-stage-label" role="status">Checking the result</span></div>;
-  return <button type="button" className="sgf-tile sgf-ready" onClick={onOpen} aria-label={onOpen ? 'Open in theater view' : alt} disabled={!onOpen}><img src={media.url} alt={alt} loading="lazy" /></button>;
+  const open = chat ? () => chat.open(assetId, media.mime, alt) : onOpen;
+  return <button type="button" className="sgf-tile sgf-ready" onClick={open} aria-label={chat ? 'Open in the Library viewer' : onOpen ? 'Open in theater view' : alt} title={chat ? 'Open' : undefined} disabled={!open}><img src={media.url} alt={alt} loading="lazy" onLoad={single && chat ? (event) => { const { naturalWidth: w, naturalHeight: h } = event.currentTarget; if (w > 0 && h > 0) chat.shape(w / h); } : undefined} /></button>;
 }
 const pretty = (value: string) => /^(glb|gltf|obj|fbx|usdz|stl|png|jpg|webp|mp4|wav|mp3)$/.test(value) ? value.toUpperCase() : /^[a-z]/.test(value) ? value[0].toUpperCase() + value.slice(1) : value;
 
@@ -115,6 +117,10 @@ export type FeedOptions = {
   empty?: { title: string; text: string };
 };
 const Options = React.createContext<FeedOptions>({});
+/** In a chat reply only: a result opens in the Library viewer, and the card learns the picture's real shape so its
+    frame IS the picture (no letterbox bars). Studio provides neither and keeps its theater view. */
+type ChatResult = { open: (assetId: string, mime: string, alt: string) => void; shape: (ratio: number) => void };
+const ChatResultContext = React.createContext<ChatResult | null>(null);
 
 /** Before and after under one divider. Drag anywhere on it. */
 function Compare({ before, after, type, label }: { before: string; after: string; type: GenerationType; label: string }) {
@@ -141,7 +147,7 @@ function Stage({ record, now, onExpand }: { record: Generation; now: number; onE
   const ratio = ratioOf(record);
   const style = ratio ? { aspectRatio: ratio } : undefined;
   if (compared) return <div className="sgf-stage sgf-ready" style={style}>{onExpand && <button type="button" className="sgf-expand" aria-label="Open in theater view" title="Theater view" onClick={onExpand}><Expand size={15} /></button>}<Compare before={before!} after={record.resultAssetIds[0]} type={record.type} label={record.request.prompt} /></div>;
-  if (set) return <div className="sgf-stage sgf-set" data-count={Math.min(4, record.resultAssetIds.length)}>{record.resultAssetIds.map(assetId => <Tile key={assetId} assetId={assetId} alt={record.request.prompt} onOpen={onExpand} />)}</div>;
+  if (set) return <div className="sgf-stage sgf-set" data-count={Math.min(4, record.resultAssetIds.length)}>{record.resultAssetIds.map(assetId => <Tile key={assetId} assetId={assetId} alt={record.request.prompt} onOpen={onExpand} single={record.resultAssetIds.length === 1} />)}</div>;
   if (record.state === 'succeeded') {
     if (error) return <div className="sgf-stage sgf-stage-note" style={style}><p role="alert">{error}</p><button type="button" className="sgf-btn" onClick={retry}>Open it again</button></div>;
     if (!media) return <div className="sgf-stage sgf-working" style={style}><span className="sgf-stage-label" role="status">Checking the result</span></div>;
@@ -238,8 +244,10 @@ type Held = { record: Generation; assetId: string; lift?: Lift };
 /** Tell the workspace where a result that was sent here has come to rest (it flies the result there). */
 /** One generation inside a chat conversation: the SAME card Studio shows (result, player, favorite, download,
     link, use prompt, try again), live while it is being made. A retry continues in the same place. */
-export function ChatGenerationCard({ id, onUsePrompt, onAttach }: { id: string; onUsePrompt: (prompt: string, type: GenerationType) => void; onAttach?: (assetId: string, prompt: string) => void }) {
+export function ChatGenerationCard({ id, onUsePrompt, onAttach, onOpenAsset }: { id: string; onUsePrompt: (prompt: string, type: GenerationType) => void; onAttach?: (assetId: string, prompt: string) => void; onOpenAsset?: (asset: { assetId: string; mime: string; prompt: string }, all: string[]) => void }) {
   const [current, setCurrent] = useState(id);
+  // the picture's real shape once it has loaded: the requested ratio is a request, and models round or ignore it
+  const [shape, setShape] = useState<number | null>(null);
   const [record, setRecord] = useState<Generation | null>(null);
   const [reload, setReload] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -271,10 +279,12 @@ export function ChatGenerationCard({ id, onUsePrompt, onAttach }: { id: string; 
     { label: menu.held.record.favorite ? 'Remove from favorites' : 'Add to favorites', run: () => void generations.favorite(menu.held.record.id, !menu.held.record.favorite).then(() => setReload(n => n + 1), () => {}) },
   ];
   const root = holder.current?.closest<HTMLElement>('.chat-themed') ?? null;
-  return <Drag.Provider value={dragApi}><div className="sgf-chat" ref={holder} data-chat-generation={record.id}>
+  const single = record.type === 'image' && record.state === 'succeeded' && record.resultAssetIds.length === 1;
+  const chatResult: ChatResult = { open: (assetId, mime, prompt) => onOpenAsset?.({ assetId, mime, prompt }, record.resultAssetIds), shape: (ratio) => setShape(r => (r && Math.abs(r - ratio) < 0.001 ? r : ratio)) };
+  return <Drag.Provider value={dragApi}><ChatResultContext.Provider value={onOpenAsset ? chatResult : { ...chatResult, open: () => {} }}><div className="sgf-chat" ref={holder} data-chat-generation={record.id} data-single={single || undefined} style={single ? { ['--sgf-ar' as string]: String(shape ?? shapeOf(record)) } : undefined}>
     <Card record={record} modelName={record.request.model} now={now} active={false} index={0} onOpen={(next) => setCurrent(next)} onChanged={() => setReload(n => n + 1)} onUsePrompt={usePrompt} />
     {menu && root ? <ResultMenu at={menu.at} items={items} root={root} onClose={() => setMenu(null)} /> : null}
-  </div></Drag.Provider>;
+  </div></ChatResultContext.Provider></Drag.Provider>;
 }
 
 export function reportLanding(find: () => Element | null | undefined) {
