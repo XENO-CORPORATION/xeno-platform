@@ -3,3 +3,8 @@
 # CRLF that breaks bash ($'\r' "command not found") or psql. See docs/DEPLOY.md.
 *.sh   text eol=lf
 *.sql  text eol=lf
+
+# Content-hashed into ?v= stamps by scripts/lib/marketing-header.mjs. The stamp must be the hash of the
+# bytes the server serves (git archive = LF), so the working tree must hold those exact bytes on Windows too.
+public/site/*.js  text eol=lf
+public/site/*.css text eol=lf

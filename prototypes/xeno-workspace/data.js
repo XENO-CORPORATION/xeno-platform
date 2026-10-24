@@ -37,7 +37,7 @@ window.XENO_PRODUCTS = Object.fromEntries([
   P('enhance-image', 'Image', { icon: null, code: 'Im', kind: 'web', blurb: 'Upscale, restore, remove the background' }),
   P('enhance-video', 'Video', { icon: null, code: 'Vi', kind: 'web', blurb: 'Upscale, smooth and steady' }),
   P('enhance-audio', 'Audio', { icon: null, code: 'Au', kind: 'web', blurb: 'Clean up, separate, level' }),
-  P('enhance-3d', '3D', { kind: 'web', blurb: 'Retopologise, reduce, sharpen textures' }),
+  P('enhance-3d', '3D', { icon: null, code: '3D', kind: 'web', blurb: 'Retopologise, reduce, sharpen textures' }),
   P('assets', 'Assets', { status: 'soon', kind: 'web', blurb: 'Brand kits and shared libraries' }),
   P('fonts', 'Fonts', { status: 'soon', kind: 'web', blurb: 'Fonts and pairing' }),
   P('stock', 'Stock', { status: 'soon', kind: 'web', blurb: 'Stock media' }),

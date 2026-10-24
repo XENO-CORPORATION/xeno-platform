@@ -108,7 +108,11 @@ test('registered client metadata, validated authorize preflight, and RFC 8628 ac
   assert.match(routes, /router\.post\('\/device\/inspect', authMiddleware/);
   assert.match(routes, /router\.post\('\/device\/approve', authMiddleware/);
   assert.match(authPage, /\/api\/oauth2\/client_info\?client_id=/);
-  assert.match(devicePage, /Approve only if you started/);
+  // 43d33edb moved the approval step into DeviceApproval (@xenosystem/components/auth): the page must mount it with
+  // the code to match and where/when the device asked, and the component itself carries the "only if you started" warning.
+  assert.match(devicePage, /<DeviceApproval[\s\S]*?code=\{code\}[\s\S]*?origin=\{\{ place: countryName\(authorization\.request_country\)/);
+  assert.match(devicePage, /mismatch=\{mismatch\}/);
+  assert.match(read('node_modules/@xenosystem/components/dist/auth/index.js'), /Only continue if you started this on /);
 });
 
 test('prompt=login leaves the cached session path and returns only after fresh authentication', () => {
@@ -161,7 +165,7 @@ test('device consent presentation comes from the registered client join', async 
     async query(sql, params) {
       assert.match(sql, /JOIN oauth_clients/);
       assert.deepEqual(params, ['ABCD-2345']);
-      return { rows: [{ client_id: 'xeno-hub', client_name: 'XENO Hub', scope: 'openid profile' }] };
+      return { rows: [{ client_id: 'xeno-hub', client_name: 'XENO Hub', scope: 'openid profile', request_country: 'DE', created_at: '2026-10-24T01:00:00.000Z' }] };
     },
   };
   assert.deepEqual(await inspectDeviceAuthorization(db, { userCode: 'abcd-2345' }), {
@@ -170,6 +174,9 @@ test('device consent presentation comes from the registered client join', async 
     scope: 'openid profile',
     // a registered first-party client, not a self-registered one (b6836ac7 added the flag to the consent view)
     unverified: false,
+    // where and when the device asked (RFC 8628 §5.4, 43d33edb), so the approval page can show it
+    request_country: 'DE',
+    requested_at: '2026-10-24T01:00:00.000Z',
   });
 });
 

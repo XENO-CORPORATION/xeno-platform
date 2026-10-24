@@ -53,6 +53,21 @@ function answer(q) {
   if (p.startsWith('/api/account/sessions/') && m === 'DELETE') { const id = decodeURIComponent(p.split('/').pop()); const had = db.sessions.some((s) => s.id === id); db.sessions = db.sessions.filter((s) => s.id !== id); return had ? json(200, { success: true, revoked_session_id: id }) : json(404, { success: false, error: 'Session not found' }); }
   if (p === '/api/auth/linked-accounts') return json(200, { success: true, accounts: db.linked });
   if (p === '/api/billing/overview') return json(200, { success: true, overview: { credits: { balance: db.credits }, subscription: null } });
+  // routes the real platform serves on every page (authRoutes, platformAgentRoutes, modesRoutes)
+  if (p === '/api/auth/activation-status') return json(200, { success: true, activated: true, delivery: null });
+  if (p === '/api/agents/presence/stream') return { status: 200, contentType: 'text/event-stream', body: 'event: ready\ndata: {}\n\n' };
+  if (p === '/api/v2/me/modes' && m === 'GET') return json(200, { success: true, modes: [] });
+  if (p === '/api/account/browsers' && m === 'GET') return json(200, { success: true, browsers: [] });
+  if (p === '/api/message/conversations') return json(200, { success: true, configured: true, channels: [], dms: [] });
+  if (p === '/api/mail/status') return json(200, { success: true, configured: false, connected: false });
+  if (p === '/api/publish/status') return json(200, { success: true, configured: false, linked: false });
+  if (p === '/api/customers/summary') return json(200, { success: true, summary: { contacts: 0, companies: 0, openDeals: 0, openCents: 0, drafts: 0 } });
+  if (p === '/api/automate' && m === 'GET') return json(200, { success: true, workflows: [], canEdit: false, configured: false, recentFailures: 0 });
+  if (p === '/api/automate/catalogue') return json(200, { success: true, nodes: [], actions: [] });
+  if (p === '/api/message/realtime') return json(200, { success: true, realtime: false });
+  if (p === '/api/agents' && m === 'GET') return json(200, { success: true, agents: [] });
+  if (p === '/api/agents/presence') return json(200, { success: true, agents: [] });
+  if (p === '/api/divisions' && m === 'GET') return json(200, { success: true, divisions: [], canManage: false });
   if (p === '/api/workspace/needs') return json(200, { success: true, items: [] });
   if (p === '/api/tasks') return json(200, { success: true, tasks: [] });
   if (p === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });

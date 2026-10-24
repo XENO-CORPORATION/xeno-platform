@@ -232,7 +232,9 @@ async function main() {
     assert.equal(exp.status, 'ready', JSON.stringify(exp));
     assert.deepEqual(exp.summary.errors, [], 'every section was read');
     assert.equal(exp.summary.conversations, 2, 'the chat in a project and the loose one'); assert.equal(exp.summary.messages, 3); assert.equal(exp.summary.files, 1);
-    const keepDays = (new Date(exp.expires_at) - Date.now()) / 86400000; assert.ok(keepDays > 6.9 && keepDays <= 7.01);
+    // EXPORT_KEEP_DAYS is calendar days (NOW() + make_interval(days => 7)): across a DST change in the database's time zone
+    // that is 7×24 h ± 1 h, so the upper bound allows exactly that hour and no more
+    const keepDays = (new Date(exp.expires_at) - Date.now()) / 86400000; assert.ok(keepDays > 6.9 && keepDays <= 7 + 1 / 24 + 0.01, `kept ${keepDays} days`);
     assert.equal((await call('GET', `/exports/${exp.id}/download`, M)).status, 404, 'nobody else can fetch it');
     assert.equal((await call('GET', `/exports/${exp.id}/download`, ANOSESSION)).status, 403, 'nor a caller with no browser session');
     assert.equal((await call('GET', '/exports', M)).body.exports.length, 0);
