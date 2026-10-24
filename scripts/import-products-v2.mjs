@@ -18,6 +18,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { marketingAssets, marketingHeader } from './lib/marketing-header.mjs';
+import { addProductCards, stampProductIcons } from './lib/product-icons.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const authoredOnly = process.argv[2] === '--authored';
@@ -28,6 +29,10 @@ const authoredDir = join(root, 'src', 'content', 'product-designs');
 const AUTHORED = {
   'XENO Storage.dc.html': 'storage',
 };
+// …and their cards on the /products index, which the handoff never listed.
+const AUTHORED_CARDS = [
+  { slug: 'storage', section: 'Platform', name: 'XENO Storage', desc: 'Your clouds as drives on Windows', status: 'v0.1.0', color: '#2D5BD7' },
+];
 
 // Design file -> URL slug. Catalog slugs keep their existing addresses; the
 // twelve designs the catalog does not carry get their own /product/<slug>
@@ -154,6 +159,18 @@ cpSync(join(srcDir, 'assets', 'xeno-mark.svg'), join(assetsDir, 'assets', 'xeno-
 cpSync(join(root, 'node_modules/react/umd/react.production.min.js'), join(assetsDir, 'vendor/react.production.min.js'));
 cpSync(join(root, 'node_modules/react-dom/umd/react-dom.production.min.js'), join(assetsDir, 'vendor/react-dom.production.min.js'));
 cpSync(join(root, 'node_modules/@babel/standalone/babel.min.js'), join(assetsDir, 'vendor/babel.min.js'));
+}
+
+// The /products index shows each product's real app icon (scripts/lib/product-icons.mjs).
+// Run on every import, both modes: the handoff index carries colour placeholders.
+{
+  const indexPath = join(pagesDir, 'index.html');
+  const withCards = addProductCards(readFileSync(indexPath, 'utf8'), AUTHORED_CARDS);
+  if (withCards.added.length) console.log(`products index: added ${withCards.added.join(', ')}`);
+  const { html, stamped, missing } = stampProductIcons(withCards.html, join(root, 'public'));
+  writeFileSync(indexPath, html);
+  if (stamped.length) console.log(`product icons: stamped ${stamped.length} cards`);
+  if (missing.length) console.log(`product icons: no icon in the pack for ${missing.join(', ')} (placeholder kept)`);
 }
 
 // The slug list the SPA redirect and the tests consume — generated from the

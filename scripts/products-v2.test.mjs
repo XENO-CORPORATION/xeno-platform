@@ -99,3 +99,28 @@ test('the Storage product design is authored in-repo and states only what 0.1.0 
   assert.doesNotMatch(html, /OneDrive (is|are) supported|supports OneDrive|Dropbox support/i, 'never claims a cloud it does not have');
   assert.doesNotMatch(html, /macOS[^<]{0,40}(available|download)/i, 'never offers a platform with no build');
 });
+
+test('every /products card wears its real app icon when the pack has one', async () => {
+  // The handoff drew colour placeholders (a square by the name, a circle in the corner).
+  // Where xeno-product-icons has the product's mark, both must be that mark; where it
+  // has none, the placeholder stays rather than a borrowed or generic mark.
+  const { iconFor } = await import('./lib/product-icons.mjs');
+  const html = read('public/product-pages/index.html');
+  const cards = [...html.matchAll(/<a href="\/product\/([a-z0-9-]+)" style="position:relative;[^>]*>([\s\S]*?)<\/a>/g)];
+  assert.ok(cards.length >= 46, `expected 46+ cards, got ${cards.length}`);
+  let stamped = 0;
+  for (const [, slug, body] of cards) {
+    const src = iconFor(slug, new URL('../public', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+    if (src) {
+      stamped++;
+      assert.ok(body.includes(`<img src="${src}" alt="" width="52" height="52" data-product-icon="corner"`), `${slug}: corner mark`);
+      assert.ok(body.includes(`<img src="${src}" alt="" width="24" height="24" data-product-icon="name"`), `${slug}: mark by the name`);
+      assert.doesNotMatch(body, /border-radius:50%; background:#[0-9A-Fa-f]{6}; opacity:\.14/, `${slug}: placeholder circle left in`);
+    } else {
+      assert.doesNotMatch(body, /data-product-icon/, `${slug}: no pack icon, so no borrowed mark`);
+    }
+  }
+  assert.ok(stamped >= 40, `expected 40+ stamped cards, got ${stamped}`);
+  assert.match(html, /<a href="\/product\/storage" style="position:relative;/, 'Storage is listed on /products');
+  assert.match(html, /XENO products · 46/, 'the total counts the added card');
+});
