@@ -147,6 +147,23 @@ async function main() {
     assert.equal((await pool.query('SELECT owner_user_id FROM user_files WHERE id = $1', [ww.body.versionId])).rows[0].owner_user_id, owner, 'and what they write is the owner’s');
     assert.equal((await call('DELETE', `${W}/files?path=wide.txt`, WI)).status, 200);
 
+    // ── a full account cannot start a NEW project; its existing projects still open, and a write that does not fit is
+    //    refused rather than half-made ──
+    const full = await user('pf_full'), F = bearer(full);
+    const { ensurePersonalWorkspace } = await import('../services/personalWorkspace.js');
+    const fullWs = (await ensurePersonalWorkspace(pool, full)).id;
+    const FP = `/xeno-workshop/${crypto.randomUUID()}`, later = crypto.randomUUID();
+    assert.equal((await call('PUT', FP, F, { json: { name: 'Made in time' } })).status, 201);
+    // a large file that exists only as a row: the meter reads rows (as in storage-allowance.test)
+    await pool.query(`INSERT INTO user_files (user_id, owner_user_id, created_by_user_id, workspace_id, filename, original_name, file_type, mime_type, file_size, storage_path, storage_type, metadata)
+      VALUES ($1, $1, $1, $2, 'bulk.bin', 'bulk.bin', 'application/octet-stream', 'video/mp4', $3, '/nowhere/bulk.bin', 'platform-upload', '{}')`, [full, fullWs, 1024 ** 4]);
+    const refused = await call('PUT', `/xeno-workshop/${later}`, F, { json: { name: 'Too late' } });
+    assert.equal(refused.status, 507, JSON.stringify(refused.body)); assert.equal(refused.body.code, 'storage_full');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM project_folders WHERE project_id = $1', [later])).rows[0].n, 0, 'nothing is made for a refused project');
+    assert.equal((await call('PUT', FP, F, { json: { name: 'Made in time' } })).status, 200, 'an existing project still opens when full');
+    const over = await call('PUT', `${FP}/files/content?path=index.html`, F, { bytes: Buffer.from('<h1>x</h1>') });
+    assert.equal(over.status, 507); assert.equal(over.body.code, 'storage_full', 'a write that does not fit is refused');
+
     // ── an app's own token reaches only that app's projects ──
     await migrateAccountV2(pool);   // the OIDC provider's tables (a separate migration, as in auth-token-confusion.test)
     const REDIRECT = 'https://workshop.xenosystem.ai/api/auth/callback';
