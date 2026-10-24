@@ -54,9 +54,16 @@
       if (method === 0) bytes = data;
       else if (method === 8) bytes = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
       else throw new Error(`${name} uses a compression this page cannot read`);
-      out.push({ path: name, content: new TextDecoder('utf-8', { fatal: false }).decode(bytes) });
+      out.push({ path: name, content: strictText(bytes, name) });
     }
     return out;
+  }
+  // Binary files are not supported yet (they need raw-byte storage to round-trip with XENO Corpus): refuse one clearly,
+  // never decode it into text with replacement characters.
+  function strictText(bytes, name) {
+    let t; try { t = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { t = null; }
+    if (t === null || t.includes('\0')) throw new Error(`${name} is a binary file; skills with binary files are not supported yet`);
+    return t;
   }
   // a dropped folder or zip usually wraps the skill in one top folder: the skill is what is inside it
   const unwrap = (files) => { const tops = new Set(files.map((f) => f.path.split('/')[0])); if (tops.size === 1 && files.every((f) => f.path.includes('/'))) { const t = [...tops][0] + '/'; return files.map((f) => ({ ...f, path: f.path.slice(t.length) })); } return files; };
@@ -383,7 +390,7 @@
     const inp = e.target.closest('.xsk [data-xsk-in]'); if (!inp || !inp.files || !inp.files.length) return;
     try {
       if (inp.dataset.xskIn === 'zip') { const f = inp.files[0]; openEditorWith(await readZip(await f.arrayBuffer()), f.name); }
-      else { const list = [...inp.files].filter((f) => !/(^|\/)\./.test(f.webkitRelativePath || f.name)).slice(0, 64); openEditorWith(await Promise.all(list.map(async (f) => ({ path: f.webkitRelativePath || f.name, content: await f.text() }))), 'a folder'); }
+      else { const list = [...inp.files].filter((f) => !/(^|\/)\./.test(f.webkitRelativePath || f.name)).slice(0, 64); openEditorWith(await Promise.all(list.map(async (f) => ({ path: f.webkitRelativePath || f.name, content: strictText(new Uint8Array(await f.arrayBuffer()), f.webkitRelativePath || f.name) }))), 'a folder'); }
     } catch (err) { toast(err && err.message ? err.message : 'That could not be read'); }
     inp.value = '';
   });
@@ -396,7 +403,7 @@
   document.addEventListener('dragover', (e) => { if (e.target.closest && e.target.closest('.xsk [data-xsk-drop]')) e.preventDefault(); });
   document.addEventListener('drop', async (e) => {
     const z = e.target.closest && e.target.closest('.xsk [data-xsk-drop]'); if (!z || !S.ed) return; e.preventDefault();
-    for (const f of [...(e.dataTransfer.files || [])].slice(0, 64)) { const path = f.name; if (path === 'SKILL.md') { const m = splitMd(await f.text()); Object.assign(S.ed, { name: m.name || S.ed.name, description: m.description || S.ed.description, body: m.body }); continue; } S.ed.files = S.ed.files.filter((x) => x.path !== path).concat({ path, content: await f.text() }); }
+    for (const f of [...(e.dataTransfer.files || [])].slice(0, 64)) { const path = f.name; if (path === 'SKILL.md') { const m = splitMd(await f.text()); Object.assign(S.ed, { name: m.name || S.ed.name, description: m.description || S.ed.description, body: m.body }); continue; } let content; try { content = strictText(new Uint8Array(await f.arrayBuffer()), path); } catch (err) { toast(err.message); continue; } S.ed.files = S.ed.files.filter((x) => x.path !== path).concat({ path, content }); }
     paint();
   });
   async function archive() {
