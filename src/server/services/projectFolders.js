@@ -15,6 +15,7 @@ import path from 'node:path';
 import { createFolder, folderAccess } from './storageFolders.js';
 import { registerManagedLibraryFile } from './libraryAssets.js';
 import { addVersion } from './storageVersions.js';
+import { assertStorageRoom } from './storageAllowance.js';
 import { storeFileObject } from './storageObjects.js';
 import { cleanLibraryName, trashLibraryItem } from './libraryOrganise.js';
 import { reconcileShares, sharedFolderAccess } from './storageShares.js';
@@ -90,6 +91,9 @@ export async function ensureProjectFolder(db, userId, { app, projectId, name, wo
   checkIds(app, projectId);
   if (workspaceId !== null && !UUID.test(String(workspaceId))) throw new ProjectFolderError('A workspace id is a UUID', 'invalid_workspace');
   if (await binding(db, app, projectId)) return { created: false, folder: await projectFolder(db, userId, app, projectId, 'view') };
+  // a NEW project needs room in the pool it will fill: a full one refuses it (507 storage_full) before anything is
+  // made. An existing project always opens — reading and freeing space must work when full.
+  await assertStorageRoom(db, { userId, workspaceId, bytes: 1 });
   const title = cleanLibraryName(String(name || '').slice(0, 120)) || 'Untitled project';
   const root = await folderNamed(db, userId, { name: APP_LABEL[app] || app, workspaceId });
   // two projects may share a name; the second gets its id beside it rather than the first one's files
