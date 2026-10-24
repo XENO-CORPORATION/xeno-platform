@@ -154,8 +154,11 @@ try {
 
   const liveRecord = applyTurnEvent(newTurnRecord(Date.now() - 4000), { type: 'search_start', query: 'xeno hub launcher' }, Date.now() - 1000);
   const openingEl = await render({ messageId: 'p1', streaming: true, replyStarted: false, stepsMode: 'expanded', turn: newTurnRecord(Date.now() - 3000) });
-  await until(() => /Working for/.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'));
-  check('an opening turn shows the canonical clock line ("Working for …") — the chat\'s own spinner is gone', /Working for/.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'));
+  // the canonical clock line says "Working for …" and, past 30 s, "Still working · …" (agent-conversation Transcript):
+  // a loaded machine crossed that line, so the check accepts both wordings of the same line
+  const CLOCK = /Working for|Still working/;
+  await until(() => CLOCK.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'));
+  check('an opening turn shows the canonical clock line ("Working for …") — the chat\'s own spinner is gone', CLOCK.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'), openingEl.textContent.slice(0, 200) + ' | transcript: ' + !!openingEl.querySelector('.xa-transcript'));
 
   const liveExpanded = await render({ messageId: 'p2', streaming: true, replyStarted: false, stepsMode: 'expanded', turn: liveRecord });
   check('expanded: a live search is drawn on the rail with its query', /Searching the web/.test(liveExpanded.textContent) && /xeno hub launcher/.test(liveExpanded.textContent));
