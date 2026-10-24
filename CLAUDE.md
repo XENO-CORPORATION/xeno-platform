@@ -360,6 +360,14 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🪪 An agent's identity is an Anima Mind; skills are the open Agent Skills format (owner, 2026-10-24)
+
+Decision record: `docs/AGENT-IDENTITY-SKILLS-CORPUS.md`. WHO an agent is lives in its version as `persona: { role, body }`
+(an Anima Mind body: `# Voice`, `# Style`, `# Boundaries`, `# Output` …) and is composed by `@xenosystem/anima-mind`'s own
+`composePersonaPrompt` in `agentGuidance.identityOf` — first in every brief, task guidance and `agents_whoami`. Import and
+export are mind.xeno through Anima's parser and injection scanner (`services/agentMind.js`). Never write a second
+persona composer or format. Skills, publishing and Corpus knowledge follow the record's §7 order.
+
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 
 XENO-WORKFORCE-01's run authority is a **platform primitive**, like agent identity above: every

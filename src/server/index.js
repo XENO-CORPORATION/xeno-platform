@@ -5,6 +5,7 @@ import { meModesRouter, workspaceModesRouter } from './routes/modesRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
+import skillsRoutes from './routes/skillsRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import workforcePeopleRoutes from './routes/workforcePeopleRoutes.js';
 import peopleLifecycleRoutes from './routes/peopleLifecycleRoutes.js';
@@ -711,6 +712,8 @@ app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPer
 // REST over the same catalogue (WORKSPACE AGENT SURFACE P1): /api/v1/<division>/<domain>/<verb> + /api/v1/openapi.json
 app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
+// the skills library (docs/AGENT-IDENTITY-SKILLS-CORPUS.md): a person's and their workspaces' skills, pinned to agents
+app.use('/api/skills', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, skillsRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
 // People in a company workspace (xeno-company SPEC §7.3 D-EMP): profiles, org chart, directory, time off, on/offboarding.
 app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, peopleLifecycleRoutes);

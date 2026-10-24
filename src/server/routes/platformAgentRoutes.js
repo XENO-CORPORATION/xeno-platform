@@ -19,6 +19,8 @@
  *   DELETE /api/agents/:id/credentials/:cid
  *   PUT    /api/agents/:id/projects/:projectId    { access: viewer|editor }
  *   DELETE /api/agents/:id/projects/:projectId
+ *   GET    /api/agents/:id/brief                  what it is told before any task: who it is, how to work, its instructions
+ *   GET|POST /api/agents/:id/mind              its identity as an Anima mind.xeno (export / import; validated and scanned)
  *   GET    /api/agents/:id/overview               the agent page's Overview in one read (services/agentOverview.js)
  *   POST   /api/agents/:id/message                { body, task? } — a comment on the task it is on, which reaches it
  *   POST   /api/agents/:id/connections/:cid/pause|resume   one place it runs stops / starts answering
@@ -36,11 +38,15 @@ import * as presenceStream from '../services/agentPresenceStream.js';
 import { requireConfirmation } from '../services/accountConfirmation.js';
 import * as transfer from '../services/workforceOwnershipTransfer.js';
 import * as overview from '../services/agentOverview.js';
+import * as mind from '../services/agentMind.js';
+import { SkillError } from '../services/skills.js';
 
 const router = express.Router();
 const handled = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (e) {
+    if (e instanceof SkillError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
+    if (e instanceof mind.MindError) return res.status(e.status).json({ success: false, error: e.message, code: e.code, ...(e.details ? { details: e.details } : {}) });
     if (e instanceof overview.OverviewError || e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError || e instanceof access.AccessError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     console.error('[agents]', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
@@ -57,6 +63,9 @@ router.post('/lends/:lendId/revoke', handled(async (req, res) => { res.json({ su
 // presence (online / working / cloud / offline …) for every agent you can see, and one agent's activity log
 router.get('/presence/stream', async (req, res) => { try { await presenceStream.serve(req, res); } catch (e) { console.error('[agents presence stream]', e); if (!res.headersSent) res.status(500).json({ success: false, error: 'Internal server error' }); else res.end(); } });
 router.get('/presence', handled(async (req, res) => { res.json({ success: true, agents: await presence.presenceAll(req.db, req.me) }); }));
+router.get('/:id/brief', handled(async (req, res) => { res.json({ success: true, ...(await mind.briefOf(req.db, req.me, req.params.id)) }); }));
+router.get('/:id/mind', handled(async (req, res) => { res.json({ success: true, ...(await mind.exportMind(req.db, req.me, req.params.id)) }); }));
+router.post('/:id/mind', handled(async (req, res) => { res.json({ success: true, agent: await mind.importMind(req.db, req.me, req.params.id, req.body && req.body.text) }); }));
 router.get('/:id/overview', handled(async (req, res) => { res.json({ success: true, ...(await overview.overview(req.db, req.me, req.params.id)) }); }));
 router.post('/:id/message', handled(async (req, res) => { res.json({ success: true, ...(await overview.message(req.db, req.me, req.params.id, req.body || {})) }); }));
 router.post('/:id/connections/:cid/pause', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, true) }); }));

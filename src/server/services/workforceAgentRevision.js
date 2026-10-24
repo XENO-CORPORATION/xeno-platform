@@ -95,7 +95,7 @@ function runtimeOf(value, rec) {
 }
 /** The content of a revision -- the same grammar creation accepts, minus provenance and licence, which are inherited. */
 function content(value) {
-  const input = record(value, ['schemaVersion', 'instructions', 'skills', 'requestedCapabilities', 'secretReferences', 'runtime', 'provenance', 'license'], 'definition');
+  const input = record(value, ['schemaVersion', 'instructions', 'persona', 'skills', 'requestedCapabilities', 'secretReferences', 'runtime', 'provenance', 'license'], 'definition');
   // Named, not merely unknown: a caller asking to relabel what it is revising is told why it cannot.
   if (Object.hasOwn(input, 'provenance') || Object.hasOwn(input, 'license')) fail('bad_input', 'provenance_and_license_are_inherited');
   if (input.schemaVersion !== 1) fail('bad_input', 'unsupported_definition_schema');
@@ -114,7 +114,17 @@ function content(value) {
     return { name: reference.name, ref: uuid(reference.ref, 'secret_reference') };
   }, (r) => r.name);
   const runtime = Object.hasOwn(input, 'runtime') ? runtimeOf(input.runtime, (v, a) => record(v, a, 'runtime')) : null;
-  return { instructions, skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) };
+  // WHO it is (docs/AGENT-IDENTITY-SKILLS-CORPUS.md D1): an Anima Mind — a role line and the Mind body (# Voice, # Style,
+  // # Boundaries, # Output …), composed by @xenosystem/anima-mind. Additive: a version without it has no persona.
+  let persona = null;
+  if (Object.hasOwn(input, 'persona') && input.persona !== null) {
+    const pr = record(input.persona, ['role', 'body'], 'persona');
+    const role = Object.hasOwn(pr, 'role') ? pr.role : '', body = Object.hasOwn(pr, 'body') ? pr.body : '';
+    if (typeof role !== 'string' || role.includes(' ') || role.length > 200) fail('bad_input', 'invalid_persona');
+    if (typeof body !== 'string' || body.includes(' ') || Buffer.byteLength(body, 'utf8') > 32768) fail('bad_input', 'invalid_persona');
+    if (role.trim() || body.trim()) persona = { role: role.trim(), body: body.trim() };
+  }
+  return { instructions, ...(persona ? { persona } : {}), skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) };
 }
 function actorOf(context) {
   const ctx = record(context, ['actorUserId', 'clientId', 'apiKeyId'], 'context');

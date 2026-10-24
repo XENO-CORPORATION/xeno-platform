@@ -15,6 +15,7 @@ import { ownershipOf } from './agentAccess.js';
 import { listTaskProjects, listTasks } from './xenoTasks.js';
 import { budgetOf } from './divisionAgentBudget.js';
 import { personalWorkspace } from './workforceDivisions.js';
+import { identityOf } from './agentGuidance.js';
 
 export class AgentsMcpError extends Error { constructor(message, code) { super(message); this.name = 'AgentsMcpError'; this.code = code; } }
 
@@ -23,7 +24,7 @@ const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, nul
 export const TOOLS = [
   {
     name: 'whoami', title: 'Who am I',
-    description: 'Your own identity on XENO: your agt_ id, name, owning workspace and division, the person who owns you, the projects you can see, and your division’s agent budget (null when it has none). Takes no arguments.',
+    description: 'Your own identity on XENO: your agt_ id, name, who you are (your persona — follow it in everything you do), owning workspace and division, the person who owns you, the projects you can see, and your division’s agent budget (null when it has none). Takes no arguments.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   },
@@ -58,6 +59,8 @@ export async function agentMe(db, me) {
       accountable: o && o.owner_user_id ? { name: o.accountable_name || null } : null,
       projects: (await listTaskProjects(db, { id: me.id })).map((p) => ({ id: p.id, name: p.name, access: p.canEdit ? 'editor' : 'viewer' })),
       budget: budget ? { ...budget.view, scope: 'division' } : null,
+      // additive, 2026-10-24: who it is (its persona, composed by Anima). null when it has none
+      identity: (await identityOf(db, me.id)) || null,
     },
     tasks: (await listTasks(db, me, { delegate: 'me', status: 'raised,todo,in_progress,blocked,in_review' })).filter((x) => !tok || !tok.taskId || String(x.id) === tok.taskId),
   };

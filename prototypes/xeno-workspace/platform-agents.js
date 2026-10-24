@@ -107,7 +107,7 @@
       const [ch, dv] = await Promise.all([api('GET', `/api/agents/${id}/project-choices`), api('GET', '/api/divisions' + (S.one.workspace ? `?workspace=${S.one.workspace.id}` : ''))]);
       if (S.key !== at) return;
       S.choices = ch.ok ? ch.d.projects || [] : []; S.divisions = dv.ok ? dv.d.divisions || [] : []; S.canManageDivisions = !!(dv.ok && dv.d.canManage);
-      loadRuns(id); loadAccess(id); loadActivity(id); loadOverview(id);
+      loadRuns(id); loadAccess(id); loadActivity(id); loadOverview(id); if (S.atab === 'Identity') loadBrief(id);
     }
     S.status = 'ready'; paint();
   }
@@ -314,7 +314,7 @@
    *   no permission— without the run right there is no Connect setup and no message box
    *   mobile 390px — one column, no sideways scroll
    * Commands an agent runs on its own computer never reach XENO; the page shows its reports and XENO tool calls only. */
-  const AGENT_TABS = [['', 'Overview'], ['Work', 'Work'], ['Activity', 'Activity'], ['Connect', 'Connect'], ['Settings', 'Settings'], ['Access', 'Access']];
+  const AGENT_TABS = [['', 'Overview'], ['Identity', 'Identity'], ['Work', 'Work'], ['Activity', 'Activity'], ['Connect', 'Connect'], ['Settings', 'Settings'], ['Access', 'Access']];
   const TASK_STATUS = { todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'Review' };
   const fmtCredits = (n) => (n == null ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }));
   const dayLabel = (iso) => { const d = new Date(iso), t = new Date(); const k = (x) => x.toDateString(); if (k(d) === k(t)) return 'Today'; t.setDate(t.getDate() - 1); return k(d) === k(t) ? 'Yesterday' : d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }); };
@@ -409,6 +409,54 @@
       <dl class="pg-props"><dt>Owner</dt><dd>${company ? esc(a.owner.name) : 'You'}</dd><dt>Created</dt><dd>${esc(new Date(a.createdAt).toLocaleDateString())}</dd><dt>Division</dt><dd>${a.division ? esc(a.division.name) : 'None'}</dd><dt>Instructions</dt><dd>${a.version ? 'v' + a.version : '—'}</dd><dt>Model</dt><dd>${a.runtime && a.runtime.model ? `<code>${esc(a.runtime.model)}</code>` : 'The CLI’s choice'}</dd>
         <dt>Id</dt><dd><button type="button" class="xag-idbtn" data-xag="copy" data-copy="${esc(a.id)}" title="Its permanent id — what Spawn and other tools store. It never changes, even if you rename it.">${S.copied === a.id ? 'Copied' : esc(a.id.slice(0, 12)) + '…'}</button></dd></dl>
       <p class="xag-note">It acts only as itself, never as you, and you can stop it at any moment by pausing where it runs or revoking its credentials.</p></aside>`;
+  }
+
+  // WHO it is: an Anima Mind — a role and named sections. The four the page names are edited here; any other section a
+  // Mind carries (from an import) is kept as written, so nothing is lost in a round-trip.
+  const ID_SECTIONS = [['Voice', 'How it talks', 'Plain and short. Numbers before adjectives. Says when it is unsure.'],
+    ['Style', 'How it works', 'Small, checkable steps. Reads the code before changing it.'],
+    ['Boundaries', 'What it never does', 'Never deploys. Never touches billing without asking.'],
+    ['Output', 'What every hand-back contains', 'What changed, how it was checked, what is still unsure.']];
+  const splitBody = (raw) => {
+    const out = { known: {}, rest: [] }, parts = String(raw || '').split(/^#\s+(.+)$/m);
+    if (parts[0].trim()) out.rest.push(parts[0].trim());
+    for (let i = 1; i < parts.length; i += 2) {
+      const h = parts[i].trim(), b = (parts[i + 1] || '').trim(), k = ID_SECTIONS.find(([x]) => x.toLowerCase() === h.toLowerCase());
+      if (k) out.known[k[0]] = b; else out.rest.push(`# ${h}\n\n${b}`);
+    }
+    return out;
+  };
+  const joinBody = (known, rest) => [...ID_SECTIONS.filter(([k]) => (known[k] || '').trim()).map(([k]) => `# ${k}\n\n${known[k].trim()}`), String(rest || '').trim()].filter(Boolean).join('\n\n');
+
+  function identityTab(a, R) {
+    const h = h0, p = a.persona || { role: '', body: '' }, parts = splitBody(p.body), can = R.editor || R.manage;
+    const field = ([k, sub, ph]) => `<label class="xag-idf"><span><b>${esc(k)}</b><small>${esc(sub)}</small></span><textarea name="s_${esc(k)}" rows="3" maxlength="8000" placeholder="${esc(ph)}"${can ? '' : ' readonly'}>${esc(parts.known[k] || '')}</textarea></label>`;
+    const brief = S.brief && S.brief.id === a.id ? S.brief : null;
+    return `<div class="xag-idwrap"><form class="xag-idform" data-xag-form="identity">
+        <p class="xag-note xag-lead">Who ${esc(a.name)} is, in every task and every place it runs — Claude Code, Codex, Spawn or the cloud. It is stored as an Anima Mind, so it moves to and from Anima unchanged. Saving makes a new version; work already running keeps its version.</p>
+        <label class="xag-idf"><span><b>Role</b><small>One line: who it is</small></span><input name="role" maxlength="200" value="${esc(p.role || '')}" placeholder="a careful payments engineer"${can ? '' : ' readonly'}></label>
+        ${ID_SECTIONS.map(field).join('')}
+        ${parts.rest.length ? `<label class="xag-idf"><span><b>More</b><small>Other sections it carries</small></span><textarea name="rest" rows="5"${can ? '' : ' readonly'}>${esc(parts.rest.join('\n\n'))}</textarea></label>` : '<input type="hidden" name="rest" value="">'}
+        <div class="xag-idacts">${can ? `<button type="submit" class="pg-btn"${S.busy ? ' disabled' : ''}>Save version</button>` : ''}${h.btn('Export mind.xeno', 'data-xag="mind-export"', true)}${can ? h.btn('Import a Mind', 'data-xag="mind-import"', true) : ''}${can && (p.role || p.body) ? h.btn('Clear', 'data-xag="persona-clear"', true) : ''}</div>
+      </form>
+      <aside class="xag-brief"><div class="xag-box-h"><h3>What it is told</h3><button class="pg-link" data-xag="brief-refresh">Refresh</button></div>
+        <p class="xag-note">Before any task. A task adds its project’s and area’s instructions.</p>
+        ${brief ? `<pre class="xag-instr-v">${esc(brief.text)}</pre>` : '<p class="xag-none">Loading…</p>'}</aside></div>
+      ${skillsSection(a, can)}`;
+  }
+
+  // its SKILLS: pinned {id, version, hash} in its version (skills.js); the library supplies names and newer versions
+  function skillsSection(a, can) {
+    const h = h0, lib = window.XENO_SKILLS && window.XENO_SKILLS.served ? window.XENO_SKILLS.list() : [];
+    const pins = a.skills || [];
+    const row = (p) => {
+      const s = lib.find((x) => x.id === p.id), newer = s && s.version && s.version !== p.version;
+      return `<div class="xag-row"><span class="xag-row-ic">${ic('doc')}</span><span class="xag-row-b"><b>${s ? `<a href="#" data-pg-ws="Skills/${esc(p.id)}">${esc(s.name)}</a>` : 'A skill you cannot open'} · ${esc(p.version)}</b><small>${s ? esc(s.description) : 'Pinned by someone who can; it still reaches the agent'}</small></span>
+        <span class="xag-row-m">${newer ? `${esc(s.version)} available` : ''}</span><span class="xag-row-acts">${can && newer ? `<button type="button" class="pg-btn ghost" data-xag="skill-update" data-id="${esc(p.id)}">Use ${esc(s.version)}</button>` : ''}${can ? `<button type="button" class="pg-btn ghost" data-xag="skill-remove" data-id="${esc(p.id)}">Remove</button>` : ''}</span></div>`;
+    };
+    return `<section class="pg-sec xag-skills"><div class="pg-sec-h"><h3>Skills</h3><small>${h.plural(pins.length, 'skill', 'skills')}</small>${can ? '<button class="pg-link" data-xag="skill-new">New skill</button><button class="pg-link" data-xag="skill-add">Add skills</button>' : ''}</div>
+      <p class="xag-note xag-lead">How it does one kind of work. It sees each skill’s name and when to use it, and reads the steps when one fits. A skill stays at the version given here until you move it.</p>
+      ${pins.length ? `<div class="xag-rows">${pins.map(row).join('')}</div>` : `<div class="xag-empty"><p>No skills yet. Give it one from your library, or write a new one.</p>${can ? h.btn('Add skills', 'data-xag="skill-add"', true) : ''}</div>`}</section>`;
   }
 
   function workTab(a, projects) {
@@ -523,7 +571,8 @@
 
     const t = S.atab;
     const acts = (R.editor ? h.btn('Edit', 'data-xag="edit"', true, 'edit') : '') + h.btn('Hand it a task', 'data-xag="hand" aria-keyshortcuts="T"', false, 'send');
-    const body = t === 'Work' ? workTab(a, projects)
+    const body = t === 'Identity' ? identityTab(a, R)
+      : t === 'Work' ? workTab(a, projects)
       : t === 'Activity' ? activityTab(a)
       : t === 'Connect' ? connectTab(a, R, run, conns)
       : t === 'Settings' ? settingsTab(a, R, svc, company)
@@ -543,7 +592,7 @@
     const rest = it.startsWith('Agents/') ? it.slice(7).split('/') : [];
     const id = rest[0] || null, tab = rest[1] || '';
     if (rest.length > 2 || (tab && !AGENT_TABS.some(([k]) => k === tab))) return null;   // Agents/<id>/runs/<x> belongs to the workforce page
-    if (id) S.atab = tab;
+    if (id) { S.atab = tab; if (tab === 'Identity' && S.one && S.one.id === id && (!S.brief || S.brief.id !== id)) setTimeout(() => loadBrief(id), 0); }
     if (id && !ID.test(id)) return H().page(H().head({ eyebrow: '<a data-xag="list">Agents</a>', title: 'Agent not found' }) + H().box('bot', 'This agent link is not valid', 'Agents are addressed by their id. Open it from your agents.', H().btn('All agents', 'data-xag="list"', true)), 'xag');
     const key = (id ? 'one:' + id : 'list') + '@' + (wsId() || '');
     if (S.key !== key) { S.key = key; S.status = 'loading'; S.one = null; if (!id || !S.minted || S.minted.agentId !== id) S.minted = null; setTimeout(load, 0); }
@@ -735,6 +784,63 @@
     const r = await call('POST', `/api/agents/${a.id}/message`, { body }, 'The message could not be sent.');
     if (r) { form.body.value = ''; toast(`Sent on ${r.d.task}. ${a.name} sees it at its next step.`); loadActivity(a.id); }
   }
+  const pinsOf = (a) => (a.skills || []).map((p) => ({ id: p.id, version: p.version }));
+  async function setSkills(pins, done) {
+    const a = S.one; if (!a) return;
+    const r = await call('PATCH', `/api/agents/${a.id}`, { skills: pins }, 'Its skills could not be saved.');
+    if (r) { S.one = r.d.agent; toast(`${done} — saved as version ${S.one.version}`); loadBrief(a.id); paint(); }
+  }
+  async function addSkills() {
+    const a = S.one; if (!a) return;
+    const lib = window.XENO_SKILLS && window.XENO_SKILLS.served ? window.XENO_SKILLS.list() : [];
+    const have = new Set((a.skills || []).map((p) => p.id));
+    const opts = lib.filter((x) => !have.has(x.id)).map((x) => [x.id, x.name, x.description]);
+    if (!opts.length) { toast(lib.length ? 'It already has every skill in your library' : 'Your library has no skills yet — write one'); return lib.length ? null : newSkillFor(); }
+    const v = await D().form({ title: `Give ${a.name} skills`, sub: 'Each one at its current version. It stays there until you move it.', submit: 'Add', size: 'md', fields: [
+      { id: 'pick', label: 'Skills', type: 'checks', required: true, value: [], options: opts }] });
+    if (!v || !v.pick || !v.pick.length) return;
+    return setSkills([...pinsOf(a), ...v.pick.map((id) => ({ id }))], v.pick.length === 1 ? 'Skill added' : `${v.pick.length} skills added`);
+  }
+  async function newSkillFor() {
+    const a = S.one; if (!a || !window.XENO_SKILLS || !window.XENO_SKILLS.served) return;
+    const sk = await window.XENO_SKILLS.create({ open: false });
+    if (sk) return setSkills([...pinsOf(a), { id: sk.id }], `${sk.name} written and added`);
+  }
+  async function loadBrief(id) {
+    const r = await api('GET', `/api/agents/${id}/brief`);
+    if (!S.one || S.one.id !== id) return;
+    S.brief = { id, text: r.ok ? r.d.text : 'It could not be loaded just now.' }; paint();
+  }
+  async function savePersona(form) {
+    const a = S.one; if (!a) return;
+    const known = {}; for (const [k] of ID_SECTIONS) known[k] = form[`s_${k}`] ? form[`s_${k}`].value : '';
+    const persona = { role: form.role.value.trim(), body: joinBody(known, form.rest ? form.rest.value : '') };
+    const r = await call('PATCH', `/api/agents/${a.id}`, { persona: persona.role || persona.body ? persona : null }, 'Who it is could not be saved.');
+    if (r) { S.one = r.d.agent; toast(`Saved as version ${S.one.version}`); loadBrief(a.id); paint(); }
+  }
+  async function clearPersona() {
+    const a = S.one; if (!a) return;
+    if (!(await D().confirm({ title: `Clear who ${esc(a.name)} is?`, body: 'It keeps its instructions and works the XENO way. Earlier versions keep their persona.', action: 'Clear' }))) return;
+    const r = await call('PATCH', `/api/agents/${a.id}`, { persona: null }, 'It could not be cleared.');
+    if (r) { S.one = r.d.agent; toast(`Saved as version ${S.one.version}`); loadBrief(a.id); paint(); }
+  }
+  async function exportMind() {
+    const a = S.one; if (!a) return;
+    const r = await api('GET', `/api/agents/${a.id}/mind`);
+    if (!r.ok) return toast(why(r, 'It could not be exported.'));
+    const url = URL.createObjectURL(new Blob([r.d.text], { type: 'text/markdown' }));
+    const link = document.createElement('a'); link.href = url; link.download = r.d.filename; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function importMind() {
+    const a = S.one; if (!a) return;
+    const v = await D().form({ title: `Import a Mind into ${a.name}`, sub: 'Paste a mind.xeno from Anima or another agent. Its role and sections become this agent’s next version; its name stays this agent’s. A Mind that tries to take over the agent is refused.', submit: 'Import', size: 'sm', fields: [
+      { id: 'text', label: 'mind.xeno', type: 'textarea', required: true, rows: 12, max: 65536, placeholder: '---\nxeno_mind_version: 1\nid: atlas\nname: Atlas\nrole: a careful payments engineer\n---\n\n# Voice\n\n…' }] });
+    if (!v) return;
+    const r = await api('POST', `/api/agents/${a.id}/mind`, { text: v.text });
+    if (!r.ok) return toast(why(r, 'It could not be imported.') + (r.d && r.d.details && r.d.details.length ? ' — ' + String(r.d.details[0]).split('\n')[0] : ''));
+    S.one = r.d.agent; toast(`Imported as version ${S.one.version}`); loadBrief(a.id); paint();
+  }
   const openTab = (tab) => S.one && go(`Agents/${S.one.id}${tab ? '/' + tab : ''}`);
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); S.copied = text; paint(); clearTimeout(copy.t); copy.t = setTimeout(() => { S.copied = ''; paint(); }, 1600); }
@@ -789,6 +895,14 @@
     if (a === 'place') { S.place = b.dataset.k; S.tab = b.dataset.k === 'spawn' ? 'spawn' : (S.tab === 'spawn' ? 'claude' : S.tab); return paint(); }
     if (a === 'act-kind') { S.actKind = b.dataset.k; return paint(); }
     if (a === 'proj-toggle') return project(b.dataset.id, b.dataset.on === '1');
+    if (a === 'skill-add') return addSkills();
+    if (a === 'skill-new') return newSkillFor();
+    if (a === 'skill-remove') return S.one && setSkills(pinsOf(S.one).filter((p) => p.id !== b.dataset.id), 'Skill removed');
+    if (a === 'skill-update') { const s = (window.XENO_SKILLS.list() || []).find((x) => x.id === b.dataset.id); return S.one && s && setSkills(pinsOf(S.one).map((p) => (p.id === s.id ? { id: s.id, version: s.version } : p)), `${s.name} moved to ${s.version}`); }
+    if (a === 'mind-export') return exportMind();
+    if (a === 'mind-import') return importMind();
+    if (a === 'persona-clear') return clearPersona();
+    if (a === 'brief-refresh') return S.one && loadBrief(S.one.id);
   });
   // header tabs and every "go to that tab" link: a real address, so refresh and Back land on the same tab
   document.addEventListener('click', (e) => { const b = e.target.closest('[data-xag-tab]'); if (!b || !b.closest('#main') || !S.one) return; e.preventDefault(); openTab(b.dataset.xagTab); });
@@ -803,7 +917,7 @@
     if (e.key === 't' || e.key === 'T') { e.preventDefault(); return handTask(); }
     if ((e.key === 's' || e.key === 'S') && S.runsFor === S.one.id) { const live = S.runs.find((r) => LIVE_RUN.has(r.state)); if (live) { e.preventDefault(); return stopRun(live.id); } }
   });
-  document.addEventListener('submit', (e) => { const f = e.target.closest('.xag [data-xag-form]'); if (!f) return; e.preventDefault(); if (f.dataset.xagForm === 'instr') saveInstructions(f); else if (f.dataset.xagForm === 'msg') sendMessage(f); });
+  document.addEventListener('submit', (e) => { const f = e.target.closest('.xag [data-xag-form]'); if (!f) return; e.preventDefault(); if (f.dataset.xagForm === 'instr') saveInstructions(f); else if (f.dataset.xagForm === 'msg') sendMessage(f); else if (f.dataset.xagForm === 'identity') savePersona(f); });
   document.addEventListener('change', (e) => { const c = e.target.closest('.xag [data-xag-proj]'); if (c) project(c.dataset.xagProj, c.checked); });
   document.addEventListener('input', (e) => { const q = e.target.closest('.xag [data-xag-q]'); if (!q) return; S.q = q.value; const pos = q.selectionStart; paint(); const n = document.querySelector('.xag [data-xag-q]'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
 
@@ -894,7 +1008,11 @@
       '.xag-sets{border:1px solid var(--n31);border-radius:6px;background:var(--panel)}.xag-set{display:grid;grid-template-columns:200px 1fr auto;gap:24px;padding:18px 20px;border-top:1px solid var(--border);align-items:start}.xag-set:first-child{border-top:0}.xag-set h3{margin:0;font-size:13px;font-weight:600}.xag-set>div:first-child small{font-size:12px;color:var(--muted)}',
       '.xag-set-b{min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}.xag-set-b>*{max-width:100%}.xag-set-b b{font-size:13px;font-weight:500}.xag-dim{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted)}.xag-set-a{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}',
       '.xag-vtab{width:100%;border:1px solid var(--border);border-radius:4px;margin-top:8px;font-size:12.5px}.xag-vtab-r{display:grid;grid-template-columns:56px 1.4fr repeat(5,minmax(0,1fr));gap:10px;padding:8px 12px;border-top:1px solid var(--border);color:var(--muted)}.xag-vtab-r:first-child{border-top:0}.xag-vtab-r.cur{color:var(--text)}.xag-vtab-h{font-size:11.5px;color:var(--dim)}.xag-vtab .xag-note{padding:0 12px 10px}',
-      '.xag-row-acts{display:flex;gap:6px}',
+      '.xag-row-acts{display:flex;gap:6px}.xag-skills{margin-top:22px}.xag-skills .pg-sec-h .pg-link+.pg-link{margin-left:14px}',
+      '.xag-idwrap{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}.xag-idform{flex:999 1 520px;min-width:0;display:flex;flex-direction:column;gap:12px}.xag-brief{flex:1 1 320px;min-width:0;padding:14px;border:1px solid var(--n31);border-radius:6px;background:var(--panel);display:flex;flex-direction:column;gap:8px}.xag-brief .xag-instr-v{max-height:520px;font-size:12px}',
+      '.xag-idf{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start}.xag-idf>span{display:flex;flex-direction:column;gap:2px;padding-top:6px}.xag-idf b{font-size:13px;font-weight:600}.xag-idf small{font-size:12px;color:var(--muted)}',
+      '.xag-idf input,.xag-idf textarea{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--n31);border-radius:4px;background:var(--canvas);color:var(--text);font:inherit;font-size:13px;line-height:1.5;outline:none;resize:vertical}.xag-idf input:focus,.xag-idf textarea:focus{border-color:var(--muted)}',
+      '.xag-idacts{display:flex;gap:8px;flex-wrap:wrap;padding-left:196px}@media (max-width:720px){.xag-idf{grid-template-columns:1fr;gap:6px}.xag-idacts{padding-left:0}}',
       '@media (max-width:720px){.xag-stats{grid-template-columns:1fr 1fr}.xag-spark-w{grid-column:1/-1}.xag-places{grid-template-columns:1fr}.xag-set{grid-template-columns:1fr;gap:10px}.xag-set-a{justify-content:flex-start}.xag-vtab-r{grid-template-columns:48px repeat(3,minmax(0,1fr))}.xag-vtab-r>:nth-child(n+5){display:none}.xag-needs{grid-template-columns:1fr}.xag-now-a{width:100%}}',
       '@media (max-width:720px){.xag-steps{grid-template-columns:1fr}.xag-run{padding:12px}.xag-mint{width:100%}.xag-mint select{flex:1}.xag-row{grid-template-columns:auto 1fr auto}.xag-row-m{display:none}.xag-cmd{flex-direction:column}}',
     ].join('');

@@ -13,7 +13,9 @@ let failed = 0, fail = false;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 const PROJ = [{ id: 'p-1111', name: 'Releases', canEdit: true }, { id: 'p-2222', name: 'Website', canEdit: true }];
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
-const db = { agents: [], calls: [] };
+const db = { agents: [], calls: [], skills: [] };
+const skView = (k) => { const v = k.versions[k.versions.length - 1]; return { id: k.id, name: k.name, description: k.description, owner: { kind: 'personal' }, version: v.version, hash: v.hash, files: [{ path: 'SKILL.md', content: v.md }], versions: [...k.versions].reverse().map((x) => ({ version: x.version, hash: x.hash, createdAt: new Date().toISOString() })), canEdit: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; };
+const mdMeta = (md) => ({ name: (String(md).match(/^name: (.+)$/m) || [])[1], description: (String(md).match(/^description: (.+)$/m) || [])[1] });
 const ALL = { viewer: true, runner: true, editor: true, exporter: true, manage: true };
 const view = (a) => ({ webhook: null, owner: { kind: 'personal' }, accountable: { userId: 'u1', name: 'Me' }, paused: null, rights: ALL, ...a, projects: PROJ.filter((p) => a.pids.includes(p.id)).map((p) => ({ id: p.id, name: p.name, access: 'editor' })), credentials: a.creds.filter((c) => !c.revoked).map(({ token, revoked, ...c }) => c) });
 
@@ -52,10 +54,14 @@ p.on('request', (q) => {
     const a = db.agents.find((x) => x.id === m[1]); if (!a) return json(404, { success: false, error: 'Agent not found', code: 'agent_not_found' });
     const rest = m[2] || '';
     if (!rest && method === 'GET') return json(200, { success: true, agent: view(a) });
-    if (!rest && method === 'PATCH') { if (b.runtime !== undefined) { a.runtime = b.runtime; a.version = (a.version || 1) + 1; } if (b.name) a.name = b.name; if (b.description !== undefined) a.description = b.description; return json(200, { success: true, agent: view(a) }); }
+    if (!rest && method === 'PATCH' && b.skills !== undefined) { a.skills = b.skills.map((p) => { const k = db.skills.find((x) => x.id === p.id); const v = p.version ? k.versions.find((x) => x.version === p.version) : k.versions[k.versions.length - 1]; return { id: k.id, version: v.version, hash: v.hash }; }); a.version = (a.version || 1) + 1; return json(200, { success: true, agent: view(a) }); }
+    if (!rest && method === 'PATCH') { if (b.persona !== undefined) { a.persona = b.persona; a.version = (a.version || 1) + 1; } if (b.runtime !== undefined) { a.runtime = b.runtime; a.version = (a.version || 1) + 1; } if (b.name) a.name = b.name; if (b.description !== undefined) a.description = b.description; return json(200, { success: true, agent: view(a) }); }
     if (!rest && method === 'DELETE') { db.agents = db.agents.filter((x) => x !== a); return json(200, { success: true, id: a.id, deleted: true }); }
     if (rest === '/credentials' && method === 'POST') { const c = { id: 'c' + a.creds.length, token: 'xtk_abcdefabcdef_' + hex(), hint: 'xtk_abcdefabcdef_…', label: b.label, scopes: ['tasks:read', 'tasks:write'], expiresAt: new Date(Date.now() + b.ttlHours * 3600e3).toISOString(), lastUsedAt: null, createdAt: new Date().toISOString() }; a.creds.push(c); return json(201, { success: true, credential: { id: c.id, token: c.token, expiresAt: c.expiresAt, scopes: c.scopes } }); }
     const cr = rest.match(/^\/credentials\/(.+)$/); if (cr && method === 'DELETE') { const c = a.creds.find((x) => x.id === cr[1]); c.revoked = true; return json(200, { success: true, revoked: true }); }
+    if (rest === '/brief') return json(200, { success: true, layers: a.persona ? ['identity', 'xeno'] : ['xeno'], text: (a.persona ? `Who you are:\nYou are ${a.name}, ${a.persona.role}.\n\n${a.persona.body}\n\n` : '') + 'How to work a XENO task:\nWork in small, checkable steps.' });
+    if (rest === '/mind' && method === 'GET') return json(200, { success: true, filename: 'agent.mind.xeno', text: `---\nxeno_mind_version: 1\nid: agent\nname: ${a.name}\nrole: ${(a.persona || {}).role || ''}\n---\n\n${(a.persona || {}).body || ''}\n` });
+    if (rest === '/mind' && method === 'POST') { const m = String(b.text || '').match(/role:\s*(.+)\n---\n\n([\s\S]*)$/); if (!m) return json(400, { success: false, error: 'This is not a valid mind.xeno', code: 'invalid_mind', details: ['manifest.name: required'] }); a.persona = { role: m[1].trim(), body: m[2].trim() }; a.version = (a.version || 1) + 1; return json(200, { success: true, agent: view(a) }); }
     if (rest === '/overview') {
       const pres = a.pres || { state: 'working', label: 'Working in the cloud', canTakeWork: true, run: { state: 'running' } };
       const days = [...Array(14)].map((_, i) => ({ day: new Date(Date.now() - (13 - i) * 864e5).toISOString().slice(0, 10), credits: i === 13 ? (a.spent || 0) : 0 }));
@@ -89,6 +95,12 @@ p.on('request', (q) => {
   if (stopM) { for (const a of db.agents) for (const r of a.runs || []) if (r.id === stopM[1]) { r.state = 'cancelled'; r.reason = 'stopped_by_owner'; r.endedAt = new Date().toISOString(); } return json(200, { success: true, run: {} }); }
   { const tk = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (tk && method === 'PATCH') return json(200, { success: true, task: { key: tk[1], delegate: { id: b.delegateId, kind: 'agent' } } }); }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
+  if (u.pathname === '/api/skills' && method === 'GET') return json(200, { success: true, skills: db.skills.filter((k) => !k.archived).map(skView) });
+  if (u.pathname === '/api/skills' && method === 'POST') { const m = mdMeta(b.skillMd); if (!/^[a-z0-9][a-z0-9-]*$/.test(m.name || '')) return json(400, { success: false, error: 'bad name', code: 'invalid_skill_name' }); const k = { id: 'skl_' + hex(), name: m.name, description: m.description, versions: [{ version: '1.0.0', hash: hex() + hex(), md: b.skillMd }] }; db.skills.push(k); return json(201, { success: true, skill: skView(k) }); }
+  { const sm = u.pathname.match(/^\/api\/skills\/(skl_[0-9a-f]{32})(\/versions)?$/); if (sm) { const k = db.skills.find((x) => x.id === sm[1]); if (!k) return json(404, { success: false, code: 'skill_not_found' });
+    if (sm[2] && method === 'POST') { const md = b.files[0].content, last = k.versions[k.versions.length - 1].version.split('.').map(Number); k.versions.push({ version: `${last[0]}.${last[1]}.${last[2] + 1}`, hash: hex() + hex(), md }); k.description = mdMeta(md).description; return json(201, { success: true, skill: skView(k) }); }
+    if (method === 'DELETE') { k.archived = true; return json(200, { success: true, id: k.id, archived: true }); }
+    return json(200, { success: true, skill: skView(k) }); } }
   if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: 'w-acme', name: 'Acme', workspace_type: 'team' }, { id: 'w-me', name: 'Mine', workspace_type: 'personal' }] });
   if (u.pathname === '/api/workspaces/w-acme/members') return json(200, { success: true, members: [{ user_id: 'u1', display_name: 'Me', role: 'owner' }, { user_id: 'u-cal', display_name: 'Cal', role: 'editor' }] });
   if (u.pathname === '/api/account/security') return json(200, { success: true, security: { confirmation: { confirmed: true }, methods: ['password'] } });
@@ -120,7 +132,7 @@ try {
   ok(a && a.name === 'Release Bot' && a.description === 'Takes release tasks and reports back', 'New agent creates it on the platform with its name and purpose');
   // the header: its name, the six tabs IN the header bar, Hand it a task on the right
   { const hd = await p.evaluate(() => { const tabs = [...document.querySelectorAll('#main [data-xag-tab][role="tab"]')]; const hand = document.querySelector('#main [data-xag="hand"]'); const top = document.querySelector('#main .pg-tabs'); return { tabs: tabs.map((t) => t.innerText.trim()), sel: (tabs.find((t) => t.getAttribute('aria-selected') === 'true') || {}).innerText, hand: !!hand, tabsTop: top ? Math.round(top.getBoundingClientRect().top) : -1 }; });
-    ok(hd.tabs.join() === 'Overview,Work,Activity,Connect,Settings,Access' && hd.sel === 'Connect' && hd.hand && hd.tabsTop < 140, `the header carries its six tabs and Hand it a task (${JSON.stringify(hd)})`); }
+    ok(hd.tabs.join() === 'Overview,Identity,Work,Activity,Connect,Settings,Access' && hd.sel === 'Connect' && hd.hand && hd.tabsTop < 140, `the header carries its seven tabs and Hand it a task (${JSON.stringify(hd)})`); }
   const crumb = await p.$eval('.crumbs', (e) => e.innerText).catch(() => '');
   ok(/Agents\s*\/\s*Release Bot\s*\/\s*Connect/.test(crumb) && !crumb.includes(a.id), `the breadcrumb names it and its tab, never its id (${crumb.replace(/\s+/g, ' ')})`);
   await p.click('[data-xag="place"][data-k="cli"]'); await settle(300);
@@ -148,10 +160,10 @@ try {
   await p.click('[data-xag="proj-toggle"][data-id="p-1111"]'); await settle(900);
   ok(db.calls.some(([m, u, b]) => m === 'PUT' && u === `/api/agents/${a.id}/projects/p-1111` && b.access === 'editor') && a.pids.includes('p-1111'), 'the first step gives it a project on the platform');
 
-  // keys: 3 opens Activity, at its own address; its tool calls are folded into sittings
-  await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('3'); await settle(900);
+  // keys: 4 opens Activity, at its own address; its tool calls are folded into sittings
+  await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('4'); await settle(900);
   t = await main();
-  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}/Activity` && /commented on\s*T-7/.test(t) && /1 XENO tool call from Claude Code/.test(t) && /tasks_claim_task/.test(t), `3 opens Activity at its address: task actions, and XENO tool calls as sittings (${new URL(p.url()).pathname})`);
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}/Activity` && /commented on\s*T-7/.test(t) && /1 XENO tool call from Claude Code/.test(t) && /tasks_claim_task/.test(t), `4 opens Activity at its address: task actions, and XENO tool calls as sittings (${new URL(p.url()).pathname})`);
   await fresh('/workspace/workspace');
   ok(!!(await p.$('#panel .side-dot.xag-dot--working')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)) && parseFloat(await p.$eval('#panel .side-dot', (d) => getComputedStyle(d).borderTopLeftRadius)) < 4, 'the sidebar lists your agents with the same square status mark');
   { const g = await p.evaluate(() => { const row = [...document.querySelectorAll('#panel .row')].find((x) => x.querySelector('.side-dot')); const d = row.querySelector('.side-dot').getBoundingClientRect(), t = row.querySelector('.t').getBoundingClientRect(), r = row.getBoundingClientRect(); return { leftOfText: d.right <= t.left, inRowStart: d.left - r.left < 16, lowHalf: d.top >= t.top + t.height / 2 - 1 && d.bottom <= t.bottom, w: d.width }; });
@@ -161,6 +173,44 @@ try {
     ok(/Your agents/.test(side) && /Release Bot/.test(side) && !!(await p.$('#panel [data-ws-item] .side-dot')), `Overview's sidebar lists your agents with their status mark (${side.replace(/\s+/g, ' ').slice(0, 160)})`);
     await p.click(`#panel [data-ws-item="Agents/${a.id}"]`); await settle(900);
     ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}` && /Release Bot/.test(await main()), 'clicking it there opens the agent at its id address'); }
+
+  // Identity: who it is, as an Anima Mind — saved as a version, shown in what it is told, exported and imported
+  await fresh(`/workspace/workspace/Agents/${a.id}/Identity`); await settle(400);
+  t = await main();
+  ok(/stored as an Anima Mind/.test(t) && /What it is told/.test(t) && /How to work a XENO task/.test(t) && ['Role', 'Voice', 'Style', 'Boundaries', 'Output'].every((x) => t.includes(x)), 'Identity shows role, voice, style, boundaries and output, beside what the agent is told');
+  await p.type('.xag-idform input[name="role"]', 'a careful release engineer');
+  await p.type('.xag-idform textarea[name="s_Voice"]', 'Plain and short.');
+  await p.type('.xag-idform textarea[name="s_Output"]', 'What changed and how it was checked.');
+  await p.click('.xag-idform [type="submit"]'); await settle(900);
+  { const sv = db.calls.filter((c) => c[0] === 'PATCH' && c[2].persona).pop();
+    ok(sv && sv[2].persona.role === 'a careful release engineer' && sv[2].persona.body === '# Voice\n\nPlain and short.\n\n# Output\n\nWhat changed and how it was checked.', `Save version sends the role and the Mind body (${sv ? JSON.stringify(sv[2].persona) : 'none'})`); }
+  ok(/You are Release Bot, a careful release engineer/.test(await main()) && /Saved as version/.test(await p.evaluate(() => document.body.innerText)), 'what it is told now starts with who it is, and the save is a new version');
+  await p.click('[data-xag="mind-export"]'); await settle(500);
+  ok(db.calls.some(([m, u]) => m === 'GET' && u === `/api/agents/${a.id}/mind`), 'Export mind.xeno fetches it as an Anima Mind');
+  await p.click('[data-xag="mind-import"]'); await settle(500);
+  await fill(['---\nxeno_mind_version: 1\nid: x\nname: Other\nrole: a meticulous ledger engineer\n---\n\n# Voice\n\nExact.']); await submit();
+  ok(a.persona && a.persona.role === 'a meticulous ledger engineer' && (await p.$eval('.xag-idform input[name="role"]', (e) => e.value)) === 'a meticulous ledger engineer', 'Import a Mind makes its role and sections the next version');
+  await shot('identity');
+
+  // Skills: written once, given to the agent at a fixed version, moved on deliberately
+  ok(/No skills yet/.test(await main()), 'with no skills, the Identity tab says so and offers to add one');
+  await p.click('[data-xag="skill-new"]'); await settle(500);
+  await fill(['Ledger Review', 'Use when a change touches money.', '1. Run the ledger tests.\n2. Report what changed.']); await submit(); await settle(600);
+  { const made = db.calls.filter((c) => c[0] === 'POST' && c[1] === '/api/skills').pop(); const pin = db.calls.filter((c) => c[0] === 'PATCH' && c[2].skills).pop();
+    ok(made && /^---\nname: ledger-review\ndescription: Use when a change touches money\.\n---\n\n1\. Run the ledger tests\./.test(made[2].skillMd) && pin && pin[2].skills.length === 1 && pin[2].skills[0].id === db.skills[0].id, 'New skill writes a SKILL.md (name, when to use it, steps) and gives it to the agent'); }
+  ok(/ledger-review · 1\.0\.0/.test(await main()) && /Use when a change touches money/.test(await main()), 'the agent lists the skill at its version');
+  await fresh('/workspace/workspace/Skills');
+  ok(/ledger-review/.test(await main()) && /Skills/.test(await p.$eval('#panel', (e) => e.innerText).catch(() => '')), 'the Skills library lists it, and the sidebar has Skills');
+  await p.click('[data-xsk="open"]'); await settle(900);
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Skills/${db.skills[0].id}` && /Run the ledger tests/.test(await main()) && /Skills\s*\/\s*ledger-review/.test(await p.$eval('.crumbs', (e) => e.innerText).catch(() => '')), 'a skill opens at its id address, with its steps, and the breadcrumb names it');
+  await p.click('[data-xsk="version"]'); await settle(500); await fill(['Use when a change touches money or invoices.', '1. Run the ledger tests.\n2. Reconcile.\n3. Report.']); await submit(); await settle(900);
+  ok(db.skills[0].versions.length === 2 && /1\.0\.1/.test(await main()), 'New version publishes 1.0.1 and keeps 1.0.0');
+  await fresh(`/workspace/workspace/Agents/${a.id}/Identity`); await settle(600);
+  ok(/ledger-review · 1\.0\.0/.test(await main()) && /1\.0\.1 available/.test(await main()), 'the agent stays on 1.0.0 and is told 1.0.1 is available');
+  await p.click('[data-xag="skill-update"]'); await settle(800);
+  ok(a.skills[0].version === '1.0.1' && /ledger-review · 1\.0\.1/.test(await main()), 'Use 1.0.1 moves it, as a new version of the agent');
+  await p.click('[data-xag="skill-remove"]'); await settle(800);
+  ok(!a.skills.length && /No skills yet/.test(await main()), 'Remove takes the skill away from the agent');
 
   // Connect: a credential shown once, filled into each CLI's setup
   await fresh(`/workspace/workspace/Agents/${a.id}/Connect`);
