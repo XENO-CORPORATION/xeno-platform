@@ -23,14 +23,64 @@
   // one way to call the platform: the session cookie, the CSRF token on writes, and the surface name
   const csrf = () => { for (const n of ['__Host-xeno_csrf', 'xeno_csrf']) { const m = document.cookie.split(';').map((p) => p.trim()).find((p) => p.startsWith(n + '=')); if (m) return decodeURIComponent(m.slice(n.length + 1)); } return null; };
   P.csrf = csrf;
+  // STAFF is read from the role the session already has (GET /api/auth/me: role + kind), never by calling a staff
+  // route to see whether it refuses (2026-10-24: every customer's Support and Releases pages drew 403s and 404s).
+  // A label for what to SHOW; every staff route still decides for itself.
+  P.isStaff = () => { const u = P.user; return !!u && (u.kind || 'human') === 'human' && (u.role === 'admin' || u.role === 'moderator'); };
+  P.isAdmin = () => { const u = P.user; return !!u && (u.kind || 'human') === 'human' && u.role === 'admin'; };
+  // ONE READ PER RESOURCE PER PAGE LOAD: the same GET asked by several adapters at once shares one request, and
+  // while the page is loading an answer that arrived a moment ago is reused (a cold load once asked for some
+  // resources three times, ~60-70 calls a load against a 200/min per-user limit, 2026-10-24). Once the page is
+  // shown only requests still in flight are shared, so a read made later (a step-up check, a filter) is always
+  // fresh. Any write forgets every remembered answer. Each caller parses its own copy of the answer.
+  // A write anywhere on the page (an upload made with fetch directly too) forgets them, when it starts and when it ends.
+  const READ_REUSE_MS = 3000, reads = new Map(), nativeFetch = window.fetch.bind(window);
+  let reuseUntil = Infinity;   // the end of the first load: set when the page is shown
+  window.fetch = (input, init) => {
+    const m = String((init && init.method) || (input && typeof input === 'object' && input.method) || 'GET').toUpperCase();
+    if (m === 'GET' || m === 'HEAD') return nativeFetch(input, init);
+    reads.clear(); const done = () => reads.clear();
+    return nativeFetch(input, init).then((x) => { done(); return x; }, (e) => { done(); throw e; });
+  };
+  P.forgetReads = () => reads.clear();
+  // LOAD WHEN SHOWN: an area's first load starts the first time the workspace asks the area for anything it draws
+  // (its page, its rows, its rail badge), not on every page load. Overview never draws Customers, so a cold load of
+  // Overview no longer reads Customers, Scheduling, Mail... (2026-10-24). Returns touch(), which starts it by hand.
+  P.lazy = (fn) => { let on = false; return () => { if (on) return; on = true; Promise.resolve(P.ready).then((u) => { if (u) fn(); }); }; };
+  // The Overview rail asks EVERY area for its badge (a closed category still signals news), so the badge never starts
+  // the full load: an area whose badge carries a count passes `badgeFn`, the one cheap read that count needs.
+  P.lazyZone = (zone, fn, badgeFn) => {
+    const touch = P.lazy(fn), touchBadge = badgeFn ? P.lazy(badgeFn) : () => {};
+    const wrap = (k, t) => { if (zone && typeof zone[k] === 'function') { const f = zone[k]; zone[k] = (...a) => { t(); return f(...a); }; } };
+    for (const k of ['page', 'work', 'reload']) wrap(k, touch);
+    wrap('badge', touchBadge);
+    return touch;
+  };
+  const send = async (method, url, headers, body) => {
+    const r = await window.fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let text = ''; try { text = await r.text(); } catch {}
+    return { status: r.status, okHttp: r.ok, text };
+  };
   P.api = async (method, url, body, extra) => {
     const headers = { 'x-xeno-surface': 'xeno-web', ...(extra || {}) };
     // AREA: the area the person is in, so what this request stores (an upload) lands there. A label, never an authority.
     { const k = P.area(); if (k && !headers['x-xeno-area']) headers['x-xeno-area'] = k; }
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (!['GET', 'HEAD'].includes(method)) { const t = csrf(); if (t) headers['x-xeno-csrf'] = t; }
-    const r = await fetch(url, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
-    let d = null; try { d = await r.json(); } catch {}
+    let r;
+    if (method === 'GET' && body === undefined) {
+      const key = url + '\n' + JSON.stringify(headers), now = Date.now(), hit = reads.get(key);
+      if (hit && (hit.pending || (now < reuseUntil && now - hit.at < READ_REUSE_MS))) r = await hit.p;
+      else {
+        const entry = { pending: true, at: now, p: null };
+        entry.p = send(method, url, headers).then((x) => { entry.pending = false; entry.at = Date.now(); if (!x.okHttp && reads.get(key) === entry) reads.delete(key); return x; },
+          (e) => { if (reads.get(key) === entry) reads.delete(key); throw e; });
+        if (reads.size > 100) for (const [k, v] of reads) if (!v.pending && now - v.at >= READ_REUSE_MS) reads.delete(k);
+        reads.set(key, entry); r = await entry.p;
+      }
+    } else r = await send(method, url, headers, body);
+    let d = null; try { d = r.text ? JSON.parse(r.text) : null; } catch {}
+    r = { status: r.status, ok: r.okHttp };
     // One route answering 401 is not proof the session ended (a route bug looped everyone to /login on 2026-10-20).
     // Go to sign-in only when the session itself says so.
     if (r.status === 401 && !P._toLogin) {
@@ -70,7 +120,7 @@
       localStorage.setItem('xw.acct', JSON.stringify(a));
     } catch {}
     // the adapters start their first loads when `ready` resolves, a moment after this returns; wait for them
-    const lift = () => { if (!root.classList.contains('xp-wait')) return; const s = document.getElementById('xp-state'); try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); if (s && !s.isConnected) document.body.appendChild(s); /* the first render rewrites the page; the mark stays on top and fades away over it */ if (s) { s.dataset.leaving = ''; setTimeout(() => { stopMark?.(); stopMark = null; s.remove(); }, 440); } };
+    const lift = () => { if (!root.classList.contains('xp-wait')) return; reuseUntil = Date.now(); const s = document.getElementById('xp-state'); try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); if (s && !s.isConnected) document.body.appendChild(s); /* the first render rewrites the page; the mark stays on top and fades away over it */ if (s) { s.dataset.leaving = ''; setTimeout(() => { stopMark?.(); stopMark = null; s.remove(); }, 440); } };
     setTimeout(() => { Promise.race([Promise.all(firsts), new Promise((r) => setTimeout(r, FIRST_PAINT_MS))]).then(lift); }, 0);
     const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = 'Preview. Your account, chats, projects, tasks, library, people, community and each area’s home are real. Marketplace, Company, Anima and Places still show sample data.'; document.body.appendChild(n);
     try { window.XW?.render?.(); } catch {}

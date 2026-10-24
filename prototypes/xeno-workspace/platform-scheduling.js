@@ -144,5 +144,5 @@
     }
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  P.lazyZone(window.XENO_ZONE_LIVE['corpo.scheduling'], () => load());   // the first load waits until the area is shown
 })();

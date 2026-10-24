@@ -311,5 +311,5 @@
     }
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  P.lazyZone(window.XENO_ZONE_LIVE['dev.automate'], () => load(), () => load());   // one read; the rail's badge needs it too
 })();

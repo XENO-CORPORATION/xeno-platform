@@ -1864,13 +1864,15 @@
   const SURFACE = { xeno_agent: 'Agent', motion: 'Motion', xeno_api: 'Chat & API', xeno_post: 'Post' };
   const usageLeft = () => { const u = DS.usage && DS.usage.val; return u ? u.availableMicro / MICRO : null; };
   function openUsage(keep) {
+    // served: the load that drew the balance did not ask for spending; opening the popover asks for it once
+    { const d0 = DS.usage; if (d0 && d0.val && d0.val.spendPending && !d0.loading && window.XENO_SRC?.usage?.want) { window.XENO_SRC.usage.want(); load('usage'); } }
     const d = data('usage'), u = d.val, range = S.usRange || '30d', group = S.usGroup || 'surface';
     const alert = store.get('lowAlert', { on: true, at: 500 });
     let main;
     const ghostU = !u && !d.err;
     if (!u && d.err) main = errorPlate('usage', 'your usage');
     else {
-      const u = d.val || PH.usage();
+      const u0 = d.val || PH.usage(), spendGhost = !!u0.spendPending, u = spendGhost ? { ...PH.usage(), availableMicro: u0.availableMicro, postedMicro: u0.postedMicro, held: [], activity: null } : u0;
       const left = u.availableMicro / MICRO, held = (u.postedMicro - u.availableMicro) / MICRO, availPct = u.postedMicro ? (u.availableMicro / u.postedMicro) * 100 : 0;
       const real = u.byRange ? u.byRange[range] || {} : null, g2 = group === 'recent' && u.activity ? 'surface' : group === 'recent' ? 'surface' : group;
       const f = real ? 1 : RANGES[range][1], rows = ((real ? real[g2] : u.by[g2]) || []).map(([k, c, ev]) => [k, (c / MICRO) * f, Math.round(ev * f)]);
@@ -1887,7 +1889,7 @@
         <div class="us-legend"><span><i class="a"></i>${fmt(left)} available</span>${held > 0 ? `<button class="us-held" data-us-held aria-expanded="${!!S.usHeld}" data-fk="held"><i class="h"></i>${fmt(held)} held by ${u.held.length} jobs ${ic(S.usHeld ? 'up' : 'chev')}</button>` : '<span>Nothing held</span>'}</div>
         ${S.usHeld && held > 0 ? `<div class="us-jobs">${u.held.map(([t, p, c]) => `<div class="us-lg us-act"><span class="us-n">${esc(t)}</span><span class="us-t">${esc(p)}</span><span class="us-v">${c}</span></div>`).join('')}</div>` : ''}
       </section>
-      <section class="pl us-spend">
+      ${spendGhost ? '<div class="ph-shape" aria-busy="true" aria-label="Loading">' : ''}<section class="pl us-spend">
         <div class="us-head"><span>Spending</span><div class="pl-seg" role="radiogroup" aria-label="Range" data-seg="range" style="--i:${Object.keys(RANGES).indexOf(range)};--n:3">${Object.entries(RANGES).map(([k, [l]]) => `<button role="radio" aria-checked="${range === k}" data-us-range="${k}" data-fk="r${k}">${l}</button>`).join('')}</div></div>
         <div class="us-stats">
           <div class="us-stat us-tile"><small>Total · ${RANGES[range][0]}</small><b>${fmt(total)}</b></div>
@@ -1898,7 +1900,7 @@
         <div class="us-list">${spendUnknown ? '<p class="us-none" data-us-none="unknown">Spending for this period couldn’t be loaded.</p>' : !rows.length && real ? '<p class="us-none" data-us-none="empty">Nothing spent in this period.</p>' : group === 'recent' && u.activity
           ? u.activity.slice(0, 4).map(([f2, c, t]) => `<div class="us-lg us-act"><span class="us-n">${esc(feat(f2))}</span><span class="us-t">${esc(agoShort(t))} ago</span><span class="us-v">−${c}</span></div>`).join('')
           : `<div class="us-stack" aria-hidden="true">${rows.map(([k, c], i) => `<i style="width:${(c / total) * 100}%;background:${tone[i % 4]}"></i>`).join('')}</div>${rows.map(([k, c], i) => `<div class="us-lg"><i style="background:${tone[i % 4]}"></i><span class="us-n">${esc(name(k))}</span><span class="us-pc">${Math.round((c / total) * 100)}%</span><span class="us-v">${fmt(c)}</span></div>`).join('')}`}</div>
-      </section>`;
+      </section>${spendGhost ? '</div>' : ''}`;
       if (ghostU) main = `<div class="ph-shape" aria-busy="true" aria-label="Loading">${main}</div>`;
     }
     const m = railPopOpen('usage', 'usm', `<header class="pl pl-head"><b>Usage</b>${u && u.frozen ? '<span class="pl-pill">Frozen</span>' : ''}${freshLine('usage')}<span class="pp-tools">${iconBtn('data-retry="usage" data-fk="refresh"', 'reset', 'Refresh')}</span></header>
