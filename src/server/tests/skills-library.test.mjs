@@ -143,6 +143,30 @@ async function main() {
     check(imp.name === 'pdf-forms' && imp.version === '1.0.0' && imp.files.map((f) => f.path).join() === 'SKILL.md,scripts/fill.py' && imp.scripts.join() === 'scripts/fill.py' && seen.every((u) => u.startsWith('https://api.github.com/repos/acme/skills/')), 'a GitHub folder imports as a skill, its script named, fetching only from the GitHub API');
     let badUrl = null; try { await skillsSvc.importFromGitHub(pool, { id: ada, kind: 'human' }, { url: 'https://evil.example/acme/skills/tree/main/x' }, { fetchImpl: gh }); } catch (e) { badUrl = e; }
     check(badUrl && badUrl.code === 'invalid_github_url', 'a link that is not a GitHub folder is refused before anything is fetched');
+
+    // 9. XENO Corpus's bundle digest (D240): computed here from the rule Corpus stated, independently of its code
+    const { createHash } = await import('node:crypto');
+    const h = (b) => 'sha256:' + createHash('sha256').update(b).digest('hex');
+    const corpusRule = (files) => h(Buffer.from(files.map((f) => [f.path, h(Buffer.from(f.content, 'utf8'))]).sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)).map(([p, d]) => p + ' ' + d).join('\n')));
+    const one = (await call('GET', `/api/skills/${imp.id}`, { token: A })).j.skill;
+    const stored = (await pool.query("SELECT v.bundle_digest, v.files FROM skill_versions v JOIN skills s ON s.id = v.skill_id WHERE s.public_id = $1 AND v.version = '1.0.0'", [imp.id])).rows[0];
+    check(stored.bundle_digest === corpusRule(stored.files) && one.versions.find((v) => v.version === '1.0.0').bundleDigest === stored.bundle_digest, 'every new version stores Corpus’s bundle digest, matching Corpus’s rule');
+    // a version made before the digest existed is filled once, and is immutable again afterwards
+    await pool.query("ALTER TABLE skill_versions DISABLE TRIGGER skill_versions_no_update");
+    await pool.query("UPDATE skill_versions SET bundle_digest = NULL WHERE bundle_digest IS NOT NULL");
+    await pool.query("ALTER TABLE skill_versions ENABLE TRIGGER skill_versions_no_update");
+    const filled = await skillsSvc.backfillBundleDigests(pool);
+    const left = (await pool.query('SELECT count(*)::int AS n FROM skill_versions WHERE bundle_digest IS NULL')).rows[0].n;
+    const again = await skillsSvc.backfillBundleDigests(pool);
+    const after = (await pool.query("SELECT v.bundle_digest, v.files FROM skill_versions v JOIN skills s ON s.id = v.skill_id WHERE s.public_id = $1 AND v.version = '1.0.0'", [imp.id])).rows[0];
+    check(filled > 0 && left === 0 && again === 0 && after.bundle_digest === corpusRule(after.files), 'the backfill fills every older version once, with the same digest, and has nothing to do the second time');
+    let dz = null; try { await pool.query("UPDATE skill_versions SET bundle_digest = 'sha256:' || repeat('0', 64)"); } catch (e) { dz = e; }
+    let dc = null; try { await pool.query("UPDATE skill_versions SET bundle_digest = NULL"); } catch (e) { dc = e; }
+    let dx = null; try { await pool.query("ALTER TABLE skill_versions DISABLE TRIGGER skill_versions_no_update; UPDATE skill_versions SET bundle_digest = NULL; ALTER TABLE skill_versions ENABLE TRIGGER skill_versions_no_update;"); await pool.query(`UPDATE skill_versions SET bundle_digest = 'sha256:' || repeat('0', 64), files = files || '[{"path":"added.md","content":"x"}]'::jsonb`); } catch (e) { dx = e; }
+    await skillsSvc.backfillBundleDigests(pool);
+    check([dz, dc, dx].every((e) => e && /never changes/.test(e.message)), 'once filled the digest cannot be changed or cleared, and filling it cannot carry any other change');
+    const newPin = (await skillsSvc.resolvePins(pool, { id: ada, kind: 'human' }, [{ id: imp.id, version: '1.0.0' }]))[0];
+    check(newPin.bundleDigest === after.bundle_digest, 'a new pin names Corpus’s digest beside the hash');
   } finally {
     server.close(); try { await stopListening(); } catch { /* already stopped */ } await pool.end();
   }

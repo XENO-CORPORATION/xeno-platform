@@ -253,7 +253,7 @@ export async function update(db, me, publicId, { name, description, instructions
     const nextRt = runtime !== undefined ? (runtime || {}) : (last ? last.content.runtime || {} : {});
     const nextPersona = persona !== undefined ? personaOf(persona) : (last ? last.content.persona || null : null);
     const nextSkills = pins !== undefined ? pins : (last ? last.content.skills || [] : []);
-    const sameSkills = (x, y) => x.length === y.length && x.every((p, i) => p.id === y[i].id && p.version === y[i].version && p.hash === y[i].hash);
+    const sameSkills = (x, y) => x.length === y.length && x.every((p, i) => p.id === y[i].id && p.version === y[i].version && p.hash === y[i].hash && (p.bundleDigest || null) === (y[i].bundleDigest || null));
     if (!last || (last.content.instructions || '') !== nextInstr || JSON.stringify(last.content.runtime || {}) !== JSON.stringify(nextRt) || !samePersona(last.content.persona || null, nextPersona) || !sameSkills(last.content.skills || [], nextSkills)) {
       try {
         await reviseAgentDefinition(db, ctx(me), { operationId: randomUUID(), resourceId: String(r.workforce_resource_id), baseVersion: cur,

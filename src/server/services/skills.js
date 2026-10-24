@@ -15,6 +15,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { redactSecrets, summarizeRedactions, scanForInjection, blockingFindings, formatFinding } from '@xenosystem/anima-mind';
 import { check } from '../utils/authzReBAC.js';
+import { bundleDigestOf, fileEntry } from '../vendor/xeno-corpus/corpus-skill-format.mjs';
 
 export class SkillError extends Error { constructor(message, code, status = 400, details) { super(message); this.name = 'SkillError'; this.code = code; this.status = status; this.details = details; } }
 
@@ -65,6 +66,10 @@ function normalizeFiles(files) {
 /** The content hash a pin names: SHA-256 over the files in their stored order. */
 export const hashOf = (files) => createHash('sha256').update(JSON.stringify(files.map((f) => [f.path, f.content]))).digest('hex');
 
+/** XENO Corpus's bundle digest (D240, vendored code — never re-implemented here): what Corpus and the platform both
+ *  call "this exact skill". Stored beside content_hash until pins move over (expand/contract). */
+export const bundleDigestOf_ = (files) => bundleDigestOf(files.map((f) => fileEntry(f.path, Buffer.from(f.content, 'utf8'))));
+
 /** D7: a skill is instructions an agent follows, so it may not carry a secret or try to take the agent over. */
 function assertSafe(files) {
   for (const f of files) {
@@ -109,7 +114,7 @@ const shape = (s, v, withFiles = false) => ({
   // installed from the Marketplace: which listing, the version installed last, and the latest it has published
   origin: s.origin_listing_id ? { listingId: String(s.origin_listing_id), version: s.origin_version, latest: s.origin_latest || null, slug: s.origin_slug || null } : null,
   scripts: v ? executablesOf(v.files) : [],
-  version: v ? v.version : null, hash: v ? v.content_hash : null, files: v ? (withFiles ? v.files : v.files.map((f) => ({ path: f.path, size: Buffer.byteLength(f.content, 'utf8') }))) : [],
+  version: v ? v.version : null, hash: v ? v.content_hash : null, bundleDigest: v ? v.bundle_digest || bundleDigestOf_(v.files) : null, files: v ? (withFiles ? v.files : v.files.map((f) => ({ path: f.path, size: Buffer.byteLength(f.content, 'utf8') }))) : [],
   createdAt: s.created_at, updatedAt: s.updated_at,
 });
 const latest = async (db, skillId) => {
@@ -131,8 +136,8 @@ export async function create(db, me, { workspaceId = null, files, skillMd, versi
   try {
     const s = (await db.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id)
       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [publicId, workspaceId ? null : me.id, workspaceId, meta.name, meta.description, me.id])).rows[0];
-    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [s.id, version, JSON.stringify(fs), hashOf(fs), me.id])).rows[0];
+    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [s.id, version, JSON.stringify(fs), hashOf(fs), me.id, bundleDigestOf_(fs)])).rows[0];
     return shape(s, v);
   } catch (e) {
     if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${meta.name} here. Publish a new version of it instead.`, 'skill_name_taken', 409);
@@ -154,8 +159,8 @@ export async function addVersion(db, me, publicId, { files, skillMd, version } =
   assertSafe(fs);
   const hash = hashOf(fs);
   if (cur && cur.content_hash === hash) throw new SkillError('Nothing changed since the last version', 'skill_unchanged', 409);
-  const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [s.id, next, JSON.stringify(fs), hash, me.id])).rows[0];
+  const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [s.id, next, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs)])).rows[0];
   const u = (await db.query('UPDATE skills SET description = $2, updated_at = now() WHERE id = $1 RETURNING *', [s.id, meta.description])).rows[0];
   return shape(u, v);
 }
@@ -175,10 +180,10 @@ export async function list(db, me, { workspaceId = null } = {}) {
 /** One skill with its files: its latest version, or the version asked for, and the list of versions. */
 export async function get(db, me, publicId, { version } = {}) {
   const s = await row(db, me, publicId);
-  const vs = (await db.query('SELECT version, content_hash, created_at FROM skill_versions WHERE skill_id = $1', [s.id])).rows.sort((a, b) => cmpSemver(b.version, a.version));
+  const vs = (await db.query('SELECT version, content_hash, bundle_digest, created_at FROM skill_versions WHERE skill_id = $1', [s.id])).rows.sort((a, b) => cmpSemver(b.version, a.version));
   const v = version ? (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [s.id, String(version)])).rows[0] : await latest(db, s.id);
   if (!v) throw new SkillError('No such version', 'version_not_found', 404);
-  return { ...shape(s, v, true), canEdit: await canWrite(db, me, s), versions: vs.map((x) => ({ version: x.version, hash: x.content_hash, createdAt: x.created_at })) };
+  return { ...shape(s, v, true), canEdit: await canWrite(db, me, s), versions: vs.map((x) => ({ version: x.version, hash: x.content_hash, bundleDigest: x.bundle_digest, createdAt: x.created_at })) };
 }
 
 /**
@@ -197,7 +202,7 @@ export async function installVersion(db, me, { workspaceId = null, files, versio
   const hash = hashOf(fs);
   if (mine) {
     const have = (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [mine.id, version])).rows[0];
-    if (!have) await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id) VALUES ($1, $2, $3, $4, $5)`, [mine.id, version, JSON.stringify(fs), hash, me.id]);
+    if (!have) await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6)`, [mine.id, version, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs)]);
     else if (have.content_hash !== hash) throw new SkillError('This library already holds a different version under that number', 'version_conflict', 409);
     const u = (await db.query('UPDATE skills SET origin_version = $2, description = $3, updated_at = now() WHERE id = $1 RETURNING *', [mine.id, version, meta.description])).rows[0];
     return { ...shape(u, (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [mine.id, version])).rows[0]), installed: have ? 'already' : 'updated' };
@@ -207,7 +212,7 @@ export async function installVersion(db, me, { workspaceId = null, files, versio
   try {
     const s = (await db.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id, origin_listing_id, origin_version)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, ['skl_' + randomBytes(16).toString('hex'), workspaceId ? null : me.id, workspaceId, name, meta.description, me.id, origin.listingId, version])).rows[0];
-    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`, [s.id, version, JSON.stringify(fs), hash, me.id])).rows[0];
+    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [s.id, version, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs)])).rows[0];
     return { ...shape(s, v), installed: 'new' };
   } catch (e) {
     if (e && e.code === '23505') throw new SkillError(`Your library already has a skill named ${name}. Install it under another name.`, 'skill_name_taken', 409);
@@ -264,7 +269,7 @@ export async function resolvePins(db, me, choices) {
     const s = await row(db, me, c && c.id);
     const v = c.version ? (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [s.id, String(c.version)])).rows[0] : await latest(db, s.id);
     if (!v) throw new SkillError(`${s.name} has no version ${c.version}`, 'version_not_found', 404);
-    if (!out.some((x) => x.id === s.public_id)) out.push({ id: s.public_id, version: v.version, hash: v.content_hash });
+    if (!out.some((x) => x.id === s.public_id)) out.push({ id: s.public_id, version: v.version, hash: v.content_hash, bundleDigest: v.bundle_digest || bundleDigestOf_(v.files) });
   }
   return out;
 }
@@ -278,9 +283,18 @@ export async function forAgent(db, agentUserId) {
   const pins = (r && Array.isArray(r.skills) ? r.skills : []).filter((p) => p && PUBLIC_ID.test(String(p.id)));
   const out = [];
   for (const p of pins) {
-    const x = (await db.query(`SELECT s.public_id, s.name, s.description, v.version, v.content_hash, v.files FROM skills s
+    const x = (await db.query(`SELECT s.public_id, s.name, s.description, v.version, v.content_hash, v.bundle_digest, v.files FROM skills s
         JOIN skill_versions v ON v.skill_id = s.id AND v.version = $2 WHERE s.public_id = $1`, [p.id, p.version])).rows[0];
-    if (x && x.content_hash === p.hash) out.push({ id: x.public_id, name: x.name, description: x.description, version: x.version, hash: x.content_hash, files: x.files });
+    // a pin that names Corpus's digest is held to it too (expand step: both must match while both exist)
+    if (x && x.content_hash === p.hash && (!p.bundleDigest || p.bundleDigest === (x.bundle_digest || bundleDigestOf_(x.files)))) out.push({ id: x.public_id, name: x.name, description: x.description, version: x.version, hash: x.content_hash, bundleDigest: x.bundle_digest || bundleDigestOf_(x.files), files: x.files });
   }
   return out;
+}
+
+/** Fill Corpus's bundle digest on versions made before it existed (migration 20261030150000 allows exactly this
+ *  one write, once, from empty). Idempotent; returns how many it filled. */
+export async function backfillBundleDigests(db) {
+  const rows = (await db.query('SELECT skill_id, version, files FROM skill_versions WHERE bundle_digest IS NULL')).rows;
+  for (const r of rows) await db.query('UPDATE skill_versions SET bundle_digest = $3 WHERE skill_id = $1 AND version = $2 AND bundle_digest IS NULL', [r.skill_id, r.version, bundleDigestOf_(r.files)]);
+  return rows.length;
 }

@@ -8,3 +8,4 @@
 # bytes the server serves (git archive = LF), so the working tree must hold those exact bytes on Windows too.
 public/site/*.js  text eol=lf
 public/site/*.css text eol=lf
+src/server/vendor/xeno-corpus/*.mjs text eol=lf

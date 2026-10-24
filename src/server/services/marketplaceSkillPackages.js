@@ -88,7 +88,7 @@ export async function preview(db, listingId) {
     listing: { id: listing.id, slug: listing.slug, title: listing.title, summary: listing.summary, license: listing.license, trustTier: listing.trust_tier, installCount: Number(listing.install_count || 0),
       publisher: dev ? { name: dev.display_name, handle: dev.slug, trustTier: dev.trust_tier } : null,
       pricing: (pricing || []).map(svc.serializePricing) },
-    current: cur ? { id: cur.id, version: cur.version, hash: cur.skill_package_hash, name: cur.skill_package.name, description: cur.skill_package.description,
+    current: cur ? { id: cur.id, version: cur.version, hash: cur.skill_package_hash, bundleDigest: skills.bundleDigestOf_(cur.skill_package.files), name: cur.skill_package.name, description: cur.skill_package.description,
       skillMd: cur.skill_package.files[0].content, files: cur.skill_package.files.map((f) => f.path), scripts: skills.executablesOf(cur.skill_package.files), releaseNotes: cur.release_notes } : null,
     versions: vs.map((x) => ({ id: x.id, version: x.version, hash: x.skill_package_hash, publishedAt: x.published_at })),
   };
