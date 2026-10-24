@@ -57,7 +57,8 @@
     S.ws = wsId(); if (!S.list) S.status = 'loading'; S.error = null;
     const r = await api('GET', '/api/message/conversations?' + wq()).catch(() => null);
     if (!r || !r.ok) { S.status = r && r.d && r.d.code === 'message_not_configured' ? 'off' : 'error'; S.error = said(r, 'Messages could not be reached.'); return paint(); }
-    S.list = r.d; S.status = r.d.configured === false ? 'off' : 'ready'; paint(); live();
+    // The rail badge reads this list on EVERY page, so a reply without the two arrays must not throw there.
+    S.list = { ...r.d, channels: Array.isArray(r.d.channels) ? r.d.channels : [], dms: Array.isArray(r.d.dms) ? r.d.dms : [] }; S.status = r.d.configured === false ? 'off' : 'ready'; paint(); live();
   }
   async function openRef(ref) {
     S.openRef = ref; S.open = null; paint();

@@ -43,7 +43,9 @@
     const head = (acts = '') => `<div class="pg-sec-h"><h3>${esc(title)}</h3>${acts}</div>`;
     if (e.status === 'loading') return `<section class="pg-sec" data-sec="corpus">${head()}${h.box('refresh', 'Loading the corpus', '', '', 'sm')}</section>`;
     if (e.status !== 'ready') return `<section class="pg-sec" data-sec="corpus">${head()}${h.box('x', 'The corpus could not be read', 'Try again in a moment.', h.btn('Retry', `data-xcp="retry" data-k="${esc(key)}"`, true), 'sm')}</section>`;
-    const c = e.d;
+    // A division home renders this section inline, so a reply missing a list must show an empty corpus, not throw the page.
+    const arr = (v) => (Array.isArray(v) ? v : []);
+    const c = { ...e.d, tenets: arr(e.d?.tenets), inheritedDoctrine: arr(e.d?.inheritedDoctrine), aggregated: arr(e.d?.aggregated), proposals: arr(e.d?.proposals) };
     const acts = (c.canManage ? h.btn('New tenet', `data-xcp="new-tenet" data-kind="${esc(kind)}" data-id="${esc(scopeId)}"`, true, 'plus') : '')
       + h.btn('Propose', `data-xcp="propose" data-kind="${esc(kind)}" data-id="${esc(scopeId)}"`, true, 'edit');
     const tenets = c.tenets.length ? h.table(['Tenet', 'Claim', 'Latest verdict'], c.tenets.map((t) => h.tr(tenetHref(kind, scopeId, t.id, projectName), [
