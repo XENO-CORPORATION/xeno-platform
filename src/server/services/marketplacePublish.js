@@ -24,6 +24,8 @@ export const VALID_KINDS = new Set([
   'team',
   // XENO MODES §8c D-CM1 (decided 2026-10-20): a trade pack — a mode manifest that depends on other listings by version.
   'mode',
+  // docs/AGENT-IDENTITY-SKILLS-CORPUS.md D3 (2026-10-24): an Agent Skills package (SKILL.md + files), built from a library skill.
+  'skill',
 ]);
 
 // The agent kinds (SPEC §2): `mind` is one Anima, `swarm` a coordinated package. `swarm` is the LEGACY
@@ -211,6 +213,14 @@ export function runAutomatedChecks({ kind, trustTier, license }, versionRow) {
     checks.teamPackage = versionRow?.team_package && versionRow?.team_package_hash
       ? { pass: true, detail: `team package of ${versionRow.team_package.members?.length ?? 0} agent(s)` }
       : { pass: false, detail: 'a team version carries a team package built from a canonical team' };
+  }
+
+  // a skill version carries the package the platform built from a library skill, with its hash; its CONTENTS are
+  // the database's to check at publication (marketplace_skill_package_valid) and were scanned when it was built.
+  if (kind === 'skill') {
+    checks.skillPackage = versionRow?.skill_package && versionRow?.skill_package_hash
+      ? { pass: true, detail: `skill ${versionRow.skill_package.name}: ${versionRow.skill_package.files?.length ?? 0} file(s)${(versionRow.manifest?.scripts || []).length ? `, ${versionRow.manifest.scripts.length} script(s)` : ''}` }
+      : { pass: false, detail: 'a skill version carries a skill package built from a library skill' };
   }
 
   const passed = Object.values(checks).every((c) => c.pass);

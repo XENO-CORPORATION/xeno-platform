@@ -366,7 +366,9 @@ Decision record: `docs/AGENT-IDENTITY-SKILLS-CORPUS.md`. WHO an agent is lives i
 (an Anima Mind body: `# Voice`, `# Style`, `# Boundaries`, `# Output` …) and is composed by `@xenosystem/anima-mind`'s own
 `composePersonaPrompt` in `agentGuidance.identityOf` — first in every brief, task guidance and `agents_whoami`. Import and
 export are mind.xeno through Anima's parser and injection scanner (`services/agentMind.js`). Never write a second
-persona composer or format. Skills, publishing and Corpus knowledge follow the record's §7 order.
+persona composer or format. Skills (`skills.js`) and their Marketplace listings (`marketplaceSkillPackages.js`, kind `skill`) are
+immutable, hashed, pinned and never auto-updated; storage is moving into XENO Corpus per the record's §7 4a — follow
+Corpus's record and digest, never invent a third skills model.
 
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 

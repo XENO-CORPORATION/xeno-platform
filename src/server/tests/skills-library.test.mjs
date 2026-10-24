@@ -23,6 +23,7 @@ import skillsRoutes from '../routes/skillsRoutes.js';
 import xenoMcpRoutes, { management, personOnly } from '../routes/xenoMcpRoutes.js';
 import { stopListening } from '../services/agentPresenceStream.js';
 import { authMiddleware } from '../middleware/auth.js';
+import * as skillsSvc from '../services/skills.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
@@ -129,6 +130,19 @@ async function main() {
     // 7. nobody pins a skill they cannot read
     const evesAgent = (await call('POST', '/api/agents', { token: E, body: { name: 'Eve bot' } })).j.agent;
     check((await call('PATCH', `/api/agents/${evesAgent.id}`, { token: E, body: { skills: [{ id: w1.j.skill.id }] } })).s === 404, 'a skill someone cannot read cannot be pinned to their agent');
+    // 8. import from GitHub: only the GitHub API host, a folder becomes a skill with the same checks
+    const seen = [];
+    const gh = async (u, o) => { seen.push(u); const raw = o.headers.accept === 'application/vnd.github.raw';
+      const resp = (body, ok = true) => ({ ok, status: ok ? 200 : 404, json: async () => body, text: async () => body });
+      if (/contents\/skills\/pdf-forms\?ref=main$/.test(u) && !raw) return resp([{ type: 'file', path: 'skills/pdf-forms/SKILL.md', size: 80 }, { type: 'dir', path: 'skills/pdf-forms/scripts' }]);
+      if (/contents\/skills\/pdf-forms\/scripts\?ref=main$/.test(u) && !raw) return resp([{ type: 'file', path: 'skills/pdf-forms/scripts/fill.py', size: 20 }]);
+      if (/SKILL\.md/.test(u)) return resp(md('pdf-forms', 'Use when filling PDF forms.', 'Run scripts/fill.py.'));
+      if (/fill\.py/.test(u)) return resp('print("fill")\n');
+      return resp(null, false); };
+    const imp = await skillsSvc.importFromGitHub(pool, { id: ada, kind: 'human' }, { url: 'https://github.com/acme/skills/tree/main/skills/pdf-forms' }, { fetchImpl: gh });
+    check(imp.name === 'pdf-forms' && imp.version === '1.0.0' && imp.files.map((f) => f.path).join() === 'SKILL.md,scripts/fill.py' && imp.scripts.join() === 'scripts/fill.py' && seen.every((u) => u.startsWith('https://api.github.com/repos/acme/skills/')), 'a GitHub folder imports as a skill, its script named, fetching only from the GitHub API');
+    let badUrl = null; try { await skillsSvc.importFromGitHub(pool, { id: ada, kind: 'human' }, { url: 'https://evil.example/acme/skills/tree/main/x' }, { fetchImpl: gh }); } catch (e) { badUrl = e; }
+    check(badUrl && badUrl.code === 'invalid_github_url', 'a link that is not a GitHub folder is refused before anything is fetched');
   } finally {
     server.close(); try { await stopListening(); } catch { /* already stopped */ } await pool.end();
   }

@@ -97,7 +97,20 @@ their instructions alone. A Marketplace skill listing can be unlisted without br
 2. ✅ **Skills library** (2026-10-24, `skills.js`, `skillsMcp.js`, migration `20261030130000`, Workspace › Skills) — create / upload / version / pin to an agent; `skills_list` / `skills_get`; skills index in the brief.
 3. **Delivery everywhere** — Spawn profile writer (xeno-spawn) and the cloud runner mount (xeno-agents-api), each in its
    own repo.
-4. **Publish** — Marketplace `kind: 'skill'`, install, versions, review tier.
+4. ✅ **Publish** (2026-10-24, `marketplaceSkillPackages.js`, migration `20261030140000`, Skills › Marketplace / Review) —
+   Marketplace `kind: 'skill'`: the platform builds the package from a library version (a supplied one is refused), automated
+   checks, a person's review, the database refuses a malformed/unlicensed or changed published package; install needs an
+   entitlement and never updates by itself; a skill's scripts are named before anyone gets it. The skill editor page and
+   import (zip / folder → editor first; GitHub folder → API host only) shipped with it. **Verified** badge: only from Corpus
+   verdicts held on the exact digest (below), not before.
+4a. **Corpus contract (XENO - Corpus session, 2026-10-24; D240 pending the owner):** skills live in a scope's corpus as
+   `<corpus>/skills/<name>/` + `<name>.skill.json` sidecar + append-only `.revisions.jsonl` + content-addressed objects;
+   `bundleDigest = "sha256:" + sha256 of sorted "<rel> sha256:<hex>" lines`. The platform adopts it by expand/contract
+   (bundle digest beside the current hash → backfill → pins resolve by it → old hash dropped), from a vendored, byte-identical
+   `corpus-skill-format.mjs`. Nesting: skills inherit DOWN; a same-name skill lower down is a `variantOf`, nearest scope wins
+   for activation, the shadowed one is shown. Import from a person's machine is Corpus's carry + the directory binding; the
+   server recomputes every digest and re-runs the gate. Secrets and take-over findings REFUSE the whole bundle; bytes are
+   never altered.
 5. **Knowledge** — attach Corpus scopes on the Identity tab.
 
 ## 8. What would make us revisit

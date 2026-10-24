@@ -801,10 +801,19 @@
     if (!v || !v.pick || !v.pick.length) return;
     return setSkills([...pinsOf(a), ...v.pick.map((id) => ({ id }))], v.pick.length === 1 ? 'Skill added' : `${v.pick.length} skills added`);
   }
-  async function newSkillFor() {
+  // write it in the skill editor (a page, not a dialog); saving there gives it to this agent and comes back here
+  function newSkillFor() {
     const a = S.one; if (!a || !window.XENO_SKILLS || !window.XENO_SKILLS.served) return;
-    const sk = await window.XENO_SKILLS.create({ open: false });
-    if (sk) return setSkills([...pinsOf(a), { id: sk.id }], `${sk.name} written and added`);
+    window.XENO_SKILLS.create({ forAgent: a.id, agentName: a.name });
+  }
+  /** called by the skill editor after it created a skill for agent `agentId` */
+  async function addSkillTo(agentId, sk) {
+    const r = await api('GET', `/api/agents/${agentId}`); if (!r.ok) return go(`Agents/${agentId}/Identity`);
+    const cur = (r.d.agent.skills || []).map((p) => ({ id: p.id, version: p.version }));
+    const u = await api('PATCH', `/api/agents/${agentId}`, { skills: [...cur, { id: sk.id }] });
+    toast(u.ok ? `${sk.name} written and given to ${r.d.agent.name}` : why(u, 'The skill was written, but it could not be given to the agent.'));
+    if (u.ok && S.one && S.one.id === agentId) S.one = u.d.agent;
+    go(`Agents/${agentId}/Identity`);
   }
   async function loadBrief(id) {
     const r = await api('GET', `/api/agents/${id}/brief`);
@@ -1050,5 +1059,5 @@
   };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { live(); } else if (es) { es.close(); es = null; } });
   setTimeout(live, 0);
-  window.XENO_AGENTS = { served: true, sidebar, dotOf, count: () => (S.status === 'ready' || S.list.length ? S.list.length : null), route, nameOf, isId: (s) => ID.test(String(s || '')), reload: () => { S.key = null; paint(); } };
+  window.XENO_AGENTS = { served: true, addSkill: addSkillTo, sidebar, dotOf, count: () => (S.status === 'ready' || S.list.length ? S.list.length : null), route, nameOf, isId: (s) => ID.test(String(s || '')), reload: () => { S.key = null; paint(); } };
 })();

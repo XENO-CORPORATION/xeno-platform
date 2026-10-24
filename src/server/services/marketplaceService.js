@@ -76,6 +76,7 @@ export function serializeListingSummary(row) {
     isFirstParty: row.is_first_party,
     developerId: row.developer_id,
     developerName: row.developer_name ?? null,
+    developerSlug: row.developer_slug ?? null,
     // D-6: the seller of record is a workspace; the accountable human answers for the listing
     sellerWorkspaceId: row.seller_workspace_id ?? null,
     accountableUserId: row.accountable_user_id ?? null,
@@ -169,7 +170,7 @@ export async function queryCatalog(db, { kind, category, trustTier, q, limit = 5
   params.push(safeLimit, safeOffset);
 
   const sql = `
-    SELECT l.*, d.display_name AS developer_name,
+    SELECT l.*, d.display_name AS developer_name, d.slug AS developer_slug,
       COALESCE((
         SELECT jsonb_agg(jsonb_build_object(
           'model', p.model, 'price_credits', p.price_credits, 'price_usd', p.price_usd,
