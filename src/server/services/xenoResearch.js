@@ -81,9 +81,17 @@ export function boxConfig(env = ENV) {
     caMissing: !!env.XENO_BOX_CA_FILE && !ca, internalWorkspaceId: String(env.XENO_INTERNAL_WORKSPACE_ID || '').trim().toLowerCase() || null,
     signingKey: /^[0-9a-f]{64}$/i.test(String(env.XENO_RESEARCH_SIGNING_KEY || '')) ? String(env.XENO_RESEARCH_SIGNING_KEY) : null };
 }
-async function executor({ image } = {}) {
+/**
+ * Who a run is for, as the engine understands it: 'xeno' only for the XENO workspace itself
+ * (XENO_INTERNAL_WORKSPACE_ID), 'external' for everyone else and for every unknown. The engine refuses an
+ * 'external' run on a Box whose host safety is not `qualified` -- a second, independent check behind runGate.
+ */
+export function audienceFor(workspaceId, c = boxConfig()) {
+  return !!c.internalWorkspaceId && workspaceId != null && String(workspaceId).toLowerCase() === c.internalWorkspaceId ? 'xeno' : 'external';
+}
+export async function executor({ image, workspaceId } = {}) {
   const e = await engine(), c = boxConfig();
-  return new e.BoxExecutor({ url: c.url, token: c.token, image, fetchImpl: FETCH || boxFetch({ ca: c.ca }) });
+  return new e.BoxExecutor({ url: c.url, token: c.token, image, audience: audienceFor(workspaceId, c), fetchImpl: FETCH || boxFetch({ ca: c.ca }) });
 }
 /** The image a run uses is the one its lock was resolved for (`# image:` in the lock header). */
 export const imageOfLock = (lock) => (String(lock || '').match(/^# image: (.+)$/m) || [])[1]?.trim() || undefined;
@@ -104,7 +112,7 @@ export async function runGate(workspaceId) {
     caps = r.json;
   } catch (e) { return { code: 'box_unreachable', reason: `XENO Box could not be reached: ${String(e.message || e).slice(0, 200)}` }; }
   const state = caps.host_safety?.state ?? 'unknown';
-  const inside = !!c.internalWorkspaceId && String(workspaceId).toLowerCase() === c.internalWorkspaceId;
+  const inside = audienceFor(workspaceId, c) === 'xeno';
   if (state !== 'qualified' && !inside) {
     return { code: 'box_unqualified', reason: `XENO Box reports host safety "${state}". Until it is qualified, notebooks run only for the XENO workspace.` };
   }
@@ -320,7 +328,7 @@ async function execute(db, run) {
   try {
     if (run.kind === 'lock') {
       const requirements = e.requirementsText(nb.notebook);
-      const box = await executor();
+      const box = await executor({ workspaceId: nb.workspace_id });
       const r = await box.resolve({ requirements });
       const lock = e.lockFromCompiled({ ...r, requirements });
       await db.query('UPDATE research_notebooks SET lock_text=$2, locked_at=now(), updated_at=now() WHERE id=$1', [nb.id, lock]);
@@ -328,7 +336,7 @@ async function execute(db, run) {
     }
     if (e.declaredInputs(nb.notebook).length) fail('This notebook declares input files; uploading inputs to a notebook is not built yet, so it cannot run here.', 'inputs_unsupported');
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xeno-research-'));
-    const box = await executor({ image: imageOfLock(nb.lock_text) });
+    const box = await executor({ image: imageOfLock(nb.lock_text), workspaceId: nb.workspace_id });
     const { notebook, provenance } = await e.runNotebook({ notebook: nb.notebook, notebookDir: tmp, executor: box, lock: nb.lock_text || null });
     const signed = e.signRecord(provenance, boxConfig().signingKey);
     const fields = { status: 'done', provenance, signature: signed.signature, output_notebook: notebook };

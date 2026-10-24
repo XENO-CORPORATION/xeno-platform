@@ -1,3 +1,4 @@
+import { ensureChatProjectFolder, projectFolderUsage, renameChatProjectFolder, syncProjectFolderAccess, releaseChatProjectFolder } from '../services/chatProjectFolders.js';
 import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
 import { handOff } from '../services/chatHandoff.js';
@@ -2839,6 +2840,24 @@ router.post('/projects', async (req, res) => {
 });
 
 // PUT /api/chat/projects/:id - Update project
+// The project's own Storage folder (services/chatProjectFolders.js): made on the first open if it does not exist yet,
+// with what the project's files take up. Anyone who may see the project may see where its files are.
+router.get('/projects/:id/storage', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    await requireResourceRelation(req.db, userPrincipal(userId), 'project', req.params.id, 'viewer');
+    const out = await ensureChatProjectFolder(req.db, req.params.id);
+    if (!out.folder) return res.status(out.reason === 'storage_full' ? 507 : 409).json({ success: false, code: out.reason === 'storage_full' ? 'storage_full' : 'project_folder_unavailable', error: out.reason === 'storage_full' ? 'Storage is full, so the project folder could not be made yet' : 'The project folder could not be made yet' });
+    const usage = await projectFolderUsage(req.db, out.folder.id);
+    res.json({ success: true, created: out.created, folder: { id: out.folder.id, name: out.folder.name, workspaceId: out.folder.workspace_id || null, url: `/workspace/corpo/apps/storage/f/${out.folder.id}` }, usage });
+  } catch (error) {
+    if (error instanceof ChatAuthorizationError) return res.status(404).json({ success: false, error: 'Project not found', code: 'project_not_found' });
+    console.error('[chat] project storage', error);
+    res.status(500).json({ success: false, error: 'Project storage failed' });
+  }
+});
+
 router.put('/projects/:id', async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -2870,6 +2889,7 @@ router.put('/projects/:id', async (req, res) => {
     );
 
     if (rows.length === 0) return res.status(404).json({ success: false, error: 'Project not found' });
+    if (name !== undefined && rows[0]) await renameChatProjectFolder(req.db, id).catch((e) => console.warn(`[project-folder] rename ${id}: ${e.message}`));
     res.json({ success: true, project: rows[0] });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -2946,6 +2966,7 @@ router.put('/projects/:id/access/user/by-email', async (req, res) => {
       );
       await writeTuples(tx, { writes: [{ object: `project:${req.params.id}`, relation, subject: `user:${identity.id}` }] });
     });
+    await syncProjectFolderAccess(req.db, req.params.id);
     res.json({ success: true, grant: { relation, subject: `user:${identity.id}`, identity } });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -2973,6 +2994,7 @@ router.put('/projects/:id/access/:subjectType/:subjectId', async (req, res) => {
       );
       await writeTuples(tx, { writes: [{ object: `project:${req.params.id}`, relation, subject: `${subjectType}:${subjectId}` }] });
     });
+    await syncProjectFolderAccess(req.db, req.params.id);
     res.json({ success: true, grant: { relation, subject: `${subjectType}:${subjectId}` } });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -2995,6 +3017,7 @@ router.delete('/projects/:id/access/:subjectType/:subjectId', async (req, res) =
        AND subject_type=$2 AND subject_id=$3 AND relation IN ('viewer','reviewer','editor','admin')`,
       [req.params.id, subjectType, subjectId],
     );
+    await syncProjectFolderAccess(req.db, req.params.id);
     res.json({ success: true });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -3065,6 +3088,7 @@ router.delete('/projects/:id/permanent', async (req, res) => {
       if (gone.length) await tx.query("DELETE FROM relationship_tuples WHERE object_type = 'schedule' AND object_id = ANY($1::text[])", [gone]);
       const dead = (await tx.query('DELETE FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NOT NULL RETURNING id', [id])).rows.map((r) => String(r.id));
       if (dead.length) await tx.query("DELETE FROM relationship_tuples WHERE object_type = 'conversation' AND object_id = ANY($1::text[])", [dead]);
+      await releaseChatProjectFolder(tx, id);   // the folder and its files stay in Storage; only the binding goes
       await tx.query("DELETE FROM relationship_tuples WHERE (object_type = 'project' AND object_id = $1) OR (subject_type = 'project' AND subject_id = $1)", [String(id)]);
       await tx.query('DELETE FROM chat_projects WHERE id = $1', [id]);
       return { status: 200, body: { success: true, deleted: true } };

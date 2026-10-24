@@ -12,7 +12,7 @@ import express from 'express';
 import fs from 'fs';
 import sharp from 'sharp';
 import { authMiddleware } from '../middleware/auth.js';
-import { siteOrigin } from '../config/hosts.js';
+import { siteOrigin, publicSiteOrigin } from '../config/hosts.js';
 import {
   createSignedLibraryContentPath,
   createAuthorizedLibraryContentPath,
@@ -291,7 +291,7 @@ router.get('/assets/file/:id/shares', folders(async (req, res) => { const r = aw
 router.get('/folders/:id/shares', folders(async (req, res) => { const r = await listShares(req.db, req.user.id, { folderId: req.params.id }); shareReply(res, r, { shares: r.shares }); }));
 router.post('/folders/:id/shares', folders(async (req, res) => { const r = await shareWithPerson(req.db, req.user.id, { folderId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share }); }));
 router.post('/assets/file/:id/shares', folders(async (req, res) => {
-  if (req.body?.link === true) { const r = await createLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null }); return shareReply(res, r, r.ok ? { share: r.share, url: `${siteOrigin()}/api/library/links/${r.token}` } : {}); }
+  if (req.body?.link === true) { const r = await createLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null }); return shareReply(res, r, r.ok ? { share: r.share, url: `${publicSiteOrigin()}/api/library/links/${r.token}` } : {}); }
   const r = await shareWithPerson(req.db, req.user.id, { fileId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share });
 }));
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
@@ -301,7 +301,7 @@ router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await
 router.get('/folders/:id/links', folders(async (req, res) => { const r = await listFolderLinks(req.db, req.user.id, req.params.id); shareReply(res, r, { links: r.links }); }));
 router.post('/folders/:id/links', folders(async (req, res) => {
   const r = await createFolderLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null, label: req.body?.label ?? null });
-  shareReply(res, r, r.ok ? { link: r.link, url: `${/^(xenosystem\.ai|xenostudio\.ai)$/.test(String(req.get('host'))) ? `https://${req.get('host')}` : siteOrigin()}/storage/shared/${r.token}` } : {});
+  shareReply(res, r, r.ok ? { link: r.link, url: `${publicSiteOrigin()}/storage/shared/${r.token}` } : {});
 }));
 router.get('/folder-links/:id/activity', folders(async (req, res) => { const r = await folderLinkActivity(req.db, req.user.id, req.params.id); shareReply(res, r, r.ok ? { link: r.link, events: r.events } : {}); }));
 router.delete('/folder-links/:id', folders(async (req, res) => { shareReply(res, await revokeFolderLink(req.db, req.user.id, req.params.id)); }));

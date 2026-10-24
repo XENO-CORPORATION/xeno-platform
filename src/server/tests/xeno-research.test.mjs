@@ -162,6 +162,18 @@ async function main() {
     BOX.safety = 'qualified';
     ok((await research.runGate(crypto.randomUUID())) === null, 'and for everyone once Box reports qualified');
     BOX.safety = 'unqualified';
+    // SECOND LAYER: the engine itself (vendored, assertQualifiedFor) refuses an outside workspace's run on an
+    // unqualified Box even if the platform's gate were bypassed; the XENO workspace passes as audience 'xeno'.
+    ok(research.audienceFor(ws) === 'xeno' && research.audienceFor(crypto.randomUUID()) === 'external' && research.audienceFor(null) === 'external', 'audience is xeno for the XENO workspace only');
+    let engineRefused = null;
+    try { await (await research.executor({ workspaceId: crypto.randomUUID() })).capabilities(); } catch (e) { engineRefused = e; }
+    ok(engineRefused && /host_safety "unqualified"/.test(engineRefused.message), 'outside the XENO workspace on an unqualified Box: the engine refuses the run itself');
+    let insideErr = null;
+    try { await (await research.executor({ workspaceId: ws })).capabilities(); } catch (e) { insideErr = e; }
+    ok(!insideErr || !/host_safety/.test(insideErr.message), 'the XENO workspace is not refused by the engine’s audience check');
+    research.configure({ env });
+    ok(research.audienceFor(ws) === 'external', 'with no XENO workspace configured, nobody is inside');
+    research.configure({ env: { ...env, XENO_INTERNAL_WORKSPACE_ID: ws } });
     const refusedRow = (await pool.query(`SELECT id FROM research_runs WHERE status='refused' LIMIT 1`)).rows[0].id;
     ok(await rejects(pool.query(`UPDATE research_runs SET status='queued' WHERE id=$1`, [refusedRow]), /research_run_finished/), 'the database refuses reopening a refused run');
 
@@ -269,7 +281,9 @@ async function main() {
 
     // ── DOWN path
     await research.settled();
-    await rollbackMigrations(pool, 1);
+    // Roll back to just before the research migration: later migrations may have landed on top of it.
+    const newer = Number((await pool.query(`SELECT count(*) n FROM schema_migrations WHERE version >= '20261025090000'`)).rows[0].n);
+    await rollbackMigrations(pool, newer);
     ok(!(await pool.query(`SELECT to_regclass('research_runs') r`)).rows[0].r && !(await pool.query(`SELECT to_regclass('research_notebooks') r`)).rows[0].r, 'the DOWN path drops both tables');
     await runAllMigrations(pool);
     ok(!!(await pool.query(`SELECT to_regclass('research_runs') r`)).rows[0].r, 'and UP restores them');

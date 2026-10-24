@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import { check } from '../utils/authzReBAC.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { sendEmail } from './emailService.js';
-import { siteOrigin } from '../config/hosts.js';
+import { publicSiteOrigin } from '../config/hosts.js';
 import * as people from './workforcePeople.js';
 
 export class SchedulingError extends Error {
@@ -41,8 +41,8 @@ const MIN = 60_000;
 const hash = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const token = () => crypto.randomBytes(24).toString('base64url');
 export const emailsEnabled = (env = process.env) => String(env.SCHEDULING_EMAILS ?? '').trim().toLowerCase() === 'true';
-const manageUrl = (t) => `${siteOrigin()}/api/scheduling/manage/${t}`;
-export const bookUrl = (slug) => `${siteOrigin()}/api/scheduling/book/${slug}`;
+const manageUrl = (t) => `${publicSiteOrigin()}/api/scheduling/manage/${t}`;
+export const bookUrl = (slug) => `${publicSiteOrigin()}/api/scheduling/book/${slug}`;
 const text = (v, field, max, required = true) => {
   const s = String(v ?? '').trim();
   if (required && !s) throw new SchedulingError(`${field} is required`, `${field}_required`);
@@ -303,7 +303,7 @@ async function mailBoth(db, b, page, update, manage) {
   const at = `${b.starts_at.toISOString().replace('T', ' ').slice(0, 16)} UTC`;
   const send = (to, name, url) => sendEmail(db, 'scheduling_update', to, { displayName: name, update, title: page.title, at, url }).catch((e) => console.error('[Scheduling] mail', e.message));
   await send(b.guest_email, b.guest_name, manage ? manageUrl(manage) : bookUrl(page.slug));
-  if (host && host.email) await send(host.email, host.name, `${siteOrigin()}/workspace/#/corpo/z/scheduling`);
+  if (host && host.email) await send(host.email, host.name, `${publicSiteOrigin()}/workspace/#/corpo/z/scheduling`);
   return { mailed: true };
 }
 
@@ -460,7 +460,7 @@ export async function rotateFeed(db, actor, { workspace } = {}) {
   const t = token();
   await db.query(`INSERT INTO calendar_feed_tokens (workspace_id, user_id, token_hash) VALUES ($1,$2,$3)
     ON CONFLICT (workspace_id, user_id) DO UPDATE SET token_hash = EXCLUDED.token_hash, created_at = NOW()`, [s.ws, s.userId, hash(t)]);
-  return { url: `${siteOrigin()}/api/scheduling/feed/${t}.ics` };
+  return { url: `${publicSiteOrigin()}/api/scheduling/feed/${t}.ics` };
 }
 /** The feed by token. Membership is rechecked on every read: a removed member's feed goes dark. */
 export async function feedIcs(db, t) {
