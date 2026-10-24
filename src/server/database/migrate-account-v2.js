@@ -91,6 +91,11 @@ CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_rt_family ON oauth_refresh_tokens (family_id);
+-- Idempotent refresh recovery (XENO AUTH): the successor a rotation issued, and the sha256 of the
+-- client's rotation_id, so a client killed before persisting the successor can retry without
+-- tripping reuse detection. Also added by migration 20261031120000.
+ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS successor_id uuid;
+ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS rotation_id_hash text;
 
 -- OIDC access-token revocation without changing the live users/refresh tables.
 -- Every minted SID is registered here with the user's revocation epoch. Access

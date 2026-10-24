@@ -285,12 +285,14 @@ async function ensureRefreshSession(db, row) {
     state = await db.query('SELECT * FROM oauth_session_state WHERE sid = $1 FOR UPDATE', [row.sid]);
   }
   const session = state.rows[0];
-  if (!session || session.user_id !== row.user_id || session.revoked_at
-      || new Date(session.expires_at).getTime() <= Date.now()
-      || Number(session.auth_epoch) !== Number(epoch.epoch)) {
-    throw oauthError('invalid_grant', 'session revoked');
-  }
+  if (!refreshSessionUsable(session, row, epoch)) throw oauthError('invalid_grant', 'session revoked');
   return session;
+}
+
+function refreshSessionUsable(session, row, epoch) {
+  return Boolean(session && session.user_id === row.user_id && !session.revoked_at
+    && new Date(session.expires_at).getTime() > Date.now()
+    && Number(session.auth_epoch) === Number(epoch.epoch));
 }
 
 async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date(), dpopJkt = null }) {
@@ -335,7 +337,7 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = ne
   await recordSurfaceLink(db, { userId: user.id, clientId, email: user.email });
   // Opaque refresh token, hashed at rest, with a rotation family.
   const familyId = crypto.randomUUID();
-  const refreshToken = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId });
+  const { token: refreshToken } = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId });
   return {
     access_token: accessToken,
     token_type: dpopJkt ? 'DPoP' : 'Bearer',
@@ -368,14 +370,17 @@ async function recordSurfaceLink(db, { userId, clientId, email }) {
   );
 }
 
+// Returns the opaque token AND its row id: a rotation records the successor's id on the row it
+// rotated, which is what idempotent refresh recovery checks.
 async function issueRefreshToken(db, { userId, clientId, scope, sid, familyId }) {
   const token = crypto.randomBytes(32).toString('base64url');
-  await db.query(
+  const r = await db.query(
     `INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, family_id, scope, sid, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6, now() + interval '${REFRESH_TTL_SEC} seconds')`,
+     VALUES ($1,$2,$3,$4,$5,$6, now() + interval '${REFRESH_TTL_SEC} seconds')
+     RETURNING id`,
     [sha256(token), clientId, userId, familyId, scope, sid],
   );
-  return token;
+  return { token, id: r.rows[0].id };
 }
 
 // ── Authorization Code flow ─────────────────────────────────────────────────
@@ -474,7 +479,72 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
 
 // ── Refresh rotation + reuse detection ──────────────────────────────────────
 
-export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null }) {
+// Idempotent refresh recovery (XENO AUTH). A client killed after sending a refresh but before
+// persisting the successor can present the OLD token again with the same `rotation_id` it sent the
+// first time. Format is checked here, so every caller of the grant gets the same refusal.
+const ROTATION_ID_RE = /^[A-Za-z0-9_-]{16,128}$/;
+
+function hashesEqual(aHex, bHex) {
+  const a = Buffer.from(String(aHex || ''), 'hex');
+  const b = Buffer.from(String(bHex || ''), 'hex');
+  return a.length === 32 && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * The ONE place a refresh rotation builds its response: access JWT (cnf.jkt when DPoP-bound), a new
+ * refresh token in the same family, and the old row's successor_id pointed at it. Used by both the
+ * normal rotation and recovery, so the two can never return differently shaped token sets.
+ */
+async function rotatedTokenSet(tx, { row, session, clientId }) {
+  const user = await userClaims(tx, row.user_id);
+  if (!user) throw oauthError('invalid_grant', 'user not found');
+  const key = await getSigningKey(tx);
+  const now = Math.floor(Date.now() / 1000);
+  const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
+  const access = jwt.sign(
+    { iss: issuer(), iat: now, sub: user.id, aud: await audienceForClient(tx, clientId), client_id: clientId, azp: clientId,
+      scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
+      typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
+    key.privatePem,
+    { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
+  );
+  const successor = await issueRefreshToken(tx, {
+    userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id,
+  });
+  await tx.query('UPDATE oauth_refresh_tokens SET successor_id = $2 WHERE id = $1', [row.id, successor.id]);
+  return { access_token: access, token_type: session.dpop_jkt ? 'DPoP' : 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: successor.token, scope: row.scope };
+}
+
+/**
+ * For an ALREADY-rotated row: the session and the unconsumed successor if, and only if, every
+ * recovery condition holds: the rotation_id matches the one recorded at rotation, the session is
+ * usable and DPoP-bound to THIS request's key, and the successor is the same family, unrevoked,
+ * never used and unexpired. Anything else returns null and the caller takes the reuse path, exactly
+ * as before recovery existed. Never throws for a failed condition (a throw would skip reuse).
+ * Lock order matches a normal refresh of the successor (token row → auth epoch → session).
+ */
+async function recoverableRotation(tx, row, { rotationHash, dpopJkt }) {
+  if (!rotationHash || !row.rotation_id_hash || !row.successor_id) return null;
+  if (!hashesEqual(rotationHash, row.rotation_id_hash)) return null;
+  const n = await tx.query('SELECT * FROM oauth_refresh_tokens WHERE id = $1 FOR UPDATE', [row.successor_id]);
+  const successor = n.rows[0];
+  if (!successor || successor.family_id !== row.family_id || successor.client_id !== row.client_id
+      || successor.sid !== row.sid || successor.revoked || successor.rotated
+      || new Date(successor.expires_at).getTime() < Date.now()) return null;
+  const epoch = await currentAuthEpoch(tx, row.user_id, { forUpdate: true });
+  const state = await tx.query('SELECT * FROM oauth_session_state WHERE sid = $1 FOR UPDATE', [row.sid]);
+  const session = state.rows[0];
+  if (!refreshSessionUsable(session, row, epoch)) return null;
+  if (!session.dpop_jkt || !dpopJkt || session.dpop_jkt !== dpopJkt) return null;
+  return { session, successor };
+}
+
+export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null, rotationId = null }) {
+  if (rotationId !== null && rotationId !== undefined
+      && (typeof rotationId !== 'string' || !ROTATION_ID_RE.test(rotationId))) {
+    throw oauthError('invalid_request', 'rotation_id must be 16-128 characters of [A-Za-z0-9_-]');
+  }
+  const rotationHash = rotationId ? sha256(rotationId) : null;
   const hash = sha256(refreshToken);
   const tx = await db.connect();
   let reuse = null;
@@ -488,34 +558,26 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
     if (row.client_id !== clientId) throw oauthError('invalid_grant', 'client mismatch');
     if (row.revoked) throw oauthError('invalid_grant', 'refresh token revoked');
     if (new Date(row.expires_at).getTime() < Date.now()) throw oauthError('invalid_grant', 'refresh token expired');
-    if (row.rotated) {
+    const recovery = row.rotated ? await recoverableRotation(tx, row, { rotationHash, dpopJkt }) : null;
+    if (row.rotated && !recovery) {
       await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE family_id = $1', [row.family_id]);
       await tx.query('UPDATE oauth_session_state SET revoked_at = COALESCE(revoked_at, now()) WHERE sid = $1', [row.sid]);
       reuse = row;
+      await tx.query('COMMIT');
+    } else if (recovery) {
+      // The first rotation's successor was never used: retire it and issue a fresh one in its place.
+      await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE id = $1', [recovery.successor.id]);
+      refreshed = await rotatedTokenSet(tx, { row, session: recovery.session, clientId });
+      refreshEvent = { userId: row.user_id, familyId: row.family_id, recovered: true };
       await tx.query('COMMIT');
     } else {
       const session = await ensureRefreshSession(tx, row);
       if (session.dpop_jkt && session.dpop_jkt !== dpopJkt) {
         throw oauthError('invalid_dpop_proof', 'refresh token sender constraint mismatch');
       }
-      await tx.query('UPDATE oauth_refresh_tokens SET rotated = true WHERE id = $1', [row.id]);
-      const user = await userClaims(tx, row.user_id);
-      if (!user) throw oauthError('invalid_grant', 'user not found');
-      const key = await getSigningKey(tx);
-      const now = Math.floor(Date.now() / 1000);
-      const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
-      const access = jwt.sign(
-        { iss: issuer(), iat: now, sub: user.id, aud: await audienceForClient(tx, clientId), client_id: clientId, azp: clientId,
-          scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
-          typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
-        key.privatePem,
-        { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
-      );
-      const newRefresh = await issueRefreshToken(tx, {
-        userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id,
-      });
-      refreshed = { access_token: access, token_type: session.dpop_jkt ? 'DPoP' : 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: newRefresh, scope: row.scope };
-      refreshEvent = { userId: row.user_id, familyId: row.family_id };
+      await tx.query('UPDATE oauth_refresh_tokens SET rotated = true, rotation_id_hash = $2 WHERE id = $1', [row.id, rotationHash]);
+      refreshed = await rotatedTokenSet(tx, { row, session, clientId });
+      refreshEvent = { userId: row.user_id, familyId: row.family_id, recovered: false };
       await tx.query('COMMIT');
     }
   } catch (error) {
@@ -531,7 +593,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
     });
     throw oauthError('invalid_grant', 'refresh token reuse detected — family revoked');
   }
-  recordSecurityEventAsync(db, EVENTS.TOKEN_REFRESHED, {
+  recordSecurityEventAsync(db, refreshEvent.recovered ? EVENTS.TOKEN_REFRESH_RECOVERED : EVENTS.TOKEN_REFRESHED, {
     userId: refreshEvent.userId,
     metadata: { clientId, familyId: refreshEvent.familyId },
   });
