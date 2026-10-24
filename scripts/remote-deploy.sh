@@ -75,6 +75,20 @@ fi
 
 cd "$ROOT"
 mkdir -p .deploy/candidates
+# --- One deploy at a time on this box ------------------------------------------
+# 🔴 2026-10-24: two sessions started frontend deploys five seconds apart. Two image
+# builds on a VM ballooned to 8 GB took the load average to 149, every container went
+# unhealthy and the API answered 502 for about sixteen minutes. Nothing stopped the
+# second deploy, because each caller only looked at the box before it started and both
+# looked in the same gap. The lock is taken here, on the box, for the whole run (build,
+# swap, healthcheck, rollback), so a second deploy is refused instead of competing.
+# Non-blocking on purpose: a deploy that queues silently is how a stale one lands later.
+exec 9>"$ROOT/.deploy/deploy.lock"
+if ! flock -n 9; then
+  echo "remote-deploy: another deploy is already running on this box (see $ROOT/.deploy/deploy.log)." >&2
+  echo "remote-deploy: refusing to start a second one; retry when it has ended." >&2
+  exit 4
+fi
 LOG="$ROOT/.deploy/deploy.log"
 IMAGE="xeno-platform-$SERVICE"
 CANDIDATE_ROOT="$(mktemp -d "$ROOT/.deploy/candidates/$SHA-$SERVICE-XXXXXX")"
