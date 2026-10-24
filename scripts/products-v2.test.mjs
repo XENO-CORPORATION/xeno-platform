@@ -81,3 +81,21 @@ test('the Spawn product design states what ships, not the concept it was written
   assert.doesNotMatch(html, /Nothing is published or installable yet/, 'the waitlist copy must not come back');
   assert.doesNotMatch(html, /"Can I use it\?","No\./, 'the first FAQ answer says it cannot be used');
 });
+
+test('the Storage product design is authored in-repo and states only what 0.1.0 ships', () => {
+  // Storage had no design in the handoff zip; its page is written in this repo and imported by the
+  // same transform (`import-products-v2.mjs --authored`). The served document must be that output.
+  const importer = read('scripts/import-products-v2.mjs');
+  assert.match(importer, /'XENO Storage\.dc\.html': 'storage'/, 'the importer owns the Storage design');
+  assert.ok(onDisk('src/content/product-designs/XENO Storage.dc.html'), 'the Storage design source is in the repo');
+  const html = read('public/product-pages/storage/index.html');
+  assert.match(html, /v0\.1\.0/, 'names the published version');
+  assert.match(html, /\/product\/storage\/download\/win/, 'links the gated download route');
+  assert.match(html, /not code-signed yet[\s\S]*SmartScreen/, 'the unsigned-installer notice (§5c site half)');
+  assert.match(html, /Dokany/, 'discloses the administrator prompt and why');
+  assert.match(html, /5–40x slower/, 'states the measured small-file slowdown, not native speed');
+  assert.match(html, /There is no in-app updater yet/, 'says updates are a manual download');
+  assert.match(html, /OneDrive and Dropbox/, 'lists the clouds it does not support');
+  assert.doesNotMatch(html, /OneDrive (is|are) supported|supports OneDrive|Dropbox support/i, 'never claims a cloud it does not have');
+  assert.doesNotMatch(html, /macOS[^<]{0,40}(available|download)/i, 'never offers a platform with no build');
+});
