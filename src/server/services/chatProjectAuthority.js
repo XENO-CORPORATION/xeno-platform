@@ -1,5 +1,6 @@
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { UUID_RE } from '../utils/workspaceContext.js';
+import { ensureChatProjectFolder } from './chatProjectFolders.js';
 
 export class ChatAuthorizationError extends Error {
   constructor(message = 'Resource not found or access denied', code = 'resource_not_found') {
@@ -56,7 +57,7 @@ export async function createAuthorizedProject(db, {
   if (!String(name || '').trim()) throw Object.assign(new Error('Project name is required'), { code: 'invalid_project' });
   if (workspaceId && !UUID_RE.test(workspaceId)) throw new ChatAuthorizationError('Workspace id must be a UUID', 'invalid_id');
 
-  return withTransaction(db, async (tx) => {
+  const project = await withTransaction(db, async (tx) => {
     if (workspaceId) await requireResourceRelation(tx, principal, 'workspace', workspaceId, 'editor');
     const { rows } = await tx.query(
       `INSERT INTO chat_projects (
@@ -91,6 +92,12 @@ export async function createAuthorizedProject(db, {
     }
     return project;
   });
+  // Every project gets its own Storage folder (services/chatProjectFolders.js). Only once the project row is committed,
+  // i.e. when we were given the pool; a caller inside its own transaction gets the folder on the project's first open.
+  if (typeof db.totalCount === 'number') {
+    await ensureChatProjectFolder(db, project.id).catch((error) => console.warn(`[project-folder] ${project.id}: ${error.message}`));
+  }
+  return project;
 }
 
 export async function linkAssetToProject(db, { principal, projectId, assetId }) {

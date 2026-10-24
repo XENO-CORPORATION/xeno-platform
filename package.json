@@ -343,7 +343,8 @@
     "test:marketing-navigation": "node --test scripts/homepage-v21.test.mjs scripts/homepage-v21.browser.test.mjs scripts/products-v2.test.mjs scripts/products-v2.browser.test.mjs",
     "test:spawn-profiles-web": "node --test scripts/spawn-profiles-web.test.mjs",
     "test:spawn-profiles": "node --test src/server/tests/spawn-profiles.test.mjs",
-    "test:project-folders": "node src/server/tests/project-folders.test.mjs"
+    "test:project-folders": "node src/server/tests/project-folders.test.mjs",
+    "test:chat-project-folders": "node src/server/tests/chat-project-folders.test.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.7",

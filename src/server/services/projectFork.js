@@ -1,3 +1,4 @@
+import { ensureChatProjectFolder } from './chatProjectFolders.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { readPublicProject } from './projectPublication.js';
 import { REDISTRIBUTABLE_LICENCES } from './marketplaceTeamPackages.js';
@@ -56,7 +57,7 @@ export async function forkProject(poolOrClient, { upstreamProjectId, forkerUserI
     throw new Error('invalid fork name');
   }
   const bundle = await exportProjectBundle(poolOrClient, upstreamProjectId);
-  return withTx(poolOrClient, async (executor) => {
+  const out = await withTx(poolOrClient, async (executor) => {
     const forker = await resolvePrincipal(executor, forkerUserId);
     if (!forker?.usable) throw new Error('forker_not_usable');
     const upstream = (await executor.query(
@@ -80,6 +81,11 @@ export async function forkProject(poolOrClient, { upstreamProjectId, forkerUserI
     );
     return { fork: fork, provenance: rows[0] };
   });
+  // A fork is a new project, so it gets its own Storage folder too (services/chatProjectFolders.js), once committed.
+  if (typeof poolOrClient.totalCount === 'number') {
+    await ensureChatProjectFolder(poolOrClient, out.fork.id).catch((error) => console.warn(`[project-folder] fork ${out.fork.id}: ${error.message}`));
+  }
+  return out;
 }
 
 export async function readForkProvenance(poolOrClient, forkProjectId) {
