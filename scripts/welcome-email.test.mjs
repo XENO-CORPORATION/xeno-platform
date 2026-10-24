@@ -246,7 +246,7 @@ test('the welcome email contains a checklist, a CTA and a working unsubscribe li
 
     const rest = p.slice(mount.length) || '/';
     const routerFile = serverSrc.match(
-      new RegExp(`import\\s+(\\w+)\\s+from\\s+'([^']*routes/[^']+)';[\\s\\S]*?app\\.use\\(\\s*['"]${mount.replace(/[/]/g, '\\/')}['"][^)]*\\1`),
+      new RegExp(`import\\s+(\\w+)\\s+from\\s+'([^']*routes/[^']+)';[\\s\\S]*?app\\.use\\(\\s*['"]${mount.replace(/[/]/g, '\\/')}['"][^)]*\\b\\1\\b`),   // whole word: mailRoutes is inside emailRoutes
     );
     assert.ok(routerFile, `could not resolve which router serves ${mount}`);
     const routerSrc = readFileSync(new URL(`../src/server/${routerFile[2].replace(/^\.\//, '')}`, import.meta.url), 'utf8');

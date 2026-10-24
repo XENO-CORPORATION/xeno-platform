@@ -263,7 +263,10 @@ async function main() {
     for (const secret of ['password_hash', 'key_hash', 'token_hash', stored.key_hash, made.secret, 'mallory-secret-text', 'mallory-file-bytes', 'Mallory private plans', 'mallory@xeno.test']) {
       assert.equal(whole.includes(secret), false, `the copy must not contain ${secret.slice(0, 24)}`);
     }
-    assert.ok(/data_export_requested/.test(JSON.stringify(await events(ada))) && /data_export_downloaded/.test(JSON.stringify(await events(ada))));
+    // the download's audit event is written after the response (recordSecurityEvent is not awaited there): wait for it
+    let both = false;
+    for (let i = 0; i < 50 && !both; i++) { const ev = JSON.stringify(await events(ada)); both = /data_export_requested/.test(ev) && /data_export_downloaded/.test(ev); if (!both) await new Promise((r) => setTimeout(r, 40)); }
+    assert.ok(both, 'both export events are recorded');
 
     // a day's limit, removal, and the sweep
     await call('POST', '/exports', A);

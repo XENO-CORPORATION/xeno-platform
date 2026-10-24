@@ -46,9 +46,11 @@ test('the seed writes both rows with their own redirects, authority and loopback
   }
 });
 
-test('workshop authority is identity + credits + gateway inference, and nothing more', () => {
+// storage:read/write since a350d19b: the Workshop's project files live in XENO Storage, reached only through
+// /api/storage/projects/xeno-workshop/* (reviewed with the Storage session, 2026-10-23)
+test('workshop authority is identity + credits + gateway inference + its own project storage, and nothing more', () => {
   for (const id of ['xeno-workshop', 'xeno-workshop-local']) {
-    assert.deepEqual(scopesForClient(id), ['openid', 'profile', 'email', 'inference:run', 'ledger:read', 'ledger:spend']);
+    assert.deepEqual(scopesForClient(id), ['openid', 'profile', 'email', 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write']);
   }
 });
 

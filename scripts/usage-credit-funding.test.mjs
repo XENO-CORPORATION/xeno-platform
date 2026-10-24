@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { allocateFunding, consumeFunding, saveHoldFunding, readHoldFunding } from '../src/server/utils/usageCreditFunding.js';
 
-function fixture({ enabled, lots = [], legacy = '0' } = {}) {
+function fixture({ enabled, lots = [], legacy = '0', owner = 'user' } = {}) {
   const stored = [];
   const taken = [];
   return { stored, taken, async query(sql, p=[]) {
     if (sql.startsWith('SELECT enabled')) return { rows: enabled === undefined ? [] : [{enabled}] };
+    // whose wallet it is: a person's here (a workspace wallet is always spendable, usageCreditFunding.js)
+    if (sql.startsWith('SELECT owner_kind FROM credit_accounts')) return { rows: [{ owner_kind: owner }] };
     if (sql.startsWith('SELECT to_regclass')) return { rows: [{ relation: null }] };
     if (sql.startsWith('SELECT g.id')) {
       assert.match(sql,/h.state='held'/);
@@ -25,6 +27,11 @@ function fixture({ enabled, lots = [], legacy = '0' } = {}) {
 const lots = [{id:'a',kind:'allowance',available:'100'},{id:'promo',kind:'promo',available:'50'},{id:'paid',kind:'paid',available:'1000'}];
 test('absent preference is OFF despite a funded paid balance',async()=>{
   await assert.rejects(()=>allocateFunding(fixture({lots}), 'u',101),e=>e.code==='QUOTA_EXCEEDED' && !!e.resetsAt);
+});
+test('a WORKSPACE wallet spends its credits with no consent row: there is no plan allowance and no person to ask',async()=>{
+  const ws=[{id:'paid',kind:'paid',available:'1000'}];
+  assert.deepEqual(await allocateFunding(fixture({lots:ws,owner:'workspace'}),'w',300),[{grantId:'paid',amountMicro:'300'}]);
+  await assert.rejects(()=>allocateFunding(fixture({lots:ws}),'u',300),{code:'QUOTA_EXCEEDED'});
 });
 test('explicit OFF uses allowance but never overflows',async()=>{
   const f=fixture({enabled:false,lots});

@@ -131,6 +131,8 @@ try {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     return document.getElementById('root');
   };
+  // wait for what a check reads, not a guessed delay: under a loaded machine 20 ms was not enough (flaked in the gate chain)
+  const until = async (fn, ms = 3000) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < ms) await act(async () => { await new Promise((r) => setTimeout(r, 20)); }); return fn(); };
 
   /*
    * The state the legacy box drew, and the state it drew it in most often (2026-09-19): a turn that
@@ -152,7 +154,11 @@ try {
 
   const liveRecord = applyTurnEvent(newTurnRecord(Date.now() - 4000), { type: 'search_start', query: 'xeno hub launcher' }, Date.now() - 1000);
   const openingEl = await render({ messageId: 'p1', streaming: true, replyStarted: false, stepsMode: 'expanded', turn: newTurnRecord(Date.now() - 3000) });
-  check('an opening turn shows the canonical clock line ("Working for …") — the chat\'s own spinner is gone', /Working for/.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'));
+  // the canonical clock line says "Working for …" and, past 30 s, "Still working · …" (agent-conversation Transcript):
+  // a loaded machine crossed that line, so the check accepts both wordings of the same line
+  const CLOCK = /Working for|Still working/;
+  await until(() => CLOCK.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'));
+  check('an opening turn shows the canonical clock line ("Working for …") — the chat\'s own spinner is gone', CLOCK.test(openingEl.textContent) && openingEl.querySelector('.xa-transcript'), openingEl.textContent.slice(0, 200) + ' | transcript: ' + !!openingEl.querySelector('.xa-transcript'));
 
   const liveExpanded = await render({ messageId: 'p2', streaming: true, replyStarted: false, stepsMode: 'expanded', turn: liveRecord });
   check('expanded: a live search is drawn on the rail with its query', /Searching the web/.test(liveExpanded.textContent) && /xeno hub launcher/.test(liveExpanded.textContent));

@@ -122,8 +122,8 @@ function content(value) {
   if (Object.hasOwn(input, 'persona') && input.persona !== null) {
     const pr = record(input.persona, ['role', 'body'], 'persona');
     const role = Object.hasOwn(pr, 'role') ? pr.role : '', body = Object.hasOwn(pr, 'body') ? pr.body : '';
-    if (typeof role !== 'string' || role.includes(' ') || role.length > 200) fail('bad_input', 'invalid_persona');
-    if (typeof body !== 'string' || body.includes(' ') || Buffer.byteLength(body, 'utf8') > 32768) fail('bad_input', 'invalid_persona');
+    if (typeof role !== 'string' || role.includes('\0') || role.length > 200) fail('bad_input', 'invalid_persona');
+    if (typeof body !== 'string' || body.includes('\0') || Buffer.byteLength(body, 'utf8') > 32768) fail('bad_input', 'invalid_persona');
     if (role.trim() || body.trim()) persona = { role: role.trim(), body: body.trim() };
   }
   return { instructions, ...(persona ? { persona } : {}), skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) };

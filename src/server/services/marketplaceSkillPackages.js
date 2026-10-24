@@ -31,7 +31,7 @@ const personOnly = (me) => { if (!me || me.kind !== 'human') throw new SkillPack
 /** The package a `skill` version sells: exactly the allowlisted shape marketplace_skill_package_valid() checks. */
 export function buildPackage(skill) {
   return { format: SKILL_PACKAGE_FORMAT, schemaVersion: 1, name: skill.name, description: skill.description,
-    files: skill.files.map((f) => ({ path: f.path, content: f.content })) };
+    files: skill.files.map((f) => (skills.isBinary(f) ? { path: f.path, sha256: f.sha256, bytes: f.bytes } : { path: f.path, content: f.content })) };
 }
 
 export async function exportSkillPackage(db, me, { listing, skillId, version, releaseNotes = null }) {
@@ -41,7 +41,7 @@ export async function exportSkillPackage(db, me, { listing, skillId, version, re
   try { s = await skills.get(db, me, skillId, { version: version || undefined }); }
   catch (e) { if (e instanceof skills.SkillError) throw new SkillPackageError(e.message, e.code, e.status); throw e; }
   if (!s.canEdit) throw new SkillPackageError('Only someone who can change this skill publishes it', 'not_allowed', 403);
-  const files = s.files.map((f) => ({ path: f.path, content: f.content }));
+  const files = s.files.map((f) => (skills.isBinary(f) ? { path: f.path, sha256: f.sha256, bytes: f.bytes } : { path: f.path, content: f.content }));
   try { skills.assertSafe(files); } catch (e) { if (e instanceof skills.SkillError) throw new SkillPackageError(e.message, e.code, e.status, e.details); throw e; }
   const pkg = buildPackage({ ...s, files });
   const hash = skills.hashOf(files);

@@ -369,6 +369,13 @@ export are mind.xeno through Anima's parser and injection scanner (`services/age
 persona composer or format. Skills (`skills.js`) and their Marketplace listings (`marketplaceSkillPackages.js`, kind `skill`) are
 immutable, hashed, pinned and never auto-updated; storage is moving into XENO Corpus per the record's §7 4a — follow
 Corpus's record and digest, never invent a third skills model.
+- **Corpus's code is vendored, never copied:** `src/server/vendor/xeno-corpus/` (`corpus-skill-format.mjs` = digest and
+  records, `corpus-secret-rules.mjs` = THE skill secret gate), byte-identical, pinned in `SOURCE.json`, gated by
+  `npm run test:corpus-skill-format-vendor`. Change xeno-corpus, then `--sync --commit <sha> --confirm`.
+- **A skill file's bytes never change:** text inline (BOM/CRLF kept), anything else in `skill_objects` by its digest.
+  Never decode an upload "to be safe" — that is what made binary skills impossible and digests disagree with Corpus.
+- **`npm run test:skills-corpus-import`** with `XENO_CORPUS_STORE=<corpus>/skills` imports a real store read-only and
+  fails if the platform ever disagrees with Corpus about a digest.
 
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 

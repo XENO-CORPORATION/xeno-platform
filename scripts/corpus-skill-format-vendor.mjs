@@ -24,14 +24,15 @@ import { execFileSync } from 'node:child_process';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDOR = join(ROOT, 'src/server/vendor/xeno-corpus');
 const MANIFEST = join(VENDOR, 'SOURCE.json');
-const FILE = 'corpus-skill-format.mjs';
+// every vendored Corpus file: the format (D240) and the secret-gate rules (D236). Each is pinned on its own.
+const FILES = ['corpus-skill-format.mjs', 'corpus-secret-rules.mjs'];
 
 const lf = (buf) => Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
 export const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 export const gitBlob = (buf) => createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${buf.length}\0`), buf])).digest('hex');
 
 /** Pure: problems with these bytes against the pinned record. */
-export function problemsOf(bytes, pin) {
+export function problemsOf(bytes, pin, FILE = FILES[0]) {
   const b = lf(bytes), out = [];
   if (sha256(b) !== pin.sha256) out.push(`${FILE}: sha256 ${sha256(b)} is not the pinned ${pin.sha256} — edit xeno-corpus, never the vendored copy`);
   if (gitBlob(b) !== pin.blob) out.push(`${FILE}: git blob ${gitBlob(b)} is not the pinned ${pin.blob}`);
@@ -44,18 +45,21 @@ export function problemsOf(bytes, pin) {
 
 function check() {
   const m = JSON.parse(readFileSync(MANIFEST, 'utf8'));
-  const p = join(VENDOR, FILE);
-  if (!existsSync(p)) return [`${FILE} is missing`];
-  return problemsOf(readFileSync(p), m.files[FILE]);
+  return FILES.flatMap((FILE) => {
+    const p = join(VENDOR, FILE);
+    if (!existsSync(p)) return [`${FILE} is missing`];
+    if (!m.files[FILE]) return [`${FILE} has no pin in SOURCE.json`];
+    return problemsOf(readFileSync(p), m.files[FILE], FILE);
+  });
 }
 
 function findCorpus() {
   if (process.env.XENO_CORPUS_DIR) return process.env.XENO_CORPUS_DIR;
-  for (let d = ROOT; ; d = dirname(d)) { const c = join(d, 'xeno-corpus'); if (existsSync(join(c, FILE))) return c; if (dirname(d) === d) return null; }
+  for (let d = ROOT; ; d = dirname(d)) { const c = join(d, 'xeno-corpus'); if (existsSync(join(c, FILES[0]))) return c; if (dirname(d) === d) return null; }
 }
 
 function selfTest() {
-  const bytes = readFileSync(join(VENDOR, FILE)), pin = JSON.parse(readFileSync(MANIFEST, 'utf8')).files[FILE];
+  const FILE = FILES[0], bytes = readFileSync(join(VENDOR, FILE)), pin = JSON.parse(readFileSync(MANIFEST, 'utf8')).files[FILE];
   const cases = [
     ['a changed byte', Buffer.concat([bytes, Buffer.from('\n')])],
     ['an fs import', Buffer.from(bytes.toString('utf8').replace('import { createHash } from "node:crypto";', 'import { createHash } from "node:crypto";\nimport fs from "node:fs";'))],
@@ -63,6 +67,9 @@ function selfTest() {
   let ok = problemsOf(bytes, pin).length === 0;
   console.log(ok ? 'ok   the vendored file passes' : 'FAIL the vendored file does not pass');
   for (const [name, b] of cases) { const caught = problemsOf(b, pin).length > 0; console.log(`${caught ? 'ok  ' : 'FAIL'} ${name} is caught`); ok = ok && caught; }
+  const rules = readFileSync(join(VENDOR, FILES[1])), rpin = JSON.parse(readFileSync(MANIFEST, 'utf8')).files[FILES[1]];
+  const r1 = problemsOf(rules, rpin, FILES[1]).length === 0, r2 = problemsOf(Buffer.concat([rules, Buffer.from('//x\n')]), rpin, FILES[1]).length > 0;
+  console.log(`${r1 && r2 ? 'ok  ' : 'FAIL'} the secret rules pass, and a changed byte in them is caught`); ok = ok && r1 && r2;
   const pure = problemsOf(Buffer.from('import x from "node:fs";\n'), { sha256: 'x', blob: 'x' }).some((s) => /only node:crypto/.test(s));
   console.log(`${pure ? 'ok  ' : 'FAIL'} a non-crypto import is named`); ok = ok && pure;
   process.exit(ok ? 0 : 1);
@@ -73,18 +80,17 @@ if (args.includes('--self-test')) selfTest();
 else if (args.includes('--sync')) {
   const dir = findCorpus(); const ci = args.indexOf('--commit'); const commit = ci >= 0 ? args[ci + 1] : null;
   if (!dir || !commit) { console.error('--sync needs a xeno-corpus checkout (XENO_CORPUS_DIR) and --commit <sha>'); process.exit(2); }
-  const bytes = lf(execFileSync('git', ['-C', dir, 'show', `${commit}:${FILE}`]));
-  const pin = { blob: gitBlob(bytes), sha256: sha256(bytes) };
-  const bad = problemsOf(bytes, pin);
+  const got = FILES.map((FILE) => { const bytes = lf(execFileSync('git', ['-C', dir, 'show', `${commit}:${FILE}`])); return { FILE, bytes, pin: { blob: gitBlob(bytes), sha256: sha256(bytes) } }; });
+  const bad = got.flatMap((g) => problemsOf(g.bytes, g.pin, g.FILE));
   if (bad.length) { console.error(bad.join('\n')); process.exit(1); }
-  console.log(`${FILE} @ ${commit}: blob ${pin.blob}, sha256 ${pin.sha256}`);
+  for (const g of got) console.log(`${g.FILE} @ ${commit}: blob ${g.pin.blob}, sha256 ${g.pin.sha256}`);
   if (!args.includes('--confirm')) { console.log('DRY-RUN: pass --confirm to write it'); process.exit(0); }
-  writeFileSync(join(VENDOR, FILE), bytes);
-  const m = JSON.parse(readFileSync(MANIFEST, 'utf8')); m.commit = execFileSync('git', ['-C', dir, 'rev-parse', commit]).toString().trim(); m.files[FILE] = pin;
+  for (const g of got) writeFileSync(join(VENDOR, g.FILE), g.bytes);
+  const m = JSON.parse(readFileSync(MANIFEST, 'utf8')); m.commit = execFileSync('git', ['-C', dir, 'rev-parse', commit]).toString().trim(); for (const g of got) m.files[g.FILE] = g.pin;
   writeFileSync(MANIFEST, JSON.stringify(m, null, 2) + '\n');
   console.log('written');
 } else {
   const bad = check();
   if (bad.length) { console.error(bad.join('\n')); process.exit(1); }
-  console.log(`corpus-skill-format: vendored byte-identical (${JSON.parse(readFileSync(MANIFEST, 'utf8')).commit.slice(0, 7)})`);
+  console.log(`corpus-skill-format + corpus-secret-rules: vendored byte-identical (${JSON.parse(readFileSync(MANIFEST, 'utf8')).commit.slice(0, 7)})`);
 }

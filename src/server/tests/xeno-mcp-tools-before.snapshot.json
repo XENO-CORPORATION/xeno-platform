@@ -718,7 +718,7 @@
   {
    "name": "agents_whoami",
    "title": "Agents: Who am I",
-   "description": "Your own identity on XENO: your agt_ id, name, owning workspace and division, the person who owns you, the projects you can see, and your division’s agent budget (null when it has none). Takes no arguments.",
+   "description": "Your own identity on XENO: your agt_ id, name, who you are (your persona — follow it in everything you do), owning workspace and division, the person who owns you, the projects you can see, and your division’s agent budget (null when it has none). Takes no arguments.",
    "inputSchema": {
     "type": "object",
     "properties": {},

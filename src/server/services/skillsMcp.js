@@ -5,11 +5,13 @@
  * to the agent's current version, at the exact version and hash pinned — never another person's library, never a
  * newer version nobody accepted. Read-only: making and changing skills is a person's (skills.js).
  */
-import { forAgent } from './skills.js';
+import { forAgent, isBinary, bytesOf } from './skills.js';
 
 export class SkillsMcpError extends Error { constructor(message, code) { super(message); this.name = 'SkillsMcpError'; this.code = code; } }
 
 const ok = (data) => ({ content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }], structuredContent: typeof data === 'string' ? { text: data } : data });
+
+const IMAGE = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
 
 export const TOOLS = [
   {
@@ -37,6 +39,15 @@ export async function callTool(db, actor, name, args = {}) {
     const path = String(args.path || 'SKILL.md');
     const f = s.files.find((x) => x.path === path);
     if (!f) throw new SkillsMcpError(`${s.name} has no file ${path}. Its files: ${s.files.map((x) => x.path).join(', ')}`, 'file_not_found');
+    if (isBinary(f)) {
+      // an image is shown to the agent as an image; any other binary file is described, never dumped as text
+      const mime = IMAGE[((path.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase()];
+      if (mime && f.bytes <= 1024 * 1024) {
+        const { bytes } = await bytesOf(db, f);
+        return { content: [{ type: 'text', text: `# ${s.name} ${s.version} — ${path}` }, { type: 'image', data: Buffer.from(bytes).toString('base64'), mimeType: mime }], structuredContent: { path, sha256: f.sha256, bytes: f.bytes, mimeType: mime } };
+      }
+      return ok({ path, binary: true, bytes: f.bytes, sha256: f.sha256, note: 'A binary file; its bytes are not text.' });
+    }
     return ok(`# ${s.name} ${s.version} — ${path}\n\n${f.content}`);
   }
   throw new SkillsMcpError(`Unknown tool ${name}`, 'unknown_tool');
