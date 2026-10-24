@@ -59,7 +59,7 @@
     "uuid": "^14.0.2",
     "ws": "^8.14.0",
     "xeno-ai": "^0.1.1",
-    "xeno-research": "file:vendor/xeno-research-0.1.0-d8f158a.tgz"
+    "xeno-research": "file:vendor/xeno-research-0.1.0-e6df130.tgz"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
