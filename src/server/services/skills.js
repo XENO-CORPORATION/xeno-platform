@@ -13,10 +13,11 @@
  *     text through `skills_get` when it decides to use one.
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { scanForInjection, blockingFindings, formatFinding } from '@xenosystem/anima-mind';
+import { scanForInjection, blockingFindings } from '@xenosystem/anima-mind';
 import { check } from '../utils/authzReBAC.js';
 import { bundleDigestOf, fileEntry, sha256Of, sidecarProblems, revisionProblems, verifyBundle, describeBlock, reviewField, detectBundles, MAX_BUNDLE_FILES, MAX_BUNDLE_BYTES } from '../vendor/xeno-corpus/corpus-skill-format.mjs';
 import { scanBytes, PER_FILE_RULE_CAP } from '../vendor/xeno-corpus/corpus-secret-rules.mjs';
+import { scanFileBytes } from '../vendor/xeno-corpus/corpus-skill-risk.mjs';
 
 export class SkillError extends Error { constructor(message, code, status = 400, details) { super(message); this.name = 'SkillError'; this.code = code; this.status = status; this.details = details; } }
 
@@ -122,44 +123,76 @@ export const bundleDigestOf_ = (files) => bundleDigestOf(files.map((f) => (isBin
 // Instructions an agent reads as prose. A take-over attempt in one of these refuses the skill; the same pattern in a
 // script, a lockfile or data is listed for a person to read instead (a lockfile is full of URLs; that is not exfiltration).
 const INSTRUCTIONS = /(^|\/)[^/.]+$|\.(md|mdx|markdown|txt|rst)$/i;
+/** What a finding means, in words a person reads before deciding (the rule ids are Corpus's and Anima's). */
+const WORDS = {
+  'fetch-from-ip-or-paste-into-shell': 'downloads code from a bare address or a paste site and runs it',
+  'decoded-into-shell': 'decodes hidden code and runs it',
+  'reverse-shell': 'opens a remote shell to another machine',
+  'crypto-miner': 'runs a cryptocurrency miner',
+  'fake-password-prompt': 'asks for your password in a fake dialog',
+  'invisible-tag-characters': 'hides instructions in invisible characters',
+  'reads-credentials-and-sends': 'reads stored credentials and sends them out',
+  'fetch-into-shell': 'downloads code and runs it',
+  'reads-credential-store': 'reads stored credentials (keys, cookies, a keychain)',
+  'starts-at-login': 'makes something start on its own at login',
+  'disables-protection': 'switches off a malware or app-safety protection',
+  'trojan-source-bidi': 'contains text that reads differently from how it runs',
+  'ships-a-program': 'includes a program nobody can read',
+  'ships-an-archive': 'includes an archive with more files inside',
+  'bare-ip-url': 'talks to a bare internet address',
+  'zero-width-characters': 'contains invisible characters',
+  'large-encoded-blob': 'contains a large encoded blob',
+  'makes-executable': 'makes a file executable',
+};
+const says = (x) => (x.check === 'secret' ? `secret-shaped material (${x.rule})` : x.check === 'instructions' ? `instructions that try to steer the agent (${x.rule})` : WORDS[x.rule] || x.rule);
+const where = (x) => `${x.file}${x.line ? ':' + x.line : ''}`;
+
 /**
- * The secret gate is XENO Corpus's (D236, vendored corpus-secret-rules.mjs — the same rules the local store applies):
- * every file's BYTES are scanned, a binary one as the text runs inside it. Any block-level finding refuses the whole
- * skill, worded with Corpus's describeBlock (rule and place, never the value). Review-level findings and take-over
- * patterns outside instruction files are returned, capped, to be kept with the version for a person to read.
- * `objects` holds the bytes of binary files new in this version; a reused one was scanned when it was first stored.
- * Take-over patterns work like GitHub's push protection: a "high" one refuses the skill until the PERSON has read it
- * and chosen to save it anyway (`acknowledge: true`, sent only by a person's own request — never by an agent); it is then
- * kept with the version, marked as acknowledged. A "dangerous" one (always-approve, auto-confirm, a secret sent to an
- * endpoint…) refuses whatever anyone says. A secret's block level refuses always: there is no saving a credential.
+ * Every check a skill gets before it is saved, as one report — nothing is stored and nothing is run:
+ *   secret        XENO Corpus's secret gate (D236, vendored corpus-secret-rules.mjs) over every file's bytes
+ *   instructions  Anima's take-over scanner over every text file (only instruction files can refuse)
+ *   code          XENO Corpus's malicious-skill rules (vendored corpus-skill-risk.mjs): what the files would DO —
+ *                 download-and-run, reverse shells, credential theft, miners, programs and archives, hidden text
+ * Each finding is { check, level: block | confirm | review, file, line, rule, says } — never the matched text.
+ * `objects` holds the bytes of binary files new in this version; a reused one was checked when it was first stored.
  */
-function assertSafe(allFiles, objects = new Map(), { acknowledge = false } = {}) {
-  const findings = [];
+export function inspect(allFiles, objects = new Map()) {
+  const out = [];
+  const push = (x) => out.push({ ...x, says: says(x) });
   for (const f of allFiles) {
     const buf = isBinary(f) ? objects.get(f.sha256) : Buffer.from(f.content, 'utf8');
     if (!buf) continue;
     const perRule = new Map();
-    for (const x of scanBytes(buf)) { const n = (perRule.get(x.rule) || 0) + 1; perRule.set(x.rule, n); if (n <= PER_FILE_RULE_CAP) findings.push({ file: f.path, ...x }); }
-  }
-  const block = findings.filter((x) => x.severity === 'block');
-  if (block.length) throw new SkillError(`This skill was not saved: it contains ${describeBlock(block)}. A skill is read by every agent that uses it.`, 'skill_has_secret', 422, block.slice(0, 20).map((x) => ({ file: x.file, line: x.line, rule: x.rule })));
-  const review = findings.filter((x) => x.severity === 'review');
-  const blocking = [];
-  for (const f of allFiles) {
-    if (isBinary(f)) continue;
-    for (const x of blockingFindings(scanForInjection(f.content, { source: f.path }))) {
-      if (INSTRUCTIONS.test(f.path) && (!acknowledge || x.severity === 'dangerous')) blocking.push(x);
-      else review.push({ file: f.path, line: x.line || 0, rule: `instructions:${x.rule || x.id || 'pattern'}`, severity: 'review', ...(INSTRUCTIONS.test(f.path) ? { acknowledged: true } : {}) });
+    for (const x of scanBytes(buf)) { const n = (perRule.get(x.rule) || 0) + 1; perRule.set(x.rule, n); if (n <= PER_FILE_RULE_CAP) push({ check: 'secret', level: x.severity === 'block' ? 'block' : 'review', file: f.path, line: x.line, rule: x.rule }); }
+    for (const x of scanFileBytes(f.path, buf)) push({ check: 'code', level: x.severity, file: f.path, line: x.line, rule: x.rule, category: x.category });
+    if (!isBinary(f)) {
+      for (const x of blockingFindings(scanForInjection(f.content, { source: f.path }))) {
+        const level = INSTRUCTIONS.test(f.path) ? (x.severity === 'dangerous' ? 'block' : 'confirm') : 'review';
+        push({ check: 'instructions', level, file: f.path, line: x.line || 0, rule: x.rule || x.id || 'pattern' });
+      }
     }
   }
-  if (blocking.length) {
-    const dangerous = blocking.some((b) => b.severity === 'dangerous');
-    throw new SkillError(`This skill contains instructions that try to take over the agent using it (${[...new Set(blocking.map((b) => b.source))].join(', ')})${dangerous ? '' : '. Read them; if they are what you meant, save it anyway.'}`, 'skill_unsafe', 422, { findings: blocking.slice(0, 10).map(formatFinding), canAcknowledge: !dangerous });
-  }
-  const r = reviewField({ review });
-  // Corpus's record keeps file, line and rule; a finding the person chose to save anyway also says so
-  if (r.review) r.review = r.review.map((x, i) => (review[i].acknowledged ? { ...x, acknowledged: true } : x));
-  return r.review ? r : null;
+  return { block: out.filter((x) => x.level === 'block'), confirm: out.filter((x) => x.level === 'confirm'), review: out.filter((x) => x.level === 'review') };
+}
+
+/**
+ * The gate at save. A secret, or anything at block level, refuses the whole skill whatever anyone says. A confirm-level
+ * finding refuses until the PERSON has read it and saved anyway (`acknowledge: true`, sent only by a person's own
+ * request — GitHub push protection's model); it is then kept with the version, marked acknowledged. Review-level
+ * findings are kept with the version (Corpus's reviewField shape) for whoever reads or installs the skill.
+ */
+function assertSafe(allFiles, objects = new Map(), { acknowledge = false } = {}) {
+  const r = inspect(allFiles, objects);
+  const secrets = r.block.filter((x) => x.check === 'secret');
+  if (secrets.length) throw new SkillError(`This skill was not saved: it contains ${describeBlock(secrets)}. A skill is read by every agent that uses it.`, 'skill_has_secret', 422, secrets.slice(0, 20).map((x) => ({ file: x.file, line: x.line, rule: x.rule })));
+  const list = (xs) => xs.slice(0, 12).map((x) => `${where(x)} — ${x.says}`);
+  if (r.block.length) throw new SkillError(`This skill was not saved: it ${r.block[0].says} (${where(r.block[0])})${r.block.length > 1 ? ` and ${r.block.length - 1} more` : ''}. No one can save a skill that does this.`, 'skill_unsafe', 422, { findings: list(r.block), items: r.block.slice(0, 20), canAcknowledge: false });
+  if (r.confirm.length && !acknowledge) throw new SkillError(`Read this before saving: the skill ${r.confirm[0].says} (${where(r.confirm[0])})${r.confirm.length > 1 ? ` and ${r.confirm.length - 1} more` : ''}. If that is what you meant, save it anyway.`, 'skill_unsafe', 422, { findings: list(r.confirm), items: r.confirm.slice(0, 20), canAcknowledge: true });
+  const kept = [...r.confirm.map((x) => ({ ...x, acknowledged: true })), ...r.review];
+  const f = reviewField({ review: kept });
+  // Corpus's record keeps file, line and rule; ours also says which check, what it means, and whether a person said yes
+  if (f.review) f.review = f.review.map((x, i) => ({ ...x, check: kept[i].check, says: kept[i].says, ...(kept[i].acknowledged ? { acknowledged: true } : {}) }));
+  return f.review ? f : null;
 }
 
 /** Files that can run as code: shown to a person before they install or pin the skill. Never executed here. */
@@ -473,6 +506,17 @@ export async function importFromCorpus(db, me, { name, sidecar, revisions = null
     if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${rename || meta.name} here. Import it under another name.`, 'skill_name_taken', 409);
     throw e;
   }
+}
+
+/** Before saving: every check a skill would get, run on its files, with nothing stored. Same input as create. */
+export async function preflight(db, me, { files } = {}) {
+  humanOnly(me);
+  const { files: fs, objects } = await prepareFiles(db, files);
+  const meta = parseSkillMd(fs[0].content);
+  const r = inspect(fs, objects);
+  const level = r.block.length ? 'block' : r.confirm.length ? 'confirm' : r.review.length ? 'review' : 'clean';
+  const strip = (xs) => xs.slice(0, 30).map(({ check: c, level: l, file, line, rule, says: w }) => ({ check: c, level: l, file, line, rule, says: w }));
+  return { name: meta.name, level, block: strip(r.block), confirm: strip(r.confirm), review: strip(r.review), scripts: executablesOf(fs) };
 }
 
 /**

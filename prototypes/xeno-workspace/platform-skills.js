@@ -204,7 +204,8 @@
         <label class="grow"><span>Steps</span><textarea data-xsk-ed="body" spellcheck="false" placeholder="1. Run the ledger tests.&#10;2. Reconcile the totals.&#10;3. Report what changed, how you checked it, what you are unsure of.">${esc(ed.body)}</textarea></label></div>`
       : isBin(sel) ? binPanel(sel, ed)
       : `<div class="xsk-edf"><label><span>Path</span><input data-xsk-path="${esc(sel.path)}" value="${esc(sel.path)}" maxlength="200"></label><label class="grow"><span>Content</span><textarea data-xsk-file="${esc(sel.path)}" spellcheck="false">${esc(sel.content)}</textarea></label></div>`;
-    const side = `<aside class="xsk-side"><section><h3>Checks</h3><ul class="xsk-checks">${cs.map(([k, t]) => `<li class="${k}"><i>${k === 'ok' ? ic('check') : k === 'bad' ? ic('x') : ic('alert')}</i><span>${esc(t)}</span></li>`).join('')}</ul><p class="xsk-hint">XENO checks again when you save: secrets and instructions that try to take over an agent are refused.</p></section>
+    const side = `<aside class="xsk-side"><section><h3>Checks</h3><ul class="xsk-checks">${cs.map(([k, t]) => `<li class="${k}"><i>${k === 'ok' ? ic('check') : k === 'bad' ? ic('x') : ic('alert')}</i><span>${esc(t)}</span></li>`).join('')}</ul>${ed.check ? `<ul class="xsk-checks xsk-server">${ed.check.level === 'clean' ? `<li class="ok"><i>${ic('check')}</i><span>XENO’s checks found nothing</span></li>` : [...ed.check.block.map((x) => ['bad', x]), ...ed.check.confirm.map((x) => ['note', x]), ...ed.check.review.map((x) => ['note', x])].slice(0, 8).map(([k, x]) => `<li class="${k}"><i>${k === 'bad' ? ic('x') : ic('alert')}</i><span>${k === 'bad' ? 'Refused' : x.level === 'confirm' ? 'Needs your yes' : 'Note'}: ${esc(x.says)} <code>${esc(x.file)}${x.line ? ':' + esc(x.line) : ''}</code></span></li>`).join('')}</ul>` : ''}
+      <p class="xsk-hint">XENO checks every file when you save: secrets, instructions that try to take over an agent, and code that downloads and runs things, steals credentials or hides what it does. <button type="button" class="pg-link" data-xsk="ed-check"${S.busy ? ' disabled' : ''}>Check now</button></p></section>
       <section><h3>What an agent sees</h3><p class="xsk-hint">Always, in its brief:</p><pre class="xsk-pre">- ${esc(ed.name || 'name')}: ${esc(ed.description || 'when to use it')}</pre><p class="xsk-hint">When it decides to use it, the steps and, when they mention them, the files.</p></section>
       ${!ed.id && tm ? `<section><h3>Belongs to</h3><div class="pg-seg" role="radiogroup" aria-label="Belongs to"><button role="radio" aria-checked="${ed.where === 'workspace'}" data-xsk="ed-where" data-k="workspace">${esc(tm.name || 'Workspace')}</button><button role="radio" aria-checked="${ed.where !== 'workspace'}" data-xsk="ed-where" data-k="personal">Only me</button></div></section>` : ''}</aside>`;
     return h.page(head + `<div class="xsk-editor">${tree}<div class="xsk-ed-main">${main}</div>${side}</div>`, 'xsk');
@@ -216,6 +217,11 @@
     return `<div class="xsk-edf"><label><span>Path</span><input data-xsk-path="${esc(f.path)}" value="${esc(f.path)}" maxlength="200"></label>
       <div class="xsk-bin">${t ? (src ? `<img src="${esc(src)}" alt="${esc(f.path)}">` : '<div class="xsk-bin-ph" aria-busy="true"></div>') : `<span class="xsk-ic">${ic('doc')}</span>`}
         <p><b>${esc(f.path.split('/').pop())}</b><small>${t ? 'Image' : 'A file that is not text'} · ${esc(kb(sizeOf(f)))}. Its bytes are kept exactly as they are; replace it by dropping a new one here.</small></p></div></div>`;
+  }
+  async function checkEditor() {
+    const ed = S.ed; if (!ed) return;
+    const r = await call('POST', '/api/skills/check', { files: edFiles(ed).map(wire) }, 'It could not be checked.');
+    if (r) { ed.check = r.d; paint(); }
   }
   async function saveEditor() {
     const ed = S.ed; if (!ed) return;
@@ -415,6 +421,27 @@
       it.state = 'ready'; it.msg = 'New';
     }
     paint();
+    // before anything is saved: secrets, instructions that steer an agent, and what the files would DO (XENO Corpus's
+    // malicious-skill rules) — a refusal shows here, a "needs your yes" waits for the person, the rest can go in
+    for (const it of F.items.filter((x) => x.state === 'ready' || x.state === 'changed')) {
+      if (S.found !== F) return;
+      await preflightItem(F, it); paint();
+    }
+  }
+  const verdict = (xs) => xs.slice(0, 2).map((x) => `${x.says} (${x.file}${x.line ? ':' + x.line : ''})`).join('; ') + (xs.length > 2 ? ` and ${xs.length - 2} more` : '');
+  async function preflightItem(F, it) {
+    const pre = it.dir ? it.dir + '/' : '';
+    let r; try { r = await api('POST', '/api/skills/check', { files: await Promise.all(it.files.map(async (rel) => ({ path: rel, base64: b64(await F.at.get(pre + rel).read()) }))) }); } catch { r = { ok: false, d: {} }; }
+    if (!r.ok) { if (r.d && r.d.code === 'skill_has_secret') { it.state = 'refused'; it.msg = why(r, 'It contains a secret.'); } return; }
+    it.check = r.d;
+    if (r.d.level === 'block') { it.state = 'refused'; it.msg = `Refused: it ${verdict(r.d.block)}`; return; }
+    if (r.d.level === 'confirm') {
+      it.wasChanged = it.wasChanged || it.state === 'changed';
+      it.state = 'unsafe'; it.msg = `Needs your yes: it ${verdict(r.d.confirm)}`;
+      it.ack = { d: { code: 'skill_unsafe', details: { canAcknowledge: true, findings: r.d.confirm.map((x) => `${x.file}${x.line ? ':' + x.line : ''} — ${x.says}`) } } };
+      return;
+    }
+    if (r.d.level === 'review') it.msg += ` · ${r.d.review.length} note${r.d.review.length === 1 ? '' : 's'} to read`;
   }
   async function importFound(it, opts = {}) {
     const F = S.found; if (!F) return;
@@ -452,7 +479,7 @@
       : it.state === 'clash' ? `<button type="button" class="pg-link" data-xsk="fd-as" data-k="${esc(it.key)}">Import under another name</button>`
       : it.state === 'unsafe' ? `<button type="button" class="pg-link" data-xsk="fd-ack" data-k="${esc(it.key)}">Read and decide</button>` : '';
     const row = (it) => `<li class="xsk-cp-${it.state === 'done' || it.state === 'same' ? 'done' : it.state}"><b title="${esc(it.dir)}">${esc(it.name || it.dir)}</b><span class="xsk-tool">${esc(TOOL[it.tool] || '')}</span><small>${it.state === 'checking' ? 'Checking…' : it.state === 'importing' ? 'Checking every file…' : esc(it.msg)}</small><span>${act(it)}</span></li>`;
-    return `<section class="xsk-cp" aria-label="Skills found"><div class="xsk-cp-h"><div><b>Found in ${esc(F.label)}</b><small>${F.items.length} skill${F.items.length === 1 ? '' : 's'}${tools.length ? ' from ' + esc(tools.join(', ')) : ''} · ${n(['ready'])} new, ${n(['changed'])} changed, ${n(['same', 'twin'])} already here${F.skipped ? ` · ${F.skipped} folder${F.skipped === 1 ? '' : 's'} without a SKILL.md skipped` : ''}. Each is checked file by file when it is saved; nothing is saved from a skill that fails a check.</small></div>
+    return `<section class="xsk-cp" aria-label="Skills found"><div class="xsk-cp-h"><div><b>Found in ${esc(F.label)}</b><small>${F.items.length} skill${F.items.length === 1 ? '' : 's'}${tools.length ? ' from ' + esc(tools.join(', ')) : ''} · ${n(['ready'])} new, ${n(['changed'])} changed, ${n(['same', 'twin'])} already here${n(['unsafe']) ? `, ${n(['unsafe'])} need${n(['unsafe']) === 1 ? 's' : ''} your yes` : ''}${n(['refused']) ? `, ${n(['refused'])} refused` : ''}${F.skipped ? ` · ${F.skipped} folder${F.skipped === 1 ? '' : 's'} without a SKILL.md skipped` : ''}. Each is checked file by file when it is saved; nothing is saved from a skill that fails a check.</small></div>
       <div class="xsk-acts">${h.btn('Close', 'data-xsk="fd-close"', true)}<button type="button" class="pg-btn" data-xsk="fd-all"${F.running || !n(['ready', 'changed']) ? ' disabled' : ''}>${F.running ? 'Importing…' : `Import ${n(['ready', 'changed'])}`}</button></div></div><ul class="xsk-cp-list xsk-fd">${F.items.map(row).join('')}</ul></section>`;
   }
 
@@ -574,6 +601,7 @@
     if (a === 'approve') return decide(b.dataset.id, true);
     if (a === 'reject') return decide(b.dataset.id, false);
     if (a === 'ed-save') return saveEditor();
+    if (a === 'ed-check') return checkEditor();
     if (a === 'ed-addfile') return addFile();
     if (a === 'ed-sel') { S.ed.sel = b.dataset.p; return paint(); }
     if (a === 'ed-rm') { S.ed.files = S.ed.files.filter((f) => f.path !== b.dataset.p); S.ed.sel = 'SKILL.md'; return paint(); }

@@ -142,6 +142,23 @@ their instructions alone. A Marketplace skill listing can be unlisted without br
      reads the findings), 0 disagreements, re-import adds nothing; 36 variants wait on D240; 17 refused for dangerous
      take-over patterns, 3 for more than 64 files, 1 for a file over the size cap, 5 for a description the Agent Skills
      standard does not allow (over 1,024 characters).
+   ✅ **Any folder + malicious-skill checks (2026-10-24):**
+   - *Any folder.* Workspace › Skills › Import › A folder (or a .zip) takes one skill, a tool's skills (`~/.claude/skills`,
+     `~/.codex/skills`, `~/.gemini/config/skills`, `.agents/skills`, plugins), a whole home folder or repository, or a
+     Corpus store. What is in it is decided by Corpus's `detectBundles` (vendored, `corpus-skill-format.mjs` at
+     `b298a97`; surveySkills uses the same rules and limits) on the server: `POST /api/skills/detect` takes paths,
+     sizes and each SKILL.md's text. `POST /api/skills/match` says, from file SHA-256s and Corpus's digest code, which
+     are new, already here byte for byte, a changed version, or a name clash; the same skill in two tools is shown once.
+     A skill records the tool it came from, never a path on the person's machine. Limits are Corpus's (500 files,
+     32 MiB; migration `20261031120000`). Proof: on this machine's real folders, 328 skills are found exactly as
+     surveySkills finds them, and all 282 that save carry Corpus's exact digest.
+   - *Malicious skills.* One report before anything is saved (`inspect`, `POST /api/skills/check`): Corpus's secret
+     gate, Anima's take-over scanner, and Corpus's malicious-skill rules (`corpus-skill-risk.mjs`): download-and-run
+     (incl. the ClawHub "prerequisite" pattern in prose), decoded payloads, reverse shells, credential theft, miners,
+     fake password prompts, hidden characters, bundled programs and archives. **block** refuses whatever anyone says;
+     **confirm** refuses until the person reads it and says yes (kept as acknowledged); **review** is kept with the
+     version. The import list shows each skill's verdict before Import; the editor has Check now. Calibrated on 29
+     attack/legit cases (all correct) and the 323 real skills here (0 blocks; confirm on 4).
 5. **Knowledge** — attach Corpus scopes on the Identity tab.
 
 ## 8. What would make us revisit

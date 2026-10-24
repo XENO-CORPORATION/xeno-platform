@@ -207,15 +207,19 @@ export function detectBundles(entries) {
   }
 
   const dirsWithSkill = new Set(files.filter((f) => baseOf(f.rel) === "SKILL.md" && !hasSkipped(f.rel) && !f.link).map((f) => parentOf(f.rel)));
-  if (dirsWithSkill.has("")) {
+  // A browser folder pick prefixes every path with the picked folder's own name; when every entry
+  // shares one top segment, THAT folder is the picked one (so a renamed `my-skills` behaves like `skills`).
+  const tops = new Set(files.map((f) => (f.rel.includes("/") ? f.rel.slice(0, f.rel.indexOf("/")) : "")));
+  const picked = tops.size === 1 && !tops.has("") ? [...tops][0] : "";
+  if (dirsWithSkill.has(picked)) {
     out.layout = "single-bundle";
-    out.roots.push({ dir: "", tool: "unknown" });
-    out.bundles.push(bundleOf(files, "", "", null, "unknown"));
+    out.roots.push({ dir: picked, tool: "unknown" });
+    out.bundles.push(bundleOf(files, picked, picked, null, "unknown"));
     return out;
   }
-  const dirs = new Set([""]);
-  for (const f of files) { let d = parentOf(f.rel); while (d) { dirs.add(d); d = parentOf(d); } }
-  const roots = [...dirs].filter((d) => d === "" || (baseOf(d) === "skills" && !hasSkipped(d))).sort((a, b) => a.length - b.length);
+  const dirs = new Set([picked]);
+  for (const f of files) { let d = parentOf(f.rel); while (d && d !== picked) { dirs.add(d); d = parentOf(d); } }
+  const roots = [...dirs].filter((d) => d === picked || (baseOf(d) === "skills" && !hasSkipped(d))).sort((a, b) => a.length - b.length);
   const taken = [];
   for (const root of roots) {
     if (taken.some((b) => isUnder(root, b))) continue;
@@ -230,7 +234,7 @@ export function detectBundles(entries) {
         if (dirsWithSkill.has(sub) && !taken.some((b) => isUnder(sub, b))) { out.bundles.push(bundleOf(files, sub, root, baseOf(child), tool)); taken.push(sub); nested++; }
       }
       found += nested;
-      if (!nested && root !== "") out.skipped.push({ dir: child, reason: "not-a-bundle: no SKILL.md" });
+      if (!nested && root !== picked) out.skipped.push({ dir: child, reason: "not-a-bundle: no SKILL.md" });
     }
     if (found) out.roots.push({ dir: root, tool });
   }

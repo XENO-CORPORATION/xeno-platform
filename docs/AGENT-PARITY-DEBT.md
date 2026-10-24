@@ -4,12 +4,12 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1807 actions · 196 agent capability · 1306 planned (debt) · 305 excluded · **coverage 13%** of the 1502 owed.
+**Total:** 1816 actions · 196 agent capability · 1309 planned (debt) · 311 excluded · **coverage 13%** of the 1505 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 302 | 53 | 244 | 5 | 17.8% |
-| agents | 184 | 0 | 130 | 54 | 0% |
+| agents | 193 | 0 | 133 | 60 | 0% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | commerce | 115 | 0 | 99 | 16 | 0% |
@@ -98,7 +98,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:settings.js:data-set=route`
 - `ui:settings.js:data-set=shortcuts`
 
-## agents — 130 planned
+## agents — 133 planned
 
 - `route:agentRoutes.js:DELETE /:handle`
 - `route:agentRoutes.js:GET /`
@@ -151,8 +151,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:skillsRoutes.js:GET /:id/file`
 - `route:skillsRoutes.js:POST /`
 - `route:skillsRoutes.js:POST /:id/versions`
+- `route:skillsRoutes.js:POST /check`
+- `route:skillsRoutes.js:POST /detect`
 - `route:skillsRoutes.js:POST /import/corpus`
 - `route:skillsRoutes.js:POST /import/github`
+- `route:skillsRoutes.js:POST /match`
 - `route:spawnProfileRoutes.js:DELETE /:profileId`
 - `route:spawnProfileRoutes.js:GET /`
 - `route:spawnProfileRoutes.js:PUT /:profileId`
