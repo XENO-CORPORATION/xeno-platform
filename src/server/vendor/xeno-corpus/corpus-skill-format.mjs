@@ -148,3 +148,115 @@ export function reviewField(scan) {
   if (!scan?.review?.length) return {};
   return { review: scan.review.slice(0, 50).map((x) => ({ file: x.file, line: x.line, rule: x.rule })), reviewCount: scan.review.length };
 }
+
+// ── detecting skill bundles in ANY folder, from its paths (adopted from the xeno-platform draft) ──────
+
+/** The limits and skip rules surveySkills applies on disk — defined HERE, imported there. */
+export const MAX_BUNDLE_FILES = 500;
+export const MAX_BUNDLE_BYTES = 32 * 1024 * 1024;
+export const SKIP_DIRS = Object.freeze(["node_modules", ".git", "__pycache__", ".venv", "venv", ".cache"]);
+/** A directory without SKILL.md may CONTAIN bundles (`synced/`): descended exactly this many levels. */
+export const CONTAINER_DEPTH = 1;
+
+/** Which tool a root belongs to, from the shape of its path. */
+export function toolOf(dir) {
+  const p = "/" + dir + "/";
+  if (/\/\.claude\/plugins\//.test(p)) return "plugin";
+  if (/\/\.claude\/skills\//.test(p)) return "claude";
+  if (/\/\.codex\/skills\//.test(p)) return "codex";
+  if (/\/\.gemini\/config\/skills\//.test(p)) return "agy";
+  if (/\/\.agents\/skills\//.test(p)) return "workspace";
+  if (/\/\.xeno-code\/skills\//.test(p)) return "xeno-cli";
+  return "unknown";
+}
+
+const parentOf = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
+const baseOf = (dir) => dir.slice(dir.lastIndexOf("/") + 1);
+const isUnder = (rel, dir) => dir === "" || rel === dir || rel.startsWith(dir + "/");
+const hasSkipped = (rel) => rel.split("/").some((seg) => SKIP_DIRS.includes(seg));
+
+/**
+ * Which skill bundles a picked folder holds — the rules surveySkills applies on disk, over a flat list
+ * of POSIX paths relative to the picked folder (all a browser folder picker or a .zip gives):
+ *   entries [{ rel, bytes?, text?, link? }] — `text` is REQUIRED for each SKILL.md (its front matter must
+ *   carry `name` and `description`, or the bundle is quarantined; with no text it is quarantined as
+ *   unchecked — fail closed); `link: true` marks a symlink/junction, which quarantines its bundle (a
+ *   browser cannot see links: the caller must mark or drop them).
+ * Roots: every directory named `skills`, and the picked folder itself; a `skills` directory inside a
+ * bundle belongs to that bundle. A Corpus store is recognised by its `<name>.skill.json` sidecars.
+ * → { layout: "corpus-store"|"single-bundle"|"skill-roots"|"none", store?, roots, bundles, skipped }
+ */
+export function detectBundles(entries) {
+  const files = [];
+  for (const e of entries || []) {
+    const rel = String((e && e.rel) || "").split(BACKSLASH).join("/").replace(/^\/+/, "");   // Windows separators → POSIX
+    if (!rel || rel.split("/").some((s) => s === "" || s === "." || s === "..")) continue;
+    files.push({ rel, bytes: Number(e.bytes) || 0, text: typeof e.text === "string" ? e.text : null, link: e.link === true });
+  }
+  const out = { layout: "none", roots: [], bundles: [], skipped: [] };
+  if (!files.length) return out;
+
+  const sidecars = files.filter((f) => /\.skill\.json$/.test(f.rel));
+  if (sidecars.length) {
+    const byDir = new Map();
+    for (const f of sidecars) byDir.set(parentOf(f.rel), (byDir.get(parentOf(f.rel)) || 0) + 1);
+    const dir = [...byDir].sort((a, b) => b[1] - a[1])[0][0];
+    out.layout = "corpus-store";
+    out.store = { dir, sidecars: sidecars.filter((f) => parentOf(f.rel) === dir).map((f) => baseOf(f.rel).slice(0, -".skill.json".length)).sort() };
+    return out;
+  }
+
+  const dirsWithSkill = new Set(files.filter((f) => baseOf(f.rel) === "SKILL.md" && !hasSkipped(f.rel) && !f.link).map((f) => parentOf(f.rel)));
+  if (dirsWithSkill.has("")) {
+    out.layout = "single-bundle";
+    out.roots.push({ dir: "", tool: "unknown" });
+    out.bundles.push(bundleOf(files, "", "", null, "unknown"));
+    return out;
+  }
+  const dirs = new Set([""]);
+  for (const f of files) { let d = parentOf(f.rel); while (d) { dirs.add(d); d = parentOf(d); } }
+  const roots = [...dirs].filter((d) => d === "" || (baseOf(d) === "skills" && !hasSkipped(d))).sort((a, b) => a.length - b.length);
+  const taken = [];
+  for (const root of roots) {
+    if (taken.some((b) => isUnder(root, b))) continue;
+    const children = [...dirs].filter((d) => d !== root && parentOf(d) === root && !hasSkipped(d)).sort();
+    const tool = toolOf(root);
+    let found = 0;
+    for (const child of children) {
+      if (taken.some((b) => isUnder(child, b))) continue;
+      if (dirsWithSkill.has(child)) { out.bundles.push(bundleOf(files, child, root, null, tool)); taken.push(child); found++; continue; }
+      let nested = 0;
+      if (CONTAINER_DEPTH > 0) for (const sub of [...dirs].filter((d) => parentOf(d) === child && !hasSkipped(d)).sort()) {
+        if (dirsWithSkill.has(sub) && !taken.some((b) => isUnder(sub, b))) { out.bundles.push(bundleOf(files, sub, root, baseOf(child), tool)); taken.push(sub); nested++; }
+      }
+      found += nested;
+      if (!nested && root !== "") out.skipped.push({ dir: child, reason: "not-a-bundle: no SKILL.md" });
+    }
+    if (found) out.roots.push({ dir: root, tool });
+  }
+  out.bundles.sort((a, b) => (a.dir < b.dir ? -1 : 1));
+  out.layout = out.bundles.length ? "skill-roots" : "none";
+  return out;
+}
+
+function bundleOf(files, dir, root, container, tool) {
+  const mine = files.filter((f) => isUnder(f.rel, dir) && !hasSkipped(dir ? f.rel.slice(dir.length + 1) : f.rel))
+    .map((f) => ({ ...f, rel: dir ? f.rel.slice(dir.length + 1) : f.rel }))
+    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  const name = dir ? baseOf(dir) : "";
+  const bytes = mine.reduce((n, f) => n + f.bytes, 0);
+  const b = { name, dir, root, tool, container, files: mine.map((f) => f.rel), bytes, state: "ok" };
+  const skillMd = mine.find((f) => f.rel === "SKILL.md");
+  const quarantine = (reason) => Object.assign(b, { state: "quarantined", reason });
+  // the same order of checks as surveySkills' inspectCandidate
+  if (dir && !NAME_RE.test(name)) return quarantine(`unusable skill name: ${name}`);
+  const link = mine.find((f) => f.link);
+  if (link) return quarantine(`reparse point inside the bundle: ${link.rel}`);
+  if (mine.length > MAX_BUNDLE_FILES) return quarantine(`more than ${MAX_BUNDLE_FILES} files`);
+  if (bytes > MAX_BUNDLE_BYTES) return quarantine(`larger than ${MAX_BUNDLE_BYTES} bytes`);
+  if (skillMd?.text == null) return quarantine("SKILL.md content not provided — its frontmatter cannot be checked");
+  const fm = readFrontmatter(skillMd.text);
+  if (!fm || !fm.name || !fm.description) return quarantine("SKILL.md has no readable `name` + `description` frontmatter");
+  Object.assign(b, { declaredName: fm.name, description: fm.description });
+  return b;
+}

@@ -15,7 +15,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { scanForInjection, blockingFindings, formatFinding } from '@xenosystem/anima-mind';
 import { check } from '../utils/authzReBAC.js';
-import { bundleDigestOf, fileEntry, sha256Of, sidecarProblems, revisionProblems, verifyBundle, describeBlock, reviewField } from '../vendor/xeno-corpus/corpus-skill-format.mjs';
+import { bundleDigestOf, fileEntry, sha256Of, sidecarProblems, revisionProblems, verifyBundle, describeBlock, reviewField, detectBundles, MAX_BUNDLE_FILES, MAX_BUNDLE_BYTES } from '../vendor/xeno-corpus/corpus-skill-format.mjs';
 import { scanBytes, PER_FILE_RULE_CAP } from '../vendor/xeno-corpus/corpus-secret-rules.mjs';
 
 export class SkillError extends Error { constructor(message, code, status = 400, details) { super(message); this.name = 'SkillError'; this.code = code; this.status = status; this.details = details; } }
@@ -23,9 +23,9 @@ export class SkillError extends Error { constructor(message, code, status = 400,
 const PUBLIC_ID = /^skl_[0-9a-f]{32}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SEMVER = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})$/;
-const MAX_FILE = 256 * 1024, MAX_TOTAL = 1024 * 1024, MAX_FILES = 64;
-// binary files (images, fonts): larger, stored once by digest in skill_objects (migration 20261030160000)
-const MAX_BINARY = 4 * 1024 * 1024, MAX_BUNDLE = 8 * 1024 * 1024;
+// XENO Corpus's own bundle limits, from the vendored module (surveySkills reads the same constants): a skill a person keeps
+// in Claude Code, Codex or their Corpus is accepted here as it is there. Migration 20261031120000 holds the file count too.
+const MAX_FILES = MAX_BUNDLE_FILES, MAX_BUNDLE = MAX_BUNDLE_BYTES;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const B64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
@@ -67,7 +67,7 @@ export const sizeOf = (f) => (isBinary(f) ? Number(f.bytes) : Buffer.byteLength(
 async function prepareFiles(db, files, { reuse = new Set() } = {}) {
   if (!Array.isArray(files) || !files.length) throw new SkillError('A skill needs at least its SKILL.md', 'skill_md_required');
   if (files.length > MAX_FILES) throw new SkillError(`A skill has at most ${MAX_FILES} files`, 'too_many_files');
-  const seen = new Set(), objects = new Map(); let text = 0, all = 0;
+  const seen = new Set(), objects = new Map(); let all = 0;
   const out = [];
   for (const f of files) {
     const path = String((f && f.path) || '').replace(/\\/g, '/').trim();
@@ -85,7 +85,6 @@ async function prepareFiles(db, files, { reuse = new Set() } = {}) {
       if (t !== null) entry = { path, content: t };
       else {
         if (path === 'SKILL.md') throw new SkillError('SKILL.md must be UTF-8 text', 'not_text');
-        if (buf.length > MAX_BINARY) throw new SkillError(`${path} is larger than 4 MB`, 'file_too_large');
         const digest = sha256Of(buf);
         objects.set(digest, buf);
         entry = { path, sha256: digest, bytes: buf.length };
@@ -95,15 +94,10 @@ async function prepareFiles(db, files, { reuse = new Set() } = {}) {
       if (!o) throw new SkillError(`${path}’s stored bytes are missing`, 'object_missing', 409);
       entry = { path, sha256: f.sha256, bytes: o.size };
     } else throw new SkillError(`${path} has no content`, 'invalid_file');
-    if (!isBinary(entry)) {
-      const size = Buffer.byteLength(entry.content, 'utf8'); text += size;
-      if (size > MAX_FILE) throw new SkillError(`${path} is larger than 256 KB`, 'file_too_large');
-    }
     all += sizeOf(entry);
     out.push(entry);
   }
-  if (text > MAX_TOTAL) throw new SkillError('A skill’s text is at most 1 MB', 'skill_too_large');
-  if (all > MAX_BUNDLE) throw new SkillError('A skill is at most 8 MB', 'skill_too_large');
+  if (all > MAX_BUNDLE) throw new SkillError('A skill is at most 32 MB', 'skill_too_large');
   const skill = out.find((f) => f.path === 'SKILL.md');
   if (!skill || isBinary(skill)) throw new SkillError('A skill needs a SKILL.md at its top level', 'skill_md_required');
   return { files: [skill, ...out.filter((f) => f !== skill).sort((a, b) => a.path.localeCompare(b.path))], objects };
@@ -222,25 +216,34 @@ const latest = async (db, skillId) => {
 // ───────────────────────────── the library
 
 /** A new skill from its files (or just a SKILL.md), as version 1.0.0 (or the version given). */
-export async function create(db, me, { workspaceId = null, files, skillMd, version = '1.0.0', acknowledge = false } = {}, { source = null } = {}) {
+const TOOLS = new Set(['claude', 'codex', 'agy', 'workspace', 'xeno-cli', 'plugin', 'unknown']);
+/** Where a skill a person uploaded came from: the tool whose folder it was in, never a path on their machine. */
+const folderSource = (s) => (s && s.kind === 'folder' && TOOLS.has(s.tool) ? { kind: 'folder', tool: s.tool } : null);
+
+export async function create(db, me, { workspaceId = null, files, skillMd, version = '1.0.0', acknowledge = false, source: given = null, as: rename = null } = {}, { source = folderSource(given) } = {}) {
   humanOnly(me);
   const { files: fs, objects } = await prepareFiles(db, files || [{ path: 'SKILL.md', content: skillMd }]);
   const meta = parseSkillMd(fs[0].content);
   if (!SEMVER.test(String(version))) throw new SkillError('A version is three numbers, like 1.0.0', 'invalid_version');
   const review = assertSafe(fs, objects, { acknowledge: acknowledge === true });
   if (workspaceId && !(await check(db, { object: `workspace:${workspaceId}`, relation: 'editor', subject: `user:${me.id}` })).allowed) throw new SkillError('Only an editor of that workspace adds skills to it', 'not_allowed', 403);
+  // a second skill with the same name (Claude Code's and Codex's copies differ) goes in under another name; its SKILL.md
+  // keeps its own, recorded so later versions of it from the same folder are still recognised as this skill
+  const name = rename ? String(rename).trim() : meta.name;
+  if (!NAME.test(name)) throw new SkillError('The skill’s name is lowercase letters, numbers and hyphens, at most 64', 'invalid_skill_name');
+  const src = name !== meta.name ? { ...(source || { kind: 'upload' }), declaredName: meta.name } : source;
   const publicId = 'skl_' + randomBytes(16).toString('hex');
   try {
     return await withTx(db, async (c) => {
       await storeObjects(c, objects);
       const s = (await c.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id, source)
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, [publicId, workspaceId ? null : me.id, workspaceId, meta.name, meta.description, me.id, source ? JSON.stringify(source) : null])).rows[0];
+        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, [publicId, workspaceId ? null : me.id, workspaceId, name, meta.description, me.id, src ? JSON.stringify(src) : null])).rows[0];
       const v = (await c.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest, review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [s.id, version, JSON.stringify(fs), hashOf(fs), me.id, bundleDigestOf_(fs), review ? JSON.stringify(review) : null])).rows[0];
       return shape(s, v);
     });
   } catch (e) {
-    if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${meta.name} here. Publish a new version of it instead.`, 'skill_name_taken', 409);
+    if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${name} here. Publish a new version of it, or add this one under another name.`, 'skill_name_taken', 409);
     throw e;
   }
 }
@@ -253,7 +256,7 @@ export async function addVersion(db, me, publicId, { files, skillMd, version, ac
   const prior = new Set((await db.query('SELECT files FROM skill_versions WHERE skill_id = $1', [s.id])).rows.flatMap((r) => [...digestsOf(r.files)]));
   const { files: fs, objects } = await prepareFiles(db, files || [{ path: 'SKILL.md', content: skillMd }], { reuse: prior });
   const meta = parseSkillMd(fs[0].content);
-  if (meta.name !== s.name) throw new SkillError(`A new version keeps the name ${s.name}; a different name is a different skill`, 'skill_renamed');
+  if (meta.name !== s.name && !(s.source && s.source.declaredName === meta.name)) throw new SkillError(`A new version keeps the name ${s.name}; a different name is a different skill`, 'skill_renamed');
   const cur = await latest(db, s.id);
   const next = version || (cur ? cur.version.replace(SEMVER, (_, a, b, c) => `${a}.${b}.${Number(c) + 1}`) : '1.0.0');
   if (!SEMVER.test(String(next))) throw new SkillError('A version is three numbers, like 1.0.1', 'invalid_version');
@@ -347,7 +350,7 @@ export async function importFromGitHub(db, me, { url, workspaceId = null, acknow
     for (const it of items) {
       if (it.type === 'dir') await walk(it.path, depth + 1);
       else if (it.type === 'file') {
-        if (it.size > MAX_BINARY) throw new SkillError(`${it.path} is larger than 4 MB`, 'file_too_large');
+        if (it.size > MAX_BUNDLE) throw new SkillError(`${it.path} is larger than 32 MB`, 'file_too_large');
         const raw = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/contents/${it.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`, { headers: { accept: 'application/vnd.github.raw', 'user-agent': 'xeno-skills-import' } });
         if (!raw.ok) throw new SkillError(`Could not read ${it.path} from GitHub`, 'github_unavailable', 502);
         // the exact bytes: text stays text, an image or a font is stored as it is (never decoded into text)
@@ -470,6 +473,56 @@ export async function importFromCorpus(db, me, { name, sidecar, revisions = null
     if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${rename || meta.name} here. Import it under another name.`, 'skill_name_taken', 409);
     throw e;
   }
+}
+
+/**
+ * Which skills are in a folder a person picked — one skill, a tool's skills (Claude Code, Codex, agy, XENO CLI, a plugin),
+ * a project or repository, or a Corpus store — decided by XENO Corpus's detectBundles (vendored; the same rules
+ * surveySkills applies on a disk). The page sends only paths, sizes and each SKILL.md's text; nothing is stored.
+ *   entries: [{ rel, bytes, text? }]  → Corpus's result: layout, store, roots, bundles (with declaredName, description), skipped
+ */
+export function detect(me, { entries = [] } = {}) {
+  humanOnly(me);
+  if (!Array.isArray(entries) || entries.length > 200_000) throw new SkillError('That folder has too many files to look through (at most 200,000)', 'too_many_files');
+  let text = 0;
+  const clean = entries.map((e) => {
+    const rel = String((e && e.rel) || '');
+    const out = { rel, bytes: Math.max(0, Number(e && e.bytes) || 0) };
+    // only a SKILL.md's text is read (its front matter decides whether it is a skill); anything else sent is ignored
+    if (typeof (e && e.text) === 'string' && /(^|\/)SKILL\.md$/.test(rel)) { text += e.text.length; out.text = e.text; }
+    return out;
+  });
+  if (text > 64 * 1024 * 1024) throw new SkillError('The SKILL.md files in that folder are too large to read at once', 'too_large');
+  return detectBundles(clean);
+}
+
+/**
+ * Before a folder of skills is uploaded, what each one is to THIS library: already here byte for byte, a changed
+ * version of a skill here, a name taken by a different skill, or new. The page sends each file's SHA-256 (not its
+ * bytes); the bundle digest is computed here with Corpus's own code, so the page never re-implements the rule.
+ *   bundles: [{ key, name, files: [{ rel, sha256 }] }]   → [{ key, bundleDigest, status, skill? }]
+ */
+export async function match(db, me, { workspaceId = null, bundles = [] } = {}) {
+  humanOnly(me);
+  if (!Array.isArray(bundles) || bundles.length > 1000) throw new SkillError('Give at most 1,000 skills at once', 'invalid_input');
+  const mine = (await list(db, me, workspaceId ? { workspaceId } : {})).filter((s) => (workspaceId ? s.owner.kind === 'workspace' : s.owner.kind === 'personal'));
+  const digests = new Map();
+  for (const s of mine) {
+    for (const v of (await db.query('SELECT bundle_digest, files FROM skill_versions sv JOIN skills k ON k.id = sv.skill_id WHERE k.public_id = $1', [s.id])).rows) digests.set(v.bundle_digest || bundleDigestOf_(v.files), s);
+  }
+  return bundles.map((b) => {
+    let bundleDigest = null;
+    try {
+      if (!Array.isArray(b.files) || !b.files.length || b.files.length > MAX_FILES) throw new Error('files');
+      bundleDigest = bundleDigestOf(b.files.map((f) => { if (!DIGEST.test(String(f.sha256))) throw new Error('sha256'); return { rel: String(f.rel), sha256: f.sha256 }; }));
+    } catch { return { key: b.key, bundleDigest: null, status: 'invalid' }; }
+    const same = digests.get(bundleDigest);
+    if (same) return { key: b.key, bundleDigest, status: 'same', skill: { id: same.id, name: same.name, version: same.version } };
+    const named = mine.find((s) => s.name === String(b.name || '')) || mine.find((s) => s.source && s.source.declaredName === String(b.name || ''));
+    if (named && named.origin) return { key: b.key, bundleDigest, status: 'taken', skill: { id: named.id, name: named.name, version: named.version } };
+    if (named) return { key: b.key, bundleDigest, status: 'changed', skill: { id: named.id, name: named.name, version: named.version } };
+    return { key: b.key, bundleDigest, status: 'new' };
+  });
 }
 
 /** Archive: it leaves the library; agents that pinned a version keep working with it. */
