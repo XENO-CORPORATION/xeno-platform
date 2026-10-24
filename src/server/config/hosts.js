@@ -107,6 +107,16 @@ export function siteOrigin() {
   return firstSet(process.env.XENO_SITE_ORIGIN, DEFAULT_SITE_ORIGIN);
 }
 
+/**
+ * The origin for links a PERSON opens: share links, invites, booking pages, tickets.
+ * Public pages already live on `xenosystem.ai` (see docs/CLI_AUTH_CONTRACT.md), while
+ * `siteOrigin()` stays the pinned OIDC issuer. Links minted on the old host keep
+ * resolving, since both hosts serve the same backend.
+ */
+export function publicSiteOrigin() {
+  return String(firstSet(process.env.SITE_URL, 'https://xenosystem.ai')).replace(/\/+$/, '');
+}
+
 /** Hostname only (no scheme), e.g. `xenostudio.ai`. */
 export function siteHost() {
   try {

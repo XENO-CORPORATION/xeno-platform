@@ -25,7 +25,7 @@
 import { createThread } from './forumWrite.js';
 import * as xenoTasks from './xenoTasks.js';
 import { sendEmail } from './emailService.js';
-import { siteOrigin } from '../config/hosts.js';
+import { publicSiteOrigin } from '../config/hosts.js';
 
 export class SupportError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'SupportError'; this.code = code; this.statusCode = status; }
@@ -53,7 +53,7 @@ const kindOf = (u) => (u.kind === 'agent' ? 'agent' : u.kind === 'service' ? 'se
 /** Staff is a HUMAN with an effective role of moderator or admin. An agent is never staff, whatever its role says. */
 export const isStaff = (u) => !!u && kindOf(u) === 'human' && ['admin', 'moderator'].includes(u.role);
 const keyOf = (t) => `T-${t.number}`;
-const urlOf = (t) => `${siteOrigin()}/workspace/support/${keyOf(t)}`;
+const urlOf = (t) => `${publicSiteOrigin()}/workspace/support/${keyOf(t)}`;
 const text = (v, field, max, required = true) => {
   const s = String(v ?? '').trim();
   if (required && !s) throw new SupportError(`${field} is required`, `${field}_required`);

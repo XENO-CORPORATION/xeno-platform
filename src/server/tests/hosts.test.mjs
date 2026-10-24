@@ -57,6 +57,25 @@ const CLEARED = {
   OIDC_ISSUER: undefined,
 };
 
+test('links a person opens are minted on xenosystem.ai, while the issuer stays pinned', async () => {
+  await withEnv({ ...CLEARED, SITE_URL: undefined }, (h) => {
+    assert.equal(h.publicSiteOrigin(), 'https://xenosystem.ai');
+    assert.equal(h.issuer(), 'https://xenostudio.ai', 'tokens already issued stay valid');
+  });
+  await withEnv({ ...CLEARED, SITE_URL: 'https://example.test/' }, (h) => assert.equal(h.publicSiteOrigin(), 'https://example.test'));
+});
+
+test('no person-facing link is built from the issuer origin', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const files = ['src/server/routes/libraryRoutes.js', 'src/server/services/storageMcp.js', 'src/server/routes/collaborationRoutes.js',
+    'src/server/services/scheduling.js', 'src/server/services/supportTickets.js'];
+  for (const f of files) {
+    const src = await readFile(new URL(`../../../${f}`, import.meta.url), 'utf8');
+    for (const path of ['/api/library/links/', '/storage/shared/', '/os/join/', '/os/invite/', '/api/scheduling/', '/workspace/support/'])
+      assert.ok(!src.includes('${siteOrigin()}' + path), `${f} mints ${path} on the issuer origin`);
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. NO-OP: the frozen defaults ARE the literals that used to be hardcoded.
 // ─────────────────────────────────────────────────────────────────────────────
