@@ -150,7 +150,7 @@ their instructions alone. A Marketplace skill listing can be unlisted without br
      sizes and each SKILL.md's text. `POST /api/skills/match` says, from file SHA-256s and Corpus's digest code, which
      are new, already here byte for byte, a changed version, or a name clash; the same skill in two tools is shown once.
      A skill records the tool it came from, never a path on the person's machine. Limits are Corpus's (500 files,
-     32 MiB; migration `20261031120000`). Proof: on this machine's real folders, 328 skills are found exactly as
+     32 MiB; migration `20261031130000`). Proof: on this machine's real folders, 328 skills are found exactly as
      surveySkills finds them, and all 282 that save carry Corpus's exact digest.
    - *Malicious skills.* One report before anything is saved (`inspect`, `POST /api/skills/check`): Corpus's secret
      gate, Anima's take-over scanner, and Corpus's malicious-skill rules (`corpus-skill-risk.mjs`): download-and-run

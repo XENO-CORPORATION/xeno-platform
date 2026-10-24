@@ -25,7 +25,7 @@ const PUBLIC_ID = /^skl_[0-9a-f]{32}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SEMVER = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})$/;
 // XENO Corpus's own bundle limits, from the vendored module (surveySkills reads the same constants): a skill a person keeps
-// in Claude Code, Codex or their Corpus is accepted here as it is there. Migration 20261031120000 holds the file count too.
+// in Claude Code, Codex or their Corpus is accepted here as it is there. Migration 20261031130000 holds the file count too.
 const MAX_FILES = MAX_BUNDLE_FILES, MAX_BUNDLE = MAX_BUNDLE_BYTES;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const B64 = /^[A-Za-z0-9+/]*={0,2}$/;
