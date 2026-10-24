@@ -111,6 +111,12 @@ their instructions alone. A Marketplace skill listing can be unlisted without br
    for activation, the shadowed one is shown. Import from a person's machine is Corpus's carry + the directory binding; the
    server recomputes every digest and re-runs the gate. Secrets and take-over findings REFUSE the whole bundle; bytes are
    never altered.
+   ✅ **Expand step done (2026-10-24):** `corpus-skill-format.mjs` vendored byte-identical at xeno-corpus `17c0db2`
+   (`src/server/vendor/xeno-corpus/`, gate `npm run test:corpus-skill-format-vendor` — bytes, git blob id, purity,
+   self-test); `skill_versions.bundle_digest` written on every version from Corpus's code and backfilled at startup
+   (migration `20261030150000`: the one write a version allows, once, from empty); new agent pins carry `bundleDigest`
+   beside `hash` and a pin naming it is held to it. **Next (contract):** resolve pins by `bundleDigest`, then drop
+   `content_hash` once nothing reads it. **Waiting on the owner:** D240's nesting rule (nearest scope wins) — not built.
 5. **Knowledge** — attach Corpus scopes on the Identity tab.
 
 ## 8. What would make us revisit

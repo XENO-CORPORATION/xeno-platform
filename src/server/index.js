@@ -4062,6 +4062,8 @@ app.locals.migrationsReady = false;
  */
 async function runStartupMigrations() {
   await runRequiredStartupMigrations(pool);
+  // XENO Corpus's bundle digest on skill versions made before it existed (expand step; idempotent)
+  await import('./services/skills.js').then((m) => m.backfillBundleDigests(pool)).then((n) => n && console.log(`[Skills] bundle digest filled on ${n} version(s)`)).catch(err => console.error('[Skills] bundle digest backfill warning (non-fatal):', err.message));
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
   // The Forum needs its SPACES to exist before anything works — with no spaces a
   // deploy yields an empty page and every post fails with "unknown space".

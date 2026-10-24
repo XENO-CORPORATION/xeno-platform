@@ -102,9 +102,11 @@ function content(value) {
   const instructions = input.instructions;
   if (typeof instructions !== 'string' || instructions.includes('\0') || Buffer.byteLength(instructions, 'utf8') > 32768) fail('bad_input', 'invalid_text');
   const skills = list(input.skills, 64, (item) => {
-    const skill = record(item, ['id', 'version', 'hash'], 'skill');
+    const skill = record(item, ['id', 'version', 'hash', 'bundleDigest'], 'skill');
     if (typeof skill.hash !== 'string' || !hashPattern.test(skill.hash)) fail('bad_input', 'invalid_definition_hash');
-    return { id: identifier(skill.id), version: identifier(skill.version), hash: skill.hash };
+    // XENO Corpus's bundle digest (D240), optional while pins move over from `hash` (expand/contract)
+    if (Object.hasOwn(skill, 'bundleDigest') && (typeof skill.bundleDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(skill.bundleDigest))) fail('bad_input', 'invalid_definition_hash');
+    return { id: identifier(skill.id), version: identifier(skill.version), hash: skill.hash, ...(skill.bundleDigest ? { bundleDigest: skill.bundleDigest } : {}) };
   }, (s) => s.id);
   const requestedCapabilities = list(input.requestedCapabilities, 64, identifier, (c) => c);
   const secretReferences = list(Object.hasOwn(input, 'secretReferences') ? input.secretReferences : [], 32, (item) => {
