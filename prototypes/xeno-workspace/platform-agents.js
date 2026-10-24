@@ -441,7 +441,22 @@
       </form>
       <aside class="xag-brief"><div class="xag-box-h"><h3>What it is told</h3><button class="pg-link" data-xag="brief-refresh">Refresh</button></div>
         <p class="xag-note">Before any task. A task adds its project’s and area’s instructions.</p>
-        ${brief ? `<pre class="xag-instr-v">${esc(brief.text)}</pre>` : '<p class="xag-none">Loading…</p>'}</aside></div>`;
+        ${brief ? `<pre class="xag-instr-v">${esc(brief.text)}</pre>` : '<p class="xag-none">Loading…</p>'}</aside></div>
+      ${skillsSection(a, can)}`;
+  }
+
+  // its SKILLS: pinned {id, version, hash} in its version (skills.js); the library supplies names and newer versions
+  function skillsSection(a, can) {
+    const h = h0, lib = window.XENO_SKILLS && window.XENO_SKILLS.served ? window.XENO_SKILLS.list() : [];
+    const pins = a.skills || [];
+    const row = (p) => {
+      const s = lib.find((x) => x.id === p.id), newer = s && s.version && s.version !== p.version;
+      return `<div class="xag-row"><span class="xag-row-ic">${ic('doc')}</span><span class="xag-row-b"><b>${s ? `<a href="#" data-pg-ws="Skills/${esc(p.id)}">${esc(s.name)}</a>` : 'A skill you cannot open'} · ${esc(p.version)}</b><small>${s ? esc(s.description) : 'Pinned by someone who can; it still reaches the agent'}</small></span>
+        <span class="xag-row-m">${newer ? `${esc(s.version)} available` : ''}</span><span class="xag-row-acts">${can && newer ? `<button type="button" class="pg-btn ghost" data-xag="skill-update" data-id="${esc(p.id)}">Use ${esc(s.version)}</button>` : ''}${can ? `<button type="button" class="pg-btn ghost" data-xag="skill-remove" data-id="${esc(p.id)}">Remove</button>` : ''}</span></div>`;
+    };
+    return `<section class="pg-sec xag-skills"><div class="pg-sec-h"><h3>Skills</h3><small>${h.plural(pins.length, 'skill', 'skills')}</small>${can ? '<button class="pg-link" data-xag="skill-new">New skill</button><button class="pg-link" data-xag="skill-add">Add skills</button>' : ''}</div>
+      <p class="xag-note xag-lead">How it does one kind of work. It sees each skill’s name and when to use it, and reads the steps when one fits. A skill stays at the version given here until you move it.</p>
+      ${pins.length ? `<div class="xag-rows">${pins.map(row).join('')}</div>` : `<div class="xag-empty"><p>No skills yet. Give it one from your library, or write a new one.</p>${can ? h.btn('Add skills', 'data-xag="skill-add"', true) : ''}</div>`}</section>`;
   }
 
   function workTab(a, projects) {
@@ -769,6 +784,28 @@
     const r = await call('POST', `/api/agents/${a.id}/message`, { body }, 'The message could not be sent.');
     if (r) { form.body.value = ''; toast(`Sent on ${r.d.task}. ${a.name} sees it at its next step.`); loadActivity(a.id); }
   }
+  const pinsOf = (a) => (a.skills || []).map((p) => ({ id: p.id, version: p.version }));
+  async function setSkills(pins, done) {
+    const a = S.one; if (!a) return;
+    const r = await call('PATCH', `/api/agents/${a.id}`, { skills: pins }, 'Its skills could not be saved.');
+    if (r) { S.one = r.d.agent; toast(`${done} — saved as version ${S.one.version}`); loadBrief(a.id); paint(); }
+  }
+  async function addSkills() {
+    const a = S.one; if (!a) return;
+    const lib = window.XENO_SKILLS && window.XENO_SKILLS.served ? window.XENO_SKILLS.list() : [];
+    const have = new Set((a.skills || []).map((p) => p.id));
+    const opts = lib.filter((x) => !have.has(x.id)).map((x) => [x.id, x.name, x.description]);
+    if (!opts.length) { toast(lib.length ? 'It already has every skill in your library' : 'Your library has no skills yet — write one'); return lib.length ? null : newSkillFor(); }
+    const v = await D().form({ title: `Give ${a.name} skills`, sub: 'Each one at its current version. It stays there until you move it.', submit: 'Add', size: 'md', fields: [
+      { id: 'pick', label: 'Skills', type: 'checks', required: true, value: [], options: opts }] });
+    if (!v || !v.pick || !v.pick.length) return;
+    return setSkills([...pinsOf(a), ...v.pick.map((id) => ({ id }))], v.pick.length === 1 ? 'Skill added' : `${v.pick.length} skills added`);
+  }
+  async function newSkillFor() {
+    const a = S.one; if (!a || !window.XENO_SKILLS || !window.XENO_SKILLS.served) return;
+    const sk = await window.XENO_SKILLS.create({ open: false });
+    if (sk) return setSkills([...pinsOf(a), { id: sk.id }], `${sk.name} written and added`);
+  }
   async function loadBrief(id) {
     const r = await api('GET', `/api/agents/${id}/brief`);
     if (!S.one || S.one.id !== id) return;
@@ -858,6 +895,10 @@
     if (a === 'place') { S.place = b.dataset.k; S.tab = b.dataset.k === 'spawn' ? 'spawn' : (S.tab === 'spawn' ? 'claude' : S.tab); return paint(); }
     if (a === 'act-kind') { S.actKind = b.dataset.k; return paint(); }
     if (a === 'proj-toggle') return project(b.dataset.id, b.dataset.on === '1');
+    if (a === 'skill-add') return addSkills();
+    if (a === 'skill-new') return newSkillFor();
+    if (a === 'skill-remove') return S.one && setSkills(pinsOf(S.one).filter((p) => p.id !== b.dataset.id), 'Skill removed');
+    if (a === 'skill-update') { const s = (window.XENO_SKILLS.list() || []).find((x) => x.id === b.dataset.id); return S.one && s && setSkills(pinsOf(S.one).map((p) => (p.id === s.id ? { id: s.id, version: s.version } : p)), `${s.name} moved to ${s.version}`); }
     if (a === 'mind-export') return exportMind();
     if (a === 'mind-import') return importMind();
     if (a === 'persona-clear') return clearPersona();
@@ -967,7 +1008,7 @@
       '.xag-sets{border:1px solid var(--n31);border-radius:6px;background:var(--panel)}.xag-set{display:grid;grid-template-columns:200px 1fr auto;gap:24px;padding:18px 20px;border-top:1px solid var(--border);align-items:start}.xag-set:first-child{border-top:0}.xag-set h3{margin:0;font-size:13px;font-weight:600}.xag-set>div:first-child small{font-size:12px;color:var(--muted)}',
       '.xag-set-b{min-width:0;display:flex;flex-direction:column;gap:6px;align-items:flex-start}.xag-set-b>*{max-width:100%}.xag-set-b b{font-size:13px;font-weight:500}.xag-dim{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted)}.xag-set-a{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}',
       '.xag-vtab{width:100%;border:1px solid var(--border);border-radius:4px;margin-top:8px;font-size:12.5px}.xag-vtab-r{display:grid;grid-template-columns:56px 1.4fr repeat(5,minmax(0,1fr));gap:10px;padding:8px 12px;border-top:1px solid var(--border);color:var(--muted)}.xag-vtab-r:first-child{border-top:0}.xag-vtab-r.cur{color:var(--text)}.xag-vtab-h{font-size:11.5px;color:var(--dim)}.xag-vtab .xag-note{padding:0 12px 10px}',
-      '.xag-row-acts{display:flex;gap:6px}',
+      '.xag-row-acts{display:flex;gap:6px}.xag-skills{margin-top:22px}.xag-skills .pg-sec-h .pg-link+.pg-link{margin-left:14px}',
       '.xag-idwrap{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}.xag-idform{flex:999 1 520px;min-width:0;display:flex;flex-direction:column;gap:12px}.xag-brief{flex:1 1 320px;min-width:0;padding:14px;border:1px solid var(--n31);border-radius:6px;background:var(--panel);display:flex;flex-direction:column;gap:8px}.xag-brief .xag-instr-v{max-height:520px;font-size:12px}',
       '.xag-idf{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:start}.xag-idf>span{display:flex;flex-direction:column;gap:2px;padding-top:6px}.xag-idf b{font-size:13px;font-weight:600}.xag-idf small{font-size:12px;color:var(--muted)}',
       '.xag-idf input,.xag-idf textarea{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--n31);border-radius:4px;background:var(--canvas);color:var(--text);font:inherit;font-size:13px;line-height:1.5;outline:none;resize:vertical}.xag-idf input:focus,.xag-idf textarea:focus{border-color:var(--muted)}',

@@ -14,6 +14,7 @@
  * a local agent and a cloud run of the same agent are told the same thing.
  */
 import { composePersonaPrompt } from '@xenosystem/anima-mind';
+import { forAgent as skillsForAgent } from './skills.js';
 
 const DEFAULT = [
   'Work in small, checkable steps and keep the task updated as you go (report what you are doing; ask when you need a decision, then wait).',
@@ -73,9 +74,13 @@ export async function guidanceFor(db, t, agentUserId) {
   const proj = await projectInstructions(db, projectId); if (proj) layers.push({ from: 'project', text: proj });
   const ar = await areaInstructions(db, owner, area); if (ar) layers.push({ from: 'area', text: ar });
   const own = await agentInstructions(db, agentUserId); if (own) layers.push({ from: 'agent', text: own });
+  // its skills: only the name and when to use each (docs/AGENT-IDENTITY-SKILLS-CORPUS.md D4); the full text loads when it
+  // decides to use one, so many skills cost a few lines, not their whole bodies
+  const sk = agentUserId ? await skillsForAgent(db, agentUserId).catch(() => []) : [];
+  if (sk.length) layers.push({ from: 'skills', text: sk.map((x) => `- ${x.name}: ${x.description}`).join('\n') + '\nWhen one fits what you are doing, read it with skills_get (by its name) and follow it.' });
   // the task's folders: where its inputs are and where results go (taskFolders.js)
   if (Array.isArray(t.folders) && t.folders.length) layers.push({ from: 'folders', text: t.folders.map((f) => `- ${f.name} (folder ${f.id}) — ${f.role === 'editor' ? 'read the inputs here and save your results here' : 'read the inputs here'}`).join('\n') + '\nList and read them with the library tools (library_list_files, library_get_file).' });
-  const label = { identity: 'Who you are', xeno: 'How to work a XENO task', project: 'From the project', area: 'From the area', agent: 'Your own instructions', folders: 'This task’s folders in Storage' };
+  const label = { identity: 'Who you are', skills: 'Your skills', xeno: 'How to work a XENO task', project: 'From the project', area: 'From the area', agent: 'Your own instructions', folders: 'This task’s folders in Storage' };
   let text = layers.map((l) => `${label[l.from]}:\n${l.text}`).join('\n\n');
   if (text.length > MAX) text = text.slice(0, MAX) + '\n…';
   return { layers: layers.map((l) => l.from), text };

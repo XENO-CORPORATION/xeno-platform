@@ -23,6 +23,7 @@ import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
 import * as peopleMcp from './peopleMcp.js';
 import * as corpusMcp from './corpusMcp.js';
+import * as skillsMcp from './skillsMcp.js';
 import * as researchMcp from './researchMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
@@ -229,6 +230,14 @@ export const SERVICES = Object.freeze([
     tools: () => agentsMcp.TOOLS,
     call: (db, actor, name, args) => agentsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof agentsMcp.AgentsMcpError,
+  },
+  // the skills pinned to the agent (skillsMcp.js, docs/AGENT-IDENTITY-SKILLS-CORPUS.md D4). Agents only: people manage skills on their pages.
+  {
+    category: 'skills', title: 'Skills', version: '1.0.0', timeoutMs: 15_000, agentsOnly: true,
+    description: 'Your skills: list them, and read one (its SKILL.md and files) when it fits what you are doing.',
+    tools: () => skillsMcp.TOOLS,
+    call: (db, actor, name, args) => skillsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof skillsMcp.SkillsMcpError,
   },
   // what an agent can make and use (agentMedia.js). Agents only: a person's own screens already do all of this.
   ...[

@@ -80,8 +80,7 @@ agent lacks; its `requestedCapabilities` must be within what the agent may alrea
 ## 5. Blast radius (what depends on it)
 
 - `workforce_agent_versions.content` gains `persona` (additive; old versions read as no persona).
-- New tables: `skills`, `skill_versions`, `agent_skill_pins` (or reuse OWN-03 `skills` in the version content — the pin
-  IS the version content, so no separate pin table is needed).
+- New tables: `skills`, `skill_versions`. No pin table: the pin IS the agent version's OWN-03 `skills` content.
 - Marketplace `kind` CHECK gains `'skill'` (additive; the team-packages migration shows the pattern).
 - XENO MCP gains `skills_list`, `skills_get`; `agents_whoami` gains `brief`.
 - Consumers: xeno-spawn (profile writer), xeno-agents-api runner (mount), xeno-agent-cli (reads MCP; no change needed).
@@ -93,9 +92,9 @@ their instructions alone. A Marketplace skill listing can be unlisted without br
 
 ## 7. Order of work
 
-1. **Identity** — `persona` + output style on the agent version; an Identity tab; the server-composed brief;
+1. ✅ **Identity** (2026-10-24, `agentMind.js`, `agentGuidance.identityOf`, Identity tab) — `persona` + output style on the agent version; an Identity tab; the server-composed brief;
    `agents_whoami` returns it; Mind import/export. *(First, because everything else is delivered through the brief.)*
-2. **Skills library** — create / upload / version / pin to an agent; `skills_list` / `skills_get`; skills index in the brief.
+2. ✅ **Skills library** (2026-10-24, `skills.js`, `skillsMcp.js`, migration `20261030130000`, Workspace › Skills) — create / upload / version / pin to an agent; `skills_list` / `skills_get`; skills index in the brief.
 3. **Delivery everywhere** — Spawn profile writer (xeno-spawn) and the cloud runner mount (xeno-agents-api), each in its
    own repo.
 4. **Publish** — Marketplace `kind: 'skill'`, install, versions, review tier.

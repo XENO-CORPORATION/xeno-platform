@@ -39,11 +39,13 @@ import { requireConfirmation } from '../services/accountConfirmation.js';
 import * as transfer from '../services/workforceOwnershipTransfer.js';
 import * as overview from '../services/agentOverview.js';
 import * as mind from '../services/agentMind.js';
+import { SkillError } from '../services/skills.js';
 
 const router = express.Router();
 const handled = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (e) {
+    if (e instanceof SkillError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     if (e instanceof mind.MindError) return res.status(e.status).json({ success: false, error: e.message, code: e.code, ...(e.details ? { details: e.details } : {}) });
     if (e instanceof overview.OverviewError || e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError || e instanceof access.AccessError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     console.error('[agents]', e);

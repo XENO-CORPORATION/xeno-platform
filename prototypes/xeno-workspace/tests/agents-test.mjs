@@ -13,7 +13,9 @@ let failed = 0, fail = false;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 const PROJ = [{ id: 'p-1111', name: 'Releases', canEdit: true }, { id: 'p-2222', name: 'Website', canEdit: true }];
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
-const db = { agents: [], calls: [] };
+const db = { agents: [], calls: [], skills: [] };
+const skView = (k) => { const v = k.versions[k.versions.length - 1]; return { id: k.id, name: k.name, description: k.description, owner: { kind: 'personal' }, version: v.version, hash: v.hash, files: [{ path: 'SKILL.md', content: v.md }], versions: [...k.versions].reverse().map((x) => ({ version: x.version, hash: x.hash, createdAt: new Date().toISOString() })), canEdit: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; };
+const mdMeta = (md) => ({ name: (String(md).match(/^name: (.+)$/m) || [])[1], description: (String(md).match(/^description: (.+)$/m) || [])[1] });
 const ALL = { viewer: true, runner: true, editor: true, exporter: true, manage: true };
 const view = (a) => ({ webhook: null, owner: { kind: 'personal' }, accountable: { userId: 'u1', name: 'Me' }, paused: null, rights: ALL, ...a, projects: PROJ.filter((p) => a.pids.includes(p.id)).map((p) => ({ id: p.id, name: p.name, access: 'editor' })), credentials: a.creds.filter((c) => !c.revoked).map(({ token, revoked, ...c }) => c) });
 
@@ -52,6 +54,7 @@ p.on('request', (q) => {
     const a = db.agents.find((x) => x.id === m[1]); if (!a) return json(404, { success: false, error: 'Agent not found', code: 'agent_not_found' });
     const rest = m[2] || '';
     if (!rest && method === 'GET') return json(200, { success: true, agent: view(a) });
+    if (!rest && method === 'PATCH' && b.skills !== undefined) { a.skills = b.skills.map((p) => { const k = db.skills.find((x) => x.id === p.id); const v = p.version ? k.versions.find((x) => x.version === p.version) : k.versions[k.versions.length - 1]; return { id: k.id, version: v.version, hash: v.hash }; }); a.version = (a.version || 1) + 1; return json(200, { success: true, agent: view(a) }); }
     if (!rest && method === 'PATCH') { if (b.persona !== undefined) { a.persona = b.persona; a.version = (a.version || 1) + 1; } if (b.runtime !== undefined) { a.runtime = b.runtime; a.version = (a.version || 1) + 1; } if (b.name) a.name = b.name; if (b.description !== undefined) a.description = b.description; return json(200, { success: true, agent: view(a) }); }
     if (!rest && method === 'DELETE') { db.agents = db.agents.filter((x) => x !== a); return json(200, { success: true, id: a.id, deleted: true }); }
     if (rest === '/credentials' && method === 'POST') { const c = { id: 'c' + a.creds.length, token: 'xtk_abcdefabcdef_' + hex(), hint: 'xtk_abcdefabcdef_…', label: b.label, scopes: ['tasks:read', 'tasks:write'], expiresAt: new Date(Date.now() + b.ttlHours * 3600e3).toISOString(), lastUsedAt: null, createdAt: new Date().toISOString() }; a.creds.push(c); return json(201, { success: true, credential: { id: c.id, token: c.token, expiresAt: c.expiresAt, scopes: c.scopes } }); }
@@ -92,6 +95,12 @@ p.on('request', (q) => {
   if (stopM) { for (const a of db.agents) for (const r of a.runs || []) if (r.id === stopM[1]) { r.state = 'cancelled'; r.reason = 'stopped_by_owner'; r.endedAt = new Date().toISOString(); } return json(200, { success: true, run: {} }); }
   { const tk = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (tk && method === 'PATCH') return json(200, { success: true, task: { key: tk[1], delegate: { id: b.delegateId, kind: 'agent' } } }); }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
+  if (u.pathname === '/api/skills' && method === 'GET') return json(200, { success: true, skills: db.skills.filter((k) => !k.archived).map(skView) });
+  if (u.pathname === '/api/skills' && method === 'POST') { const m = mdMeta(b.skillMd); if (!/^[a-z0-9][a-z0-9-]*$/.test(m.name || '')) return json(400, { success: false, error: 'bad name', code: 'invalid_skill_name' }); const k = { id: 'skl_' + hex(), name: m.name, description: m.description, versions: [{ version: '1.0.0', hash: hex() + hex(), md: b.skillMd }] }; db.skills.push(k); return json(201, { success: true, skill: skView(k) }); }
+  { const sm = u.pathname.match(/^\/api\/skills\/(skl_[0-9a-f]{32})(\/versions)?$/); if (sm) { const k = db.skills.find((x) => x.id === sm[1]); if (!k) return json(404, { success: false, code: 'skill_not_found' });
+    if (sm[2] && method === 'POST') { const md = b.files[0].content, last = k.versions[k.versions.length - 1].version.split('.').map(Number); k.versions.push({ version: `${last[0]}.${last[1]}.${last[2] + 1}`, hash: hex() + hex(), md }); k.description = mdMeta(md).description; return json(201, { success: true, skill: skView(k) }); }
+    if (method === 'DELETE') { k.archived = true; return json(200, { success: true, id: k.id, archived: true }); }
+    return json(200, { success: true, skill: skView(k) }); } }
   if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: 'w-acme', name: 'Acme', workspace_type: 'team' }, { id: 'w-me', name: 'Mine', workspace_type: 'personal' }] });
   if (u.pathname === '/api/workspaces/w-acme/members') return json(200, { success: true, members: [{ user_id: 'u1', display_name: 'Me', role: 'owner' }, { user_id: 'u-cal', display_name: 'Cal', role: 'editor' }] });
   if (u.pathname === '/api/account/security') return json(200, { success: true, security: { confirmation: { confirmed: true }, methods: ['password'] } });
@@ -182,6 +191,26 @@ try {
   await fill(['---\nxeno_mind_version: 1\nid: x\nname: Other\nrole: a meticulous ledger engineer\n---\n\n# Voice\n\nExact.']); await submit();
   ok(a.persona && a.persona.role === 'a meticulous ledger engineer' && (await p.$eval('.xag-idform input[name="role"]', (e) => e.value)) === 'a meticulous ledger engineer', 'Import a Mind makes its role and sections the next version');
   await shot('identity');
+
+  // Skills: written once, given to the agent at a fixed version, moved on deliberately
+  ok(/No skills yet/.test(await main()), 'with no skills, the Identity tab says so and offers to add one');
+  await p.click('[data-xag="skill-new"]'); await settle(500);
+  await fill(['Ledger Review', 'Use when a change touches money.', '1. Run the ledger tests.\n2. Report what changed.']); await submit(); await settle(600);
+  { const made = db.calls.filter((c) => c[0] === 'POST' && c[1] === '/api/skills').pop(); const pin = db.calls.filter((c) => c[0] === 'PATCH' && c[2].skills).pop();
+    ok(made && /^---\nname: ledger-review\ndescription: Use when a change touches money\.\n---\n\n1\. Run the ledger tests\./.test(made[2].skillMd) && pin && pin[2].skills.length === 1 && pin[2].skills[0].id === db.skills[0].id, 'New skill writes a SKILL.md (name, when to use it, steps) and gives it to the agent'); }
+  ok(/ledger-review · 1\.0\.0/.test(await main()) && /Use when a change touches money/.test(await main()), 'the agent lists the skill at its version');
+  await fresh('/workspace/workspace/Skills');
+  ok(/ledger-review/.test(await main()) && /Skills/.test(await p.$eval('#panel', (e) => e.innerText).catch(() => '')), 'the Skills library lists it, and the sidebar has Skills');
+  await p.click('[data-xsk="open"]'); await settle(900);
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Skills/${db.skills[0].id}` && /Run the ledger tests/.test(await main()) && /Skills\s*\/\s*ledger-review/.test(await p.$eval('.crumbs', (e) => e.innerText).catch(() => '')), 'a skill opens at its id address, with its steps, and the breadcrumb names it');
+  await p.click('[data-xsk="version"]'); await settle(500); await fill(['Use when a change touches money or invoices.', '1. Run the ledger tests.\n2. Reconcile.\n3. Report.']); await submit(); await settle(900);
+  ok(db.skills[0].versions.length === 2 && /1\.0\.1/.test(await main()), 'New version publishes 1.0.1 and keeps 1.0.0');
+  await fresh(`/workspace/workspace/Agents/${a.id}/Identity`); await settle(600);
+  ok(/ledger-review · 1\.0\.0/.test(await main()) && /1\.0\.1 available/.test(await main()), 'the agent stays on 1.0.0 and is told 1.0.1 is available');
+  await p.click('[data-xag="skill-update"]'); await settle(800);
+  ok(a.skills[0].version === '1.0.1' && /ledger-review · 1\.0\.1/.test(await main()), 'Use 1.0.1 moves it, as a new version of the agent');
+  await p.click('[data-xag="skill-remove"]'); await settle(800);
+  ok(!a.skills.length && /No skills yet/.test(await main()), 'Remove takes the skill away from the agent');
 
   // Connect: a credential shown once, filled into each CLI's setup
   await fresh(`/workspace/workspace/Agents/${a.id}/Connect`);
