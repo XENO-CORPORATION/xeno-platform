@@ -25,7 +25,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const APP = /^[a-z][a-z0-9-]{1,63}$/;
 const SHA = /^[0-9a-f]{64}$/;
 /** The top folder an app's projects sit in, as a person browsing Storage reads it. */
-const APP_LABEL = { 'xeno-workshop': 'XENO Workshop' };
+const APP_LABEL = { 'xeno-workshop': 'XENO Workshop', projects: 'Projects' };
 const MAX_DEPTH = 32;
 
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');

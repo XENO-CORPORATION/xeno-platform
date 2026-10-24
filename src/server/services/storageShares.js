@@ -62,6 +62,18 @@ export async function reconcileShares(db, ownerUserId) {
          JOIN tasks t ON t.id = tf.task_id AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'wont_do')
          CROSS JOIN LATERAL (VALUES (t.assignee_id), (t.delegate_id), (t.reviewer_id)) AS w(user_id)
         WHERE w.user_id IS NOT NULL AND w.user_id <> $1
+       UNION ALL
+       -- a personal project's own folder (project_folders, app 'projects'; services/chatProjectFolders.js): the people
+       -- the owner put on the project may open it, editors and admins to change files, viewers and reviewers to read.
+       -- Removing someone from the project, or deleting the project, takes it away on the next reconcile.
+       SELECT pf.folder_id, rt.subject_id::uuid, CASE WHEN rt.relation IN ('editor', 'admin') THEN 'editor' ELSE 'viewer' END, 0
+         FROM project_folders pf
+         JOIN storage_folders sf ON sf.id = pf.folder_id AND sf.owner_user_id = $1 AND sf.workspace_id IS NULL
+         JOIN chat_projects cp ON cp.id = pf.project_id AND cp.owner_user_id = $1
+         JOIN relationship_tuples rt ON rt.object_type = 'project' AND rt.object_id = cp.id::text AND rt.subject_type = 'user'
+          AND rt.relation IN ('viewer', 'reviewer', 'editor', 'admin')
+          AND rt.subject_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND rt.subject_id <> $1::text
+        WHERE pf.app = 'projects'
        UNION ALL SELECT c.id, tree.user_id, tree.role, tree.depth + 1 FROM storage_folders c JOIN tree ON c.parent_id = tree.id WHERE tree.depth < 64)
      SELECT id, user_id, MAX(CASE role WHEN 'editor' THEN 2 ELSE 1 END) AS rank FROM tree GROUP BY id, user_id`, [ownerUserId])).rows;
   const want = new Map();   // "kind|target|user" -> role

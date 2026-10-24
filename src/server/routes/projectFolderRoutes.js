@@ -37,6 +37,9 @@ export default function projectFolderRoutes({ uploadsDir }) {
   };
 
   router.put('/:app/:projectId', express.json({ limit: '16kb' }), async (req, res) => {
+    // Workspace projects bind their folder from the project's own row (services/chatProjectFolders.js). Binding one here,
+    // from a caller-chosen id, would let anyone claim someone else's project for a folder of their own.
+    if (req.params.app === 'projects') return res.status(403).json({ success: false, code: 'reserved_app', error: "A project's folder is made with the project" });
     try {
       const workspaceId = req.body?.workspace ? String(req.body.workspace) : null;
       const out = await ensureProjectFolder(req.db, req.user.id, { app: req.params.app, projectId: req.params.projectId, name: req.body?.name, workspaceId });
