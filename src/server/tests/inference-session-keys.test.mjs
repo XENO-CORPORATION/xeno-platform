@@ -117,7 +117,9 @@ async function main() {
     for (let i = 0; i < 3; i += 1) three.push((await call('POST', '/', bearer(legacy(rich)), { label: `k${i}` })).body.key);
     const sixth = await call('POST', '/', bearer(legacy(rich)), {});
     assert.equal(sixth.status, 429); assert.equal(sixth.body.error.code, 'SESSION_KEY_LIMIT');
-    await pool.query(`UPDATE api_keys SET expires_at = now() - interval '1 minute' WHERE id = $1`, [three[0].id]);
+    // api_keys.expires_at is `timestamp without time zone` holding UTC wall time (the service's contract), so the expiry is
+    // written the same way: a bare now() would store the database's LOCAL wall time and leave the key live east of UTC
+    await pool.query(`UPDATE api_keys SET expires_at = (now() AT TIME ZONE 'UTC') - interval '1 minute' WHERE id = $1`, [three[0].id]);
     assert.equal((await call('POST', '/', bearer(legacy(rich)), {})).status, 200, 'an expired key does not count');
     assert.equal((await call('POST', '/', bearer(legacy(rich)), {})).status, 429);
     // concurrency: with one place free, two at once make exactly one key

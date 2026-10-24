@@ -37,7 +37,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { requireProofDatabase, workforceProofUnavailable } from './lib/workforce-proof-database.mjs';
+import { errorMatches, requireProofDatabase, workforceProofUnavailable } from './lib/workforce-proof-database.mjs';
 
 test('workspace assignment schema on owned isolated PostgreSQL', { skip: workforceProofUnavailable() }, async t => {
   const connectionString = requireProofDatabase(process.env.WORKFORCE_TEST_DATABASE_URL);
@@ -53,7 +53,7 @@ test('workspace assignment schema on owned isolated PostgreSQL', { skip: workfor
   const agent = randomUUID(), team = randomUUID(), companyAgent = randomUUID();
   const policy = { schemaVersion: 1, mode: 'explicit', capabilities: ['files.read'] };
   let createdSchema = false;
-  const deny = (sql, values = [], code = '23514') => assert.rejects(pool.query(sql, values), error => error.code === code);
+  const deny = (sql, values = [], code = '23514') => assert.rejects(pool.query(sql, values), error => errorMatches(error, code));
   const propose = async ({ resource = agent, kind = 'agent', workspace = targetWorkspace, ownerUser = sourceOwner, ownerWorkspace = null, revision = 1, selectedPolicy = policy } = {}) => (await pool.query(`
     INSERT INTO workforce_workspace_assignments(resource_id,resource_kind,workspace_id,source_owner_user_id,source_owner_workspace_id,resource_revision,created_by_user_id,policy)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`, [resource, kind, workspace, ownerUser, ownerWorkspace, revision, creator, selectedPolicy])).rows[0];

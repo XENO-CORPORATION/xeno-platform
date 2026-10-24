@@ -56,7 +56,10 @@ try {
       for (const [k, A] of Object.entries(window.XENO_PG_AREAS || {})) out.set(k, [...(out.get(k) || []), ...A.rows.map((r) => r[0])]);
       return [...out].map(([k, rows]) => ({ m: k.split('.')[0], id: k.split('.').slice(1).join('.'), live: !!live[k], rows })); });
     const sample = zones.filter((z) => !z.live);
-    ok(sample.length >= 3 && zones.some((z) => z.m === 'social' && z.id === 'publish' && z.live), `derived from code: ${zones.length} areas with sample rows in the source, ${sample.length} not yet live (${sample.map((z) => z.m + '.' + z.id).join(', ')}); Publish is live`);
+    // The derivation must find the areas (>= 3 with sample rows in the source) and at least one still on sample data for the
+    // honesty loop below. Areas leave the sample list as they go live (Automate, Customers…), so the count of SAMPLE areas
+    // is not a requirement: when the last one goes live this check and the loop below should be retired together.
+    ok(zones.length >= 3 && sample.length >= 1 && zones.some((z) => z.m === 'social' && z.id === 'publish' && z.live), `derived from code: ${zones.length} areas with sample rows in the source, ${sample.length} not yet live (${sample.map((z) => z.m + '.' + z.id).join(', ')}); Publish is live`);
     let unmarked = [], shown = 0;
     for (const z of sample) {
       await nav(p, `#/${z.m}/z/${z.id}`);
