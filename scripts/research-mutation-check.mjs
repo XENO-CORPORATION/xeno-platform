@@ -20,6 +20,7 @@ const MUTATIONS = [
   ['fail-closed gate: no Box configuration still queues', "if (!c.configured) return {", 'if (false) return {'],
   ['tenant scoping: the project viewer check is skipped', "!(await allowed(db, who.accountable, `project:${pid}`, 'viewer'))) throw notFound('Project not found');", 'false) throw notFound(\'Project not found\');'],
   ['signature check: verify against the embedded key, not the platform key', 'e.verifyRecord({ ...r.provenance, signature: r.signature }, expected || undefined)', 'e.verifyRecord({ ...r.provenance, signature: r.signature })'],
+  ['engine audience: every run is passed to the engine as XENO', 'audience: audienceFor(workspaceId, c)', "audience: 'xeno'"],
   ['concurrency cap removed', 'if (running >= MAX_CONCURRENT) {', 'if (false) {'],
 ];
 const original = readFileSync(FILE, 'utf8');
