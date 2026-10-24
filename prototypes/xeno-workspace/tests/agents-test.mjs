@@ -1,4 +1,5 @@
-// agents-test — the workspace's Agents pages are the person's REAL agents (platform-agents.js), against a stand-in
+// agents-test — the workspace's Agents pages are the person's REAL agents (platform-agents.js; redesigned 2026-10-24:
+// header tabs with their own addresses, Right now, Needs you, a message box, per-place pause, a spending cap), against a stand-in
 // /api/agents that keeps the server's rules. Proves: a first-run explainer, create, an address by id (never a
 // name) that survives refresh, Back and a fresh tab, giving it projects, making a credential that is shown once with
 // each CLI's setup filled in, revoking, edit keeping the id, delete, and that a gone agent and a failure say so.
@@ -37,7 +38,10 @@ p.on('request', (q) => {
   if (u.pathname === '/api/mcp/services') return json(200, { success: true, services: [{ category: 'tasks', title: 'Tasks', description: 'Projects and tasks.', tools: 10 }] });
   if (u.pathname === '/api/agents/presence/stream') { db.streamOpen = (db.streamOpen || 0) + 1; return q.respond({ status: 200, contentType: 'text/event-stream', headers: { 'Cache-Control': 'no-cache' }, body: db.agents.map((a) => `event: presence\ndata: ${JSON.stringify(a.pres ? { id: a.id, name: a.name, ...a.pres } : { id: a.id, name: a.name, state: 'working', label: 'Working in the cloud', canTakeWork: true, run: { state: 'running' } })}\n\n`).join('') + 'retry: 600000\nevent: ready\ndata: {}\n\n' }); }
   if (u.pathname === '/api/agents/presence') return json(200, { success: true, agents: db.agents.map((a) => (a.pres ? { id: a.id, name: a.name, ...a.pres } : { id: a.id, name: a.name, state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null })) });
-  { const m = u.pathname.match(/^\/api\/agents\/(agt_[0-9a-f]{32})\/activity$/); if (m) return json(200, { success: true, agent: { id: m[1] }, presence: (db.agents.find((x) => x.id === m[1]) || {}).pres || { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true }, items: [{ id: 'e1', at: new Date(Date.now() - 120000).toISOString(), kind: 'task', what: 'comment', task: 'T-7', title: 'Ship the notes', detail: 'Done, checked in the preview' }, { id: 'c1', at: new Date(Date.now() - 180000).toISOString(), kind: 'call', what: 'tasks_claim_task', detail: 'ok · 41 ms', where: 'Claude Code', ok: true }], next: null }); }
+  { const m = u.pathname.match(/^\/api\/agents\/(agt_[0-9a-f]{32})\/activity$/); if (m) {
+    const raw = [{ id: 'e1', at: new Date(Date.now() - 120000).toISOString(), kind: 'task', what: 'comment', task: 'T-7', title: 'Ship the notes', detail: 'Done, checked in the preview' }, { id: 'c1', at: new Date(Date.now() - 180000).toISOString(), kind: 'call', what: 'tasks_claim_task', detail: 'ok · 41 ms', where: 'Claude Code', ok: true }];
+    const items = u.searchParams.get('grouped') === '1' ? raw.map((x) => (x.kind === 'call' ? { kind: 'calls', at: x.at, from: x.at, to: x.at, where: x.where, count: 1, failed: 0, task: null, tools: [{ name: x.what, n: 1 }] } : x)) : raw;
+    return json(200, { success: true, agent: { id: m[1] }, presence: (db.agents.find((x) => x.id === m[1]) || {}).pres || { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true }, items, next: null }); } }
   if (u.pathname === '/api/agents' && method === 'GET') { if (fail) return json(500, { success: false }); return json(200, { success: true, agents: db.agents.map(view) }); }
   if (u.pathname === '/api/agents' && method === 'POST') {
     const a = { id: 'agt_' + hex(), userId: 'x', name: b.name, description: b.description || '', createdAt: new Date().toISOString(), status: 'active', pids: [], creds: [], connections: [] };
@@ -52,6 +56,23 @@ p.on('request', (q) => {
     if (!rest && method === 'DELETE') { db.agents = db.agents.filter((x) => x !== a); return json(200, { success: true, id: a.id, deleted: true }); }
     if (rest === '/credentials' && method === 'POST') { const c = { id: 'c' + a.creds.length, token: 'xtk_abcdefabcdef_' + hex(), hint: 'xtk_abcdefabcdef_…', label: b.label, scopes: ['tasks:read', 'tasks:write'], expiresAt: new Date(Date.now() + b.ttlHours * 3600e3).toISOString(), lastUsedAt: null, createdAt: new Date().toISOString() }; a.creds.push(c); return json(201, { success: true, credential: { id: c.id, token: c.token, expiresAt: c.expiresAt, scopes: c.scopes } }); }
     const cr = rest.match(/^\/credentials\/(.+)$/); if (cr && method === 'DELETE') { const c = a.creds.find((x) => x.id === cr[1]); c.revoked = true; return json(200, { success: true, revoked: true }); }
+    if (rest === '/overview') {
+      const pres = a.pres || { state: 'working', label: 'Working in the cloud', canTakeWork: true, run: { state: 'running' } };
+      const days = [...Array(14)].map((_, i) => ({ day: new Date(Date.now() - (13 - i) * 864e5).toISOString().slice(0, 10), credits: i === 13 ? (a.spent || 0) : 0 }));
+      return json(200, { success: true, agentId: a.id, presence: pres, today: { taskActions: 1, toolCalls: 1 }, queue: a.queue || [], needsYou: a.needs || [],
+        spend: { days, windowDays: 30, spentCredits: a.spent || 0, capCredits: a.cap === undefined ? null : a.cap, covers: 'images, video and model calls through XENO tools' },
+        groups: [{ kind: 'calls', at: new Date(Date.now() - 180000).toISOString(), from: new Date(Date.now() - 180000).toISOString(), to: new Date(Date.now() - 180000).toISOString(), where: 'Claude Code', count: 1, failed: 0, task: null, tools: [{ name: 'tasks_claim_task', n: 1 }] }],
+        versions: [{ version: a.version || 1, createdAt: a.createdAt, by: 'Me', runs: (a.runs || []).length, completed: 0, failed: 0, stopped: 0, tasksDone: 0, tasksInReview: 0, tasksBlocked: 0 }], connections: a.connections });
+    }
+    if (rest === '/message' && method === 'POST') {
+      if (!String(b.body || '').trim()) return json(400, { success: false, error: 'Write the message', code: 'invalid_body' });
+      const doing = a.pres && (a.pres.asking || a.pres.doing);
+      if (!doing) return json(409, { success: false, error: `${a.name} is not on a task right now.`, code: 'no_current_task' });
+      (a.msgs = a.msgs || []).push(b.body); return json(200, { success: true, task: doing.task });
+    }
+    const pz = rest.match(/^\/connections\/([^/]+)\/(pause|resume)$/);
+    if (pz && method === 'POST') { const c = (a.connections || []).find((x) => x.id === pz[1]); if (!c) return json(404, { success: false, code: 'connection_not_found' }); c.pausedAt = pz[2] === 'pause' ? new Date().toISOString() : null; return json(200, { success: true, connection: { id: c.id, client: c.client, lastUsedAt: c.lastUsedAt, pausedAt: c.pausedAt } }); }
+    if (rest === '/spend-cap' && method === 'PUT') { if (b.credits !== null && !(Number(b.credits) >= 0)) return json(400, { success: false, error: 'The cap is between 0 and 10,000,000 credits', code: 'invalid_cap' }); a.cap = b.credits === null ? null : Number(b.credits); return json(200, { success: true, capCredits: a.cap }); }
     if (rest === '/runs' && method === 'GET') return json(200, { success: true, runs: (a.runs || []) });
     if (rest === '/runs' && method === 'POST') { a.runs = a.runs || []; const r = { id: 'r' + a.runs.length, state: 'queued', task: b.task, version: 1, budgetCredits: b.budgetCredits, createdAt: new Date().toISOString() }; a.runs.unshift(r); return json(201, { success: true, run: r }); }
     if (rest === '/access' && method === 'GET') return json(200, { success: true, access: { owner: a.owner || { kind: 'personal' }, accountable: a.accountable || { userId: 'u1', name: 'Me' }, people: a.people || [], history: a.history || [] } });
@@ -66,6 +87,7 @@ p.on('request', (q) => {
   }
   const stopM = u.pathname.match(/^\/api\/agents\/runs\/(.+)\/stop$/);
   if (stopM) { for (const a of db.agents) for (const r of a.runs || []) if (r.id === stopM[1]) { r.state = 'cancelled'; r.reason = 'stopped_by_owner'; r.endedAt = new Date().toISOString(); } return json(200, { success: true, run: {} }); }
+  { const tk = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (tk && method === 'PATCH') return json(200, { success: true, task: { key: tk[1], delegate: { id: b.delegateId, kind: 'agent' } } }); }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
   if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: 'w-acme', name: 'Acme', workspace_type: 'team' }, { id: 'w-me', name: 'Mine', workspace_type: 'personal' }] });
   if (u.pathname === '/api/workspaces/w-acme/members') return json(200, { success: true, members: [{ user_id: 'u1', display_name: 'Me', role: 'owner' }, { user_id: 'u-cal', display_name: 'Cal', role: 'editor' }] });
@@ -93,23 +115,25 @@ try {
   // the next question is where it runs; the default is this computer, through Spawn
   ok(/Where will Release Bot run\?/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')) && /XENO Spawn/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')) && /In the cloud/.test(await p.$eval('.xd', (e) => e.innerText).catch(() => '')), 'after creating, it asks where the agent will run: this computer, the cloud, or another CLI');
   await submit();
-  ok(/spawn profiles bind/.test(await main()) && /aria-selected="true"[^>]*data-k="spawn"/.test(await p.$eval('.xag-tabs', (e) => e.outerHTML).catch(() => '')), 'choosing this computer lands on its Spawn setup');
-  await p.click('[data-xag="tab"][data-k="claude"]'); await settle(300);
   const a = db.agents[0];
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}/Connect` && /spawn profiles bind/.test(await main()) && (await p.$eval('[data-xag="place"][data-k="spawn"]', (e) => e.getAttribute('aria-checked')).catch(() => '')) === 'true', `choosing this computer lands on its Connect tab with Spawn chosen (${new URL(p.url()).pathname})`);
   ok(a && a.name === 'Release Bot' && a.description === 'Takes release tasks and reports back', 'New agent creates it on the platform with its name and purpose');
-  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}`, `it opens at its id address (${new URL(p.url()).pathname})`);
-  t = await main();
-  ok(/Run Release Bot anywhere/.test(t) && /Works on/.test(t) && /Where it has run/.test(t) && /Credentials/.test(t), 'its page shows where it runs, what it works on, where it ran and its credentials');
+  // the header: its name, the six tabs IN the header bar, Hand it a task on the right
+  { const hd = await p.evaluate(() => { const tabs = [...document.querySelectorAll('#main [data-xag-tab][role="tab"]')]; const hand = document.querySelector('#main [data-xag="hand"]'); const top = document.querySelector('#main .pg-tabs'); return { tabs: tabs.map((t) => t.innerText.trim()), sel: (tabs.find((t) => t.getAttribute('aria-selected') === 'true') || {}).innerText, hand: !!hand, tabsTop: top ? Math.round(top.getBoundingClientRect().top) : -1 }; });
+    ok(hd.tabs.join() === 'Overview,Work,Activity,Connect,Settings,Access' && hd.sel === 'Connect' && hd.hand && hd.tabsTop < 140, `the header carries its six tabs and Hand it a task (${JSON.stringify(hd)})`); }
   const crumb = await p.$eval('.crumbs', (e) => e.innerText).catch(() => '');
-  ok(/Agents\s*\/\s*Release Bot/.test(crumb) && !crumb.includes(a.id), `the breadcrumb names it, never its id (${crumb.replace(/\s+/g, ' ')})`);
+  ok(/Agents\s*\/\s*Release Bot\s*\/\s*Connect/.test(crumb) && !crumb.includes(a.id), `the breadcrumb names it and its tab, never its id (${crumb.replace(/\s+/g, ' ')})`);
+  await p.click('[data-xag="place"][data-k="cli"]'); await settle(300);
+  ok(/Connect a CLI/.test(await main()) && (await p.$eval('.xag-tabs [aria-selected="true"]', (e) => e.dataset.k).catch(() => '')) === 'claude', 'On a computer shows the CLI setup, Claude Code first');
 
-  // address: fresh tab, back/forward
+  // the Overview of an agent that never ran: three steps, not empty sections
   await fresh(`/workspace/workspace/Agents/${a.id}`);
-  ok(/Run Release Bot anywhere/.test(await main()) && new URL(p.url()).pathname.endsWith(a.id), 'a fresh tab on the id address lands on the same agent, and the address keeps its id');
+  t = await main();
+  ok(/Three steps and Release Bot starts working/.test(t) && /Give it projects/.test(t) && /Choose where it runs/.test(t) && /Hand it a task/.test(t), 'a fresh tab on its id address lands on its Overview: three steps for an agent that never ran');
   await p.click('.crumbs a[data-crumb="Agents"]'); await settle();
   ok(/Release Bot/.test(await main()) && new URL(p.url()).pathname === '/workspace/workspace/Agents', 'the trail goes back to the list');
   await p.goBack(); await settle();
-  ok(/Run Release Bot anywhere/.test(await main()), 'Back returns to the agent');
+  ok(/Three steps and Release Bot/.test(await main()), 'Back returns to the agent');
 
   // the status mark: a square with a small radius (never a circle), green and blinking while it works — pushed live
   await settle(900);
@@ -118,53 +142,56 @@ try {
   await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   ok((await p.$eval('.xag-mono--lg .xag-dot', (d) => getComputedStyle(d).animationName)) === 'none', 'and it stops blinking for people who turn motion off');
   await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
-  // presence and activity
   ok((await p.$eval('[data-xag-presence]', (e) => e.dataset.xagPresence).catch(() => '')) === 'working' && /Working in the cloud/.test(await main()) && /Can take work now/.test(await main()), 'the agent says whether it can take work, from the server’s presence');
-  ok(/Activity/.test(await main()) && /commented on\s*T-7/.test(await main()) && /tasks_claim_task/.test(await main()), 'its activity lists what it did on tasks and the tools it called');
+
+  // step 1 gives it a project, from the Overview
+  await p.click('[data-xag="proj-toggle"][data-id="p-1111"]'); await settle(900);
+  ok(db.calls.some(([m, u, b]) => m === 'PUT' && u === `/api/agents/${a.id}/projects/p-1111` && b.access === 'editor') && a.pids.includes('p-1111'), 'the first step gives it a project on the platform');
+
+  // keys: 3 opens Activity, at its own address; its tool calls are folded into sittings
+  await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('3'); await settle(900);
+  t = await main();
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}/Activity` && /commented on\s*T-7/.test(t) && /1 XENO tool call from Claude Code/.test(t) && /tasks_claim_task/.test(t), `3 opens Activity at its address: task actions, and XENO tool calls as sittings (${new URL(p.url()).pathname})`);
   await fresh('/workspace/workspace');
   ok(!!(await p.$('#panel .side-dot.xag-dot--working')) && /Release Bot/.test(await p.$eval('#panel', (e) => e.innerText)) && parseFloat(await p.$eval('#panel .side-dot', (d) => getComputedStyle(d).borderTopLeftRadius)) < 4, 'the sidebar lists your agents with the same square status mark');
   { const g = await p.evaluate(() => { const row = [...document.querySelectorAll('#panel .row')].find((x) => x.querySelector('.side-dot')); const d = row.querySelector('.side-dot').getBoundingClientRect(), t = row.querySelector('.t').getBoundingClientRect(), r = row.getBoundingClientRect(); return { leftOfText: d.right <= t.left, inRowStart: d.left - r.left < 16, lowHalf: d.top >= t.top + t.height / 2 - 1 && d.bottom <= t.bottom, w: d.width }; });
     ok(g.leftOfText && g.inRowStart && g.lowHalf && g.w <= 7, `the sidebar mark is small, at the start of the row, before the name and level with its bottom (${JSON.stringify(g)})`); }
-  // Overview's sidebar lists them too, and a row opens the agent's own page by its id
   await fresh('/workspace'); await settle(1500);
   { const side = await p.$eval('#panel', (e) => e.innerText).catch(() => '');
     ok(/Your agents/.test(side) && /Release Bot/.test(side) && !!(await p.$('#panel [data-ws-item] .side-dot')), `Overview's sidebar lists your agents with their status mark (${side.replace(/\s+/g, ' ').slice(0, 160)})`);
     await p.click(`#panel [data-ws-item="Agents/${a.id}"]`); await settle(900);
-    ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}` && /Run Release Bot anywhere/.test(await main()), 'clicking it there opens the agent at its id address'); }
-  await fresh(`/workspace/workspace/Agents/${a.id}`);
+    ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${a.id}` && /Release Bot/.test(await main()), 'clicking it there opens the agent at its id address'); }
 
-  // projects
-  await p.click('[data-xag-proj="p-1111"]'); await settle(900);
-  ok(db.calls.some(([m, u, b]) => m === 'PUT' && u === `/api/agents/${a.id}/projects/p-1111` && b.access === 'editor') && a.pids.includes('p-1111'), 'ticking a project gives it to the agent on the platform');
-
-  // credential: shown once, filled into each CLI's setup
+  // Connect: a credential shown once, filled into each CLI's setup
+  await fresh(`/workspace/workspace/Agents/${a.id}/Connect`);
   t = await main();
   ok(/Make a credential to fill this in/.test(t) && !/xtk_/.test(t), 'before a credential exists, the setup says to make one');
   await p.click('[data-xag="mint"]'); await settle(1000);
   const tok = a.creds[0].token; t = await main();
-  ok(t.includes(tok) && /never shown again/.test(t), 'New credential shows the secret once, and says so');
+  ok(t.includes(tok) && /never shown again/.test(t), 'Make credential shows the secret once, and says so');
   ok(t.includes(`claude mcp add --transport http xeno ${base}/api/mcp --header "Authorization: Bearer ${tok}"`), 'the Claude Code command is filled in with the credential');
   await p.click('[data-xag="tab"][data-k="codex"]'); await settle(300);
   ok((await main()).includes(`export XENO_AGENT_TOKEN=${tok}`) && /bearer-token-env-var XENO_AGENT_TOKEN/.test(await main()), 'Codex uses an environment variable, not the command line');
-  await p.click('[data-xag="tab"][data-k="spawn"]'); await settle(300);
+  await p.click('[data-xag="place"][data-k="spawn"]'); await settle(300);
   ok((await main()).includes(`spawn profiles bind ${a.id}`) && /secure store/.test(await main()), 'Spawn binds a profile by the agent id');
-  await fresh(`/workspace/workspace/Agents/${a.id}`);
-  ok(!(await main()).includes(tok) && /xtk_abcdefabcdef_…/.test(await main()), 'after leaving, the secret is never shown again — only its hint');
+  await fresh(`/workspace/workspace/Agents/${a.id}/Access`);
+  ok(!(await main()).includes(tok) && /xtk_abcdefabcdef_…/.test(await main()), 'after leaving, the secret is never shown again — Access lists only its hint');
 
-  // revoke
+  // revoke (Access)
   await p.click('[data-xag="revoke"]'); await settle(400); await submit();
   ok(a.creds[0].revoked && /No live credential/.test(await main()), 'Revoke, after confirming, stops the credential');
 
-  // webhook: where it hears about new work; the signing secret is shown once
+  // Settings: webhook, signing secret shown once
+  await fresh(`/workspace/workspace/Agents/${a.id}/Settings`);
   await p.click('[data-xag="webhook"]'); await settle(500); await fill(['https://agent.example.com/xeno']); await submit();
   let t2 = await main();
   ok(a.webhook === 'https://agent.example.com/xeno' && /whsec_SIGNING/.test(t2) && /never shown again/.test(t2), 'a webhook is saved and its signing secret shown once');
-  await fresh(`/workspace/workspace/Agents/${a.id}`);
+  await fresh(`/workspace/workspace/Agents/${a.id}/Settings`);
   t2 = await main();
   ok(/agent\.example\.com/.test(t2) && !/whsec_SIGNING/.test(t2), 'afterwards the address is listed and the secret is gone');
 
-  // how it runs: model, reasoning, tools — saved as a new version
-  ok(/Runs with/.test(await main()) && /CLI it runs in picks the model/.test(await main()), 'an agent with no runtime says the CLI chooses');
+  // Settings: model, reasoning, tools — saved as a new version
+  ok(/Model and tools/.test(await main()) && /CLI it runs in picks the model/.test(await main()), 'an agent with no runtime says the CLI chooses');
   await p.click('[data-xag="runtime"]'); await settle(500);
   await fill(['gpt-5.5', 'Read, Edit, XenoTaskComment', 'Bash']);
   await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="effort"] [data-v]')].find((x) => x.dataset.v === 'high')?.click()); await settle(200);
@@ -177,11 +204,18 @@ try {
   ok(await p.evaluate(() => document.querySelector('.xd input')?.value === 'gpt-5.5'), 'Change opens with the current values');
   await fill(['', '', '']); await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="effort"] [data-v]')].find((x) => x.dataset.v === '')?.click()); await submit();
   ok(JSON.stringify(db.calls.filter((c) => c[0] === 'PATCH' && c[2].runtime).pop()[2].runtime) === '{}', 'clearing everything hands the choice back to the CLI');
+  { const st = await main(); ok(/cloud runs, which record the version/i.test(st) && /Spending cap/.test(st) && /All 1 XENO services/.test(st), `Settings shows how each version did, its spending cap and its services in one line (${[/cloud runs, which record the version/i.test(st), /Spending cap/.test(st), /All 1 XENO services/.test(st)]})`); }
 
-  // run it in the cloud on one of its tasks
-  ok(/Runs in the cloud/.test(await main()) && /no CLI, no computer of yours/.test(await main()), 'the agent page offers cloud runs, and says what they are');
-  if (!a.pids.length) { await p.evaluate(() => document.querySelector('.xag [data-xag-proj]')?.click()); await settle(500); }
-  await p.click('[data-xag="run-cloud"]'); await settle(600);
+  // Settings: the spending cap
+  await p.click('[data-xag="cap"]'); await settle(500); await fill(['250']); await submit();
+  ok(db.calls.some(([m, u, b]) => m === 'PUT' && u === `/api/agents/${a.id}/spend-cap` && b.credits === 250) && a.cap === 250, 'a cap is saved in credits');
+  await p.click('[data-xag="cap"]'); await settle(500); await fill(['']); await submit();
+  ok(db.calls.some(([m, u, b]) => m === 'PUT' && u === `/api/agents/${a.id}/spend-cap` && b.credits === null) && a.cap === null, 'emptying it removes the cap');
+
+  // Work: run it in the cloud on one of its tasks
+  await fresh(`/workspace/workspace/Agents/${a.id}/Work`);
+  ok(/Cloud runs/.test(await main()) && /no CLI, no computer of yours/.test(await main()), 'Work offers cloud runs, and says what they are');
+  await p.click('.xag-runs [data-xag="run-cloud"]'); await settle(600);
   const offered = await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="task"] [data-v]')].map((x) => x.dataset.v));
   ok(offered.includes('T-7') && !offered.includes('T-8'), 'Run offers only tasks in its projects');
   await submit();
@@ -192,16 +226,23 @@ try {
   await p.click('[data-xag="stop-run"]'); await settle(900);
   ok(/T-7 · Stopped/.test(await main()) && /You stopped it/.test(await main()), 'Stop stops it and says so');
 
-  // ownership: a personal agent can be offered to a company, after confirming it is you
-  ok(/Owner and access/.test(await main()) && /You, personally/.test(await main()), 'the page says who owns it and who answers for it');
+  // Hand it a task: T, from any tab, offers only its projects' tasks and hands one over
+  await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.keyboard.press('t'); await settle(700);
+  const offered2 = await p.evaluate(() => [...document.querySelectorAll('.xd [data-f="task"] [data-v]')].map((x) => x.dataset.v));
+  ok(offered2.includes('T-7') && !offered2.includes('T-8'), 'T opens Hand it a task with only its projects’ tasks');
+  await submit();
+  ok(db.calls.some(([m, u, b]) => m === 'PATCH' && u === '/api/tasks/T-7' && b.delegateId === a.userId), 'it hands the task to the agent');
+
+  // Access: ownership — a personal agent can be offered to a company, after confirming it is you
+  await fresh(`/workspace/workspace/Agents/${a.id}/Access`);
+  ok(/Owner and access/.test(await main()) && /You, personally/.test(await main()), 'Access says who owns it and who answers for it');
   await p.click('[data-xag="move"]'); await settle(500);
   await p.evaluate(() => document.querySelector('.xd [data-v="w-acme"], .xd [value="w-acme"]')?.click()); await submit();
   ok(db.calls.some(([m, u, b]) => m === 'POST' && u === `/api/agents/${a.id}/transfers` && b.workspaceId === 'w-acme'), 'Move to a company offers it to the chosen company (personal workspaces are not offered)');
   ok(/Offered to its new owner/.test(await main()), 'the pending move is shown on its page');
   // a company agent whose accountable admin left: paused, and an admin takes it over
   Object.assign(a, { owner: { kind: 'company', workspaceId: 'w-acme', name: 'Acme' }, accountable: { userId: 'u-bea', name: 'Bea' }, paused: 'needs_owner', transfers: [] });
-  await fresh(`/workspace/workspace/Agents/${a.id}`); let tt = await main();
-  if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: false });
+  await fresh(`/workspace/workspace/Agents/${a.id}/Access`); let tt = await main();
   ok(/is paused/.test(tt) && /Nothing is lost/.test(tt) && /Owned by\s*Acme/.test(tt), 'a company agent whose accountable person left shows as paused, kept, owned by the company');
   await p.click('[data-xag="takeover"]'); await settle(500); await fill(['Bea left']); await submit();
   tt = await main();
@@ -211,8 +252,10 @@ try {
   ok(db.calls.some(([m, u]) => m === 'PUT' && u === `/api/agents/${a.id}/access/u-cal/runner`) && /Cal/.test(await main()), 'Give access grants a member one of the four rights, and lists them');
   // someone with only the run right sees no edit or delete
   Object.assign(a, { rights: { viewer: true, runner: true, editor: false, exporter: false, manage: false } });
-  await fresh(`/workspace/workspace/Agents/${a.id}`); tt = await main();
-  ok(!(await p.$('[data-xag="edit"]')) && !(await p.$('[data-xag="delete"]')) && /You can\s*See, Run/.test(tt), 'a person who may only run it sees what they can do, and no Edit or Delete');
+  await fresh(`/workspace/workspace/Agents/${a.id}/Access`); tt = await main();
+  ok(!(await p.$('[data-xag="edit"]')) && /You can\s*See, Run/.test(tt), 'a person who may only run it sees what they can do, and no Edit');
+  await fresh(`/workspace/workspace/Agents/${a.id}/Settings`);
+  ok(!(await p.$('[data-xag="delete"]')) && !(await p.$('[data-xag="cap"]')), 'and no Delete or spending cap in Settings');
   Object.assign(a, { owner: { kind: 'personal' }, accountable: { userId: 'u1', name: 'Me' }, paused: null, rights: ALL, people: [], history: [] });
   await fresh(`/workspace/workspace/Agents/${a.id}`);
 
@@ -221,7 +264,8 @@ try {
   await fill(['Ship Bot']); await submit();
   ok(a.name === 'Ship Bot' && new URL(p.url()).pathname.endsWith(a.id) && /Ship Bot/.test(await p.$eval('.crumbs', (e) => e.innerText)), 'renaming keeps its id address; the breadcrumb follows the new name');
 
-  // delete, then the gone address
+  // delete (Settings), then the gone address
+  await fresh(`/workspace/workspace/Agents/${a.id}/Settings`);
   await p.click('[data-xag="delete"]'); await settle(400); await submit();
   ok(!db.agents.length && new URL(p.url()).pathname === '/workspace/workspace/Agents', 'Delete, after confirming, removes it and returns to the list');
   await fresh(`/workspace/workspace/Agents/${a.id}`);
@@ -232,13 +276,15 @@ try {
   ok(/could not be loaded/.test(await main()) && await p.$('[data-xag="retry"]'), 'a failed load says so and offers to try again'); fail = false;
 
 
-  // ── EVERY STATE OF ONE AGENT'S PAGE (the redesign, 2026-10-18). Each status line must come from a measured field
+  // ── EVERY STATE OF ONE AGENT'S PAGE (the redesign, 2026-10-24). Each status line must come from a measured field
   // (presence state / seenAt / runs) or say "never"; nothing shows a status nobody measured.
   const before = (ms) => new Date(Date.now() - ms).toISOString();
   const seed = (name, extra) => { const x = { id: 'agt_' + hex(), userId: 'x', name, description: '', createdAt: new Date().toISOString(), status: 'active', pids: [], creds: [], connections: [], ...extra }; db.agents.push(x); return x; };
   const sNew = seed('Fresh Bot', { pres: { state: 'new', label: 'Not connected yet', canTakeWork: false, seenAt: null } });
   const sNever = seed('Idle Bot', { creds: [{ id: 'c0', token: 'xtk_n', hint: 'xtk_n…', label: 'Credential', expiresAt: new Date(Date.now() + 864e5).toISOString(), lastUsedAt: null, createdAt: before(1000) }], pres: { state: 'cloud', label: 'Runs in the cloud', canTakeWork: true, seenAt: null } });
-  const sRan = seed('Busy Bot', { connections: [{ id: 'k1', client: 'Claude Code', createdAt: before(864e5), lastUsedAt: before(180e3) }], pres: { state: 'online', label: 'Online', canTakeWork: true, seenAt: before(180e3) } });
+  const sRan = seed('Busy Bot', { pids: ['p-1111'], connections: [{ id: 'k1', client: 'Claude Code', createdAt: before(864e5), lastUsedAt: before(180e3), pausedAt: null }], pres: { state: 'online', label: 'Online', canTakeWork: true, seenAt: before(180e3), doing: { task: 'T-7', title: 'Ship the header', note: 'Header built; checking it at phone width', at: before(120e3) } },
+    queue: [{ task: 'T-7', title: 'Ship the header', status: 'in_progress', at: before(120e3) }, { task: 'T-9', title: 'Fix the footer', status: 'in_review', at: before(600e3) }],
+    needs: [{ kind: 'review', task: 'T-9', title: 'Fix the footer', at: before(600e3) }, { kind: 'asks', task: 'T-7', title: 'Ship the header', note: 'Which logo goes in the header?', at: before(60e3) }], spent: 12.5, cap: 100 });
   const sOff = seed('Away Bot', { connections: [{ id: 'k2', client: 'Codex', createdAt: before(5 * 864e5), lastUsedAt: before(2 * 864e5) }], pres: { state: 'offline', label: 'Offline — work waits until it connects', canTakeWork: false, seenAt: before(2 * 864e5) } });
   const sSus = seed('Kept Bot', { owner: { kind: 'company', workspaceId: 'w-acme', name: 'Acme' }, accountable: { userId: 'u-bea', name: 'Bea' }, paused: 'needs_owner', pres: { state: 'paused', label: 'Paused — needs an owner', canTakeWork: false, seenAt: null } });
   const sRo = seed('Shared Bot', { rights: { viewer: true, runner: false, editor: false, exporter: false, manage: false }, pres: { state: 'offline', label: 'Offline — work waits until it connects', canTakeWork: false, seenAt: before(3600e3) } });
@@ -248,34 +294,55 @@ try {
 
   await fresh(`/workspace/workspace/Agents/${sNew.id}`); await shot('new');
   { const id = await avail(); ok(/Not connected yet/.test(id) && /Last seen never/.test(id) && !/Can take work/.test(id), `new: not connected, never seen (${one(id)})`); }
-  { const order = await p.evaluate(() => { const t = document.querySelector('#main').innerText; return ['Run Fresh Bot anywhere', 'Where it has run', 'Works on', 'Runs in the cloud', 'Activity', 'Instructions', 'Owner and access', 'Credentials'].map((s) => t.indexOf(s)); });
-    ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `the page reads: run it, where it ran, give it work, settings, access (${order})`); }
-  await p.click('[data-xag="tab"][data-k="spawn"]'); await settle(300); await shot('spawn-tab');
-  ok(!(await p.$('[data-xag="mint"]')) && !(await p.$('[data-xag-ttl]')), 'the Spawn tab shows no credential controls: Spawn makes its own');
+  ok(/Three steps and Fresh Bot starts working/.test(await main()), 'new: its Overview is the three steps');
+  await fresh(`/workspace/workspace/Agents/${sNew.id}/Connect`);
+  await p.click('[data-xag="place"][data-k="spawn"]'); await settle(300); await shot('spawn-tab');
+  ok(!(await p.$('[data-xag="mint"]')) && !(await p.$('[data-xag-ttl]')), 'In Spawn shows no credential controls: Spawn makes its own');
   { const sp = await p.evaluate(() => { const e = document.querySelector('.xag-spawn'); if (!e) return null; const c = getComputedStyle(e); const l = getComputedStyle(e.querySelector('a.pg-btn')); return { display: c.display, pad: parseFloat(c.paddingTop), border: c.borderTopStyle, bg: c.backgroundColor, ink: l.color, btn: l.backgroundColor }; });
     ok(sp && sp.display === 'flex' && sp.pad > 0 && sp.border !== 'none' && sp.bg !== 'rgb(255, 255, 255)' && sp.ink !== sp.btn, `the Open in Spawn block is styled and its button label is readable (${JSON.stringify(sp)})`); }
   { const tx = await main(); const vs = [...new Set((tx.match(/XENO Spawn 0\.1\.0-rc\.\d+/g) || []))];
     ok(vs.length === 1 && vs[0] === 'XENO Spawn 0.1.0-rc.42' && (tx.match(/XENO Spawn 0\.1\.0-rc/g) || []).length >= 2, `every Spawn version on the page is the same one (${JSON.stringify(vs)})`); }
-  await p.click('[data-xag="tab"][data-k="claude"]'); await settle(300);
-  ok(!!(await p.$('[data-xag="mint"]')) && !!(await p.$('[data-xag-ttl]')), 'the Claude Code tab keeps its credential controls');
+  await p.click('[data-xag="place"][data-k="cli"]'); await settle(300);
+  ok(!!(await p.$('[data-xag="mint"]')) && !!(await p.$('[data-xag-ttl]')), 'On a computer keeps its credential controls');
   { const ov = await p.evaluate(async () => { const n = document.getElementById('xp-note'); if (!n) return { note: false };
       for (const el of [document.scrollingElement, ...document.querySelectorAll('#main, #main *')]) if (el && el.scrollHeight > el.clientHeight + 4) el.scrollTop = el.scrollHeight;
-      await new Promise((r) => setTimeout(r, 250)); const secs = [...document.querySelectorAll('#main .pg-sec')]; const last = secs[secs.length - 1].getBoundingClientRect(), nr = n.getBoundingClientRect();
+      await new Promise((r) => setTimeout(r, 250)); const secs = [...document.querySelectorAll('#main .xag-one > *, #main .pg-sec')]; const last = secs[secs.length - 1].getBoundingClientRect(), nr = n.getBoundingClientRect();
       return { note: true, lastBottom: Math.round(last.bottom), noteTop: Math.round(nr.top) }; });
     if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `${TAG}-bottom.png`) }).catch(() => {});
     ok(ov.note && ov.lastBottom <= ov.noteTop, `the Preview note does not cover the last section (${JSON.stringify(ov)})`); }
 
   await fresh(`/workspace/workspace/Agents/${sNever.id}`); await shot('never-run');
   { const id = await avail(); ok(/Never run/.test(id) && /Last seen never/.test(id) && !/Can take work now/.test(id) && !/Runs in the cloud/.test(id), `never run: says so, not "runs in the cloud, can take work now" (${one(id)})`); }
+
+  // working: Right now, Needs you, the message box, its place controls and its spend
   await fresh(`/workspace/workspace/Agents/${sRan.id}`); await shot('ran');
   { const id = await avail(); ok(/Online/.test(id) && /seen 3 min ago/.test(id) && /Can take work now/.test(id), `ran: online, seen 3 min ago (${one(id)})`); }
+  t = await main();
+  ok(/Right now/i.test(t) && /Ship the header/.test(t) && /Header built; checking it at phone width/.test(t) && /Live/i.test(t), 'Right now shows the task it is on and the note it last reported, marked live');
+  { const n = await p.$$eval('.xag-needs .xag-att', (xs) => xs.map((x) => x.innerText.replace(/\s+/g, ' ')));
+    ok(n.length === 2 && /Review T-9/i.test(n[0]) && /Asks “Which logo goes in the header\?”/i.test(n[1]), `Needs you lists its review and its question, each with its own button (${JSON.stringify(n)})`); }
+  ok(/12\.5 credits/.test(t) && /of 100 cap/.test(t) && (await p.$$('.xag-spark i')).length === 14, 'its spend shows against its cap, with 14 days of bars');
+  ok(/Waiting for it/.test(t) && /T-9 · Fix the footer/.test(t), 'what is waiting for it is listed');
+  await p.click('[data-xag="watch"]'); await settle(700);
+  ok(/Commands it runs on its own computer stay on that computer/.test(await main()) && /tasks_claim_task/.test(await main()), 'Watch shows its XENO tool calls, and says what XENO cannot see');
+  await p.type('#xag-ask-in', 'Use the black logo'); await p.click('.xag-ask [type="submit"]'); await settle(700);
+  ok((sRan.msgs || []).includes('Use the black logo') && /Sent on T-7/.test(await p.evaluate(() => document.body.innerText)), 'a message goes on the task it is on');
+  await p.click('.xag-side [data-xag="pause"][data-id="k1"]'); await settle(900);
+  ok(sRan.connections[0].pausedAt && /Paused/.test(await p.$eval('.xag-side', (e) => e.innerText)) && !!(await p.$('.xag-side [data-xag="resume"][data-id="k1"]')), 'Pause stops that one place it runs, and offers Resume');
+  await p.click('.xag-side [data-xag="resume"][data-id="k1"]'); await settle(900);
+  ok(!sRan.connections[0].pausedAt, 'Resume lets it run there again');
   await fresh(`/workspace/workspace/Agents/${sOff.id}`); await shot('offline');
   { const id = await avail(); ok(/Offline/.test(id) && /seen 2 d ago/.test(id) && /waits until it connects/.test(id), `offline: seen 2 d ago, work waits (${one(id)})`); }
+  ok(!!(await p.$('#xag-ask-in[disabled]')), 'with no task, the message box says to hand it one first');
   await fresh(`/workspace/workspace/Agents/${sSus.id}`); await shot('suspended');
-  { const first = await p.evaluate(() => { const c = document.querySelector('.pg-cols--item > div'); return c && c.firstElementChild ? c.firstElementChild.className : ''; });
+  { const first = await p.evaluate(() => { const c = document.querySelector('.xag-one'); return c && c.firstElementChild ? c.firstElementChild.className : ''; });
     ok(/xag-paused/.test(first) && /Can’t take work/.test(await avail()), `suspended: the pause comes first, it can’t take work (${first})`); }
   await fresh(`/workspace/workspace/Agents/${sRo.id}`); await shot('no-permission');
-  ok(!(await p.$('.xag-run')) && !(await p.$('[data-xag="edit"]')) && /You can\s*See/.test(await main()), 'no permission to run: no run section, no Edit, says what you can do');
+  ok(!(await p.$('#xag-ask-in')) && !(await p.$('[data-xag="edit"]')), 'no permission to run: no message box, no Edit');
+  await fresh(`/workspace/workspace/Agents/${sRo.id}/Connect`);
+  ok(!(await p.$('.xag-run')) && /not run it/.test(await main()), 'and Connect says it can see the agent but not run it');
+  await fresh(`/workspace/workspace/Agents/${sRo.id}/Access`);
+  ok(/You can\s*See/.test(await main()), 'Access says what you can do');
 
   if (process.env.AXE_PATH) {
     await fresh(`/workspace/workspace/Agents/${sRan.id}`); await p.addScriptTag({ path: process.env.AXE_PATH });
@@ -285,7 +352,7 @@ try {
   } else console.log('SKIP axe — set AXE_PATH to an axe.min.js');
 
   await p.setViewport({ width: 390, height: 844 }); await fresh(`/workspace/workspace/Agents/${sRan.id}`); await shot('mobile-390');
-  ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1) && !!(await p.$('.xag-run')), 'at 390px the agent page fits and still leads with running it');
+  ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1) && !!(await p.$('.xag-now')), 'at 390px the agent page fits and still leads with what it is doing now');
   ok(cerrs.length === ce0, `no console error on any agent state (${JSON.stringify(cerrs.slice(ce0, ce0 + 3))})`);
   db.agents = [];
 

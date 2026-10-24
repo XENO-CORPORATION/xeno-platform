@@ -99,6 +99,10 @@ export async function callerOf(req, res, rid, { principal = true } = {}) {
     const client = await getClient(req.db, tok.clientId);
     connection = await mcp.connectionFor(req.db, { ownerId: tok.ownerId, agentId: tok.agentUserId, clientId: tok.clientId, clientName: client ? client.name : null, ...(workspaceToken ? { categories: mcp.categoriesForScopes(tok.scopes) } : {}) });
   }
+  // paused on the agent's page: refused before anything runs, and answers again the moment it is resumed
+  if (connection && connection.paused_at) {
+    res.status(403).json({ jsonrpc: '2.0', id: rid, error: { code: -32001, message: 'This connection is paused in XENO. Its owner can resume it on the agent’s page.' } }); return null;
+  }
   if (fresh) await creds.grant(req.db, tok.agentUserId, await personalWorkspace(req.db, tok.ownerId), creds.capabilitiesForScopes(tok.scopes));
   if (!principal) return { connection, actor: null };
   const p = await resolvePrincipal(req.db, tok.agentUserId); assertPrincipalUsable(p);

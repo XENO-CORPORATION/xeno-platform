@@ -90,8 +90,8 @@ async function versions(db, resourceId) {
 async function full(db, r, me = null) {
   const projects = (await tasks.listTaskProjects(db, { id: r.id })).map((p) => ({ id: p.id, name: p.name, access: p.canEdit ? 'editor' : 'viewer' }));
   for (const p of projects) p.division = await divisions.projectDivision(db, p.id);
-  const connections = (await db.query(`SELECT id, client_name, created_at, last_used_at FROM mcp_connections WHERE agent_user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`, [r.id])).rows
-    .map((c) => ({ id: String(c.id), client: c.client_name, createdAt: c.created_at, lastUsedAt: c.last_used_at }));
+  const connections = (await db.query(`SELECT id, client_name, created_at, last_used_at, paused_at FROM mcp_connections WHERE agent_user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`, [r.id])).rows
+    .map((c) => ({ id: String(c.id), client: c.client_name, createdAt: c.created_at, lastUsedAt: c.last_used_at, pausedAt: c.paused_at || null }));
   const vs = await versions(db, r.workforce_resource_id);
   const ws = r.owner_workspace_id || (r.r_owner_user ? await divisions.personalWorkspace(db, r.r_owner_user) : null);
   const w = ws ? (await db.query('SELECT id, name, workspace_type FROM workspaces WHERE id = $1', [ws])).rows[0] : null;

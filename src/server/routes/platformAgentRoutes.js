@@ -19,6 +19,10 @@
  *   DELETE /api/agents/:id/credentials/:cid
  *   PUT    /api/agents/:id/projects/:projectId    { access: viewer|editor }
  *   DELETE /api/agents/:id/projects/:projectId
+ *   GET    /api/agents/:id/overview               the agent page's Overview in one read (services/agentOverview.js)
+ *   POST   /api/agents/:id/message                { body, task? } — a comment on the task it is on, which reaches it
+ *   POST   /api/agents/:id/connections/:cid/pause|resume   one place it runs stops / starts answering
+ *   PUT    /api/agents/:id/spend-cap              { credits | null } — what it may spend through XENO tools in 30 days
  */
 import express from 'express';
 import * as agents from '../services/platformAgents.js';
@@ -31,12 +35,13 @@ import * as presence from '../services/agentPresence.js';
 import * as presenceStream from '../services/agentPresenceStream.js';
 import { requireConfirmation } from '../services/accountConfirmation.js';
 import * as transfer from '../services/workforceOwnershipTransfer.js';
+import * as overview from '../services/agentOverview.js';
 
 const router = express.Router();
 const handled = (fn) => async (req, res) => {
   try { await fn(req, res); }
   catch (e) {
-    if (e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError || e instanceof access.AccessError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
+    if (e instanceof overview.OverviewError || e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError || e instanceof access.AccessError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     console.error('[agents]', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -52,7 +57,16 @@ router.post('/lends/:lendId/revoke', handled(async (req, res) => { res.json({ su
 // presence (online / working / cloud / offline …) for every agent you can see, and one agent's activity log
 router.get('/presence/stream', async (req, res) => { try { await presenceStream.serve(req, res); } catch (e) { console.error('[agents presence stream]', e); if (!res.headersSent) res.status(500).json({ success: false, error: 'Internal server error' }); else res.end(); } });
 router.get('/presence', handled(async (req, res) => { res.json({ success: true, agents: await presence.presenceAll(req.db, req.me) }); }));
-router.get('/:id/activity', handled(async (req, res) => { res.json({ success: true, ...(await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before })) }); }));
+router.get('/:id/overview', handled(async (req, res) => { res.json({ success: true, ...(await overview.overview(req.db, req.me, req.params.id)) }); }));
+router.post('/:id/message', handled(async (req, res) => { res.json({ success: true, ...(await overview.message(req.db, req.me, req.params.id, req.body || {})) }); }));
+router.post('/:id/connections/:cid/pause', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, true) }); }));
+router.post('/:id/connections/:cid/resume', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, false) }); }));
+router.put('/:id/spend-cap', handled(async (req, res) => { res.json({ success: true, ...(await overview.setSpendCap(req.db, req.me, req.params.id, req.body || {})) }); }));
+router.get('/:id/activity', handled(async (req, res) => {
+  const out = await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before });
+  // ?grouped=1: XENO tool calls folded into sittings, as the agent page's Activity tab shows them
+  res.json({ success: true, ...out, ...(req.query.grouped === '1' ? { items: overview.groupActivity(out.items) } : {}) });
+}));
 router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null, workspaceId: req.query.workspace ? String(req.query.workspace) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, agent: await agents.create(req.db, req.me, req.body || {}) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.get(req.db, req.me, req.params.id) }); }));
