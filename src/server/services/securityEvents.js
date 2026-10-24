@@ -58,6 +58,7 @@ export const EVENTS = Object.freeze({
   TOKEN_REFRESHED: 'token_refreshed',
   TOKEN_REVOKED: 'token_revoked',
   TOKEN_REUSE_DETECTED: 'token_reuse_detected', // RFC 9700 family revocation fired
+  TOKEN_REFRESH_RECOVERED: 'token_refresh_recovered', // an unconsumed rotation was replayed with its rotation_id (idempotent recovery)
   OIDC_CLIENT_REGISTERED: 'oidc_client_registered',
   // BYOK credential lifecycle (INFERENCE ROUTING spec; Vault's rule: no secret
   // op without an audit record). Metadata carries ids, provider and the key
