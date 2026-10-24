@@ -24,6 +24,9 @@ test('download, releases and release pages render inside the v2 chrome', () => {
   const chrome = read('src/components/product/v2/V2Page.tsx');
   assert.match(chrome, /V2_HEADER_HTML\.replace\(V2_PRODUCT_TOKEN, escapeHtml\(word\)\)/, 'the only runtime input to the header is escaped');
   assert.match(chrome, /V2_HEADER_JS/, 'the shared header behaviour is loaded');
+  // A short page in a tall window: the footer must reach the bottom edge (no paper strip under it).
+  assert.match(chrome, /minHeight: '100vh', display: 'flex', flexDirection: 'column'/, 'the chrome is a full-height column');
+  assert.match(chrome, /<main style=\{\{ flex: '1 0 auto' \}\}>/, 'main takes the slack so the footer sits at the bottom');
 });
 
 test('the experimental notice keeps its single source of copy in the paper tone', () => {
