@@ -5,7 +5,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import puppeteer from 'puppeteer';
 
-test('all 46 product documents have working shared navigation on desktop and phone', { timeout: 120000 }, async () => {
+test('every product document has working shared navigation on desktop and phone', { timeout: 120000 }, async () => {
   const root = resolve('public');
   const server = createServer(async (req, res) => {
     try {
@@ -76,7 +76,9 @@ test('all 46 product documents have working shared navigation on desktop and pho
       }
       await page.close();
     }));
-    assert.equal(passed.length, 46);
+    // Derived from the documents on disk: a hardcoded count fails the day a page is added.
+    assert.ok(slugs.length >= 47, `expected 47+ documents, got ${slugs.length}`);
+    assert.equal(passed.length, slugs.length);
     console.log(`Verified ${passed.length} documents: desktop menus, keyboard, phone controls, navigation links and no renderer errors.`);
   } finally {
     await browser?.close();
