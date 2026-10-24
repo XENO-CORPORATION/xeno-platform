@@ -52,7 +52,9 @@ function normalizeFiles(files) {
     if (!path || path.startsWith('/') || path.split('/').some((seg) => !seg || seg === '..' || seg === '.') || path.length > 200) throw new SkillError(`“${path || '(empty)'}” is not a path inside the skill`, 'invalid_path');
     if (seen.has(path)) throw new SkillError(`${path} is listed twice`, 'duplicate_path');
     seen.add(path);
-    if (typeof f.content !== 'string' || f.content.includes('\0')) throw new SkillError(`${path} must be text`, 'not_text');
+    // Binary files (images, fonts) are not supported YET: they must be stored as raw bytes to round-trip with XENO
+    // Corpus (D239), and decoding one as text would silently corrupt it and give a digest Corpus never matches.
+    if (typeof f.content !== 'string' || f.content.includes('\0')) throw new SkillError(`${path} is a binary file; skills with binary files are not supported yet`, 'not_text');
     const size = Buffer.byteLength(f.content, 'utf8'); total += size;
     if (size > MAX_FILE) throw new SkillError(`${path} is larger than 256 KB`, 'file_too_large');
     return { path, content: f.content };
@@ -243,7 +245,12 @@ export async function importFromGitHub(db, me, { url, workspaceId = null } = {},
         if (it.size > MAX_FILE) throw new SkillError(`${it.path} is larger than 256 KB`, 'file_too_large');
         const raw = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/contents/${it.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`, { headers: { accept: 'application/vnd.github.raw', 'user-agent': 'xeno-skills-import' } });
         if (!raw.ok) throw new SkillError(`Could not read ${it.path} from GitHub`, 'github_unavailable', 502);
-        const text = await raw.text();
+        // decode strictly: a binary file is refused, never turned into text with replacement characters
+        let text;
+        if (typeof raw.arrayBuffer === 'function') {
+          try { text = new TextDecoder('utf-8', { fatal: true }).decode(await raw.arrayBuffer()); }
+          catch { throw new SkillError(`${it.path} is a binary file; skills with binary files are not supported yet`, 'not_text'); }
+        } else text = await raw.text();
         files.push({ path: it.path.slice(dir.replace(/\/$/, '').length + 1), content: text });
       }
     }

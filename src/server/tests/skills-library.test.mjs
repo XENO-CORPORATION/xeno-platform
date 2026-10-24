@@ -143,6 +143,14 @@ async function main() {
     check(imp.name === 'pdf-forms' && imp.version === '1.0.0' && imp.files.map((f) => f.path).join() === 'SKILL.md,scripts/fill.py' && imp.scripts.join() === 'scripts/fill.py' && seen.every((u) => u.startsWith('https://api.github.com/repos/acme/skills/')), 'a GitHub folder imports as a skill, its script named, fetching only from the GitHub API');
     let badUrl = null; try { await skillsSvc.importFromGitHub(pool, { id: ada, kind: 'human' }, { url: 'https://evil.example/acme/skills/tree/main/x' }, { fetchImpl: gh }); } catch (e) { badUrl = e; }
     check(badUrl && badUrl.code === 'invalid_github_url', 'a link that is not a GitHub folder is refused before anything is fetched');
+    // a binary file (here: PNG bytes, not valid UTF-8) is refused by name, never decoded into text
+    const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe]);
+    const ghBin = async (u) => ({ ok: true, status: 200,
+      json: async () => [{ type: 'file', path: 'skills/logo/SKILL.md', size: 60 }, { type: 'file', path: 'skills/logo/logo.png', size: 10 }],
+      arrayBuffer: async () => (/logo\.png/.test(u) ? png.buffer : new TextEncoder().encode(md('logo-skill', 'Use when drawing the logo.', 'Draw it.')).buffer),
+      text: async () => '' });
+    let binErr = null; try { await skillsSvc.importFromGitHub(pool, { id: ada, kind: 'human' }, { url: 'https://github.com/acme/skills/tree/main/skills/logo' }, { fetchImpl: ghBin }); } catch (e) { binErr = e; }
+    check(binErr && binErr.code === 'not_text' && /logo\.png is a binary file/.test(binErr.message) && !(await call('GET', '/api/skills', { token: A })).j.skills.some((x) => x.name === 'logo-skill'), 'a skill with a binary file is refused by name, never decoded as text, and nothing is saved');
 
     // 9. XENO Corpus's bundle digest (D240): computed here from the rule Corpus stated, independently of its code
     const { createHash } = await import('node:crypto');

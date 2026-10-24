@@ -263,7 +263,12 @@ try {
     await fresh('/workspace/workspace/Skills'); await settle(400);
     await p.click('[data-xsk="import"]'); await settle(300);
     const inp = await p.$('.xsk [data-xsk-in="folder"]'); await inp.evaluate((e) => e.removeAttribute('webkitdirectory')); await inp.uploadFile(path.join(dir, 'SKILL.md'), path.join(dir, 'fields.md')); await settle(900);
-    ok(new URL(p.url()).pathname === '/workspace/workspace/Skills/new' && (await p.$eval('.xsk [data-xsk-ed="name"]', (e) => e.value)) === 'pdf-forms' && /fields\.md/.test(await main()), 'an uploaded folder opens in the editor with its SKILL.md and files, not saved yet'); }
+    ok(new URL(p.url()).pathname === '/workspace/workspace/Skills/new' && (await p.$eval('.xsk [data-xsk-ed="name"]', (e) => e.value)) === 'pdf-forms' && /fields\.md/.test(await main()), 'an uploaded folder opens in the editor with its SKILL.md and files, not saved yet');
+    fs.writeFileSync(path.join(dir, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe]));
+    await fresh('/workspace/workspace/Skills'); await settle(400);
+    await p.click('[data-xsk="import"]'); await settle(300);
+    const inp2 = await p.$('.xsk [data-xsk-in="folder"]'); await inp2.evaluate((e) => e.removeAttribute('webkitdirectory')); await inp2.uploadFile(path.join(dir, 'SKILL.md'), path.join(dir, 'logo.png')); await settle(900);
+    ok(new URL(p.url()).pathname === '/workspace/workspace/Skills' && /logo\.png is a binary file/.test(await p.evaluate(() => document.body.innerText)), 'a folder with a binary file is refused by name instead of being decoded into text'); }
 
   // Connect: a credential shown once, filled into each CLI's setup
   await fresh(`/workspace/workspace/Agents/${a.id}/Connect`);
