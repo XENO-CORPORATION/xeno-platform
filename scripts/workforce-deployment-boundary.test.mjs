@@ -49,6 +49,7 @@ const ALLOWED = new Set([
   'uuid', 'bcryptjs', // id generation and hashing, reached through emailService
   'xeno-research', // research engine, vendored; talks to Box over node:http, no client library
   'rrule', // recurrence rules for chat schedules
+  '@xenosystem/anima-mind', // composes an agent's persona prompt and parses mind.xeno (YAML), in-process; no client of any service
 ]);
 
 /** Clients for distributed services this backend could reach for. Named so a failure says WHY. */

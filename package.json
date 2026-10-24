@@ -104,6 +104,7 @@
     "test:canvas-workforce-cards": "node src/server/tests/canvas-workforce-cards.test.mjs",
     "test:agents-whoami-db": "node src/server/tests/agents-whoami.test.mjs",
     "test:agent-overview": "node src/server/tests/agent-overview.test.mjs",
+    "test:agent-identity": "node src/server/tests/agent-identity.test.mjs",
     "test:billing-subject": "node --test scripts/billing-subject.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
     "test:forum-edit-delete": "node --test scripts/forum-edit-delete.test.mjs scripts/forum-my-activity.test.mjs",

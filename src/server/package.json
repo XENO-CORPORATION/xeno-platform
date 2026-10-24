@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@xenosystem/agent-sdk": "0.10.0",
+    "@xenosystem/anima-mind": "0.0.15",
     "@xenosystem/orchestrator": "file:vendor/xenosystem-orchestrator-0.1.0-f838e9f5.tgz",
     "@xenosystem/web-context-client": "0.1.1",
     "bcryptjs": "^2.4.3",
