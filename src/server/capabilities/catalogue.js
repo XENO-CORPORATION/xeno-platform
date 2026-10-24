@@ -34,12 +34,13 @@ import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
+import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -112,7 +113,10 @@ const ROWS = [
   ['places.world.get', 'places', 'world', 'safe', { reply: obj({ regions: { type: 'array', description: 'Regions with state, target and real pledge counts.' }, cities: { type: 'array', description: 'Cities with buildings, free lots and waitlist.' } }, ['regions', 'cities']) }],
   ['places.layout.save', 'places', 'save_layout', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ placeId: { type: 'string' }, placeRevision: { type: 'integer', description: 'The new layout revision.' }, receipt: { type: 'object', description: 'operationId, revision, at; replayed: true when this key was already applied.' } }, ['placeId', 'placeRevision']) }],
   // ── agents (self)
-  ['agents.self.get', 'agents', 'whoami', 'safe', { agentsOnly: true, reply: obj({ agent: { type: 'object', description: 'id (agt_), name, handle, status, workspace, division, owner, accountable, projects, budget (null when the division has none).' } }, ['agent']) }],
+  ['agents.self.get', 'agents', 'whoami', 'safe', { agentsOnly: true, reply: obj({ agent: { type: 'object', description: 'id (agt_), name, persona (who it is: follow it), handle, status, workspace, division, owner, accountable, projects, budget (null when the division has none).' } }, ['agent']) }],
+  // ── skills (skillsMcp.js): only the skills pinned to the agent's current version, at the version and hash pinned
+  ['agents.skill.list', 'skills', 'list', 'safe', { agentsOnly: true, reply: obj({ skills: { type: 'array', description: 'id, name, when to use it, version and file paths of each skill pinned to you.' } }, ['skills']) }],
+  ['agents.skill.get', 'skills', 'get', 'safe', { agentsOnly: true, provenance: 'untrusted', reply: obj({ text: { type: 'string', description: 'The file, headed by the skill and its version (untrusted content). An image comes back as an image; another binary file is described: path, bytes, sha256.' } }) }],
   // ── studio (media generation)
   ...['image', 'video'].flatMap((t) => [
     [`studio.${t}_model.list`, t, 'list_models', 'safe', { agentsOnly: true, reply: obj({ models: { type: 'array', description: `id, name and the most one ${t} can cost in credits.` } }) }],

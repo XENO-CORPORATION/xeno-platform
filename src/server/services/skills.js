@@ -13,9 +13,10 @@
  *     text through `skills_get` when it decides to use one.
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { redactSecrets, summarizeRedactions, scanForInjection, blockingFindings, formatFinding } from '@xenosystem/anima-mind';
+import { scanForInjection, blockingFindings, formatFinding } from '@xenosystem/anima-mind';
 import { check } from '../utils/authzReBAC.js';
-import { bundleDigestOf, fileEntry } from '../vendor/xeno-corpus/corpus-skill-format.mjs';
+import { bundleDigestOf, fileEntry, sha256Of, sidecarProblems, revisionProblems, verifyBundle, describeBlock, reviewField } from '../vendor/xeno-corpus/corpus-skill-format.mjs';
+import { scanBytes, PER_FILE_RULE_CAP } from '../vendor/xeno-corpus/corpus-secret-rules.mjs';
 
 export class SkillError extends Error { constructor(message, code, status = 400, details) { super(message); this.name = 'SkillError'; this.code = code; this.status = status; this.details = details; } }
 
@@ -23,6 +24,10 @@ const PUBLIC_ID = /^skl_[0-9a-f]{32}$/;
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SEMVER = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})$/;
 const MAX_FILE = 256 * 1024, MAX_TOTAL = 1024 * 1024, MAX_FILES = 64;
+// binary files (images, fonts): larger, stored once by digest in skill_objects (migration 20261030160000)
+const MAX_BINARY = 4 * 1024 * 1024, MAX_BUNDLE = 8 * 1024 * 1024;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
+const B64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 // ───────────────────────────── the format
 
@@ -42,51 +47,131 @@ export function parseSkillMd(text) {
   return { name, description, body: m[2].trim() };
 }
 
-/** The files of a version, SKILL.md first; paths are relative, inside the skill, text only and size-capped. */
-function normalizeFiles(files) {
+/** Text is UTF-8 with no NUL, decoded so that re-encoding gives back the exact bytes (a BOM is kept, not eaten). */
+export function asText(buf) {
+  let t; try { t = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buf); } catch { return null; }
+  return t.includes('\0') ? null : t;
+}
+export const isBinary = (f) => f && typeof f.content !== 'string' && typeof f.sha256 === 'string';
+/** A stored file's bytes (text files are their UTF-8; a binary file's come from skill_objects). */
+export const sizeOf = (f) => (isBinary(f) ? Number(f.bytes) : Buffer.byteLength(f.content, 'utf8'));
+
+/**
+ * The files of a version, SKILL.md first; paths are relative and inside the skill; size-capped. A file arrives as
+ *   { path, content }        text typed in the editor
+ *   { path, base64 }         the exact bytes of an uploaded file — text if they are UTF-8, otherwise a binary file
+ *   { path, sha256 }         a binary file already stored, and only one `reuse` names (a previous version's, a package's)
+ * → { files, objects }: the stored list ({ path, content } or { path, sha256, bytes }) and the new bytes to store.
+ * The digest of a binary file is always computed here from its bytes; a client never names one it did not send.
+ */
+async function prepareFiles(db, files, { reuse = new Set() } = {}) {
   if (!Array.isArray(files) || !files.length) throw new SkillError('A skill needs at least its SKILL.md', 'skill_md_required');
   if (files.length > MAX_FILES) throw new SkillError(`A skill has at most ${MAX_FILES} files`, 'too_many_files');
-  const seen = new Set(); let total = 0;
-  const out = files.map((f) => {
+  const seen = new Set(), objects = new Map(); let text = 0, all = 0;
+  const out = [];
+  for (const f of files) {
     const path = String((f && f.path) || '').replace(/\\/g, '/').trim();
-    if (!path || path.startsWith('/') || path.split('/').some((seg) => !seg || seg === '..' || seg === '.') || path.length > 200) throw new SkillError(`“${path || '(empty)'}” is not a path inside the skill`, 'invalid_path');
+    if (!path || path.startsWith('/') || /^[A-Za-z]:/.test(path) || path.split('/').some((seg) => !seg || seg === '..' || seg === '.') || path.length > 200) throw new SkillError(`“${path || '(empty)'}” is not a path inside the skill`, 'invalid_path');
     if (seen.has(path)) throw new SkillError(`${path} is listed twice`, 'duplicate_path');
     seen.add(path);
-    // Binary files (images, fonts) are not supported YET: they must be stored as raw bytes to round-trip with XENO
-    // Corpus (D239), and decoding one as text would silently corrupt it and give a digest Corpus never matches.
-    if (typeof f.content !== 'string' || f.content.includes('\0')) throw new SkillError(`${path} is a binary file; skills with binary files are not supported yet`, 'not_text');
-    const size = Buffer.byteLength(f.content, 'utf8'); total += size;
-    if (size > MAX_FILE) throw new SkillError(`${path} is larger than 256 KB`, 'file_too_large');
-    return { path, content: f.content };
-  });
-  if (total > MAX_TOTAL) throw new SkillError('A skill is at most 1 MB', 'skill_too_large');
+    let entry;
+    if (typeof f.content === 'string') {
+      if (f.content.includes('\0')) throw new SkillError(`${path} is not text; upload it as a file so its bytes are kept`, 'not_text');
+      entry = { path, content: f.content };
+    } else if (typeof f.base64 === 'string') {
+      if (!B64.test(f.base64) || f.base64.length % 4) throw new SkillError(`${path} did not arrive as base64`, 'invalid_file');
+      const buf = Buffer.from(f.base64, 'base64');
+      const t = asText(buf);
+      if (t !== null) entry = { path, content: t };
+      else {
+        if (path === 'SKILL.md') throw new SkillError('SKILL.md must be UTF-8 text', 'not_text');
+        if (buf.length > MAX_BINARY) throw new SkillError(`${path} is larger than 4 MB`, 'file_too_large');
+        const digest = sha256Of(buf);
+        objects.set(digest, buf);
+        entry = { path, sha256: digest, bytes: buf.length };
+      }
+    } else if (typeof f.sha256 === 'string' && DIGEST.test(f.sha256) && reuse.has(f.sha256)) {
+      const o = (await db.query('SELECT size FROM skill_objects WHERE sha256 = $1', [f.sha256])).rows[0];
+      if (!o) throw new SkillError(`${path}’s stored bytes are missing`, 'object_missing', 409);
+      entry = { path, sha256: f.sha256, bytes: o.size };
+    } else throw new SkillError(`${path} has no content`, 'invalid_file');
+    if (!isBinary(entry)) {
+      const size = Buffer.byteLength(entry.content, 'utf8'); text += size;
+      if (size > MAX_FILE) throw new SkillError(`${path} is larger than 256 KB`, 'file_too_large');
+    }
+    all += sizeOf(entry);
+    out.push(entry);
+  }
+  if (text > MAX_TOTAL) throw new SkillError('A skill’s text is at most 1 MB', 'skill_too_large');
+  if (all > MAX_BUNDLE) throw new SkillError('A skill is at most 8 MB', 'skill_too_large');
   const skill = out.find((f) => f.path === 'SKILL.md');
-  if (!skill) throw new SkillError('A skill needs a SKILL.md at its top level', 'skill_md_required');
-  return [skill, ...out.filter((f) => f !== skill).sort((a, b) => a.path.localeCompare(b.path))];
+  if (!skill || isBinary(skill)) throw new SkillError('A skill needs a SKILL.md at its top level', 'skill_md_required');
+  return { files: [skill, ...out.filter((f) => f !== skill).sort((a, b) => a.path.localeCompare(b.path))], objects };
 }
 
-/** The content hash a pin names: SHA-256 over the files in their stored order. */
-export const hashOf = (files) => createHash('sha256').update(JSON.stringify(files.map((f) => [f.path, f.content]))).digest('hex');
+/** Write new objects once. The table's CHECK recomputes each digest, so bytes can never sit under another name. */
+async function storeObjects(db, objects) {
+  for (const [digest, buf] of objects) await db.query('INSERT INTO skill_objects (sha256, bytes, size) VALUES ($1, $2, $3) ON CONFLICT (sha256) DO NOTHING', [digest, buf, buf.length]);
+}
+const digestsOf = (files) => new Set((files || []).filter(isBinary).map((f) => f.sha256));
+
+/** The content hash a pin names: SHA-256 over the files in their stored order (a binary file by its digest). */
+export const hashOf = (files) => createHash('sha256').update(JSON.stringify(files.map((f) => [f.path, isBinary(f) ? f.sha256 : f.content]))).digest('hex');
 
 /** XENO Corpus's bundle digest (D240, vendored code — never re-implemented here): what Corpus and the platform both
- *  call "this exact skill". Stored beside content_hash until pins move over (expand/contract). */
-export const bundleDigestOf_ = (files) => bundleDigestOf(files.map((f) => fileEntry(f.path, Buffer.from(f.content, 'utf8'))));
+ *  call "this exact skill". A text file's entry is computed from its UTF-8 bytes; a binary file's digest was computed
+ *  from its bytes when it was stored. Stored beside content_hash until pins move over (expand/contract). */
+export const bundleDigestOf_ = (files) => bundleDigestOf(files.map((f) => (isBinary(f) ? { rel: f.path, sha256: f.sha256 } : fileEntry(f.path, Buffer.from(f.content, 'utf8')))));
 
-/** D7: a skill is instructions an agent follows, so it may not carry a secret or try to take the agent over. */
-function assertSafe(files) {
-  for (const f of files) {
-    const r = redactSecrets(f.content);
-    if (r.redacted) throw new SkillError(`${f.path} contains what looks like a secret (${summarizeRedactions(r.hits)}). Remove it: a skill is read by every agent that uses it.`, 'skill_has_secret', 422);
+/** D7: a skill is instructions an agent follows, so it may not carry a secret or try to take the agent over. Text
+ *  files are read; a binary file is data no agent follows as instructions, and is listed to the person instead. */
+// Instructions an agent reads as prose. A take-over attempt in one of these refuses the skill; the same pattern in a
+// script, a lockfile or data is listed for a person to read instead (a lockfile is full of URLs; that is not exfiltration).
+const INSTRUCTIONS = /(^|\/)[^/.]+$|\.(md|mdx|markdown|txt|rst)$/i;
+/**
+ * The secret gate is XENO Corpus's (D236, vendored corpus-secret-rules.mjs — the same rules the local store applies):
+ * every file's BYTES are scanned, a binary one as the text runs inside it. Any block-level finding refuses the whole
+ * skill, worded with Corpus's describeBlock (rule and place, never the value). Review-level findings and take-over
+ * patterns outside instruction files are returned, capped, to be kept with the version for a person to read.
+ * `objects` holds the bytes of binary files new in this version; a reused one was scanned when it was first stored.
+ * Take-over patterns work like GitHub's push protection: a "high" one refuses the skill until the PERSON has read it
+ * and chosen to save it anyway (`acknowledge: true`, sent only by a person's own request — never by an agent); it is then
+ * kept with the version, marked as acknowledged. A "dangerous" one (always-approve, auto-confirm, a secret sent to an
+ * endpoint…) refuses whatever anyone says. A secret's block level refuses always: there is no saving a credential.
+ */
+function assertSafe(allFiles, objects = new Map(), { acknowledge = false } = {}) {
+  const findings = [];
+  for (const f of allFiles) {
+    const buf = isBinary(f) ? objects.get(f.sha256) : Buffer.from(f.content, 'utf8');
+    if (!buf) continue;
+    const perRule = new Map();
+    for (const x of scanBytes(buf)) { const n = (perRule.get(x.rule) || 0) + 1; perRule.set(x.rule, n); if (n <= PER_FILE_RULE_CAP) findings.push({ file: f.path, ...x }); }
   }
-  // every file, not only SKILL.md: a reference file the agent is told to read is instructions too (OWASP Agentic Skills)
-  const blocking = files.flatMap((f) => blockingFindings(scanForInjection(f.content, { source: f.path })));
-  if (blocking.length) throw new SkillError(`This skill contains instructions that try to take over the agent using it (${[...new Set(blocking.map((b) => b.source))].join(', ')})`, 'skill_unsafe', 422, blocking.slice(0, 5).map(formatFinding));
+  const block = findings.filter((x) => x.severity === 'block');
+  if (block.length) throw new SkillError(`This skill was not saved: it contains ${describeBlock(block)}. A skill is read by every agent that uses it.`, 'skill_has_secret', 422, block.slice(0, 20).map((x) => ({ file: x.file, line: x.line, rule: x.rule })));
+  const review = findings.filter((x) => x.severity === 'review');
+  const blocking = [];
+  for (const f of allFiles) {
+    if (isBinary(f)) continue;
+    for (const x of blockingFindings(scanForInjection(f.content, { source: f.path }))) {
+      if (INSTRUCTIONS.test(f.path) && (!acknowledge || x.severity === 'dangerous')) blocking.push(x);
+      else review.push({ file: f.path, line: x.line || 0, rule: `instructions:${x.rule || x.id || 'pattern'}`, severity: 'review', ...(INSTRUCTIONS.test(f.path) ? { acknowledged: true } : {}) });
+    }
+  }
+  if (blocking.length) {
+    const dangerous = blocking.some((b) => b.severity === 'dangerous');
+    throw new SkillError(`This skill contains instructions that try to take over the agent using it (${[...new Set(blocking.map((b) => b.source))].join(', ')})${dangerous ? '' : '. Read them; if they are what you meant, save it anyway.'}`, 'skill_unsafe', 422, { findings: blocking.slice(0, 10).map(formatFinding), canAcknowledge: !dangerous });
+  }
+  const r = reviewField({ review });
+  // Corpus's record keeps file, line and rule; a finding the person chose to save anyway also says so
+  if (r.review) r.review = r.review.map((x, i) => (review[i].acknowledged ? { ...x, acknowledged: true } : x));
+  return r.review ? r : null;
 }
 
 /** Files that can run as code: shown to a person before they install or pin the skill. Never executed here. */
 const EXEC_EXT = /\.(sh|bash|zsh|ps1|psm1|bat|cmd|py|js|mjs|cjs|ts|rb|pl|php|exe)$/i;
-export const executablesOf = (files) => files.filter((f) => EXEC_EXT.test(f.path) || /^#!/.test(f.content)).map((f) => f.path);
-export { assertSafe, normalizeFiles };
+export const executablesOf = (files) => files.filter((f) => EXEC_EXT.test(f.path) || (!isBinary(f) && /^#!/.test(f.content))).map((f) => f.path);
+export { assertSafe, prepareFiles, storeObjects };
 
 const cmpSemver = (a, b) => { const x = a.match(SEMVER).slice(1).map(Number), y = b.match(SEMVER).slice(1).map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 
@@ -108,6 +193,14 @@ async function row(db, me, publicId, write = false) {
   if (write && !(await canWrite(db, me, s))) throw new SkillError('Only its owner, or an editor of its workspace, changes this skill', 'not_allowed', 403);
   return s;
 }
+// a pool hands out one client for the transaction; a client (inside one already) runs it in place
+async function withTx(db, fn) {
+  if (typeof db.connect !== 'function' || typeof db.release === 'function') return fn(db);
+  const c = await db.connect();
+  try { await c.query('BEGIN'); const r = await fn(c); await c.query('COMMIT'); return r; }
+  catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }
+  finally { c.release(); }
+}
 const humanOnly = (me) => { if (!me || me.kind !== 'human') throw new SkillError('A person makes and changes skills; an agent can only use them', 'not_allowed', 403); };
 
 const shape = (s, v, withFiles = false) => ({
@@ -115,8 +208,10 @@ const shape = (s, v, withFiles = false) => ({
   owner: s.owner_user_id ? { kind: 'personal' } : { kind: 'workspace', workspaceId: String(s.workspace_id) },
   // installed from the Marketplace: which listing, the version installed last, and the latest it has published
   origin: s.origin_listing_id ? { listingId: String(s.origin_listing_id), version: s.origin_version, latest: s.origin_latest || null, slug: s.origin_slug || null } : null,
+  source: s.source || null,
+  review: v && v.review ? v.review : null,
   scripts: v ? executablesOf(v.files) : [],
-  version: v ? v.version : null, hash: v ? v.content_hash : null, bundleDigest: v ? v.bundle_digest || bundleDigestOf_(v.files) : null, files: v ? (withFiles ? v.files : v.files.map((f) => ({ path: f.path, size: Buffer.byteLength(f.content, 'utf8') }))) : [],
+  version: v ? v.version : null, hash: v ? v.content_hash : null, bundleDigest: v ? v.bundle_digest || bundleDigestOf_(v.files) : null, files: v ? (withFiles ? v.files : v.files.map((f) => ({ path: f.path, size: sizeOf(f), ...(isBinary(f) ? { binary: true } : {}) }))) : [],
   createdAt: s.created_at, updatedAt: s.updated_at,
 });
 const latest = async (db, skillId) => {
@@ -127,20 +222,23 @@ const latest = async (db, skillId) => {
 // ───────────────────────────── the library
 
 /** A new skill from its files (or just a SKILL.md), as version 1.0.0 (or the version given). */
-export async function create(db, me, { workspaceId = null, files, skillMd, version = '1.0.0' } = {}) {
+export async function create(db, me, { workspaceId = null, files, skillMd, version = '1.0.0', acknowledge = false } = {}, { source = null } = {}) {
   humanOnly(me);
-  const fs = normalizeFiles(files || [{ path: 'SKILL.md', content: skillMd }]);
+  const { files: fs, objects } = await prepareFiles(db, files || [{ path: 'SKILL.md', content: skillMd }]);
   const meta = parseSkillMd(fs[0].content);
   if (!SEMVER.test(String(version))) throw new SkillError('A version is three numbers, like 1.0.0', 'invalid_version');
-  assertSafe(fs);
+  const review = assertSafe(fs, objects, { acknowledge: acknowledge === true });
   if (workspaceId && !(await check(db, { object: `workspace:${workspaceId}`, relation: 'editor', subject: `user:${me.id}` })).allowed) throw new SkillError('Only an editor of that workspace adds skills to it', 'not_allowed', 403);
   const publicId = 'skl_' + randomBytes(16).toString('hex');
   try {
-    const s = (await db.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id)
-      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [publicId, workspaceId ? null : me.id, workspaceId, meta.name, meta.description, me.id])).rows[0];
-    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [s.id, version, JSON.stringify(fs), hashOf(fs), me.id, bundleDigestOf_(fs)])).rows[0];
-    return shape(s, v);
+    return await withTx(db, async (c) => {
+      await storeObjects(c, objects);
+      const s = (await c.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id, source)
+        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, [publicId, workspaceId ? null : me.id, workspaceId, meta.name, meta.description, me.id, source ? JSON.stringify(source) : null])).rows[0];
+      const v = (await c.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest, review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [s.id, version, JSON.stringify(fs), hashOf(fs), me.id, bundleDigestOf_(fs), review ? JSON.stringify(review) : null])).rows[0];
+      return shape(s, v);
+    });
   } catch (e) {
     if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${meta.name} here. Publish a new version of it instead.`, 'skill_name_taken', 409);
     throw e;
@@ -148,23 +246,28 @@ export async function create(db, me, { workspaceId = null, files, skillMd, versi
 }
 
 /** A new version: same name, a higher version number, its own hash. Earlier versions stay exactly as they were. */
-export async function addVersion(db, me, publicId, { files, skillMd, version } = {}) {
+export async function addVersion(db, me, publicId, { files, skillMd, version, acknowledge = false } = {}) {
   humanOnly(me);
   const s = await row(db, me, publicId, true);
-  const fs = normalizeFiles(files || [{ path: 'SKILL.md', content: skillMd }]);
+  // a binary file kept from an earlier version of THIS skill is named by its digest, not uploaded again
+  const prior = new Set((await db.query('SELECT files FROM skill_versions WHERE skill_id = $1', [s.id])).rows.flatMap((r) => [...digestsOf(r.files)]));
+  const { files: fs, objects } = await prepareFiles(db, files || [{ path: 'SKILL.md', content: skillMd }], { reuse: prior });
   const meta = parseSkillMd(fs[0].content);
   if (meta.name !== s.name) throw new SkillError(`A new version keeps the name ${s.name}; a different name is a different skill`, 'skill_renamed');
   const cur = await latest(db, s.id);
   const next = version || (cur ? cur.version.replace(SEMVER, (_, a, b, c) => `${a}.${b}.${Number(c) + 1}`) : '1.0.0');
   if (!SEMVER.test(String(next))) throw new SkillError('A version is three numbers, like 1.0.1', 'invalid_version');
   if (cur && cmpSemver(next, cur.version) <= 0) throw new SkillError(`The new version must be higher than ${cur.version}`, 'version_not_higher', 409);
-  assertSafe(fs);
+  const review = assertSafe(fs, objects, { acknowledge: acknowledge === true });
   const hash = hashOf(fs);
   if (cur && cur.content_hash === hash) throw new SkillError('Nothing changed since the last version', 'skill_unchanged', 409);
-  const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [s.id, next, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs)])).rows[0];
-  const u = (await db.query('UPDATE skills SET description = $2, updated_at = now() WHERE id = $1 RETURNING *', [s.id, meta.description])).rows[0];
-  return shape(u, v);
+  return withTx(db, async (c) => {
+    await storeObjects(c, objects);
+    const v = (await c.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest, review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [s.id, next, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs), review ? JSON.stringify(review) : null])).rows[0];
+    const u = (await c.query('UPDATE skills SET description = $2, updated_at = now() WHERE id = $1 RETURNING *', [s.id, meta.description])).rows[0];
+    return shape(u, v);
+  });
 }
 
 /** The skills this person can use: their own and their workspaces' (or one workspace's), newest first. */
@@ -195,16 +298,18 @@ export async function get(db, me, publicId, { version } = {}) {
  */
 export async function installVersion(db, me, { workspaceId = null, files, version, origin, name: rename }) {
   humanOnly(me);
-  const fs = normalizeFiles(files);
+  // a published package names its binary files by digest; their bytes were stored when it was published
+  const { files: fs, objects } = await prepareFiles(db, files, { reuse: digestsOf(files) });
   const meta = parseSkillMd(fs[0].content);
-  assertSafe(fs);
+  const review = assertSafe(fs, objects);
+  await storeObjects(db, objects);
   if (workspaceId && !(await check(db, { object: `workspace:${workspaceId}`, relation: 'editor', subject: `user:${me.id}` })).allowed) throw new SkillError('Only an editor of that workspace adds skills to it', 'not_allowed', 403);
   const own = workspaceId ? ['workspace_id = $1', workspaceId] : ['owner_user_id = $1', me.id];
   const mine = (await db.query(`SELECT * FROM skills WHERE ${own[0]} AND origin_listing_id = $2 AND archived_at IS NULL`, [own[1], origin.listingId])).rows[0];
   const hash = hashOf(fs);
   if (mine) {
     const have = (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [mine.id, version])).rows[0];
-    if (!have) await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6)`, [mine.id, version, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs)]);
+    if (!have) await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest, review) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [mine.id, version, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs), review ? JSON.stringify(review) : null]);
     else if (have.content_hash !== hash) throw new SkillError('This library already holds a different version under that number', 'version_conflict', 409);
     const u = (await db.query('UPDATE skills SET origin_version = $2, description = $3, updated_at = now() WHERE id = $1 RETURNING *', [mine.id, version, meta.description])).rows[0];
     return { ...shape(u, (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [mine.id, version])).rows[0]), installed: have ? 'already' : 'updated' };
@@ -214,7 +319,7 @@ export async function installVersion(db, me, { workspaceId = null, files, versio
   try {
     const s = (await db.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id, origin_listing_id, origin_version)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, ['skl_' + randomBytes(16).toString('hex'), workspaceId ? null : me.id, workspaceId, name, meta.description, me.id, origin.listingId, version])).rows[0];
-    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [s.id, version, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs)])).rows[0];
+    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest, review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, [s.id, version, JSON.stringify(fs), hash, me.id, bundleDigestOf_(fs), review ? JSON.stringify(review) : null])).rows[0];
     return { ...shape(s, v), installed: 'new' };
   } catch (e) {
     if (e && e.code === '23505') throw new SkillError(`Your library already has a skill named ${name}. Install it under another name.`, 'skill_name_taken', 409);
@@ -227,7 +332,7 @@ export async function installVersion(db, me, { workspaceId = null, files, versio
  * API host is ever fetched, so a link cannot point the server anywhere else; text files only, the same limits and scans
  * as any other skill. It lands as version 1.0.0 in the library, for a person to read before any agent uses it.
  */
-export async function importFromGitHub(db, me, { url, workspaceId = null } = {}, { fetchImpl = fetch } = {}) {
+export async function importFromGitHub(db, me, { url, workspaceId = null, acknowledge = false } = {}, { fetchImpl = fetch } = {}) {
   humanOnly(me);
   const m = String(url || '').trim().match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/tree\/([A-Za-z0-9_.\/-]+?)\/((?:[^/?#]+\/?)+)$/);
   if (!m) throw new SkillError('Give a link to a skill folder on GitHub, like https://github.com/owner/repo/tree/main/skills/my-skill', 'invalid_github_url');
@@ -242,21 +347,129 @@ export async function importFromGitHub(db, me, { url, workspaceId = null } = {},
     for (const it of items) {
       if (it.type === 'dir') await walk(it.path, depth + 1);
       else if (it.type === 'file') {
-        if (it.size > MAX_FILE) throw new SkillError(`${it.path} is larger than 256 KB`, 'file_too_large');
+        if (it.size > MAX_BINARY) throw new SkillError(`${it.path} is larger than 4 MB`, 'file_too_large');
         const raw = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/contents/${it.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`, { headers: { accept: 'application/vnd.github.raw', 'user-agent': 'xeno-skills-import' } });
         if (!raw.ok) throw new SkillError(`Could not read ${it.path} from GitHub`, 'github_unavailable', 502);
-        // decode strictly: a binary file is refused, never turned into text with replacement characters
-        let text;
-        if (typeof raw.arrayBuffer === 'function') {
-          try { text = new TextDecoder('utf-8', { fatal: true }).decode(await raw.arrayBuffer()); }
-          catch { throw new SkillError(`${it.path} is a binary file; skills with binary files are not supported yet`, 'not_text'); }
-        } else text = await raw.text();
-        files.push({ path: it.path.slice(dir.replace(/\/$/, '').length + 1), content: text });
+        // the exact bytes: text stays text, an image or a font is stored as it is (never decoded into text)
+        const rel = it.path.slice(dir.replace(/\/$/, '').length + 1);
+        if (typeof raw.arrayBuffer === 'function') files.push({ path: rel, base64: Buffer.from(await raw.arrayBuffer()).toString('base64') });
+        else files.push({ path: rel, content: await raw.text() });
       }
     }
   };
   await walk(dir.replace(/\/$/, ''), 0);
-  return create(db, me, { workspaceId, files });
+  return create(db, me, { workspaceId, files, acknowledge }, { source: { kind: 'github', url: String(url).trim() } });
+}
+
+/** One file of a version as its exact bytes: a text file's UTF-8, a binary file's stored object. */
+export async function readFile(db, me, publicId, { version, path } = {}) {
+  const s = await row(db, me, publicId);
+  const v = version ? (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [s.id, String(version)])).rows[0] : await latest(db, s.id);
+  if (!v) throw new SkillError('No such version', 'version_not_found', 404);
+  const f = v.files.find((x) => x.path === String(path || 'SKILL.md'));
+  if (!f) throw new SkillError(`${s.name} has no file ${path}`, 'file_not_found', 404);
+  return { path: f.path, ...(await bytesOf(db, f)) };
+}
+/** The bytes a stored entry names, verified on the way out (Corpus's readObjectVerified rule). */
+export async function bytesOf(db, f) {
+  if (!isBinary(f)) return { binary: false, bytes: Buffer.from(f.content, 'utf8') };
+  const o = (await db.query('SELECT bytes FROM skill_objects WHERE sha256 = $1', [f.sha256])).rows[0];
+  if (!o || sha256Of(o.bytes) !== f.sha256) throw new SkillError(`${f.path}’s stored bytes are missing`, 'object_missing', 500);
+  return { binary: true, bytes: o.bytes, sha256: f.sha256 };
+}
+
+/**
+ * Import ONE skill from a XENO Corpus store (`<corpus>/skills/`), its whole history included. The person picks the
+ * folder; their browser sends, for one skill, exactly what Corpus keeps for it:
+ *   name        the stored name (`<name>.skill.json`)
+ *   sidecar     that file's text            revisions  `<name>.revisions.jsonl`'s text (optional)
+ *   files       [{ rel, base64 }]: `<name>/…`, the working copy      objects  [{ sha256, base64 }]: `.objects/<hex>`
+ * Nothing the client says is trusted. Corpus's own vendored checks run on the raw bytes — sidecarProblems on the
+ * record, revisionProblems on every log line, verifyBundle on the working copy and on every recoverable revision
+ * rebuilt from its objects — and ANY problem refuses the whole import (refuse, never redact: Corpus D235). Every
+ * version saved here is then re-digested and must equal Corpus's own bundle digest for it, so what lands is provably
+ * the same bytes Corpus holds. Recoverable revisions become versions 1.0.0, 1.0.1, … in order, dated as Corpus dated
+ * them. Importing the same Corpus skill again adds only the revisions this library does not have yet.
+ * A variant (`<name>@<tool>`) is refused for now: which copy an agent uses waits on the owner's call (Corpus D240).
+ */
+export async function importFromCorpus(db, me, { name, sidecar, revisions = null, files = [], objects = [], workspaceId = null, as: rename = null, acknowledge = false } = {}) {
+  humanOnly(me);
+  const refuse = (problems) => { throw new SkillError(`This Corpus skill was not imported: ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? ` and ${problems.length - 3} more` : ''}`, 'corpus_invalid', 422, problems.slice(0, 20)); };
+  let rec; try { rec = JSON.parse(String(sidecar || '')); } catch { refuse([`${name}.skill.json is not JSON`]); }
+  const sp = sidecarProblems(rec, { fileName: `${name}.skill.json` });
+  if (sp.length) refuse(sp);
+  if (rec.name.includes('@')) throw new SkillError(`${rec.name} is another tool’s copy of ${rec.variantOf}. Which copy an agent uses is not decided yet, so variants are not imported; import ${rec.variantOf} instead.`, 'corpus_variant', 409);
+  const log = [];
+  String(revisions || '').split('\n').forEach((line, i) => {
+    if (!line.trim()) return;
+    let e; try { e = JSON.parse(line); } catch { refuse([`${name}.revisions.jsonl line ${i + 1} is not JSON`]); }
+    const rp = revisionProblems(e); if (rp.length) refuse(rp.map((x) => `revisions line ${i + 1}: ${x}`));
+    log.push(e);
+  });
+  const decode = (b64, what) => { if (typeof b64 !== 'string' || !B64.test(b64) || b64.length % 4) refuse([`${what} did not arrive as base64`]); return Buffer.from(b64, 'base64'); };
+  if (!Array.isArray(files) || !Array.isArray(objects) || objects.length > 4096) refuse(['files and objects must be lists']);
+  const current = files.map((f) => ({ rel: String(f && f.rel), bytes: decode(f && f.base64, String(f && f.rel)) }));
+  const cur = verifyBundle(current, { bundleDigest: rec.bundleDigest, files: rec.files });
+  if (!cur.ok) refuse(cur.problems);
+  const store = new Map();
+  for (const o of objects) {
+    const buf = decode(o && o.base64, 'an object');
+    if (sha256Of(buf) !== (o && o.sha256)) refuse([`OBJECT_DIGEST_MISMATCH: .objects/${String(o && o.sha256).replace(/^sha256:/, '').slice(0, 12)}`]);
+    store.set(o.sha256, buf);
+  }
+  // every recoverable revision, rebuilt from its objects and verified like the working copy; then the working copy
+  const versions = [];
+  for (const [i, e] of log.entries()) {
+    if (!Array.isArray(e.manifest) || !e.bundleDigest) continue;
+    const missing = e.manifest.filter((m) => !store.has(m.sha256)).map((m) => `OBJECT_MISSING: revision ${i + 1} ${m.rel}`);
+    if (missing.length) refuse(missing);
+    const vb = verifyBundle(e.manifest.map((m) => ({ rel: m.rel, bytes: store.get(m.sha256) })), { bundleDigest: e.bundleDigest, files: e.manifest });
+    if (!vb.ok) refuse(vb.problems.map((x) => `revision ${i + 1}: ${x}`));
+    if (!versions.length || versions[versions.length - 1].digest !== e.bundleDigest) versions.push({ digest: e.bundleDigest, at: e.at, files: e.manifest.map((m) => ({ rel: m.rel, bytes: store.get(m.sha256) })) });
+  }
+  if (!versions.length || versions[versions.length - 1].digest !== rec.bundleDigest) versions.push({ digest: rec.bundleDigest, at: log.length ? log[log.length - 1].at : null, files: current });
+  if (versions.length > 200) versions.splice(0, versions.length - 200);
+  // each version through the platform's own rules, and proven to be Corpus's bytes by its digest
+  const prepared = [];
+  for (const v of versions) {
+    const p = await prepareFiles(db, v.files.map((f) => ({ path: f.rel, base64: Buffer.from(f.bytes).toString('base64') })));
+    if (bundleDigestOf_(p.files) !== v.digest) refuse([`SKILL_DIGEST_MISMATCH: stored ${bundleDigestOf_(p.files)}, Corpus ${v.digest}`]);
+    const review = assertSafe(p.files, p.objects, { acknowledge: acknowledge === true });
+    prepared.push({ ...p, review, meta: parseSkillMd(p.files[0].content), digest: v.digest, at: v.at && Number.isFinite(Date.parse(v.at)) ? new Date(v.at) : null });
+  }
+  const meta = prepared[prepared.length - 1].meta;
+  if (workspaceId && !(await check(db, { object: `workspace:${workspaceId}`, relation: 'editor', subject: `user:${me.id}` })).allowed) throw new SkillError('Only an editor of that workspace adds skills to it', 'not_allowed', 403);
+  const source = { kind: 'corpus', name: rec.name, bundleDigest: rec.bundleDigest };
+  const own = workspaceId ? ['workspace_id = $1', workspaceId] : ['owner_user_id = $1', me.id];
+  try {
+    return await withTx(db, async (c) => {
+      for (const p of prepared) await storeObjects(c, p.objects);
+      let s = (await c.query(`SELECT * FROM skills WHERE ${own[0]} AND archived_at IS NULL AND source->>'kind' = 'corpus' AND source->>'name' = $2 FOR UPDATE`, [own[1], rec.name])).rows[0];
+      const fresh = !s;
+      if (fresh) {
+        const nm = rename ? String(rename).trim() : meta.name;
+        if (!NAME.test(nm)) throw new SkillError('The skill’s name is lowercase letters, numbers and hyphens, at most 64', 'invalid_skill_name');
+        s = (await c.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id, source)
+          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, ['skl_' + randomBytes(16).toString('hex'), workspaceId ? null : me.id, workspaceId, nm, meta.description, me.id, JSON.stringify(source)])).rows[0];
+      }
+      const have = (await c.query('SELECT version, bundle_digest, files FROM skill_versions WHERE skill_id = $1', [s.id])).rows;
+      const known = new Set(have.map((h) => h.bundle_digest || bundleDigestOf_(h.files)));
+      let next = have.length ? have.map((h) => h.version).sort(cmpSemver).pop() : null;
+      let added = 0, last = null;
+      for (const p of prepared) {
+        if (known.has(p.digest)) continue;
+        next = next ? next.replace(SEMVER, (_, a, b, x) => `${a}.${b}.${Number(x) + 1}`) : '1.0.0';
+        last = (await c.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id, bundle_digest, created_at, review)
+          VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, now()), $8) RETURNING *`, [s.id, next, JSON.stringify(p.files), hashOf(p.files), me.id, p.digest, p.at, p.review ? JSON.stringify(p.review) : null])).rows[0];
+        known.add(p.digest); added++;
+      }
+      if (added) s = (await c.query('UPDATE skills SET description = $2, source = $3, updated_at = now() WHERE id = $1 RETURNING *', [s.id, meta.description, JSON.stringify(source)])).rows[0];
+      return { ...shape(s, last || (await latest(c, s.id))), imported: fresh ? 'new' : added ? 'updated' : 'already', versionsAdded: added };
+    });
+  } catch (e) {
+    if (e && e.code === '23505') throw new SkillError(`There is already a skill named ${rename || meta.name} here. Import it under another name.`, 'skill_name_taken', 409);
+    throw e;
+  }
 }
 
 /** Archive: it leaves the library; agents that pinned a version keep working with it. */

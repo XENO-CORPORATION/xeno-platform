@@ -117,6 +117,31 @@ their instructions alone. A Marketplace skill listing can be unlisted without br
    (migration `20261030150000`: the one write a version allows, once, from empty); new agent pins carry `bundleDigest`
    beside `hash` and a pin naming it is held to it. **Next (contract):** resolve pins by `bundleDigest`, then drop
    `content_hash` once nothing reads it. **Waiting on the owner:** D240's nesting rule (nearest scope wins) — not built.
+   ✅ **Exact bytes + Corpus import (2026-10-24, migration `20261030160000`, `skills.importFromCorpus`):**
+   - *Bytes (D239).* A text file stays inline as UTF-8, byte-exact (BOM and CRLF kept); any other file is
+     `{ path, sha256, bytes }` and its bytes live once in `skill_objects`, keyed by Corpus's `sha256:<hex>`. A DB CHECK
+     recomputes the digest from the bytes; an object is never updated or deleted; a client can reuse a stored file only
+     by naming a digest from an earlier version of the SAME skill (or a package it installs), so a hash never reaches
+     someone else's file. Download: `GET /api/skills/:id/file` (attachment, nosniff, sandbox CSP). An agent reads a pinned
+     image as an image over `skills_get`.
+   - *Import.* `POST /api/skills/import/corpus`, one skill at a time, its whole history: `sidecarProblems`,
+     `revisionProblems` on every log line, `verifyBundle` on the working copy and on every revision rebuilt from
+     `.objects`; any problem refuses the whole skill, and every saved version must re-digest to Corpus's own digest.
+     Recoverable revisions become 1.0.0, 1.0.1, … dated as Corpus dated them; importing again adds only what is new;
+     a variant (`name@tool`) waits on D240. The browser sends exactly the files the sidecar lists — `.lock`/`.tmp` are
+     skipped only as the store's own writer files, never by extension inside a bundle (a skill may ship `uv.lock`).
+   - *One secret gate.* Corpus's `corpus-secret-rules.mjs` is vendored at `569bee4` beside the format (same gate): every
+     file's bytes are scanned (binary as text runs); a block-level finding refuses the whole skill, worded by
+     `describeBlock`; review-level findings are kept with the version (`skill_versions.review`, `reviewField`). It
+     replaced anima-mind's log redactor, which refused 22 real Corpus skills for `token: ${TOKEN}`-style references.
+     Take-over patterns (Anima's scanner) work like push protection: a "high" one in an instruction file refuses until
+     the PERSON reads it and saves anyway (`acknowledge`, kept as acknowledged on the version); a "dangerous" one never
+     passes; in scripts/lockfiles/data they are listed for review instead.
+   - *Measured on the real store* (`orchestrator/corpus-v0/skills`, 143 sidecars, read-only, test
+     `XENO_CORPUS_STORE=… npm run test:skills-corpus-import`): 89 import with Corpus's exact digest (8 after a person
+     reads the findings), 0 disagreements, re-import adds nothing; 36 variants wait on D240; 17 refused for dangerous
+     take-over patterns, 3 for more than 64 files, 1 for a file over the size cap, 5 for a description the Agent Skills
+     standard does not allow (over 1,024 characters).
 5. **Knowledge** — attach Corpus scopes on the Identity tab.
 
 ## 8. What would make us revisit

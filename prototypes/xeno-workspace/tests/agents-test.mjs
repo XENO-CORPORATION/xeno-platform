@@ -6,6 +6,7 @@
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
+const corpusFmt = await import('../../../src/server/vendor/xeno-corpus/corpus-skill-format.mjs');
 const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
 const PORT = 5199, base = 'http://127.0.0.1:' + PORT;
 const USER = { id: 'u1', username: 'me', email: 'me@x.test', display_name: 'Me', avatar_url: null, email_verified: true };
@@ -13,7 +14,7 @@ let failed = 0, fail = false;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 const PROJ = [{ id: 'p-1111', name: 'Releases', canEdit: true }, { id: 'p-2222', name: 'Website', canEdit: true }];
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
-const db = { agents: [], calls: [], skills: [], mkt: { dev: null, listings: [], owned: new Set() } };
+const db = { agents: [], calls: [], skills: [], corpus: [], mkt: { dev: null, listings: [], owned: new Set() } };
 const skView = (k) => { const v = k.versions[k.versions.length - 1]; return { id: k.id, name: k.name, description: k.description, owner: { kind: 'personal' }, version: v.version, hash: v.hash, files: [{ path: 'SKILL.md', content: v.md }], versions: [...k.versions].reverse().map((x) => ({ version: x.version, hash: x.hash, createdAt: new Date().toISOString() })), canEdit: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; };
 const mdMeta = (md) => ({ name: (String(md).match(/^name: (.+)$/m) || [])[1], description: (String(md).match(/^description: (.+)$/m) || [])[1] });
 const ALL = { viewer: true, runner: true, editor: true, exporter: true, manage: true };
@@ -96,6 +97,17 @@ p.on('request', (q) => {
   { const tk = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (tk && method === 'PATCH') return json(200, { success: true, task: { key: tk[1], delegate: { id: b.delegateId, kind: 'agent' } } }); }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
   if (u.pathname === '/api/skills' && method === 'GET') return json(200, { success: true, skills: db.skills.filter((k) => !k.archived).map(skView) });
+  if (u.pathname === '/api/skills/import/corpus' && method === 'POST') {
+    db.corpus.push(b);
+    let rec = null; try { rec = JSON.parse(b.sidecar); } catch { /* refused below */ }
+    const probs = rec ? corpusFmt.sidecarProblems(rec, { fileName: b.name + '.skill.json' }) : ['not JSON'];
+    if (!probs.length && rec.name.includes('@')) return json(409, { success: false, error: 'a variant', code: 'corpus_variant' });
+    const v = probs.length ? { ok: false, problems: probs } : corpusFmt.verifyBundle(b.files.map((f) => ({ rel: f.rel, bytes: Buffer.from(f.base64, 'base64') })), { bundleDigest: rec.bundleDigest, files: rec.files });
+    if (!v.ok) return json(422, { success: false, error: `This Corpus skill was not imported: ${v.problems[0]}`, code: 'corpus_invalid' });
+    const md = Buffer.from(b.files.find((f) => f.rel === 'SKILL.md').base64, 'base64').toString('utf8'), m = mdMeta(md);
+    const k = { id: 'skl_' + hex(), name: m.name, description: m.description, versions: [{ version: '1.0.0', hash: hex() + hex(), md }] }; db.skills.push(k);
+    return json(201, { success: true, skill: { ...skView(k), imported: 'new', versionsAdded: 1 } });
+  }
   if (u.pathname === '/api/skills' && method === 'POST') { const mdIn = b.skillMd || (b.files && b.files[0] && b.files[0].content); b.skillMd = mdIn; const m = mdMeta(mdIn); if (!/^[a-z0-9][a-z0-9-]*$/.test(m.name || '')) return json(400, { success: false, error: 'bad name', code: 'invalid_skill_name' }); const k = { id: 'skl_' + hex(), name: m.name, description: m.description, versions: [{ version: '1.0.0', hash: hex() + hex(), md: b.skillMd }] }; db.skills.push(k); return json(201, { success: true, skill: skView(k) }); }
   { const sm = u.pathname.match(/^\/api\/skills\/(skl_[0-9a-f]{32})(\/versions)?$/); if (sm) { const k = db.skills.find((x) => x.id === sm[1]); if (!k) return json(404, { success: false, code: 'skill_not_found' });
     if (sm[2] && method === 'POST') { const md = b.files[0].content, last = k.versions[k.versions.length - 1].version.split('.').map(Number); k.versions.push({ version: `${last[0]}.${last[1]}.${last[2] + 1}`, hash: hex() + hex(), md }); k.description = mdMeta(md).description; return json(201, { success: true, skill: skView(k) }); }
@@ -264,11 +276,53 @@ try {
     await p.click('[data-xsk="import"]'); await settle(300);
     const inp = await p.$('.xsk [data-xsk-in="folder"]'); await inp.evaluate((e) => e.removeAttribute('webkitdirectory')); await inp.uploadFile(path.join(dir, 'SKILL.md'), path.join(dir, 'fields.md')); await settle(900);
     ok(new URL(p.url()).pathname === '/workspace/workspace/Skills/new' && (await p.$eval('.xsk [data-xsk-ed="name"]', (e) => e.value)) === 'pdf-forms' && /fields\.md/.test(await main()), 'an uploaded folder opens in the editor with its SKILL.md and files, not saved yet');
-    fs.writeFileSync(path.join(dir, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe]));
+    // an image keeps its exact bytes, and an untouched SKILL.md is sent exactly as it was (BOM and CRLF included)
+    const zlib = await import('node:zlib'); const chunk = (t, d) => { const len = Buffer.alloc(4); len.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td)); return Buffer.concat([len, td, crc]); };
+    // a real 24×24 PNG, so the editor's preview can be seen decoding it
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(24, 0); ihdr.writeUInt32BE(24, 4); ihdr[8] = 8; ihdr[9] = 0;
+    const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(Array.from({ length: 24 }, (_, y) => Buffer.from([0, ...Array.from({ length: 24 }, (_, x) => ((x >> 2) + (y >> 2)) % 2 ? 230 : 40)]))))), chunk('IEND', Buffer.alloc(0))]);
+    const MD = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('---\r\nname: logo-kit\r\ndescription: Use when a page needs the brand logo and its colours.\r\n---\r\n\r\nPlace logo.png at the top.\r\n')]);
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-')); fs.writeFileSync(path.join(dir2, 'SKILL.md'), MD); fs.writeFileSync(path.join(dir2, 'logo.png'), PNG);
     await fresh('/workspace/workspace/Skills'); await settle(400);
     await p.click('[data-xsk="import"]'); await settle(300);
-    const inp2 = await p.$('.xsk [data-xsk-in="folder"]'); await inp2.evaluate((e) => e.removeAttribute('webkitdirectory')); await inp2.uploadFile(path.join(dir, 'SKILL.md'), path.join(dir, 'logo.png')); await settle(900);
-    ok(new URL(p.url()).pathname === '/workspace/workspace/Skills' && /logo\.png is a binary file/.test(await p.evaluate(() => document.body.innerText)), 'a folder with a binary file is refused by name instead of being decoded into text'); }
+    const inp2 = await p.$('.xsk [data-xsk-in="folder"]'); await inp2.evaluate((e) => e.removeAttribute('webkitdirectory')); await inp2.uploadFile(path.join(dir2, 'SKILL.md'), path.join(dir2, 'logo.png')); await settle(900);
+    ok(new URL(p.url()).pathname === '/workspace/workspace/Skills/new' && new RegExp(`logo\\.png\\s*image · ${PNG.length} B`).test(await main()), 'a folder with an image opens in the editor, the image listed as an image');
+    await p.click('.xsk [data-xsk="ed-sel"][data-p="logo.png"]'); await settle(500);
+    ok(await p.$eval('.xsk-bin img', (e) => e.naturalWidth === 24 && e.src.startsWith('blob:')).catch(() => false), 'selecting it shows the image itself, from its bytes');
+    await shot('skill-editor-image');
+    await p.click('[data-xsk="ed-save"]'); await settle(1000);
+    { const made = db.calls.filter((c) => c[0] === 'POST' && c[1] === '/api/skills').pop()[2];
+      const md = made.files.find((f) => f.path === 'SKILL.md'), img = made.files.find((f) => f.path === 'logo.png');
+      ok(md && Buffer.from(md.content, 'utf8').equals(MD) && img && Buffer.from(img.base64, 'base64').equals(PNG) && img.content === undefined, 'saving sends the image’s exact bytes and the SKILL.md exactly as uploaded'); }
+
+    // XENO Corpus: a skills folder, with its history and store files, imported skill by skill
+    const B = (x) => Buffer.from(x);
+    const kit = [{ rel: 'SKILL.md', bytes: B('---\nname: drawing-kit\ndescription: Use when drawing with the brand kit and its fonts.\n---\n\nDraw.\n') }, { rel: 'vision/uv.lock', bytes: B('version = 1\n') }, { rel: 'logo.png', bytes: PNG }];
+    const store = {};
+    const put = (rel, bytes) => { store[rel] = Buffer.from(bytes).toString('base64'); };
+    const carry = (name, files, { corrupt = false } = {}) => {
+      const entries = files.map((f) => corpusFmt.fileEntry(f.rel, f.bytes));
+      put(`${name}.skill.json`, B(JSON.stringify({ name, description: 'x', files: corpusFmt.manifestOf(entries), bundleDigest: corpusFmt.bundleDigestOf(entries), ...(name.includes('@') ? { variantOf: name.split('@')[0] } : {}) })));
+      put(`${name}.revisions.jsonl`, B(JSON.stringify({ rev: 1, event: 'carried', at: '2026-10-05T00:00:00.000Z', bundleDigest: corpusFmt.bundleDigestOf(entries), manifest: corpusFmt.manifestOf(entries) }) + '\n'));
+      for (const f of files) { put(`${name}/${f.rel}`, corrupt && f.rel === 'SKILL.md' ? Buffer.concat([f.bytes, B(' ')]) : f.bytes); put(`.objects/${corpusFmt.sha256Of(f.bytes).slice(7)}`, f.bytes); }
+    };
+    carry('drawing-kit', kit); carry('drawing-kit@codex', kit); carry('broken-kit', [{ rel: 'SKILL.md', bytes: B('---\nname: broken-kit\ndescription: Use when testing what a changed byte does.\n---\n\nx\n') }], { corrupt: true });
+    put('.skills.lock', B('')); put('drawing-kit.skill.json.tmp', B('{'));
+    await fresh('/workspace/workspace/Skills'); await settle(400);
+    await p.click('[data-xsk="import"]'); await settle(300);
+    await p.evaluate((files) => { const dt = new DataTransfer(); for (const [rel, b64] of Object.entries(files)) { const f = new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], rel.split('/').pop()); Object.defineProperty(f, 'webkitRelativePath', { value: 'corpus/skills/' + rel }); dt.items.add(f); }
+      const i = document.querySelector('.xsk [data-xsk-in="corpus"]'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); }, store);
+    await settle(600);
+    t = await main();
+    ok(/From XENO Corpus/.test(t) && /2 skills · 1 copy from other tools/.test(t) && /Another tool’s copy of drawing-kit/.test(t), 'a Corpus skills folder lists its skills, and keeps another tool’s copy apart');
+    await shot('skill-corpus');
+    await p.click('[data-xsk="cp-all"]'); await settle(2500);
+    t = await main();
+    const sent = db.corpus.find((x) => x.name === 'drawing-kit');
+    ok(/Imported as drawing-kit · 1\.0\.0/.test(t) && /broken-kit[\s\S]*not imported: SKILL_DIGEST_MISMATCH|broken-kit[\s\S]*not imported: SKILL_FILE_MISMATCH/.test(t) && db.corpus.length === 2 && !db.corpus.some((x) => x.name.includes('@')),
+      'Import all imports what passes Corpus’s checks, shows why the changed one was refused, and never sends the other tool’s copy');
+    ok(sent && sent.files.map((f) => f.rel).sort().join() === 'SKILL.md,logo.png,vision/uv.lock' && sent.objects.length === 3 && /"event":"carried"/.test(sent.revisions) && !sent.files.some((f) => /skills\.lock|\.tmp$/.test(f.rel)),
+      'each skill sends exactly the files its record lists (its own uv.lock included), its history and its objects — never the store’s lock or temp files'); }
 
   // Connect: a credential shown once, filled into each CLI's setup
   await fresh(`/workspace/workspace/Agents/${a.id}/Connect`);
@@ -469,6 +523,6 @@ try {
 
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
   // the deleted-agent (404) and failed-load (500) steps provoke their responses on purpose; anything else is a defect
-  { const real = cerrs.filter((m) => !/status of (404|500) .*\/api\/agents/.test(m) && !/status of 409 .*\/install-skill/.test(m)); ok(real.length === 0, 'no console errors beyond the deliberate 404/500/name-clash steps (' + JSON.stringify(real.slice(0, 3)) + ')'); }
+  { const real = cerrs.filter((m) => !/status of (404|500) .*\/api\/agents/.test(m) && !/status of 409 .*\/install-skill/.test(m) && !/status of 422 .*\/import\/corpus/.test(m)); ok(real.length === 0, 'no console errors beyond the deliberate 404/500/name-clash/refused-Corpus steps (' + JSON.stringify(real.slice(0, 3)) + ')'); }
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); }
 console.log(failed ? failed + ' check(s) failed' : 'ALL PASS'); process.exit(failed ? 1 : 0);

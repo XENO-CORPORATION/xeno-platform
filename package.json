@@ -107,6 +107,7 @@
     "test:agent-identity": "node src/server/tests/agent-identity.test.mjs",
     "test:skills-library": "node src/server/tests/skills-library.test.mjs",
     "test:marketplace-skills": "node src/server/tests/marketplace-skills.test.mjs",
+    "test:skills-corpus-import": "node src/server/tests/skills-corpus-import.test.mjs",
     "test:corpus-skill-format-vendor": "node scripts/corpus-skill-format-vendor.mjs && node scripts/corpus-skill-format-vendor.mjs --self-test",
     "test:migration-up-nonempty": "node --test scripts/migration-up-nonempty.test.mjs",
     "test:billing-subject": "node --test scripts/billing-subject.test.mjs",

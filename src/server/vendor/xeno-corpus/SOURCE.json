@@ -1,12 +1,16 @@
 {
   "owner": "xeno-corpus",
   "repo": "XENO-CORPORATION/xeno-corpus",
-  "commit": "17c0db27ccfb91d47977cdd6197a60864fe434c5",
+  "commit": "569bee4a8dcc320a95a16035e54af24af3ec71c6",
   "note": "Vendored byte-identical (docs/AGENT-IDENTITY-SKILLS-CORPUS.md §7 4a). Never edit here: change xeno-corpus, then run scripts/corpus-skill-format-vendor.mjs --sync --confirm.",
   "files": {
     "corpus-skill-format.mjs": {
       "blob": "e2fbf3fe54f100260fee3908d5c3b6d55169f8d0",
       "sha256": "5a75b91aa104566c1e743e69a8c7dbbcced98a6c147ab327d9af175a78e025bd"
+    },
+    "corpus-secret-rules.mjs": {
+      "blob": "329eb87e25a47775d9b5e18787b082b5cd1d022e",
+      "sha256": "0de602b3ade78b3ed1275cbcb3d969c211af96ea523e1434c7b553004e2794d8"
     }
   }
 }

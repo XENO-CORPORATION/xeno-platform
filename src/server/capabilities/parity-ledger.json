@@ -152,7 +152,9 @@
   "commsIdentityRoutes.js": "platform",
   "platform-message.js": "message",
   "automateRoutes.js": "automate",
-  "platform-automate.js": "automate"
+  "platform-automate.js": "automate",
+  "skillsRoutes.js": "agents",
+  "platform-skills.js": "agents"
  },
  "actions": {
   "route:accountGiftRoutes.js:POST /": {
@@ -9635,6 +9637,426 @@
    "because": "edits a step in the unsaved draft on screen; saving is decided on PUT /:id"
   },
   "ui:platform-automate.js:data-au-page": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "route:marketplaceRoutes.js:GET /developer/skill-listings": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "wallet:read"
+  },
+  "route:marketplaceRoutes.js:GET /skills/:listingId/preview": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "wallet:read"
+  },
+  "route:marketplaceRoutes.js:POST /listings/:id/install-skill": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "wallet:spend"
+  },
+  "route:platformAgentRoutes.js:GET /:id/brief": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:platformAgentRoutes.js:GET /:id/mind": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:platformAgentRoutes.js:POST /:id/mind": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:platformAgentRoutes.js:GET /:id/overview": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:platformAgentRoutes.js:POST /:id/message": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:platformAgentRoutes.js:POST /:id/connections/:cid/pause": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:platformAgentRoutes.js:POST /:id/connections/:cid/resume": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:platformAgentRoutes.js:PUT /:id/spend-cap": {
+   "status": "excluded",
+   "category": "self-authority",
+   "class": "reversible",
+   "scope": "none",
+   "because": "an agent never sets the limit on what agents may spend; its person does"
+  },
+  "route:skillsRoutes.js:GET /": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:skillsRoutes.js:POST /": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:skillsRoutes.js:POST /import/github": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:skillsRoutes.js:POST /import/corpus": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:skillsRoutes.js:GET /:id/file": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:skillsRoutes.js:GET /:id": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:skillsRoutes.js:POST /:id/versions": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "route:skillsRoutes.js:DELETE /:id": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "agents:write"
+  },
+  "ui:platform-agents.js:data-xag=cap": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:PUT /:id/spend-cap",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-agents.js:data-xag=proj-toggle": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:PUT /:id/projects/:projectId",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-agents.js:data-xag=hand": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:xenoTasksRoutes.js:POST /",
+   "class": "reversible",
+   "scope": "none",
+   "because": "handing an agent a task is raising a task delegated to it"
+  },
+  "ui:platform-agents.js:data-xag=watch": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-agents.js:data-xag=mind-export": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:GET /:id/mind",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-agents.js:data-xag=mind-import": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:POST /:id/mind",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-agents.js:data-xag=persona-clear": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:PATCH /:id",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-agents.js:data-xag=brief-refresh": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:GET /:id/brief",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-agents.js:data-xag=skill-update": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:PATCH /:id",
+   "class": "reversible",
+   "scope": "none",
+   "because": "pinning a newer version is editing the agent"
+  },
+  "ui:platform-agents.js:data-xag=skill-remove": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:PATCH /:id",
+   "class": "reversible",
+   "scope": "none",
+   "because": "unpinning a skill is editing the agent"
+  },
+  "ui:platform-agents.js:data-xag=skill-new": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-agents.js:data-xag=skill-add": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:platformAgentRoutes.js:PATCH /:id",
+   "class": "reversible",
+   "scope": "none",
+   "because": "pinning a skill is editing the agent"
+  },
+  "ui:platform-agents.js:data-xag=act-kind": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-agents.js:data-xag=place": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-agents.js:data-xag-tab=Connect": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-agents.js:data-xag-tab=Work": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-agents.js:data-xag-tab=Activity": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk-tab=Marketplace": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=list": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=ed-save": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=ed-addfile": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=ed-sel": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=ed-rm": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=ed-where": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=open": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=cp-as": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /import/corpus",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=cp-ack": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /import/corpus",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=cp-one": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /import/corpus",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=cp-close": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=cp-all": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /import/corpus",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=import": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=new": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=update": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:marketplaceRoutes.js:POST /listings/:id/install-skill",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=clearq": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=listing": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=get": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:marketplaceRoutes.js:POST /listings/:id/install-skill",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=reject": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:marketplaceRoutes.js:POST /submissions/:id/reject",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=approve": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:marketplaceRoutes.js:POST /submissions/:id/approve",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=publish": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:marketplaceRoutes.js:POST /listings/:id/versions",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=archive": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:DELETE /:id",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=edit": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
+  },
+  "ui:platform-skills.js:data-xsk=dl": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:GET /:id/file",
+   "class": "safe",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=retry": {
    "status": "excluded",
    "category": "view-state",
    "class": "safe",

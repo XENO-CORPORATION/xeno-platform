@@ -842,6 +842,34 @@
    ]
   },
   {
+   "name": "agents.skill.list",
+   "wire": "agents__skill__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "skills_list"
+   ]
+  },
+  {
+   "name": "agents.skill.get",
+   "wire": "agents__skill__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "skills_get"
+   ]
+  },
+  {
    "name": "studio.image_model.list",
    "wire": "studio__image_model__list",
    "version": "1.0.0",
