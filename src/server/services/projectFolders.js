@@ -16,7 +16,7 @@ import { createFolder, folderAccess } from './storageFolders.js';
 import { registerManagedLibraryFile } from './libraryAssets.js';
 import { addVersion } from './storageVersions.js';
 import { assertStorageRoom } from './storageAllowance.js';
-import { storeFileObject } from './storageObjects.js';
+import { storeFileObject, localLibraryPath } from './storageObjects.js';
 import { cleanLibraryName, trashLibraryItem } from './libraryOrganise.js';
 import { reconcileShares, sharedFolderAccess } from './storageShares.js';
 
@@ -137,7 +137,8 @@ export async function readProjectFile(db, userId, app, projectId, rawPath) {
   if (!p) throw new ProjectFolderError('Not a valid project path', 'invalid_path');
   const row = await current(db, app, projectId, p);
   if (!row) throw new ProjectFolderError('No such file in the project', 'file_not_found', 404);
-  return row;
+  // the object store is the home and this disk a cache: read through the one path that brings evicted bytes back
+  return { ...row, local_path: await localLibraryPath(db, row) };
 }
 
 /** The Storage folder a path's file sits in: its directories, made as sub-folders of the project folder.
@@ -202,15 +203,80 @@ export async function writeProjectFile(db, userId, app, projectId, rawPath, { by
 }
 
 /** Take a path out of the project. Its file goes to the Storage trash, restorable for the trash period. */
-export async function removeProjectFile(db, userId, app, projectId, rawPath) {
+export async function removeProjectFile(db, userId, app, projectId, rawPath, { ifMatch = null } = {}) {
   const folder = await projectFolder(db, userId, app, projectId, 'edit');
   const p = projectPath(rawPath);
   if (!p) throw new ProjectFolderError('Not a valid project path', 'invalid_path');
+  if (ifMatch !== null && !SHA.test(ifMatch)) throw new ProjectFolderError('If-Match is the sha256 of the version you have', 'invalid_if_match');
   const row = await current(db, app, projectId, p);
   if (!row) throw new ProjectFolderError('No such file in the project', 'file_not_found', 404);
+  // never remove a version the remover has not seen: someone may have changed it since
+  if (ifMatch !== null && row.content_sha256 !== ifMatch) throw new ProjectFolderError('The file changed since you last read it', 'version_conflict', 409);
   // the one access check has run; the trash is entered on the owner's behalf, so a collaborator can remove a path too
   const out = await trashLibraryItem(db, { type: 'user', id: actorFor(folder, userId) }, 'file', String(row.id));
   if (out.forbidden || out.notFound) throw new ProjectFolderError('You cannot remove this file', 'not_allowed', 403);
   await db.query('DELETE FROM project_files WHERE app = $1 AND project_id = $2 AND path = $3', [app, projectId, p]);
+  await db.query(`INSERT INTO project_file_events (app, project_id, path, kind, file_id) VALUES ($1, $2, $3, 'remove', $4)`, [app, projectId, p, row.file_id]);
   return { removed: true, path: p, fileId: String(row.file_id) };
+}
+
+/**
+ * Rename or move a path. The file keeps its id and history (a working copy renaming `a.ts` to `b.ts` is one file, not a
+ * delete and a new file); its Storage name and sub-folder follow. Refused onto a path that exists, and with `ifMatch`,
+ * refused when the file changed since the mover last read it.
+ */
+export async function moveProjectFile(db, userId, app, projectId, rawFrom, rawTo, { ifMatch = null } = {}) {
+  const folder = await projectFolder(db, userId, app, projectId, 'edit');
+  const from = projectPath(rawFrom), to = projectPath(rawTo);
+  if (!from || !to) throw new ProjectFolderError('Not a valid project path', 'invalid_path');
+  if (ifMatch !== null && !SHA.test(ifMatch)) throw new ProjectFolderError('If-Match is the sha256 of the version you have', 'invalid_if_match');
+  const row = await current(db, app, projectId, from);
+  if (!row) throw new ProjectFolderError('No such file in the project', 'file_not_found', 404);
+  if (ifMatch !== null && row.content_sha256 !== ifMatch) throw new ProjectFolderError('The file changed since you last read it', 'version_conflict', 409);
+  if (from === to) return { moved: false, from, to, fileId: String(row.file_id), versionId: String(row.id), sha256: row.content_sha256 };
+  let moved;
+  try {
+    moved = await db.query('UPDATE project_files SET path = $4, updated_at = now() WHERE app = $1 AND project_id = $2 AND path = $3', [app, projectId, from, to]);
+  } catch (error) {
+    if (error?.code === '23505') throw new ProjectFolderError('Something is already at that path', 'path_exists', 409);
+    throw error;
+  }
+  if (!moved.rowCount) throw new ProjectFolderError('The file changed since you last read it', 'version_conflict', 409);
+  const target = await folderFor(db, userId, folder, to);
+  await db.query('UPDATE user_files SET original_name = $2 WHERE file_id = $1', [row.file_id, to.split('/').pop()]);
+  await db.query(`UPDATE storage_item_folders SET folder_id = $2, placed_at = now()
+     WHERE source = 'file' AND source_id IN (SELECT id FROM user_files WHERE file_id = $1)`, [row.file_id, target]);
+  await db.query(`INSERT INTO project_file_events (app, project_id, path, kind, file_id) VALUES ($1, $2, $3, 'remove', $4)`, [app, projectId, from, row.file_id]);
+  if (!folder.workspace_id) await reconcileShares(db, folder.owner_user_id);
+  return { moved: true, from, to, fileId: String(row.file_id), versionId: String(row.id), sha256: row.content_sha256 };
+}
+
+/**
+ * What changed in the project since `since` (the `cursor` an earlier call returned): a path written, by anyone and by
+ * any route (a new version made in Storage itself counts), or a path gone (removed, moved away, or its file put in the
+ * Storage trash). Changes are reported at least once; apply them by `versionId`, which is idempotent. The cursor trails
+ * the clock by a moment, so a write still committing is reported on the next call rather than skipped.
+ */
+export async function projectChanges(db, userId, app, projectId, since = null) {
+  await projectFolder(db, userId, app, projectId, 'view');
+  const after = since ? new Date(since) : new Date(0);
+  if (Number.isNaN(after.getTime())) throw new ProjectFolderError('Not a cursor from this feed', 'invalid_cursor');
+  // user_files keeps timestamps WITHOUT a zone: every comparison here is made as timestamptz, or a cursor sent with an
+  // offset would be read as wall-clock time and silently skip hours of changes
+  const upto = (await db.query("SELECT clock_timestamp() - interval '2 seconds' AS t")).rows[0].t;
+  const written = (await db.query(`SELECT pf.path, cur.id, cur.file_id, cur.content_sha256, cur.file_size, GREATEST(cur.created_at::timestamptz, pf.updated_at::timestamptz) AS at
+       FROM project_files pf CROSS JOIN LATERAL (${CURRENT}) cur
+      WHERE pf.app = $1 AND pf.project_id = $2 AND GREATEST(cur.created_at::timestamptz, pf.updated_at::timestamptz) > $3::timestamptz AND GREATEST(cur.created_at::timestamptz, pf.updated_at::timestamptz) <= $4::timestamptz`,
+    [app, projectId, after, upto])).rows;
+  const trashed = (await db.query(`SELECT pf.path, pf.file_id, MAX(f.deleted_at::timestamptz) AS at FROM project_files pf JOIN user_files f ON f.file_id = pf.file_id
+      WHERE pf.app = $1 AND pf.project_id = $2 AND f.deleted_at::timestamptz > $3::timestamptz AND f.deleted_at::timestamptz <= $4::timestamptz
+        AND NOT EXISTS (SELECT 1 FROM user_files live WHERE live.file_id = pf.file_id AND live.deleted_at IS NULL)
+      GROUP BY pf.path, pf.file_id`, [app, projectId, after, upto])).rows;
+  const gone = (await db.query('SELECT path, file_id, at FROM project_file_events WHERE app = $1 AND project_id = $2 AND at > $3::timestamptz AND at <= $4::timestamptz',
+    [app, projectId, after, upto])).rows;
+  const changes = [
+    ...written.map((r) => ({ kind: 'put', path: r.path, fileId: String(r.file_id), versionId: String(r.id), sha256: r.content_sha256, size: Number(r.file_size), at: r.at })),
+    ...[...trashed, ...gone].map((r) => ({ kind: 'remove', path: r.path, fileId: r.file_id ? String(r.file_id) : null, at: r.at })),
+  ].sort((a, b) => new Date(a.at) - new Date(b.at));
+  return { cursor: new Date(Math.max(after.getTime(), new Date(upto).getTime())).toISOString(), changes };
 }

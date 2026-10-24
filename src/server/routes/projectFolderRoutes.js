@@ -5,14 +5,16 @@
  *   GET    /:app/:projectId/files                                       every path with its current version
  *   GET    /:app/:projectId/files/content?path=                         the bytes of one path
  *   PUT    /:app/:projectId/files/content?path=   raw body, If-Match?  write: new file or new version
- *   DELETE /:app/:projectId/files?path=                                 to the Storage trash
+ *   DELETE /:app/:projectId/files?path=     If-Match?                   to the Storage trash
+ *   POST   /:app/:projectId/files/move      { from, to }, If-Match?     rename or move a path, keeping the file and its history
+ *   GET    /:app/:projectId/changes?since=                              what changed since a cursor, by anyone, by any route
  *
  * Called AS THE PERSON. An app's own OIDC token reaches only that app's projects (its client id is the `:app`), so one
  * product cannot walk another's project folders; the person's own platform session may open any of theirs.
  */
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { ProjectFolderError, ensureProjectFolder, listProjectFiles, readProjectFile, writeProjectFile, removeProjectFile } from '../services/projectFolders.js';
+import { ProjectFolderError, ensureProjectFolder, listProjectFiles, readProjectFile, writeProjectFile, removeProjectFile, moveProjectFile, projectChanges } from '../services/projectFolders.js';
 
 const MAX_BYTES = 100 * 1024 * 1024;   // the same ceiling as any Storage upload
 
@@ -56,7 +58,9 @@ export default function projectFolderRoutes({ uploadsDir }) {
     try {
       const row = await readProjectFile(req.db, req.user.id, req.params.app, req.params.projectId, String(req.query.path || ''));
       res.set({ 'Content-Type': row.mime_type || 'application/octet-stream', ETag: `"${row.content_sha256}"`, 'X-Content-Type-Options': 'nosniff', 'X-Xeno-File-Id': String(row.file_id) });
-      res.sendFile(row.storage_path, (error) => { if (error && !res.headersSent) res.status(404).json({ success: false, code: 'bytes_missing', error: 'The file is being restored; try again shortly' }); });
+      if (!row.local_path) return res.status(503).json({ success: false, code: 'bytes_missing', error: 'The file is being restored; try again shortly' });
+      // ranged reads (206) come from sendFile: a working copy reads only the part it needs
+      res.sendFile(row.local_path, { acceptRanges: true, dotfiles: 'allow' /* a server-made path under the managed root, never the caller's */ }, (error) => { if (error && !res.headersSent) res.status(404).json({ success: false, code: 'bytes_missing', error: 'The file is being restored; try again shortly' }); });
     } catch (error) { fail(res, error); }
   });
 
@@ -72,8 +76,19 @@ export default function projectFolderRoutes({ uploadsDir }) {
     } catch (error) { fail(res, error); }
   });
 
+  const ifMatchOf = (req) => String(req.get('If-Match') || '').replace(/^W\//, '').replace(/"/g, '').trim() || null;
   router.delete('/:app/:projectId/files', async (req, res) => {
-    try { res.json({ success: true, ...(await removeProjectFile(req.db, req.user.id, req.params.app, req.params.projectId, String(req.query.path || ''))) }); }
+    try { res.json({ success: true, ...(await removeProjectFile(req.db, req.user.id, req.params.app, req.params.projectId, String(req.query.path || ''), { ifMatch: ifMatchOf(req) })) }); }
+    catch (error) { fail(res, error); }
+  });
+
+  router.post('/:app/:projectId/files/move', express.json({ limit: '16kb' }), async (req, res) => {
+    try { res.json({ success: true, ...(await moveProjectFile(req.db, req.user.id, req.params.app, req.params.projectId, String(req.body?.from || ''), String(req.body?.to || ''), { ifMatch: ifMatchOf(req) })) }); }
+    catch (error) { fail(res, error); }
+  });
+
+  router.get('/:app/:projectId/changes', async (req, res) => {
+    try { res.json({ success: true, ...(await projectChanges(req.db, req.user.id, req.params.app, req.params.projectId, req.query.since ? String(req.query.since) : null)) }); }
     catch (error) { fail(res, error); }
   });
   return router;

@@ -196,6 +196,61 @@ async function main() {
     assert.deepEqual((await call('GET', `${W}/files`, O)).body.files.map((f) => f.path), ['rw.txt', 'src/data/site.json']);
     assert.equal((await call('PUT', `${W}/files/content?path=README.md`, O, { bytes: Buffer.from('# Back\n') })).status, 201, 'the path can be written again');
 
+    // ── what a mounted working copy needs (docs/WORKSHOP-MOUNT.md in xeno-storage) ──
+    const mBig = Buffer.from(Array.from({ length: 4096 }, (_, i) => i % 251));
+    const wb = await call('PUT', `${W}/files/content?path=${encodeURIComponent('assets/big.bin')}`, O, { bytes: mBig });
+    assert.equal(wb.status, 201, JSON.stringify(wb.body));
+    // ranged read: only the mPart asked for
+    const mPart = await call('GET', `${W}/files/content?path=assets/big.bin`, O, { headers: { range: 'bytes=100-199' } });
+    assert.equal(mPart.status, 206, 'a range is answered with 206');
+    assert.ok(mPart.raw.equals(mBig.subarray(100, 200)), 'and exactly those bytes');
+
+    // move keeps the file and its history; refused onto a mTaken path and on a mStale If-Match
+    const mV2 = Buffer.from('second');
+    await call('PUT', `${W}/files/content?path=${encodeURIComponent('assets/big.bin')}`, O, { bytes: mV2, headers: { 'if-match': `"${sha(mBig)}"` } });
+    const mStale = await call('POST', `${W}/files/move`, O, { json: { from: 'assets/big.bin', to: 'assets/renamed.bin' }, headers: { 'if-match': `"${sha(mBig)}"` } });
+    assert.equal(mStale.status, 409, 'a move based on an old version is refused');
+    const mTaken = await call('POST', `${W}/files/move`, O, { json: { from: 'assets/big.bin', to: 'rw.txt' } });
+    assert.equal(mTaken.status, 409); assert.equal(mTaken.body.code, 'path_exists', 'never onto a path that exists');
+    const mv = await call('POST', `${W}/files/move`, O, { json: { from: 'assets/big.bin', to: 'media/renamed.bin' }, headers: { 'if-match': `"${sha(mV2)}"` } });
+    assert.equal(mv.status, 200, JSON.stringify(mv.body));
+    assert.equal(mv.body.fileId, wb.body.fileId, 'the same file, not a new one');
+    const mPaths = (await call('GET', `${W}/files`, O)).body.files.map((f) => f.path);
+    assert.ok(mPaths.includes('media/renamed.bin') && !mPaths.includes('assets/big.bin'));
+    const mVersions = (await pool.query('SELECT count(*)::int AS n, count(DISTINCT original_name)::int AS names FROM user_files WHERE file_id = $1', [mv.body.fileId])).rows[0];
+    assert.deepEqual(mVersions, { n: 2, names: 1 }, 'both mVersions kept, all under the new name');
+    const placed2 = (await pool.query(`SELECT DISTINCT f.name FROM storage_item_folders i JOIN storage_folders f ON f.id = i.folder_id
+       WHERE i.source = 'file' AND i.source_id IN (SELECT id FROM user_files WHERE file_id = $1)`, [mv.body.fileId])).rows.map((r) => r.name);
+    assert.deepEqual(placed2, ['media'], 'it sits in its new directory in Storage');
+    assert.equal((await call('POST', `${W}/files/move`, S, { json: { from: 'media/renamed.bin', to: 'x.bin' } })).status, 404, 'a stranger cannot move it');
+
+    // conditional remove
+    const rmStale = await call('DELETE', `${W}/files?path=media/renamed.bin`, O, { headers: { 'if-match': `"${sha(mBig)}"` } });
+    assert.equal(rmStale.status, 409, 'removing a version you have not seen is refused');
+
+    // the change feed: writes, moves and removals by this API, and a version made in Storage itself
+    const feed0 = await call('GET', `${W}/changes`, O);
+    assert.equal(feed0.status, 200, JSON.stringify(feed0.body));
+    await new Promise((r) => setTimeout(r, 2600));
+    const c1 = (await call('GET', `${W}/changes?since=${encodeURIComponent(feed0.body.cursor)}`, O)).body;
+    assert.ok(c1.changes.some((c) => c.kind === 'put' && c.path === 'media/renamed.bin'), 'a moved path shows as written at its new place');
+    assert.ok(c1.changes.some((c) => c.kind === 'remove' && c.path === 'assets/big.bin'), 'and gone from its old one');
+    await new Promise((r) => setTimeout(r, 2600));
+    const mQuiet = (await call('GET', `${W}/changes?since=${encodeURIComponent(c1.cursor)}`, O)).body;
+    assert.deepEqual(mQuiet.changes, [], 'nothing new, nothing reported');
+    const rmOk = await call('DELETE', `${W}/files?path=media/renamed.bin`, O, { headers: { 'if-match': `"${sha(mV2)}"` } });
+    assert.equal(rmOk.status, 200, JSON.stringify(rmOk.body));
+    await new Promise((r) => setTimeout(r, 2600));
+    const c2 = (await call('GET', `${W}/changes?since=${encodeURIComponent(mQuiet.cursor)}`, O)).body;
+    assert.deepEqual(c2.changes.map((c) => [c.kind, c.path]), [['remove', 'media/renamed.bin']]);
+    // trashed in Storage, not through this API: the feed still reports the path gone
+    const sj = (await pool.query(`SELECT pf.file_id FROM project_files pf WHERE pf.app = 'xeno-workshop' AND pf.project_id = $1 AND pf.path = 'rw.txt'`, [P])).rows[0];
+    await pool.query('UPDATE user_files SET deleted_at = clock_timestamp() WHERE file_id = $1', [sj.file_id]);
+    await new Promise((r) => setTimeout(r, 2600));
+    const c3 = (await call('GET', `${W}/changes?since=${encodeURIComponent(c2.cursor)}`, O)).body;
+    assert.deepEqual(c3.changes.map((c) => [c.kind, c.path]), [['remove', 'rw.txt']], 'a file trashed in Storage leaves the project feed');
+    assert.equal((await call('GET', `${W}/changes`, S)).status, 404, 'a stranger reads no feed');
+
     console.log('project-folders: all assertions passed');
   } finally {
     server.close();
