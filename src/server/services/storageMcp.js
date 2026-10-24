@@ -17,7 +17,7 @@ import { listFolders, createFolder, moveItemToFolder } from './storageFolders.js
 import { registerManagedLibraryFile } from './libraryAssets.js';
 import { createFolderLink } from './storageFolderLinks.js';
 import { storeFileObject } from './storageObjects.js';
-import { siteOrigin } from '../config/hosts.js';
+import { publicSiteOrigin } from '../config/hosts.js';
 
 export class StorageMcpError extends Error { constructor(message, code) { super(message); this.name = 'StorageMcpError'; this.code = code; } }
 
@@ -91,7 +91,7 @@ export async function callTool(db, actor, name, a = {}) {
       const r = await createFolderLink(db, owner, String(a.folder || ''), { expiresInDays: a.expires_in_days ?? null, label: a.label ?? null });
       if (r.invalid) throw new StorageMcpError('expires_in_days must be a whole number from 1 to 365', 'invalid_expiry');
       refuse(r, 'Folder (only your owner’s own folders can be shared by link)');
-      return ok({ link: r.link, url: `${siteOrigin()}/storage/shared/${r.token}` });
+      return ok({ link: r.link, url: `${publicSiteOrigin()}/storage/shared/${r.token}` });
     }
     default: throw new StorageMcpError(`Unknown tool ${name}`, 'unknown_tool');
   }
