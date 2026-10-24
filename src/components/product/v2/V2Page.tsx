@@ -75,11 +75,15 @@ export const V2Page: React.FC<{ product: string; children: React.ReactNode }> = 
   const header = useMemo(() => V2_HEADER_HTML.replace(V2_PRODUCT_TOKEN, escapeHtml(word)), [word]);
 
   return (
-    <div style={{ fontFamily: SANS, background: PAPER, color: INK, minHeight: '100vh', overflowX: 'clip', WebkitFontSmoothing: 'antialiased' }}>
+    // A column at least the window's height, with <main> taking the slack: on a short
+    // page (one release) in a tall window the footer must still reach the bottom edge.
+    // Without it the paper showed as a light strip under the footer, and the fixed
+    // report launcher sat on that strip in colours meant for a dark ground.
+    <div style={{ fontFamily: SANS, background: PAPER, color: INK, minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'clip', WebkitFontSmoothing: 'antialiased' }}>
       {/* Trusted, build-generated markup (scripts/lib/marketing-header.mjs); the only
           runtime input is the product word, escaped above. */}
       <div style={{ position: 'sticky', top: 0, zIndex: 60 }} dangerouslySetInnerHTML={{ __html: header }} />
-      <main>{children}</main>
+      <main style={{ flex: '1 0 auto' }}>{children}</main>
       <footer style={{ background: INK, color: '#E8E4DC', padding: '64px 24px 32px' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '40px 48px' }}>
