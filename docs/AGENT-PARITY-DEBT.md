@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1804 actions · 196 agent capability · 1303 planned (debt) · 305 excluded · **coverage 13.1%** of the 1499 owed.
+**Total:** 1807 actions · 196 agent capability · 1306 planned (debt) · 305 excluded · **coverage 13%** of the 1502 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -13,10 +13,10 @@ Every action a person can take on the platform, and whether an agent can take it
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | commerce | 115 | 0 | 99 | 16 | 0% |
+| chat | 98 | 0 | 97 | 1 | 0% |
 | workspace | 155 | 23 | 97 | 35 | 19.2% |
-| chat | 97 | 0 | 96 | 1 | 0% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
-| storage | 87 | 5 | 80 | 2 | 5.9% |
+| storage | 89 | 5 | 82 | 2 | 5.7% |
 | account | 86 | 0 | 60 | 26 | 0% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 71 | 0 | 37 | 34 | 0% |
@@ -293,7 +293,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-canvas.js:data-cv-text`
 - `ui:platform-canvas.js:data-cv-wire`
 
-## chat — 96 planned
+## chat — 97 planned
 
 - `route:aiRoutes.js:GET /local-model-catalog`
 - `route:aiRoutes.js:GET /models`
@@ -332,6 +332,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:GET /projects/:id/activity`
 - `route:chatRoutes.js:GET /projects/:id/files`
 - `route:chatRoutes.js:GET /projects/:id/people`
+- `route:chatRoutes.js:GET /projects/:id/storage`
 - `route:chatRoutes.js:GET /projects/:id/summary`
 - `route:chatRoutes.js:GET /scheduled`
 - `route:chatRoutes.js:GET /scheduled/:id/runs`
@@ -655,7 +656,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:schedulingRoutes.js:PUT /availability`
 - `ui:platform-scheduling.js:data-sc-page`
 
-## storage — 80 planned
+## storage — 82 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -712,8 +713,10 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:projectDirectoryBindingRoutes.js:POST /directories/resolve`
 - `route:projectDirectoryBindingRoutes.js:POST /projects/:id/directories`
 - `route:projectFolderRoutes.js:DELETE /:app/:projectId/files`
+- `route:projectFolderRoutes.js:GET /:app/:projectId/changes`
 - `route:projectFolderRoutes.js:GET /:app/:projectId/files`
 - `route:projectFolderRoutes.js:GET /:app/:projectId/files/content`
+- `route:projectFolderRoutes.js:POST /:app/:projectId/files/move`
 - `route:projectFolderRoutes.js:PUT /:app/:projectId`
 - `route:projectFolderRoutes.js:PUT /:app/:projectId/files/content`
 - `route:storageSharedRoutes.js:GET /:token`

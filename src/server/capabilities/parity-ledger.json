@@ -10062,6 +10062,21 @@
    "class": "safe",
    "scope": "none",
    "because": "changes only what the screen shows"
+  },
+  "route:chatRoutes.js:GET /projects/:id/storage": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "chat:read"
+  },
+  "route:projectFolderRoutes.js:POST /:app/:projectId/files/move": {
+   "status": "planned",
+   "class": "reversible",
+   "scope": "storage:write"
+  },
+  "route:projectFolderRoutes.js:GET /:app/:projectId/changes": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "storage:read"
   }
  }
 }
