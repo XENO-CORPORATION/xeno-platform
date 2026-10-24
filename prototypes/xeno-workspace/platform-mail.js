@@ -267,5 +267,5 @@
     if ('mlTocontact' in d) { const r = await act('POST', `/api/mail/threads/${idE}/contact` + q(), {}); if (r && r.contact) toast(`${r.contact.email} ${r.created === false ? 'is already a contact — mail added to the timeline' : 'saved as a contact'}`); }
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  P.lazyZone(window.XENO_ZONE_LIVE['office.mail'], () => load(), () => load());   // one read; the rail's badge needs it too
 })();

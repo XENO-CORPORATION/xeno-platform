@@ -127,5 +127,10 @@
     if (d.pubConnect) { const r = await send('POST', '/channels/connect', { platform: d.pubConnect }); if (r && r.url) location.assign(r.url); }
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  // the rail's badge (posts waiting for approval) needs the status and the approvals; the rest waits until Publish is shown
+  async function loadBadge() {
+    const st = await api('GET', url('/status')).catch(() => null); if (!st || !st.ok || !st.d.configured || !st.d.linked) return;
+    const ap = await api('GET', url('/approvals')).catch(() => null); if (ap && ap.ok && S.status !== 'ready') { S.approvals = ap.d.items || []; paint(); }
+  }
+  P.lazyZone(window.XENO_ZONE_LIVE['social.publish'], () => load(), loadBadge);
 })();

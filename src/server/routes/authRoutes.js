@@ -1350,6 +1350,9 @@ router.post('/migrate', async (req, res) => {
   }
 });
 
+// The three roles (user < moderator < admin); anything else, `service` included, reads as `user`.
+export const meRole = (role) => (role === 'admin' || role === 'moderator' ? role : 'user');
+
 // GET /api/auth/me - Get current user profile
 router.get('/me', async (req, res) => {
   try {
@@ -1369,7 +1372,7 @@ router.get('/me', async (req, res) => {
     
     const result = await req.db.query(`
       SELECT id, username, email, display_name, avatar_url, 
-             created_at, last_login, email_verified, is_active, credits, bonus_credits_claimed
+             created_at, last_login, email_verified, is_active, credits, bonus_credits_claimed, role
       FROM users 
       WHERE id = $1
     `, [decoded.userId]);
@@ -1396,7 +1399,13 @@ router.get('/me', async (req, res) => {
         email_verified: user.email_verified,
         is_active: user.is_active,
         credits: user.credits,
-        bonus_credits_claimed: user.bonus_credits_claimed
+        bonus_credits_claimed: user.bonus_credits_claimed,
+        // The ROLE the session already has, so a page shows staff tools to staff without probing a staff-only route
+        // (the workspace's Support and Releases pages did, and every customer got 403/404s, 2026-10-24). KIND and
+        // ROLE are separate axes (XENO ACCOUNT - ARCHITECTURE §2.7): `service` is a kind stored in the role column,
+        // so it reads as role `user`. A label for the UI only — every staff route still checks for itself.
+        role: meRole(user.role),
+        kind: user.role === 'service' ? 'service' : 'human'
       }
     });
 

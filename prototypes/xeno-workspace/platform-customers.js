@@ -200,5 +200,7 @@
     if (await act('POST', `/api/customers/deals/${m.dataset.crMove}/move` + q(), { stageId: m.value }, 'Moved')) loadPipeline();
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  // the rail's badge (agent drafts) needs only the summary; contacts and companies wait until Customers is shown
+  const loadBadge = async () => { const s = await api('GET', '/api/customers/summary' + q()).catch(() => null); if (s && s.ok && S.status !== 'ready') { S.summary = s.d.summary; paint(); } };
+  P.lazyZone(window.XENO_ZONE_LIVE['corpo.customers'], () => load(), loadBadge);
 })();

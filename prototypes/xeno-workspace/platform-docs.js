@@ -239,5 +239,5 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && e.target.closest?.('[data-dc-doc]')) { e.preventDefault(); e.target.closest('[data-dc-page]').querySelector('[data-dc-save]')?.click(); }
   }, true);
 
-  P.ready.then((u) => { if (u) { load('write'); load('notes'); } });
+  for (const z of Object.keys(ZONES)) P.lazyZone(window.XENO_ZONE_LIVE['office.' + z], () => load(z));   // each loads when its area is shown
 })();

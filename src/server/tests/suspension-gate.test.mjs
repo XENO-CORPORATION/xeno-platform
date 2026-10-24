@@ -60,6 +60,15 @@ async function main() {
 
   try {
     ok((await get('/api/auth/me', ownerToken)).status === 200, 'active owner: hand-rolled /me answers 200');
+    // /me carries the role the session has, so the workspace shows staff tools without probing staff-only routes
+    // (2026-10-24). Mutation: drop `role` from the response -> the first two fail; return the raw column -> the third.
+    const meOf = async () => (await (await get('/api/auth/me', ownerToken)).json()).user;
+    { const u = await meOf(); ok(u.role === 'user' && u.kind === 'human', `/me says a customer is role user, kind human (${u.role}/${u.kind})`); }
+    await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [owner]);
+    { const u = await meOf(); ok(u.role === 'admin', `/me says an admin is role admin (${u.role})`); }
+    await pool.query("UPDATE users SET role = 'service' WHERE id = $1", [owner]);
+    { const u = await meOf(); ok(u.role === 'user' && u.kind === 'service', `/me reads service as a KIND, never a role (${u.role}/${u.kind})`); }
+    await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [owner]);
     ok((await get('/api/guarded', agentKey)).status === 200, 'active owner: the agent key passes authMiddleware');
     ok((await get('/api/guarded', rawKey)).status === 200, 'active owner: the developer key passes');
 

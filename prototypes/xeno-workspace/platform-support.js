@@ -32,18 +32,20 @@
   const isKey = (it) => /^T-\d+$/i.test(it || '');
 
   async function loadFor(it) {
-    if (S.staff === null) { const q = await api('GET', '/api/support/tickets/queue?status=open'); S.staff = q.ok; if (q.ok) S.queue = q.d.tickets || []; }
-    // admins only: the server answers 403 to everyone else, and then the tab is simply not there
-    if (S.access === null || it === 'access') { const a = await api('GET', '/api/site-gate/codes'); S.access = a.ok ? a.d.codes || [] : false; }
+    // staff and admin come from the session's role (P.isStaff/isAdmin), never from a staff route refusing a customer
+    if (S.staff === null) { await P.ready; S.staff = P.isStaff(); if (S.staff) { const q = await api('GET', '/api/support/tickets/queue?status=open'); if (q.ok) S.queue = q.d.tickets || []; else S.staff = false; } }
+    // admins only: Site access is never asked for by anyone else, and then the tab is simply not there
+    if (P.isAdmin() && (S.access === null || it === 'access')) { const a = await api('GET', '/api/site-gate/codes'); S.access = a.ok ? a.d.codes || [] : false; }
+    else if (!P.isAdmin()) S.access = false;
     if (isKey(it)) {
       const key = it.toUpperCase();
       const r = await api('GET', `/api/support/tickets/${encodeURIComponent(key)}`);
       S.oneKey = key; S.one = r.ok ? r.d.ticket : { missing: r.status === 404, error: said(r, 'Could not load this request') };
       if (S.staff && !S.macros) { const m = await api('GET', '/api/support/macros'); S.macros = m.ok ? m.d.macros || [] : []; }
-    } else if (it === 'queue') {
+    } else if (it === 'queue' && S.staff) {
       const r = await api('GET', `/api/support/tickets/queue?${S.filter === 'breached' ? 'breached=1&status=open' : S.filter === 'mine' ? 'assignee=me&status=open' : S.filter === 'unassigned' ? 'assignee=none&status=open' : 'status=' + encodeURIComponent(S.filter)}`);
       S.queue = r.ok ? r.d.tickets || [] : [];
-    } else if (it === 'macros') {
+    } else if (it === 'macros' && S.staff) {
       const m = await api('GET', '/api/support/macros'); S.macros = m.ok ? m.d.macros || [] : [];
     } else {
       const r = await api('GET', '/api/support/tickets/mine'); S.mine = r.ok ? r.d.tickets || [] : { error: said(r, 'Could not load your requests') };

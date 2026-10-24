@@ -29,7 +29,7 @@
   const title = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
   const ms = (t) => { const n = t ? Date.parse(t) : NaN; return Number.isFinite(n) ? n : Date.now(); };
 
-  const S = { status: 'loading', parts: {}, usage: null, plan: null, security: null, exports: null, browsers: null };
+  const S = { status: 'loading', full: false, parts: {}, usage: null, plan: null, security: null, exports: null, browsers: null };
   let poll = 0;
   const LOCAL = new Set(['general', 'appearance', 'notifications', 'modes', 'keyboard', 'region']);
   const NOT_YET = {
@@ -43,11 +43,16 @@
   const UNAVAILABLE = new Set(['addPasskey', 'removePasskey', 'totpOn', 'totpOff', 'codes', 'addMethod']);
   const WHY = 'Not available on XENO yet';
 
+  // A page load needs only the name and the saved preferences (the home page and the account menu show them). The rest
+  // (devices, sign-in methods, plan, usage, security, copies, browsers) is Settings only, and is asked for the first
+  // time Settings shows an account section — it was seven reads on every load (2026-10-24).
+  let full = false;
   async function load() {
     if (S.status !== 'ready') { S.status = 'loading'; paint(); } // a refresh after a save keeps what is on screen
-    const urls = ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers'];
-    const got = await Promise.all(urls.map((u) => api('GET', u).catch(() => ({ ok: false, status: 0, d: {} }))));
-    const [ov, ses, link, bill, dash, set, sec, exps, brs] = got;
+    const all = full, none = { ok: false, status: 0, d: {} };
+    const urls = all ? ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers'] : ['/api/account/overview', '/api/user-data/settings'];
+    const got = await Promise.all(urls.map((u) => api('GET', u).catch(() => none)));
+    const [ov, ses, link, bill, dash, set, sec, exps, brs] = all ? got : [got[0], none, none, none, none, got[1], none, none, none];
     S.browsers = brs.ok && Array.isArray(brs.d.browsers) ? brs.d.browsers : null;
     S.security = sec.ok && sec.d.security ? sec.d.security : null;
     S.exports = exps.ok && Array.isArray(exps.d.exports) ? exps.d.exports : null;
@@ -57,6 +62,10 @@
     const u = ov.d.overview.user || {}, saved = (set.ok && set.d.settings && set.d.settings.workspace) || {};
     const a = acctNow();
     a.profile = { name: u.display_name || u.username || 'You', handle: u.username || '', email: u.email || '', verified: !!u.email_verified, bio: typeof saved.bio === 'string' ? saved.bio : '', photo: u.avatar_url || null };
+    if (saved.region && typeof saved.region === 'object') a.region = { ...(a.region || {}), ...saved.region };
+    if (saved.prefs && typeof saved.prefs === 'object') { try { localStorage.setItem('xw.prefs', JSON.stringify(saved.prefs)); window.XD?.applyPrefs?.(); } catch {} }
+    if (!all) { try { localStorage.setItem('xw.acct', JSON.stringify(a)); } catch {} S.status = 'ready'; paint(); return true; }
+    S.full = true;
     S.parts.sessions = ses.ok && Array.isArray(ses.d.sessions);
     a.sessions = S.parts.sessions ? ses.d.sessions.map((s) => ({ id: s.id, device: [s.browser, s.os].filter(Boolean).join(' on ') || title(s.device_type) || 'Unknown device', where: s.ip_address ? 'IP ' + s.ip_address : 'Location unknown', last: ms(s.last_active_at || s.created_at), current: !!s.current })) : [];
     S.parts.methods = link.ok && Array.isArray(link.d.accounts);
@@ -70,8 +79,6 @@
     a.balance = Number(credits.balance) || 0;
     a.plan = { name: S.plan.name, price: S.plan.price, renews: S.plan.renews || Date.now(), allowance: 0, payg: true, card: '' };
     S.usage = dash.ok && dash.d.stats ? { available: !!dash.d.stats.usage_available, rows: (dash.d.stats.usage_by_surface || []).map((r) => ({ name: String(r.surface || 'other'), credits: Number(r.credits) || 0 })) } : null;
-    if (saved.region && typeof saved.region === 'object') a.region = { ...(a.region || {}), ...saved.region };
-    if (saved.prefs && typeof saved.prefs === 'object') { try { localStorage.setItem('xw.prefs', JSON.stringify(saved.prefs)); window.XD?.applyPrefs?.(); } catch {} }
     try { localStorage.setItem('xw.acct', JSON.stringify(a)); } catch {}
     S.status = 'ready'; paint(); return true;
   }
@@ -86,6 +93,7 @@
     if (S.status === 'error') return h.card('We couldn’t load your account', '<p class="set-p">XENO didn’t answer. Nothing here was changed.</p>', retry);
     if (NOT_YET[id]) return h.card(esc(NOT_YET[id][0]), `<p class="pg-dim set-p">${esc(NOT_YET[id][1])}</p>`);
     if (id === 'keys') return keysSection(h);
+    if (!S.full) { if (!full) { full = true; setTimeout(load, 0); } return h.card('', '<p class="pg-dim set-p" role="status">Loading your account</p>'); }
     if (id === 'browsers') return browsersSection(h);
     if (id === 'data') return dataSection(h);
     if (id === 'sessions' && !S.parts.sessions) return h.card('Signed-in devices', '<p class="set-p">XENO couldn’t load your devices.</p>', retry);

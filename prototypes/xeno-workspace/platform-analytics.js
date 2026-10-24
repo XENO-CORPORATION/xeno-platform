@@ -141,5 +141,5 @@
     S.division = t.value; paint(); values();
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  P.lazyZone(window.XENO_ZONE_LIVE['corpo.analytics'], () => load());   // the first load waits until the area is shown
 })();

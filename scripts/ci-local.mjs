@@ -189,7 +189,7 @@ const PG = { container: 'xeno-ci-local-pg', port: '55995', password: 'test', ima
  * take minutes, so they run only when asked (`--only=browser`), never in a default run -- but they are named here so
  * gates-are-reachable.test.mjs counts them as reached, and so the one runner that executes them is this file. */
 const BROWSER_SUITES = [
-  'workspace-report.browser.test.mjs', 'homepage-v21.browser.test.mjs', 'products-v2.browser.test.mjs',
+  'workspace-report.browser.test.mjs', 'workspace-report-contrast.browser.test.mjs', 'homepage-v21.browser.test.mjs', 'products-v2.browser.test.mjs',
   'chat-project-context-browser.test.mjs',
   'studio-feed-browser.test.mjs',
   'chat-handoff-browser.test.mjs',

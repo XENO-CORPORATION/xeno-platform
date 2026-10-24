@@ -27,7 +27,8 @@
 
   async function loadFor(it) {
     const [a, id] = String(it || '').split('/');
-    if (S.staff === null) { const s = await api('GET', '/api/releases/summary'); S.staff = s.ok; if (s.ok) S.summary = s.d.summary; }
+    // staff comes from the session's role (P.isStaff), never from /summary answering a customer 404
+    if (S.staff === null) { await P.ready; S.staff = P.isStaff(); if (S.staff) { const s = await api('GET', '/api/releases/summary'); if (s.ok) S.summary = s.d.summary; else S.staff = false; } }
     if (a === 'whats-new' || !S.staff) { const r = await api('GET', '/api/releases/whats-new'); S.news = r.ok ? r.d.notes || [] : { error: said(r, 'What’s new did not load') }; }
     else if (a === 'deploys' && id) {
       const [r, n] = await Promise.all([api('GET', `/api/releases/deploys/${encodeURIComponent(id)}`), api('GET', `/api/releases/deploys/${encodeURIComponent(id)}/internal-note`)]);
