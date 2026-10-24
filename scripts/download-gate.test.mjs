@@ -36,6 +36,7 @@ const catalog = read('src/lib', 'productCatalog.ts');
 
 const UI = [
   ['src/components/product', 'ReleaseFeed.tsx'],
+  ['src/components/product/v2', 'ReleaseEntry.tsx'],
   ['src/pages', 'ProductReleaseDetail.tsx'],
   ['src/pages', 'ProductDownload.tsx'],
   ['src/pages', 'ProductPage.tsx'],
@@ -112,10 +113,16 @@ test('an ungranted request is never handed an installer', () => {
 });
 
 test('a browser navigation is sent somewhere it can act', () => {
-  /* A bare 401 in a browser tab is a dead end. HTML gets the sign-in page with
-   * a returnUrl; everything else gets JSON it can branch on. */
+  /* A bare 401 in a browser tab is a dead end. Since #898 (2026-10-22) a navigation
+   * goes to the product's download page, whose Download controls mint a grant on
+   * click and carry sign-in and plan refusals onward (downloadFlow.ts). It used to
+   * go to /login?returnUrl=, which bounced straight back here in a 302 loop.
+   * Everything else gets JSON it can branch on. */
   assert.ok(route.includes('wantsHtml(req)'), 'the route no longer distinguishes a navigation from an API call');
-  assert.ok(route.includes('/login?returnUrl='), 'a browser navigation is not sent anywhere it can act');
+  assert.ok(route.includes('res.redirect(302, `/product/${encodeURIComponent(slug)}/download`)'),
+    'a browser navigation is not sent anywhere it can act');
+  assert.ok(read('src/pages', 'ProductDownload.tsx').includes('onClick={downloadClickHandler('),
+    'the page a navigation lands on cannot mint a grant');
   assert.ok(route.includes('download_grant_required'), 'the JSON refusal lost its code');
 });
 

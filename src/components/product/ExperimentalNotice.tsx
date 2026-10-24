@@ -21,14 +21,48 @@ import { experimentalNotice, type Product } from '../../lib/productCatalog';
  * ────────────────────────────────────────────────────────────────────── */
 
 type Variant = 'band' | 'inline' | 'line';
+/* `paper` is the same statement in the v2 product-design palette (ink on warm
+   paper), for the download and release pages that sit under a design page. The
+   copy still comes only from experimentalNotice(); only the colours differ. */
+type Tone = 'dark' | 'paper';
 
-const ExperimentalNotice: React.FC<{ product: Product; variant?: Variant; className?: string }> = ({
-  product, variant = 'inline', className = '',
+const ExperimentalNotice: React.FC<{ product: Product; variant?: Variant; tone?: Tone; className?: string }> = ({
+  product, variant = 'inline', tone = 'dark', className = '',
 }) => {
   const notice = experimentalNotice(product);
   if (!notice) return null;
 
   const Icon = notice.smartScreen ? ShieldAlert : FlaskConical;
+
+  if (tone === 'paper') {
+    if (variant === 'line') {
+      return (
+        <p className={`flex items-start gap-2 text-[12.5px] leading-[1.55] text-[#6A655D] ${className}`}>
+          <Icon className="mt-[2px] h-3.5 w-3.5 shrink-0 text-[#8A6A1F]" strokeWidth={1.7} />
+          <span><span className="font-semibold text-[#1D1B18]">{notice.label}.</span> {notice.short}</span>
+        </p>
+      );
+    }
+    return (
+      <div className={`rounded-[12px] bg-[#FBF3E2] p-[clamp(16px,1.6vw,22px)] text-[#5C4414] ${className}`}>
+        <div className="flex items-center gap-2.5">
+          <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+          <span className="text-[15px] font-semibold">{notice.label}</span>
+        </div>
+        <p className="mt-2 text-[14px] leading-[1.6]">{variant === 'band' ? notice.detail : notice.short}</p>
+        {variant === 'band' && notice.steps && notice.steps.length > 0 && (
+          <ol className="mt-4 space-y-2 border-t border-[#EADBB8] pt-4">
+            {notice.steps.map((s, i) => (
+              <li key={s} className="flex items-start gap-3 text-[13.5px] leading-[1.55]">
+                <span className="mt-[1px] grid h-[20px] w-[20px] shrink-0 place-items-center rounded-full bg-[#5C4414] font-mono text-[10.5px] text-[#FBF3E2]">{i + 1}</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    );
+  }
 
   /* Bare one-liner. Sits directly above a list of download links (release feed,
      release permalink) where a boxed band would be visual noise. */
