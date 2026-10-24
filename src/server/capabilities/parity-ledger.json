@@ -10077,6 +10077,68 @@
    "status": "planned",
    "class": "safe",
    "scope": "storage:read"
+  },
+  "route:skillsRoutes.js:POST /check": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:skillsRoutes.js:POST /detect": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "route:skillsRoutes.js:POST /match": {
+   "status": "planned",
+   "class": "safe",
+   "scope": "agents:read"
+  },
+  "ui:platform-skills.js:data-xsk=ed-check": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /check",
+   "class": "safe",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=fd-one": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=fd-as": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=fd-ack": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=fd-all": {
+   "status": "excluded",
+   "category": "covered-by",
+   "of": "route:skillsRoutes.js:POST /",
+   "class": "reversible",
+   "scope": "none",
+   "because": "the screen for the same route"
+  },
+  "ui:platform-skills.js:data-xsk=fd-close": {
+   "status": "excluded",
+   "category": "view-state",
+   "class": "safe",
+   "scope": "none",
+   "because": "changes only what the screen shows"
   }
  }
 }

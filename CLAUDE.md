@@ -375,7 +375,11 @@ Corpus's record and digest, never invent a third skills model.
 - **A skill file's bytes never change:** text inline (BOM/CRLF kept), anything else in `skill_objects` by its digest.
   Never decode an upload "to be safe" — that is what made binary skills impossible and digests disagree with Corpus.
 - **`npm run test:skills-corpus-import`** with `XENO_CORPUS_STORE=<corpus>/skills` imports a real store read-only and
-  fails if the platform ever disagrees with Corpus about a digest.
+  fails if the platform ever disagrees with Corpus about a digest; with `XENO_REAL_SKILL_ROOTS=1` it also picks this
+  machine's Claude Code / Codex / agy / workspace skill folders and requires Corpus's survey and digests exactly.
+- **What a folder holds is Corpus's `detectBundles`; what a skill may do is `inspect`** (Corpus secrets + Anima
+  take-over + Corpus malicious-skill rules). Never add a detection or risk rule here — change xeno-corpus and re-sync.
+  block = never, confirm = a person's yes (`acknowledge`, people only), review = kept with the version.
 
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 

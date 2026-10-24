@@ -7,6 +7,9 @@
  *   POST   /api/skills/:id/versions              { files | skillMd, version? } → the next immutable version
  *   GET    /api/skills/:id/file?path=&version=   one file's exact bytes (a download; never rendered)
  *   POST   /api/skills/import/corpus             one skill from a XENO Corpus store, verified by Corpus's own checks
+ *   POST   /api/skills/check                     { files } → every check saving them would run (secrets, steering, malicious code), nothing saved
+ *   POST   /api/skills/detect                    { entries:[{rel,bytes,text?}] } → which skills a picked folder holds (Corpus's rules)
+ *   POST   /api/skills/match                     { bundles:[{key,name,files:[{rel,sha256}]}] } → new | same | changed | taken
  *   DELETE /api/skills/:id                       archive it (agents that pinned a version keep it)
  */
 import express from 'express';
@@ -27,6 +30,9 @@ router.use((req, _res, next) => { req.me = { id: req.owner || (req.user && req.u
 router.get('/', handled(async (req, res) => { res.json({ success: true, skills: await skills.list(req.db, req.me, { workspaceId: req.query.workspace ? String(req.query.workspace) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, skill: await skills.create(req.db, req.me, req.body || {}) }); }));
 router.post('/import/github', handled(async (req, res) => { res.status(201).json({ success: true, skill: await skills.importFromGitHub(req.db, req.me, req.body || {}) }); }));
+router.post('/check', handled(async (req, res) => { res.json({ success: true, ...(await skills.preflight(req.db, req.me, req.body || {})) }); }));
+router.post('/detect', handled(async (req, res) => { res.json({ success: true, ...skills.detect(req.me, req.body || {}) }); }));
+router.post('/match', handled(async (req, res) => { res.json({ success: true, results: await skills.match(req.db, req.me, req.body || {}) }); }));
 router.post('/import/corpus', handled(async (req, res) => { const skill = await skills.importFromCorpus(req.db, req.me, req.body || {}); res.status(skill.imported === 'new' ? 201 : 200).json({ success: true, skill }); }));
 router.get('/:id/file', handled(async (req, res) => {
   const f = await skills.readFile(req.db, req.me, req.params.id, { path: req.query.path ? String(req.query.path) : 'SKILL.md', version: req.query.version ? String(req.query.version) : undefined });

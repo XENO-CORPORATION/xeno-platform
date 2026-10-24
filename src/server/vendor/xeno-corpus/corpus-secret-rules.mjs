@@ -23,6 +23,8 @@ export function entropy(s) {
 
 /** Values that are documentation, not credentials: `xxxx`, `...`, `<token>`, `your-key`, `example`. */
 export const PLACEHOLDER = /x{4,}|\.\.\.|…|<[^>\n]*>|\*{3,}|\byour[_-]|example|placeholder|changeme|redacted|dummy|sample/i;
+/** The WHOLE value is a documentation password: an optional owner word, a stock stem, optional digits. */
+export const DOC_PASSWORD = /^(?:my|your|the|user|owner|secret|test|example)?[-_]?(?:pass(?:word)?|secret|letmein|changeit)[-_]?\d*$/i;
 
 /** A value that REFERS to a credential rather than being one: `process.env.X`, `${VAR}`, `$env:X`. */
 export function isCodeReference(v) {
@@ -53,6 +55,9 @@ function classifyAssignment(m) {
   const value = m[2];
   if (isCodeReference(value)) return null;               // reads a credential, does not contain one
   if (PLACEHOLDER.test(value)) return "review";
+  // a documentation password ("mypassword", "test_pass1", "password") is an example, not a credential — measured on
+  // Anthropic's own pdf skill (`qpdf --password=… --decrypt`); it stays visible as review, a real literal still blocks
+  if (DOC_PASSWORD.test(value.replace(/^["'`]|["'`]$/g, ""))) return "review";
   if (/^(?:password|passwd|pwd)$/i.test(m[1])) return "block"; // a password literal is a credential
   return looksRandom(value) ? "block" : "review";
 }

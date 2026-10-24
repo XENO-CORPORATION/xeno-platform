@@ -24,8 +24,9 @@ import { execFileSync } from 'node:child_process';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDOR = join(ROOT, 'src/server/vendor/xeno-corpus');
 const MANIFEST = join(VENDOR, 'SOURCE.json');
-// every vendored Corpus file: the format (D240) and the secret-gate rules (D236). Each is pinned on its own.
-const FILES = ['corpus-skill-format.mjs', 'corpus-secret-rules.mjs'];
+// every vendored Corpus file: the format and detection (D240), the secret-gate rules (D236) and the malicious-skill
+// rules (corpus-skill-risk). Each is pinned on its own.
+const FILES = ['corpus-skill-format.mjs', 'corpus-secret-rules.mjs', 'corpus-skill-risk.mjs'];
 
 const lf = (buf) => Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
 export const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');

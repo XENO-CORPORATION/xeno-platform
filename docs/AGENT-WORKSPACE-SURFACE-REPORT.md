@@ -10,7 +10,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | studio | 121 | 4 | 117 | 0 | 54 | 54 | 13 | 0 | `library:write` 66, `library:read` 51 |
 | tasks | 107 | 13 | 86 | 8 | 16 | 81 | 10 | 0 | `tasks:write` 79, `tasks:read` 7 |
 | chat | 98 | 0 | 97 | 1 | 29 | 52 | 17 | 0 | `chat:write` 69, `chat:read` 28 |
-| agents | 184 | 0 | 130 | 54 | 51 | 124 | 9 | 0 | `agents:write` 105, `agents:read` 25 |
+| agents | 193 | 0 | 133 | 60 | 56 | 128 | 9 | 0 | `agents:write` 105, `agents:read` 28 |
 | commerce | 115 | 0 | 99 | 16 | 38 | 64 | 3 | 10 | `wallet:spend` 63, `wallet:read` 36 |
 | workspace | 155 | 23 | 97 | 35 | 57 | 78 | 20 | 0 | `workspace:admin` 72, `workspace:read` 24, `agents:write` 1 |
 | places | 9 | 3 | 4 | 2 | 8 | 1 | 0 | 0 | `places:read` 4 |

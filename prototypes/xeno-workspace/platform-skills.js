@@ -31,7 +31,7 @@
   const paint = () => { try { window.XENO_PG_SYNC_NAV?.(); X()?.render?.(); } catch {} };
   const go = (item) => X()?.go?.('global', { global: 'workspace', item });
   const toast = (m) => X()?.toast?.(m);
-  const S = { key: null, status: 'idle', list: [], one: null, q: '', mq: '', busy: false, loaded: false, market: null, listing: null, owned: new Set(), subs: null, mine: null, ed: null, showImport: false, corpus: null };
+  const S = { key: null, status: 'idle', list: [], one: null, q: '', mq: '', busy: false, loaded: false, market: null, listing: null, owned: new Set(), subs: null, mine: null, ed: null, showImport: false, corpus: null, found: null };
 
   // ───────────────────────── the format, on this side only to help the writer; the server decides
   const skillMd = (name, description, body) => `---\nname: ${name}\ndescription: ${String(description).replace(/\s*\n\s*/g, ' ').trim()}\n---\n\n${String(body || '').trim()}\n`;
@@ -42,7 +42,7 @@
   const price = (pricing) => { const p = (pricing || [])[0]; if (!p || p.model === 'free' || !p.priceCredits) return 'Free'; return `${p.priceCredits} credits`; };
 
   // ───────────────────────── reading what a person drops in: a folder, or a .zip (stored or deflate)
-  async function readZip(buf) {
+  async function zipEntries(buf) {
     const dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder();
     let eocd = -1; for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
     if (eocd < 0) throw new Error('This is not a .zip file');
@@ -57,10 +57,12 @@
       if (method === 0) bytes = data;
       else if (method === 8) bytes = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
       else throw new Error(`${name} uses a compression this page cannot read`);
-      out.push(asFile(name, bytes));
+      out.push({ rel: name, size: bytes.length, read: async () => bytes });
     }
     return out;
   }
+  // what a person picked, as paths relative to the folder they chose (its own name first) and a way to read each one
+  const fromFolder = (list) => [...list].map((f) => ({ rel: f.webkitRelativePath || f.name, size: f.size, read: async () => new Uint8Array(await f.arrayBuffer()) }));
   // A file exactly as it arrived: text when its bytes are UTF-8 (a BOM and line endings kept, so the bytes come back
   // the same), otherwise its bytes as they are — an image or a font is stored by digest, never decoded into text.
   const b64 = (u8) => { let out = ''; for (let i = 0; i < u8.length; i += 0x8000) out += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(out); };
@@ -202,7 +204,8 @@
         <label class="grow"><span>Steps</span><textarea data-xsk-ed="body" spellcheck="false" placeholder="1. Run the ledger tests.&#10;2. Reconcile the totals.&#10;3. Report what changed, how you checked it, what you are unsure of.">${esc(ed.body)}</textarea></label></div>`
       : isBin(sel) ? binPanel(sel, ed)
       : `<div class="xsk-edf"><label><span>Path</span><input data-xsk-path="${esc(sel.path)}" value="${esc(sel.path)}" maxlength="200"></label><label class="grow"><span>Content</span><textarea data-xsk-file="${esc(sel.path)}" spellcheck="false">${esc(sel.content)}</textarea></label></div>`;
-    const side = `<aside class="xsk-side"><section><h3>Checks</h3><ul class="xsk-checks">${cs.map(([k, t]) => `<li class="${k}"><i>${k === 'ok' ? ic('check') : k === 'bad' ? ic('x') : ic('alert')}</i><span>${esc(t)}</span></li>`).join('')}</ul><p class="xsk-hint">XENO checks again when you save: secrets and instructions that try to take over an agent are refused.</p></section>
+    const side = `<aside class="xsk-side"><section><h3>Checks</h3><ul class="xsk-checks">${cs.map(([k, t]) => `<li class="${k}"><i>${k === 'ok' ? ic('check') : k === 'bad' ? ic('x') : ic('alert')}</i><span>${esc(t)}</span></li>`).join('')}</ul>${ed.check ? `<ul class="xsk-checks xsk-server">${ed.check.level === 'clean' ? `<li class="ok"><i>${ic('check')}</i><span>XENO’s checks found nothing</span></li>` : [...ed.check.block.map((x) => ['bad', x]), ...ed.check.confirm.map((x) => ['note', x]), ...ed.check.review.map((x) => ['note', x])].slice(0, 8).map(([k, x]) => `<li class="${k}"><i>${k === 'bad' ? ic('x') : ic('alert')}</i><span>${k === 'bad' ? 'Refused' : x.level === 'confirm' ? 'Needs your yes' : 'Note'}: ${esc(x.says)} <code>${esc(x.file)}${x.line ? ':' + esc(x.line) : ''}</code></span></li>`).join('')}</ul>` : ''}
+      <p class="xsk-hint">XENO checks every file when you save: secrets, instructions that try to take over an agent, and code that downloads and runs things, steals credentials or hides what it does. <button type="button" class="pg-link" data-xsk="ed-check"${S.busy ? ' disabled' : ''}>Check now</button></p></section>
       <section><h3>What an agent sees</h3><p class="xsk-hint">Always, in its brief:</p><pre class="xsk-pre">- ${esc(ed.name || 'name')}: ${esc(ed.description || 'when to use it')}</pre><p class="xsk-hint">When it decides to use it, the steps and, when they mention them, the files.</p></section>
       ${!ed.id && tm ? `<section><h3>Belongs to</h3><div class="pg-seg" role="radiogroup" aria-label="Belongs to"><button role="radio" aria-checked="${ed.where === 'workspace'}" data-xsk="ed-where" data-k="workspace">${esc(tm.name || 'Workspace')}</button><button role="radio" aria-checked="${ed.where !== 'workspace'}" data-xsk="ed-where" data-k="personal">Only me</button></div></section>` : ''}</aside>`;
     return h.page(head + `<div class="xsk-editor">${tree}<div class="xsk-ed-main">${main}</div>${side}</div>`, 'xsk');
@@ -214,6 +217,11 @@
     return `<div class="xsk-edf"><label><span>Path</span><input data-xsk-path="${esc(f.path)}" value="${esc(f.path)}" maxlength="200"></label>
       <div class="xsk-bin">${t ? (src ? `<img src="${esc(src)}" alt="${esc(f.path)}">` : '<div class="xsk-bin-ph" aria-busy="true"></div>') : `<span class="xsk-ic">${ic('doc')}</span>`}
         <p><b>${esc(f.path.split('/').pop())}</b><small>${t ? 'Image' : 'A file that is not text'} · ${esc(kb(sizeOf(f)))}. Its bytes are kept exactly as they are; replace it by dropping a new one here.</small></p></div></div>`;
+  }
+  async function checkEditor() {
+    const ed = S.ed; if (!ed) return;
+    const r = await call('POST', '/api/skills/check', { files: edFiles(ed).map(wire) }, 'It could not be checked.');
+    if (r) { ed.check = r.d; paint(); }
   }
   async function saveEditor() {
     const ed = S.ed; if (!ed) return;
@@ -317,23 +325,15 @@
   // ───────────────────────── XENO Corpus: a skills folder (`<corpus>/skills`), imported skill by skill with its history
   // The folder is read here only to group what belongs to each skill; the server re-checks every byte with Corpus's
   // own rules and refuses on any problem. Only the store's own .lock and .tmp files are skipped — a skill may ship one.
-  function readCorpus(fileList) {
-    const all = [...fileList].map((f) => ({ f, path: f.webkitRelativePath || f.name }));
-    const sidecars = all.filter((x) => /\.skill\.json$/.test(x.path));
-    if (!sidecars.length) throw new Error('That folder has no Corpus skills in it. Choose the skills folder inside your corpus (.xeno/corpus/skills).');
-    const dirOf = (p) => p.slice(0, p.lastIndexOf('/') + 1);
-    const counts = new Map(); for (const x of sidecars) counts.set(dirOf(x.path), (counts.get(dirOf(x.path)) || 0) + 1);
-    const root = [...counts].sort((a, b) => b[1] - a[1])[0][0];
-    const at = new Map(all.filter((x) => x.path.startsWith(root)).map((x) => [x.path.slice(root.length), x.f]));
-    const items = sidecars.filter((x) => dirOf(x.path) === root).map((x) => {
-      const name = x.path.slice(root.length, -'.skill.json'.length);
-      return { name, variant: name.includes('@'), state: 'ready', msg: '' };
-    }).filter((it) => !/\.(lock|tmp)$/.test(it.name)).sort((a, b) => a.name.localeCompare(b.name));
+  function corpusFrom(entries, store) {
+    const root = store.dir ? store.dir + '/' : '';
+    const at = new Map(entries.filter((e) => e.rel.startsWith(root)).map((e) => [e.rel.slice(root.length), e]));
+    const items = store.sidecars.map((name) => ({ name, variant: name.includes('@'), state: 'ready', msg: '' })).sort((a, b) => a.name.localeCompare(b.name));
     return { root, at, items, workspace: teamWs() ? wsId() : null, running: false };
   }
   async function corpusBody(c, it) {
-    const text = (f) => (f ? f.text() : Promise.resolve(''));
-    const bytes = async (f) => b64(new Uint8Array(await f.arrayBuffer()));
+    const text = async (e) => (e ? new TextDecoder('utf-8', { ignoreBOM: true }).decode(await e.read()) : '');
+    const bytes = async (e) => b64(await e.read());
     const sidecar = await text(c.at.get(`${it.name}.skill.json`));
     const revisions = await text(c.at.get(`${it.name}.revisions.jsonl`));
     let rec = {}; try { rec = JSON.parse(sidecar); } catch { /* the server says why */ }
@@ -374,6 +374,115 @@
       <div class="xsk-acts">${h.btn('Close', 'data-xsk="cp-close"', true)}<button type="button" class="pg-btn" data-xsk="cp-all"${c.running ? ' disabled' : ''}>${c.running ? 'Importing…' : 'Import all'}</button></div></div><ul class="xsk-cp-list">${c.items.map(row).join('')}</ul></section>`;
   }
 
+  // ───────────────────────── any folder: a skill, a tool's skills (Claude Code, Codex, agy, XENO CLI, plugins), a project,
+  // a repository, or a Corpus store. WHAT is in it is decided on the server by XENO Corpus's detectBundles — the same rules
+  // Corpus applies on a disk (a skill is a folder whose SKILL.md names it and says when to use it; SKIP_DIRS; one level of
+  // containers; its limits). The page sends paths, sizes and each SKILL.md's text; the files themselves stay here until saved.
+  const TOOL = { claude: 'Claude Code', codex: 'Codex', agy: 'agy', workspace: 'Workspace', 'xeno-cli': 'XENO CLI', plugin: 'Plugin', unknown: '' };
+  const hex = (buf) => [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  const fileSha = async (u8) => 'sha256:' + hex(await crypto.subtle.digest('SHA-256', u8));
+  async function importPicked(entries, label) {
+    const at = new Map(entries.map((e) => [e.rel, e]));
+    const sent = await Promise.all(entries.map(async (e) => (/(^|\/)SKILL\.md$/.test(e.rel) ? { rel: e.rel, bytes: e.size, text: new TextDecoder().decode(await e.read()) } : { rel: e.rel, bytes: e.size })));
+    const dr = await api('POST', '/api/skills/detect', { entries: sent });
+    if (!dr.ok) return toast(why(dr, 'That folder could not be read.'));
+    const d = dr.d;
+    if (d.layout === 'none') return toast('No skill found there. A skill is a folder with a SKILL.md in it.');
+    S.showImport = false;
+    if (d.layout === 'corpus-store') { S.corpus = corpusFrom(entries, d.store); return paint(); }
+    // one skill — at the top, or the one folder that was picked (a folder pick and most zips wrap it in its own name)
+    const one = d.bundles.length === 1 && d.bundles[0].state === 'ok' && (d.layout === 'single-bundle' || !d.bundles[0].dir.includes('/')) ? d.bundles[0] : null;
+    if (one) return openEditorWith(await Promise.all(one.files.map(async (rel) => asFile(rel, await at.get((one.dir ? one.dir + '/' : '') + rel).read()))), label);
+    const F = S.found = { label, at, workspace: teamWs() ? wsId() : null, running: false, skipped: d.skipped.length, roots: d.roots,
+      items: d.bundles.map((b) => ({ key: b.dir, name: b.name, dir: b.dir, tool: b.tool, files: b.files, state: b.state === 'ok' ? 'checking' : 'refused', msg: b.state === 'ok' ? '' : b.reason })) };
+    paint();
+    // what each one is to THIS library — from file fingerprints; the bundle digest is Corpus's code on the server
+    const ok = F.items.filter((i) => i.state === 'checking');
+    const bundles = [];
+    for (const it of ok) { const pre = it.dir ? it.dir + '/' : ''; bundles.push({ key: it.key, name: it.name, files: await Promise.all(it.files.map(async (rel) => ({ rel, sha256: await fileSha(await at.get(pre + rel).read()) }))) }); }
+    const r = bundles.length ? await api('POST', '/api/skills/match', { workspaceId: F.workspace, bundles }) : { ok: true, d: { results: [] } };
+    if (S.found !== F) return;
+    if (!r.ok) { for (const it of ok) { it.state = 'refused'; it.msg = why(r, 'Could not be checked.'); } return paint(); }
+    const byKey = new Map(r.d.results.map((x) => [x.key, x]));
+    const seenDigest = new Map(), seenName = new Map();
+    for (const it of ok) {
+      const m = byKey.get(it.key) || { status: 'invalid' };
+      it.digest = m.bundleDigest; it.skill = m.skill || null;
+      const twin = it.digest && seenDigest.get(it.digest);
+      if (twin) { it.state = 'twin'; it.msg = `The same skill as ${twin.name}${TOOL[twin.tool] ? ' from ' + TOOL[twin.tool] : ''}, byte for byte`; continue; }
+      if (it.digest) seenDigest.set(it.digest, it);
+      if (m.status === 'same') { it.state = 'same'; it.msg = `Already in your library as ${m.skill.name} · ${m.skill.version}`; continue; }
+      if (m.status === 'invalid') { it.state = 'refused'; it.msg = 'Its files could not be read'; continue; }
+      const first = seenName.get(it.name);
+      if (first) { it.state = 'clash'; it.msg = `Another ${it.name}${TOOL[it.tool] ? ' (' + TOOL[it.tool] + ')' : ''} with different content`; continue; }
+      seenName.set(it.name, it);
+      if (m.status === 'changed') { it.state = 'changed'; it.msg = `Changed: adds a new version of ${m.skill.name} (now ${m.skill.version})`; continue; }
+      if (m.status === 'taken') { it.state = 'clash'; it.msg = `${m.skill.name} in your library came from the Marketplace`; continue; }
+      it.state = 'ready'; it.msg = 'New';
+    }
+    paint();
+    // before anything is saved: secrets, instructions that steer an agent, and what the files would DO (XENO Corpus's
+    // malicious-skill rules) — a refusal shows here, a "needs your yes" waits for the person, the rest can go in
+    for (const it of F.items.filter((x) => x.state === 'ready' || x.state === 'changed')) {
+      if (S.found !== F) return;
+      await preflightItem(F, it); paint();
+    }
+  }
+  const verdict = (xs) => xs.slice(0, 2).map((x) => `${x.says} (${x.file}${x.line ? ':' + x.line : ''})`).join('; ') + (xs.length > 2 ? ` and ${xs.length - 2} more` : '');
+  async function preflightItem(F, it) {
+    const pre = it.dir ? it.dir + '/' : '';
+    let r; try { r = await api('POST', '/api/skills/check', { files: await Promise.all(it.files.map(async (rel) => ({ path: rel, base64: b64(await F.at.get(pre + rel).read()) }))) }); } catch { r = { ok: false, d: {} }; }
+    if (!r.ok) { if (r.d && r.d.code === 'skill_has_secret') { it.state = 'refused'; it.msg = why(r, 'It contains a secret.'); } return; }
+    it.check = r.d;
+    if (r.d.level === 'block') { it.state = 'refused'; it.msg = `Refused: it ${verdict(r.d.block)}`; return; }
+    if (r.d.level === 'confirm') {
+      it.wasChanged = it.wasChanged || it.state === 'changed';
+      it.state = 'unsafe'; it.msg = `Needs your yes: it ${verdict(r.d.confirm)}`;
+      it.ack = { d: { code: 'skill_unsafe', details: { canAcknowledge: true, findings: r.d.confirm.map((x) => `${x.file}${x.line ? ':' + x.line : ''} — ${x.says}`) } } };
+      return;
+    }
+    if (r.d.level === 'review') it.msg += ` · ${r.d.review.length} note${r.d.review.length === 1 ? '' : 's'} to read`;
+  }
+  async function importFound(it, opts = {}) {
+    const F = S.found; if (!F) return;
+    it.state = 'importing'; paint();
+    const pre = it.dir ? it.dir + '/' : '';
+    let r;
+    try {
+      const files = await Promise.all(it.files.map(async (rel) => ({ path: rel, base64: b64(await F.at.get(pre + rel).read()) })));
+      const ack = opts.ack ? { acknowledge: true } : {};
+      r = it.wasChanged && !opts.as
+        ? await api('POST', `/api/skills/${it.skill.id}/versions`, { files, ...ack })
+        : await api('POST', '/api/skills', { files, workspaceId: F.workspace, source: { kind: 'folder', tool: it.tool }, ...(opts.as ? { as: opts.as } : {}), ...ack });
+    } catch { r = { ok: false, d: {} }; }
+    if (r.ok) { it.state = 'done'; it.id = r.d.skill.id; it.msg = it.wasChanged && !opts.as ? `Added version ${r.d.skill.version}` : `Imported as ${r.d.skill.name} · ${r.d.skill.version}`; }
+    else if (canAck(r)) { it.state = 'unsafe'; it.ack = r; it.msg = why(r, 'It needs reading first.'); }
+    else if (r.d && r.d.code === 'skill_name_taken') { it.state = 'clash'; it.msg = why(r, 'That name is taken.'); }
+    else { it.state = 'refused'; it.msg = why(r, 'It could not be imported.'); }
+    paint();
+  }
+  async function importFoundAll() {
+    const F = S.found; if (!F || F.running) return;
+    F.running = true; paint();
+    for (const it of F.items) { if (it.state === 'changed') it.wasChanged = true; if (it.state === 'ready' || it.state === 'changed') await importFound(it, {}); }
+    F.running = false; await loadList(); paint();
+    toast(`${F.items.filter((x) => x.state === 'done').length} skill${F.items.filter((x) => x.state === 'done').length === 1 ? '' : 's'} imported — read them before giving them to an agent`);
+  }
+  function foundPanel() {
+    const F = S.found; if (!F) return '';
+    const h = H(), n = (st) => F.items.filter((x) => st.includes(x.state)).length;
+    const tools = [...new Set(F.items.map((x) => TOOL[x.tool]).filter(Boolean))];
+    const act = (it) => it.state === 'done' && it.id ? `<button type="button" class="pg-link" data-xsk="open" data-id="${esc(it.id)}">Open</button>`
+      : it.state === 'same' && it.skill ? `<button type="button" class="pg-link" data-xsk="open" data-id="${esc(it.skill.id)}">Open</button>`
+      : it.state === 'ready' ? `<button type="button" class="pg-link" data-xsk="fd-one" data-k="${esc(it.key)}">Import</button>`
+      : it.state === 'changed' ? `<button type="button" class="pg-link" data-xsk="fd-one" data-k="${esc(it.key)}">Add version</button>`
+      : it.state === 'clash' ? `<button type="button" class="pg-link" data-xsk="fd-as" data-k="${esc(it.key)}">Import under another name</button>`
+      : it.state === 'unsafe' ? `<button type="button" class="pg-link" data-xsk="fd-ack" data-k="${esc(it.key)}">Read and decide</button>` : '';
+    const row = (it) => `<li class="xsk-cp-${it.state === 'done' || it.state === 'same' ? 'done' : it.state}"><b title="${esc(it.dir)}">${esc(it.name || it.dir)}</b><span class="xsk-tool">${esc(TOOL[it.tool] || '')}</span><small>${it.state === 'checking' ? 'Checking…' : it.state === 'importing' ? 'Checking every file…' : esc(it.msg)}</small><span>${act(it)}</span></li>`;
+    return `<section class="xsk-cp" aria-label="Skills found"><div class="xsk-cp-h"><div><b>Found in ${esc(F.label)}</b><small>${F.items.length} skill${F.items.length === 1 ? '' : 's'}${tools.length ? ' from ' + esc(tools.join(', ')) : ''} · ${n(['ready'])} new, ${n(['changed'])} changed, ${n(['same', 'twin'])} already here${n(['unsafe']) ? `, ${n(['unsafe'])} need${n(['unsafe']) === 1 ? 's' : ''} your yes` : ''}${n(['refused']) ? `, ${n(['refused'])} refused` : ''}${F.skipped ? ` · ${F.skipped} folder${F.skipped === 1 ? '' : 's'} without a SKILL.md skipped` : ''}. Each is checked file by file when it is saved; nothing is saved from a skill that fails a check.</small></div>
+      <div class="xsk-acts">${h.btn('Close', 'data-xsk="fd-close"', true)}<button type="button" class="pg-btn" data-xsk="fd-all"${F.running || !n(['ready', 'changed']) ? ' disabled' : ''}>${F.running ? 'Importing…' : `Import ${n(['ready', 'changed'])}`}</button></div></div><ul class="xsk-cp-list xsk-fd">${F.items.map(row).join('')}</ul></section>`;
+  }
+
   // ───────────────────────── pages
   const tabs = (cur) => H().tabs([['', 'Library', S.loaded ? S.list.length : ''], ['Marketplace', 'Marketplace'], ...(P.isAdmin && P.isAdmin() ? [['Review', 'Review']] : [])], cur, 'data-xsk-tab');
   function listPage() {
@@ -382,11 +491,10 @@
     const head = h.head({ title: 'Skills', sub: 'How your agents do one kind of work: written once, given to any agent, at a version that never changes under it.', acts: h.btn('Import', 'data-xsk="import"', true, 'download') + h.btn('New skill', 'data-xsk="new"', false, 'plus') });
     const imp = S.showImport ? `<section class="xsk-import" aria-label="Import a skill">
         <form class="xsk-imp" data-xsk-form="github"><b>From GitHub</b><small>A public skill folder, for example from github.com/anthropics/skills</small><div><input name="url" placeholder="https://github.com/owner/repo/tree/main/skills/name" aria-label="GitHub folder link"><button type="submit" class="pg-btn"${S.busy ? ' disabled' : ''}>Import</button></div></form>
-        <label class="xsk-imp"><b>A folder</b><small>From your computer: SKILL.md and its files</small><span class="pg-btn ghost">Choose folder</span><input type="file" data-xsk-in="folder" webkitdirectory multiple hidden></label>
-        <label class="xsk-imp"><b>A .zip</b><small>A skill packed as a zip</small><span class="pg-btn ghost">Choose .zip</span><input type="file" data-xsk-in="zip" accept=".zip,application/zip" hidden></label>
-        <label class="xsk-imp"><b>From XENO Corpus</b><small>Your corpus’s skills folder, with every version Corpus kept</small><span class="pg-btn ghost">Choose skills folder</span><input type="file" data-xsk-in="corpus" webkitdirectory multiple hidden></label>
-        <p class="xsk-hint">Folders and zips open in the editor first, so you read them before they are saved. Skills already on your computer (Claude Code, Codex) come in through XENO Corpus: run <code>corpus skills carry</code>, then choose <code>.xeno/corpus/skills</code>.</p></section>` : '';
-    const cp = corpusPanel();
+        <label class="xsk-imp"><b>A folder</b><small>One skill, or many: your Claude Code, Codex or agy skills, a project, or your XENO Corpus</small><span class="pg-btn ghost">Choose folder</span><input type="file" data-xsk-in="folder" webkitdirectory multiple hidden></label>
+        <label class="xsk-imp"><b>A .zip</b><small>The same, packed as a zip</small><span class="pg-btn ghost">Choose .zip</span><input type="file" data-xsk-in="zip" accept=".zip,application/zip" hidden></label>
+        <p class="xsk-hint">XENO finds the skills in whatever you choose — <code>~/.claude/skills</code>, <code>~/.codex/skills</code>, <code>~/.gemini/config/skills</code>, a project’s <code>.claude/skills</code>, a whole repository, or <code>.xeno/corpus/skills</code> with every version Corpus kept — and says which are new, already here, or changed before anything is saved. One skill opens in the editor first.</p></section>` : '';
+    const cp = corpusPanel() + foundPanel();
     if (!S.list.length) return h.page(head + tabs('') + imp + cp + `<div class="xsk-first"><h2>Teach your agents how you work</h2>
       <p>A skill is one kind of work, written down: when to use it, and the steps. Give it to any of your agents; they see its name and when to use it, and read the steps when it fits — in Claude Code, Codex, Spawn or the cloud. Write one, import one, or get one from the Marketplace.</p>
       <div class="xsk-acts">${h.btn('Write a skill', 'data-xsk="new"', false, 'plus')}${h.btn('Browse the Marketplace', 'data-xsk-tab="Marketplace"', true)}</div></div>`, 'xsk');
@@ -493,6 +601,7 @@
     if (a === 'approve') return decide(b.dataset.id, true);
     if (a === 'reject') return decide(b.dataset.id, false);
     if (a === 'ed-save') return saveEditor();
+    if (a === 'ed-check') return checkEditor();
     if (a === 'ed-addfile') return addFile();
     if (a === 'ed-sel') { S.ed.sel = b.dataset.p; return paint(); }
     if (a === 'ed-rm') { S.ed.files = S.ed.files.filter((f) => f.path !== b.dataset.p); S.ed.sel = 'SKILL.md'; return paint(); }
@@ -500,6 +609,15 @@
     if (a === 'retry') { S.key = null; return paint(); }
     if (a === 'dl' && S.one) return download(S.one.id, b.dataset.p, S.one.version);
     if (a === 'cp-close') { S.corpus = null; return paint(); }
+    if (a === 'fd-close') { S.found = null; return paint(); }
+    if (a === 'fd-all') return importFoundAll();
+    if ((a === 'fd-one' || a === 'fd-as' || a === 'fd-ack') && S.found) {
+      const it = S.found.items.find((x) => x.key === b.dataset.k); if (!it) return;
+      if (a === 'fd-one') { if (it.state === 'changed') it.wasChanged = true; return importFound(it).then(loadList).then(paint); }
+      if (a === 'fd-ack') return askAck(it.ack, it.name).then((yes) => (yes ? importFound(it, { ack: true, ...(it.as ? { as: it.as } : {}) }).then(loadList).then(paint) : null));
+      return D().form({ title: 'Import under another name', sub: it.msg, submit: 'Import', size: 'sm', fields: [{ id: 'name', label: 'Name', required: true, max: 64, value: slug(`${it.name}-${it.tool !== 'unknown' ? it.tool : 'copy'}`) }] })
+        .then((v) => { if (!v) return null; it.as = slug(v.name); it.wasChanged = false; return importFound(it, { as: it.as }).then(loadList).then(paint); });
+    }
     if (a === 'cp-all') return importCorpusAll();
     if (a === 'cp-one' && S.corpus) { const it = S.corpus.items.find((x) => x.name === b.dataset.n); if (it) return importCorpusOne(it).then(loadList).then(paint); }
     if (a === 'cp-ack' && S.corpus) { const it = S.corpus.items.find((x) => x.name === b.dataset.n); if (!it || !it.ack) return;
@@ -520,9 +638,8 @@
     if (p && S.ed) { const x = S.ed.files.find((y) => y.path === p.dataset.xskPath); const np = p.value.trim().replace(/\\/g, '/'); if (x && np && np !== 'SKILL.md' && !S.ed.files.some((y) => y !== x && y.path === np)) { x.path = np; S.ed.sel = np; } paint(); return; }
     const inp = e.target.closest('.xsk [data-xsk-in]'); if (!inp || !inp.files || !inp.files.length) return;
     try {
-      if (inp.dataset.xskIn === 'zip') { const f = inp.files[0]; openEditorWith(await readZip(await f.arrayBuffer()), f.name); }
-      else if (inp.dataset.xskIn === 'corpus') { S.corpus = readCorpus(inp.files); S.showImport = false; paint(); }
-      else { const list = [...inp.files].filter((f) => !/(^|\/)\./.test(f.webkitRelativePath || f.name)).slice(0, 64); openEditorWith(await Promise.all(list.map(async (f) => asFile(f.webkitRelativePath || f.name, new Uint8Array(await f.arrayBuffer())))), 'a folder'); }
+      if (inp.dataset.xskIn === 'zip') { const f = inp.files[0]; await importPicked(await zipEntries(await f.arrayBuffer()), f.name); }
+      else { const list = fromFolder(inp.files); await importPicked(list, (list[0] && list[0].rel.split('/')[0]) || 'a folder'); }
     } catch (err) { toast(err && err.message ? err.message : 'That could not be read'); }
     inp.value = '';
   });
@@ -550,6 +667,7 @@
     s.textContent = [
       '.xsk-bin{display:flex;gap:14px;align-items:flex-start;padding:14px;border:1px solid var(--n31);border-radius:6px;background:var(--panel)}.xsk-bin img{max-width:min(100%,420px);max-height:320px;border:1px solid var(--border);border-radius:3px;background:var(--n24)}.xsk-bin-ph{width:160px;height:120px;border-radius:3px;background:var(--n24)}.xsk-bin p{margin:0;display:flex;flex-direction:column;gap:4px;font-size:12.5px}.xsk-bin small{color:var(--muted);line-height:1.5}',
       '.xsk-flist{list-style:none;margin:0;padding:0;border:1px solid var(--n31);border-radius:6px}.xsk-flist li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px}.xsk-flist li:last-child{border-bottom:0}.xsk-flist code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xsk-flist small{color:var(--muted)}',
+      '.xsk-cp-list.xsk-fd li{grid-template-columns:minmax(140px,220px) 92px minmax(0,1fr) auto}.xsk-tool{font-size:11.5px;color:var(--muted);white-space:nowrap}.xsk-cp-clash small,.xsk-cp-twin small,.xsk-cp-changed small{color:var(--text)}',
       '.xsk-ack{margin:8px 0;padding-left:18px;font-size:12px}.xsk-ack code{white-space:pre-wrap;word-break:break-word}.xsk-cp-unsafe small{color:var(--text)}',
       '.xsk-cp{margin:0 0 14px;border:1px solid var(--n31);border-radius:6px;background:var(--panel)}.xsk-cp-h{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:12px 14px;border-bottom:1px solid var(--border)}.xsk-cp-h>div:first-child{display:flex;flex-direction:column;gap:4px}.xsk-cp-h small{font-size:12px;color:var(--muted);line-height:1.5;max-width:720px}.xsk-cp-list{list-style:none;margin:0;padding:0;max-height:360px;overflow:auto}.xsk-cp-list li{display:grid;grid-template-columns:minmax(140px,240px) minmax(0,1fr) auto;gap:12px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--border);font-size:12.5px}.xsk-cp-list li:last-child{border-bottom:0}.xsk-cp-list b{font:12px ui-monospace,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xsk-cp-list small{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xsk-cp-done small{color:var(--text)}.xsk-cp-refused small,.xsk-cp-taken small{color:var(--danger,var(--text))}',
       '.xsk-first{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:640px;margin:28px 0}.xsk-first h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em}.xsk-first p{margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)}.xsk-acts{display:flex;gap:8px;flex-wrap:wrap}',
