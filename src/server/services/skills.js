@@ -71,9 +71,15 @@ function assertSafe(files) {
     const r = redactSecrets(f.content);
     if (r.redacted) throw new SkillError(`${f.path} contains what looks like a secret (${summarizeRedactions(r.hits)}). Remove it: a skill is read by every agent that uses it.`, 'skill_has_secret', 422);
   }
-  const blocking = blockingFindings(scanForInjection(files[0].content, { source: 'SKILL.md' }));
-  if (blocking.length) throw new SkillError('This SKILL.md contains instructions that try to take over the agent using it', 'skill_unsafe', 422, blocking.slice(0, 5).map(formatFinding));
+  // every file, not only SKILL.md: a reference file the agent is told to read is instructions too (OWASP Agentic Skills)
+  const blocking = files.flatMap((f) => blockingFindings(scanForInjection(f.content, { source: f.path })));
+  if (blocking.length) throw new SkillError(`This skill contains instructions that try to take over the agent using it (${[...new Set(blocking.map((b) => b.source))].join(', ')})`, 'skill_unsafe', 422, blocking.slice(0, 5).map(formatFinding));
 }
+
+/** Files that can run as code: shown to a person before they install or pin the skill. Never executed here. */
+const EXEC_EXT = /\.(sh|bash|zsh|ps1|psm1|bat|cmd|py|js|mjs|cjs|ts|rb|pl|php|exe)$/i;
+export const executablesOf = (files) => files.filter((f) => EXEC_EXT.test(f.path) || /^#!/.test(f.content)).map((f) => f.path);
+export { assertSafe, normalizeFiles };
 
 const cmpSemver = (a, b) => { const x = a.match(SEMVER).slice(1).map(Number), y = b.match(SEMVER).slice(1).map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 
@@ -91,6 +97,7 @@ async function row(db, me, publicId, write = false) {
   if (!PUBLIC_ID.test(String(publicId || ''))) throw new SkillError('Skill not found', 'skill_not_found', 404);
   const s = (await db.query('SELECT * FROM skills WHERE public_id = $1 AND archived_at IS NULL', [publicId])).rows[0];
   if (!s || !(await canRead(db, me, s))) throw new SkillError('Skill not found', 'skill_not_found', 404);
+  if (s.origin_listing_id) { const o = (await db.query('SELECT current_version, slug FROM marketplace_listings WHERE id = $1', [s.origin_listing_id])).rows[0]; if (o) { s.origin_latest = o.current_version; s.origin_slug = o.slug; } }
   if (write && !(await canWrite(db, me, s))) throw new SkillError('Only its owner, or an editor of its workspace, changes this skill', 'not_allowed', 403);
   return s;
 }
@@ -99,6 +106,9 @@ const humanOnly = (me) => { if (!me || me.kind !== 'human') throw new SkillError
 const shape = (s, v, withFiles = false) => ({
   id: s.public_id, name: s.name, description: s.description,
   owner: s.owner_user_id ? { kind: 'personal' } : { kind: 'workspace', workspaceId: String(s.workspace_id) },
+  // installed from the Marketplace: which listing, the version installed last, and the latest it has published
+  origin: s.origin_listing_id ? { listingId: String(s.origin_listing_id), version: s.origin_version, latest: s.origin_latest || null, slug: s.origin_slug || null } : null,
+  scripts: v ? executablesOf(v.files) : [],
   version: v ? v.version : null, hash: v ? v.content_hash : null, files: v ? (withFiles ? v.files : v.files.map((f) => ({ path: f.path, size: Buffer.byteLength(f.content, 'utf8') }))) : [],
   createdAt: s.created_at, updatedAt: s.updated_at,
 });
@@ -155,7 +165,7 @@ export async function list(db, me, { workspaceId = null } = {}) {
   // the workspaces this person is in (any relation on it, or owning it); canRead below is still the check that decides
   const mine = `(SELECT t.object_id::uuid FROM relationship_tuples t WHERE t.object_type = 'workspace' AND t.subject_type = 'user' AND t.subject_id = $1::text
       UNION SELECT w.id FROM workspaces w WHERE w.owner_user_id = $1)`;
-  const rows = (await db.query(`SELECT s.* FROM skills s WHERE s.archived_at IS NULL AND (${workspaceId ? `s.workspace_id = $2 AND s.workspace_id IN ${mine}` : `s.owner_user_id = $1 OR s.workspace_id IN ${mine}`}) ORDER BY s.updated_at DESC LIMIT 500`,
+  const rows = (await db.query(`SELECT s.*, ol.current_version AS origin_latest, ol.slug AS origin_slug FROM skills s LEFT JOIN marketplace_listings ol ON ol.id = s.origin_listing_id WHERE s.archived_at IS NULL AND (${workspaceId ? `s.workspace_id = $2 AND s.workspace_id IN ${mine}` : `s.owner_user_id = $1 OR s.workspace_id IN ${mine}`}) ORDER BY s.updated_at DESC LIMIT 500`,
     workspaceId ? [me.id, workspaceId] : [me.id])).rows;
   const out = [];
   for (const s of rows) if (await canRead(db, me, s)) out.push(shape(s, await latest(db, s.id)));
@@ -169,6 +179,72 @@ export async function get(db, me, publicId, { version } = {}) {
   const v = version ? (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [s.id, String(version)])).rows[0] : await latest(db, s.id);
   if (!v) throw new SkillError('No such version', 'version_not_found', 404);
   return { ...shape(s, v, true), canEdit: await canWrite(db, me, s), versions: vs.map((x) => ({ version: x.version, hash: x.content_hash, createdAt: x.created_at })) };
+}
+
+/**
+ * INTERNAL (marketplaceSkillPackages.installSkill): put a Marketplace version into a person's or workspace's library.
+ * The first install creates the skill; a later one adds that version to the same skill. Nothing an agent pinned
+ * changes: pins name a version, and this only ever adds one. The caller has already checked the entitlement.
+ */
+export async function installVersion(db, me, { workspaceId = null, files, version, origin, name: rename }) {
+  humanOnly(me);
+  const fs = normalizeFiles(files);
+  const meta = parseSkillMd(fs[0].content);
+  assertSafe(fs);
+  if (workspaceId && !(await check(db, { object: `workspace:${workspaceId}`, relation: 'editor', subject: `user:${me.id}` })).allowed) throw new SkillError('Only an editor of that workspace adds skills to it', 'not_allowed', 403);
+  const own = workspaceId ? ['workspace_id = $1', workspaceId] : ['owner_user_id = $1', me.id];
+  const mine = (await db.query(`SELECT * FROM skills WHERE ${own[0]} AND origin_listing_id = $2 AND archived_at IS NULL`, [own[1], origin.listingId])).rows[0];
+  const hash = hashOf(fs);
+  if (mine) {
+    const have = (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [mine.id, version])).rows[0];
+    if (!have) await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id) VALUES ($1, $2, $3, $4, $5)`, [mine.id, version, JSON.stringify(fs), hash, me.id]);
+    else if (have.content_hash !== hash) throw new SkillError('This library already holds a different version under that number', 'version_conflict', 409);
+    const u = (await db.query('UPDATE skills SET origin_version = $2, description = $3, updated_at = now() WHERE id = $1 RETURNING *', [mine.id, version, meta.description])).rows[0];
+    return { ...shape(u, (await db.query('SELECT * FROM skill_versions WHERE skill_id = $1 AND version = $2', [mine.id, version])).rows[0]), installed: have ? 'already' : 'updated' };
+  }
+  const name = rename ? String(rename).trim() : meta.name;
+  if (!NAME.test(name)) throw new SkillError('The skill’s name is lowercase letters, numbers and hyphens, at most 64', 'invalid_skill_name');
+  try {
+    const s = (await db.query(`INSERT INTO skills (public_id, owner_user_id, workspace_id, name, description, created_by_user_id, origin_listing_id, origin_version)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, ['skl_' + randomBytes(16).toString('hex'), workspaceId ? null : me.id, workspaceId, name, meta.description, me.id, origin.listingId, version])).rows[0];
+    const v = (await db.query(`INSERT INTO skill_versions (skill_id, version, files, content_hash, created_by_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *`, [s.id, version, JSON.stringify(fs), hash, me.id])).rows[0];
+    return { ...shape(s, v), installed: 'new' };
+  } catch (e) {
+    if (e && e.code === '23505') throw new SkillError(`Your library already has a skill named ${name}. Install it under another name.`, 'skill_name_taken', 409);
+    throw e;
+  }
+}
+
+/**
+ * Import a skill folder from GitHub (a public repo): https://github.com/<owner>/<repo>/tree/<ref>/<path>. Only the GitHub
+ * API host is ever fetched, so a link cannot point the server anywhere else; text files only, the same limits and scans
+ * as any other skill. It lands as version 1.0.0 in the library, for a person to read before any agent uses it.
+ */
+export async function importFromGitHub(db, me, { url, workspaceId = null } = {}, { fetchImpl = fetch } = {}) {
+  humanOnly(me);
+  const m = String(url || '').trim().match(/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/tree\/([A-Za-z0-9_.\/-]+?)\/((?:[^/?#]+\/?)+)$/);
+  if (!m) throw new SkillError('Give a link to a skill folder on GitHub, like https://github.com/owner/repo/tree/main/skills/my-skill', 'invalid_github_url');
+  const [, owner, repo, ref, dir] = m;
+  const files = [];
+  const walk = async (path, depth) => {
+    if (depth > 4 || files.length > MAX_FILES) return;
+    const r = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'xeno-skills-import' } });
+    if (!r.ok) throw new SkillError(r.status === 404 ? 'That folder was not found on GitHub (it must be public)' : `GitHub answered ${r.status}`, 'github_unavailable', 502);
+    const items = await r.json();
+    if (!Array.isArray(items)) throw new SkillError('That link is a file, not a skill folder', 'invalid_github_url');
+    for (const it of items) {
+      if (it.type === 'dir') await walk(it.path, depth + 1);
+      else if (it.type === 'file') {
+        if (it.size > MAX_FILE) throw new SkillError(`${it.path} is larger than 256 KB`, 'file_too_large');
+        const raw = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}/contents/${it.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`, { headers: { accept: 'application/vnd.github.raw', 'user-agent': 'xeno-skills-import' } });
+        if (!raw.ok) throw new SkillError(`Could not read ${it.path} from GitHub`, 'github_unavailable', 502);
+        const text = await raw.text();
+        files.push({ path: it.path.slice(dir.replace(/\/$/, '').length + 1), content: text });
+      }
+    }
+  };
+  await walk(dir.replace(/\/$/, ''), 0);
+  return create(db, me, { workspaceId, files });
 }
 
 /** Archive: it leaves the library; agents that pinned a version keep working with it. */

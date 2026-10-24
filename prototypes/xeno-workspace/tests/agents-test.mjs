@@ -13,7 +13,7 @@ let failed = 0, fail = false;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 const PROJ = [{ id: 'p-1111', name: 'Releases', canEdit: true }, { id: 'p-2222', name: 'Website', canEdit: true }];
 const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
-const db = { agents: [], calls: [], skills: [] };
+const db = { agents: [], calls: [], skills: [], mkt: { dev: null, listings: [], owned: new Set() } };
 const skView = (k) => { const v = k.versions[k.versions.length - 1]; return { id: k.id, name: k.name, description: k.description, owner: { kind: 'personal' }, version: v.version, hash: v.hash, files: [{ path: 'SKILL.md', content: v.md }], versions: [...k.versions].reverse().map((x) => ({ version: x.version, hash: x.hash, createdAt: new Date().toISOString() })), canEdit: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; };
 const mdMeta = (md) => ({ name: (String(md).match(/^name: (.+)$/m) || [])[1], description: (String(md).match(/^description: (.+)$/m) || [])[1] });
 const ALL = { viewer: true, runner: true, editor: true, exporter: true, manage: true };
@@ -96,11 +96,26 @@ p.on('request', (q) => {
   { const tk = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (tk && method === 'PATCH') return json(200, { success: true, task: { key: tk[1], delegate: { id: b.delegateId, kind: 'agent' } } }); }
   if (u.pathname === '/api/tasks' && method === 'GET') return json(200, { success: true, tasks: [{ key: 'T-7', title: 'Ship the header', status: 'todo', project: { id: PROJ[0].id, name: PROJ[0].name } }, { key: 'T-8', title: 'Elsewhere', status: 'todo', project: { id: 'zz', name: 'Other' } }] });
   if (u.pathname === '/api/skills' && method === 'GET') return json(200, { success: true, skills: db.skills.filter((k) => !k.archived).map(skView) });
-  if (u.pathname === '/api/skills' && method === 'POST') { const m = mdMeta(b.skillMd); if (!/^[a-z0-9][a-z0-9-]*$/.test(m.name || '')) return json(400, { success: false, error: 'bad name', code: 'invalid_skill_name' }); const k = { id: 'skl_' + hex(), name: m.name, description: m.description, versions: [{ version: '1.0.0', hash: hex() + hex(), md: b.skillMd }] }; db.skills.push(k); return json(201, { success: true, skill: skView(k) }); }
+  if (u.pathname === '/api/skills' && method === 'POST') { const mdIn = b.skillMd || (b.files && b.files[0] && b.files[0].content); b.skillMd = mdIn; const m = mdMeta(mdIn); if (!/^[a-z0-9][a-z0-9-]*$/.test(m.name || '')) return json(400, { success: false, error: 'bad name', code: 'invalid_skill_name' }); const k = { id: 'skl_' + hex(), name: m.name, description: m.description, versions: [{ version: '1.0.0', hash: hex() + hex(), md: b.skillMd }] }; db.skills.push(k); return json(201, { success: true, skill: skView(k) }); }
   { const sm = u.pathname.match(/^\/api\/skills\/(skl_[0-9a-f]{32})(\/versions)?$/); if (sm) { const k = db.skills.find((x) => x.id === sm[1]); if (!k) return json(404, { success: false, code: 'skill_not_found' });
     if (sm[2] && method === 'POST') { const md = b.files[0].content, last = k.versions[k.versions.length - 1].version.split('.').map(Number); k.versions.push({ version: `${last[0]}.${last[1]}.${last[2] + 1}`, hash: hex() + hex(), md }); k.description = mdMeta(md).description; return json(201, { success: true, skill: skView(k) }); }
     if (method === 'DELETE') { k.archived = true; return json(200, { success: true, id: k.id, archived: true }); }
     return json(200, { success: true, skill: skView(k) }); } }
+  if (u.pathname === '/api/marketplace/developer/skill-listings') return json(200, { success: true, developer: db.mkt.dev, listings: db.mkt.listings.filter((l) => l.mine).map((l) => ({ id: l.id, title: l.title, status: l.status, currentVersion: l.current, sourceSkill: l.sourceSkill, lastSubmission: l.sub })) });
+  if (u.pathname === '/api/marketplace/developer/register' && method === 'POST') { db.mkt.dev = { id: 'd1', name: b.displayName, handle: b.slug, trustTier: 'community' }; return json(201, { success: true, developer: db.mkt.dev }); }
+  if (u.pathname === '/api/marketplace/listings' && method === 'POST') { const l = { id: '11111111-2222-4333-8444-' + hex().slice(0, 12), title: b.title, summary: b.summary, license: b.license, pricing: b.pricing, mine: true, status: 'draft', versions: [] }; db.mkt.listings.push(l); return json(201, { success: true, listing: { id: l.id, kind: 'skill' } }); }
+  { const lm = u.pathname.match(/^\/api\/marketplace\/listings\/([0-9a-f-]{36})\/(versions|submit|purchase|install-skill)$/); if (lm) { const l = db.mkt.listings.find((x) => x.id === lm[1]); if (!l) return json(404, { success: false });
+    if (lm[2] === 'versions') { const k = db.skills.find((x) => x.id === b.skillId); const v = k.versions.find((x) => x.version === b.skillVersion); l.sourceSkill = k.id; l.versions.push({ id: 'v' + l.versions.length, version: v.version, hash: v.hash, md: v.md, name: k.name, description: k.description }); return json(201, { success: true, version: { id: 'v' + (l.versions.length - 1), version: v.version } }); }
+    if (lm[2] === 'submit') { l.sub = { state: 'in_review', version: l.versions[l.versions.length - 1].version }; return json(202, { success: true, submission: { id: 's-' + l.id, state: 'in_review' } }); }
+    if (lm[2] === 'purchase') { db.mkt.owned.add(l.id); return json(200, { success: true, entitlement: { type: 'owned' } }); }
+    if (lm[2] === 'install-skill') { if (!db.mkt.owned.has(l.id)) return json(402, { success: false, code: 'not_entitled', error: 'Get it first' }); const v = l.versions.find((x) => x.version === l.current); const name = b.name || v.name;
+      if (db.skills.some((x) => x.name === name && x.origin !== l.id)) return json(409, { success: false, code: 'skill_name_taken', error: `Your library already has a skill named ${name}. Install it under another name.` });
+      const k = { id: 'skl_' + hex(), name, description: v.description, origin: l.id, versions: [{ version: v.version, hash: v.hash, md: v.md }] }; db.skills.push(k); const sv = skView(k); return json(201, { success: true, skill: { ...sv, origin: { listingId: l.id, version: v.version, latest: l.current }, installed: 'new' } }); } } }
+  if (u.pathname === '/api/marketplace/catalog') return json(200, { success: true, listings: db.mkt.listings.filter((l) => l.status === 'published').map((l) => ({ id: l.id, kind: 'skill', title: l.title, summary: l.summary, developerSlug: db.mkt.dev.handle, trustTier: 'community', currentVersion: l.current, installCount: 0, pricing: [{ model: 'free', priceCredits: 0 }] })) });
+  if (u.pathname === '/api/marketplace/me/entitlements') return json(200, { success: true, entitlements: [...db.mkt.owned].map((id) => ({ listingId: id, status: 'active' })) });
+  { const pm = u.pathname.match(/^\/api\/marketplace\/skills\/([0-9a-f-]{36})\/preview$/); if (pm) { const l = db.mkt.listings.find((x) => x.id === pm[1]); if (!l || l.status !== 'published') return json(404, { success: false }); const v = l.versions.find((x) => x.version === l.current);
+    return json(200, { success: true, listing: { id: l.id, title: l.title, summary: l.summary, license: l.license, trustTier: 'community', installCount: 0, publisher: { name: db.mkt.dev.name, handle: db.mkt.dev.handle }, pricing: [{ model: 'free', priceCredits: 0 }] },
+      current: { id: 'v', version: v.version, hash: v.hash, name: v.name, description: v.description, skillMd: v.md, files: ['SKILL.md', 'scripts/check.sh'], scripts: ['scripts/check.sh'] }, versions: [{ id: 'v', version: v.version, publishedAt: new Date().toISOString() }] }); } }
   if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: 'w-acme', name: 'Acme', workspace_type: 'team' }, { id: 'w-me', name: 'Mine', workspace_type: 'personal' }] });
   if (u.pathname === '/api/workspaces/w-acme/members') return json(200, { success: true, members: [{ user_id: 'u1', display_name: 'Me', role: 'owner' }, { user_id: 'u-cal', display_name: 'Cal', role: 'editor' }] });
   if (u.pathname === '/api/account/security') return json(200, { success: true, security: { confirmation: { confirmed: true }, methods: ['password'] } });
@@ -194,23 +209,61 @@ try {
 
   // Skills: written once, given to the agent at a fixed version, moved on deliberately
   ok(/No skills yet/.test(await main()), 'with no skills, the Identity tab says so and offers to add one');
-  await p.click('[data-xag="skill-new"]'); await settle(500);
-  await fill(['Ledger Review', 'Use when a change touches money.', '1. Run the ledger tests.\n2. Report what changed.']); await submit(); await settle(600);
+  await p.click('[data-xag="skill-new"]'); await settle(700);
+  ok(new URL(p.url()).pathname === '/workspace/workspace/Skills/new' && /Skills\s*\/\s*New skill/.test(await p.$eval('.crumbs', (e) => e.innerText).catch(() => '')) && /When to use it/.test(await main()) && /Checks/.test(await main()) && /What an agent sees/.test(await main()), 'New skill opens the skill editor page — files, checks and what an agent sees — not a pop-up');
+  ok(!!(await p.$('[data-xsk="ed-save"][disabled]')), 'it cannot be saved before it has a name, when to use it, and steps');
+  await p.type('.xsk [data-xsk-ed="name"]', 'ledger-review');
+  await p.type('.xsk [data-xsk-ed="description"]', 'Use when a change touches money.');
+  await p.type('.xsk [data-xsk-ed="body"]', '1. Run the ledger tests.\n2. Report what changed.');
+  ok(/- ledger-review: Use when a change touches money\./.test(await main()) && !(await p.$('[data-xsk="ed-save"][disabled]')), 'the preview shows the line every agent sees, and it can be saved');
+  await shot('skill-editor');
+  await p.click('[data-xsk="ed-save"]'); await settle(1200);
   { const made = db.calls.filter((c) => c[0] === 'POST' && c[1] === '/api/skills').pop(); const pin = db.calls.filter((c) => c[0] === 'PATCH' && c[2].skills).pop();
-    ok(made && /^---\nname: ledger-review\ndescription: Use when a change touches money\.\n---\n\n1\. Run the ledger tests\./.test(made[2].skillMd) && pin && pin[2].skills.length === 1 && pin[2].skills[0].id === db.skills[0].id, 'New skill writes a SKILL.md (name, when to use it, steps) and gives it to the agent'); }
+    ok(made && /^---\nname: ledger-review\ndescription: Use when a change touches money\.\n---\n\n1\. Run the ledger tests\./.test(made[2].files[0].content) && pin && pin[2].skills.length === 1 && pin[2].skills[0].id === db.skills[0].id && new URL(p.url()).pathname.endsWith('/Identity'), 'saving writes the SKILL.md, gives it to the agent, and returns to its Identity tab'); }
   ok(/ledger-review · 1\.0\.0/.test(await main()) && /Use when a change touches money/.test(await main()), 'the agent lists the skill at its version');
   await fresh('/workspace/workspace/Skills');
   ok(/ledger-review/.test(await main()) && /Skills/.test(await p.$eval('#panel', (e) => e.innerText).catch(() => '')), 'the Skills library lists it, and the sidebar has Skills');
   await p.click('[data-xsk="open"]'); await settle(900);
   ok(new URL(p.url()).pathname === `/workspace/workspace/Skills/${db.skills[0].id}` && /Run the ledger tests/.test(await main()) && /Skills\s*\/\s*ledger-review/.test(await p.$eval('.crumbs', (e) => e.innerText).catch(() => '')), 'a skill opens at its id address, with its steps, and the breadcrumb names it');
-  await p.click('[data-xsk="version"]'); await settle(500); await fill(['Use when a change touches money or invoices.', '1. Run the ledger tests.\n2. Reconcile.\n3. Report.']); await submit(); await settle(900);
-  ok(db.skills[0].versions.length === 2 && /1\.0\.1/.test(await main()), 'New version publishes 1.0.1 and keeps 1.0.0');
+  await p.click('[data-xsk="edit"]'); await settle(900);
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Skills/${db.skills[0].id}/edit` && !!(await p.$('.xsk [data-xsk-ed="name"][readonly]')), 'Edit opens the editor at its own address, keeping the name');
+  await p.$eval('.xsk [data-xsk-ed="body"]', (e) => { e.value = '1. Run the ledger tests.\n2. Reconcile.\n3. Report.'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await p.click('[data-xsk="ed-save"]'); await settle(1200);
+  ok(db.skills[0].versions.length === 2 && /1\.0\.1/.test(await main()), 'Publish version makes 1.0.1 and keeps 1.0.0');
   await fresh(`/workspace/workspace/Agents/${a.id}/Identity`); await settle(600);
   ok(/ledger-review · 1\.0\.0/.test(await main()) && /1\.0\.1 available/.test(await main()), 'the agent stays on 1.0.0 and is told 1.0.1 is available');
   await p.click('[data-xag="skill-update"]'); await settle(800);
   ok(a.skills[0].version === '1.0.1' && /ledger-review · 1\.0\.1/.test(await main()), 'Use 1.0.1 moves it, as a new version of the agent');
   await p.click('[data-xag="skill-remove"]'); await settle(800);
   ok(!a.skills.length && /No skills yet/.test(await main()), 'Remove takes the skill away from the agent');
+
+  // the Marketplace: publish from the library (publisher, listing, checks, review), find it, read it, get it, install it
+  await fresh(`/workspace/workspace/Skills/${db.skills[0].id}`); await settle(400);
+  await p.click('[data-xsk="publish"]'); await settle(500); await fill(['Ada Labs', 'ada-labs']); await submit(); await settle(500);
+  await submit(); await settle(1200);
+  { const L = db.mkt.listings[0];
+    ok(db.mkt.dev && db.mkt.dev.handle === 'ada-labs' && L && L.sourceSkill === db.skills[0].id && L.versions[0].version === '1.0.1' && L.sub.state === 'in_review' && /in review/.test(await p.evaluate(() => document.body.innerText)), 'Publish to Marketplace sets up the publisher once, lists the skill, adds this version and sends it for review'); }
+  db.mkt.listings[0].status = 'published'; db.mkt.listings[0].current = '1.0.1';   // a person approved it
+  await fresh('/workspace/workspace/Skills/Marketplace'); await settle(600);
+  ok(/Ledger review/.test(await main()) && /@ada-labs/.test(await main()) && /Free/.test(await main()), 'the Marketplace tab lists it under @ada-labs, free');
+  await shot('skill-market');
+  await p.click('[data-xsk="listing"]'); await settle(900);
+  ok(/This skill includes scripts/.test(await main()) && /scripts\/check\.sh/.test(await main()) && /Reconcile/.test(await main()), 'a listing is read before getting it: its steps, its files, and a clear note that it carries scripts');
+  await shot('skill-listing');
+  if (process.env.AXE_PATH) { await p.addScriptTag({ path: process.env.AXE_PATH }); const ax = await p.evaluate(async () => (await window.axe.run(document.querySelector('#main'), { resultTypes: ['violations'] })).violations.map((v) => v.id + ':' + v.impact)); ok(!ax.some((v) => /critical|serious/.test(v)), `axe on a Marketplace listing: no serious or critical violations (${ax.join(', ') || 'none'})`); }
+  await p.click('[data-xsk="get"]'); await settle(900);
+  await settle(300); await fill(['ledger-review-2']); await submit(); await settle(1200);
+  { const inst = db.skills.find((x) => x.origin === db.mkt.listings[0].id);
+    ok(db.mkt.owned.has(db.mkt.listings[0].id) && inst && inst.name === 'ledger-review-2' && new URL(p.url()).pathname === `/workspace/workspace/Skills/${inst.id}`, 'Get adds it, and a name already in the library is installed under another name'); }
+
+  // import a folder: it opens in the editor first, so it is read before it is saved
+  { const fs = await import('node:fs'), os = await import('node:os'); const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-'));
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), '---\nname: pdf-forms\ndescription: Use when filling in PDF forms for customers.\n---\n\nFill each field from the task.\n');
+    fs.writeFileSync(path.join(dir, 'fields.md'), '- name\n- date\n');
+    await fresh('/workspace/workspace/Skills'); await settle(400);
+    await p.click('[data-xsk="import"]'); await settle(300);
+    const inp = await p.$('.xsk [data-xsk-in="folder"]'); await inp.evaluate((e) => e.removeAttribute('webkitdirectory')); await inp.uploadFile(path.join(dir, 'SKILL.md'), path.join(dir, 'fields.md')); await settle(900);
+    ok(new URL(p.url()).pathname === '/workspace/workspace/Skills/new' && (await p.$eval('.xsk [data-xsk-ed="name"]', (e) => e.value)) === 'pdf-forms' && /fields\.md/.test(await main()), 'an uploaded folder opens in the editor with its SKILL.md and files, not saved yet'); }
 
   // Connect: a credential shown once, filled into each CLI's setup
   await fresh(`/workspace/workspace/Agents/${a.id}/Connect`);
@@ -411,6 +464,6 @@ try {
 
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
   // the deleted-agent (404) and failed-load (500) steps provoke their responses on purpose; anything else is a defect
-  { const real = cerrs.filter((m) => !/status of (404|500) .*\/api\/agents/.test(m)); ok(real.length === 0, 'no console errors beyond the deliberate 404/500 steps (' + JSON.stringify(real.slice(0, 3)) + ')'); }
+  { const real = cerrs.filter((m) => !/status of (404|500) .*\/api\/agents/.test(m) && !/status of 409 .*\/install-skill/.test(m)); ok(real.length === 0, 'no console errors beyond the deliberate 404/500/name-clash steps (' + JSON.stringify(real.slice(0, 3)) + ')'); }
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); }
 console.log(failed ? failed + ' check(s) failed' : 'ALL PASS'); process.exit(failed ? 1 : 0);

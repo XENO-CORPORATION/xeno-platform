@@ -24,6 +24,7 @@ router.use((req, _res, next) => { req.me = { id: req.owner || (req.user && req.u
 
 router.get('/', handled(async (req, res) => { res.json({ success: true, skills: await skills.list(req.db, req.me, { workspaceId: req.query.workspace ? String(req.query.workspace) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, skill: await skills.create(req.db, req.me, req.body || {}) }); }));
+router.post('/import/github', handled(async (req, res) => { res.status(201).json({ success: true, skill: await skills.importFromGitHub(req.db, req.me, req.body || {}) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, skill: await skills.get(req.db, req.me, req.params.id, { version: req.query.version ? String(req.query.version) : undefined }) }); }));
 router.post('/:id/versions', handled(async (req, res) => { res.status(201).json({ success: true, skill: await skills.addVersion(req.db, req.me, req.params.id, req.body || {}) }); }));
 router.delete('/:id', handled(async (req, res) => { res.json({ success: true, ...(await skills.archive(req.db, req.me, req.params.id)) }); }));

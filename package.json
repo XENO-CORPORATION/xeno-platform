@@ -106,6 +106,7 @@
     "test:agent-overview": "node src/server/tests/agent-overview.test.mjs",
     "test:agent-identity": "node src/server/tests/agent-identity.test.mjs",
     "test:skills-library": "node src/server/tests/skills-library.test.mjs",
+    "test:marketplace-skills": "node src/server/tests/marketplace-skills.test.mjs",
     "test:migration-up-nonempty": "node --test scripts/migration-up-nonempty.test.mjs",
     "test:billing-subject": "node --test scripts/billing-subject.test.mjs",
     "test:forum-ranker": "node --test scripts/forum-ranker.test.mjs",
