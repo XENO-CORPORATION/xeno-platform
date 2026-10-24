@@ -112,31 +112,62 @@
    what is being made, the reference thumbnails, the prompt as the subject, the settings as chips, and
    ONE primary action. The cost is quoted on open — see the component — so there is no "show the cost"
    step; the button carries the price. */
-.chat-q-gen { margin: 12px 0; }
+.chat-q-gen-wrap { margin: 12px 0; }
+/* the card: a head bar, the prompt as its body, then any result — no shadow, the border separates it (design 2026-10-24) */
+.chat-q-gen { margin: 0; box-shadow: none; }
 .chat-q-gen-loading { margin: 0; padding: 12px 14px; font-size: 13px; color: var(--chat-muted); }
-.chat-q-gen-head { display: flex; align-items: center; gap: 10px; padding: 11px 12px 9px 13px; }
-.chat-q-gen-mark { flex: none; width: 10px; height: 10px; border-radius: 2.5px; background: var(--chat-text); }
-.chat-q-gen[data-state='failed'] .chat-q-gen-mark, .chat-q-gen[data-state='cancelled'] .chat-q-gen-mark { background: var(--chat-muted); }
-.chat-q-gen-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 13.5px; font-weight: 500; color: var(--chat-text); }
-.chat-q-gen-title a { color: inherit; text-decoration: none; }
-.chat-q-gen-title a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.chat-q-gen-title small { font-size: 11.5px; font-weight: 400; color: var(--chat-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-q-gen-state { flex: none; font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--chat-muted); }
-.chat-q-gen-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px 13px; }
+.chat-q-gen-head { display: flex; align-items: center; gap: 8px; line-height: 1; padding: 9px 13px; background: color-mix(in srgb, var(--chat-text) 3%, var(--chat-surface)); border-bottom: 1px solid var(--chat-border); }
+.chat-q-gen-mark { flex: none; display: block; width: 8px; height: 8px; border-radius: 2px; background: var(--chat-text); }
+.chat-q-gen-mark[data-live] { animation: chat-q-gen-pulse 1.4s ease-in-out infinite; }
+.chat-q-gen[data-state='failed'] .chat-q-gen-mark, .chat-q-gen[data-state='cancelled'] .chat-q-gen-mark, .chat-q-gen[data-state='denied'] .chat-q-gen-mark, .chat-q-gen[data-state='expired'] .chat-q-gen-mark { background: var(--chat-muted); }
+@keyframes chat-q-gen-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+.chat-q-gen-title { font-size: 12px; font-weight: 600; color: var(--chat-text); text-decoration: none; }
+.chat-q-gen-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.chat-q-gen-model { min-width: 0; font-size: 12px; color: var(--chat-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-q-gen-state { margin-left: auto; flex: none; font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--chat-muted); }
+/* a light passing over the words while something is still happening */
+.chat-q-gen-state[data-live] { color: transparent; background: linear-gradient(90deg, var(--chat-muted) 0%, var(--chat-muted) 40%, var(--chat-text) 50%, var(--chat-muted) 60%, var(--chat-muted) 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; animation: chat-q-gen-beam 2.2s linear infinite; }
+@keyframes chat-q-gen-beam { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+.chat-q-gen-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 13px 0; }
 .chat-q-gen-refs > * { width: 46px; height: 46px; border-radius: 6px; overflow: hidden; border: 1px solid var(--chat-border); }
-.chat-q-gen-prompt { padding: 0 13px; }
-.chat-q-gen-prompt button { all: unset; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: text; font-size: 13px; line-height: 1.5; color: var(--chat-text); }
+.chat-q-gen-prompt { padding: 12px 13px 14px; }
+.chat-q-gen-prompt button { all: unset; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; cursor: text; font-size: 14px; font-weight: 500; line-height: 1.5; color: var(--chat-text); }
 .chat-q-gen-prompt button[data-open] { -webkit-line-clamp: unset; max-height: 40vh; overflow-y: auto; }
-.chat-q-gen-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 9px 12px 11px 13px; }
-.chat-q-gen-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.chat-q-gen-settings span { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: var(--chat-text); padding: 2px 7px; border-radius: 5px; background: var(--chat-control); }
-.chat-q-gen-settings i { font-style: normal; color: var(--chat-muted); }
-/* said under the card, centred: a fact about the request, not part of the decision */
-.chat-q-gen-note { margin: -4px 0 12px; text-align: center; font-size: 12px; color: var(--chat-muted); }
-.chat-q-gen-error { margin: 8px 13px 0; font-size: 12.5px; line-height: 1.45; color: var(--chat-danger); }
-.chat-q-gen-actions { display: flex; align-items: center; gap: 5px; padding: 0 12px 11px 13px; flex-wrap: wrap; }
-/* in the shared row the actions sit right and match the chips' height */
-.chat-q-gen-row .chat-q-gen-actions { padding: 0; margin-left: auto; justify-content: flex-end; }
-.chat-q-gen-row .chat-q-btn { display: inline-flex; align-items: center; height: auto; padding: 2px 9px; border-radius: 5px; font: inherit; font-size: 11.5px; line-height: inherit; }
-.chat-q-gen-row .chat-q-gen-settings span { line-height: inherit; }
-.chat-q-gen-results { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.chat-q-gen-results { padding: 0 13px 13px; display: flex; flex-direction: column; gap: 8px; }
+/* under the card: settings left, a centred fact, the decision right */
+.chat-q-gen-foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0 14px; flex-wrap: wrap; }
+.chat-q-gen-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chat-q-gen-note { flex: 1; min-width: 160px; margin: 0; text-align: center; font-size: 13px; color: var(--chat-muted); opacity: .55; }
+.chat-q-gen-actions { display: flex; align-items: center; gap: 18px; margin-left: auto; }
+.chat-q-gen-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border: 0; border-radius: 4px; background: var(--chat-control); color: var(--chat-muted); font: inherit; font-size: 12px; white-space: nowrap; }
+.chat-q-gen-chip b { font-weight: 600; color: var(--chat-text); font-variant-numeric: tabular-nums; }
+button.chat-q-gen-chip { cursor: pointer; transition: background .15s, color .15s; }
+button.chat-q-gen-chip:hover, .chat-q-gen-pick[data-open] button.chat-q-gen-chip { background: var(--chat-hover); color: var(--chat-text); }
+.chat-q-gen-caret { width: 8px; height: 8px; margin-left: 1px; opacity: .6; transition: transform .2s ease; }
+.chat-q-gen-pick { position: relative; }
+.chat-q-gen-pick[data-open] .chat-q-gen-caret { transform: rotate(180deg); }
+/* the options: no container, a column of plates under the chip, each easing in a step after the last */
+.chat-q-gen-menu { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; gap: 2px; min-width: 100%; }
+.chat-q-gen-opt { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px 0 7px; white-space: nowrap; border: 1px solid var(--chat-border); border-radius: 4px; background: var(--chat-surface); color: var(--chat-muted); font: inherit; font-size: 12px; cursor: pointer; animation: chat-q-gen-opt-in .28s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 38ms + 40ms); }
+@keyframes chat-q-gen-opt-in { from { opacity: 0; filter: blur(5px); transform: translateY(-5px); } to { opacity: 1; filter: blur(0); transform: none; } }
+.chat-q-gen-opt:hover, .chat-q-gen-opt:focus-visible, .chat-q-gen-opt[aria-selected='true'] { background: var(--chat-control); color: var(--chat-text); outline: none; }
+.chat-q-gen-opt > span:not([class]) { flex: 1; text-align: left; font-variant-numeric: tabular-nums; }
+.chat-q-gen-tick { width: 9px; height: 9px; visibility: hidden; }
+.chat-q-gen-opt[aria-selected='true'] .chat-q-gen-tick { visibility: visible; }
+.chat-q-gen-frame { width: 14px; height: 14px; display: grid; place-items: center; flex-shrink: 0; }
+.chat-q-gen-frame i { display: block; border: 1.2px solid currentColor; border-radius: 1.5px; }
+.chat-q-gen-bars { display: flex; align-items: flex-end; gap: 1.5px; width: 14px; height: 10px; flex-shrink: 0; }
+.chat-q-gen-bars i { display: block; width: 3px; background: currentColor; opacity: .25; border-radius: .5px; }
+.chat-q-gen-bars i:nth-child(1) { height: 4px; } .chat-q-gen-bars i:nth-child(2) { height: 7px; } .chat-q-gen-bars i:nth-child(3) { height: 10px; }
+.chat-q-gen-bars i[data-on] { opacity: 1; }
+.chat-q-gen-text { background: none; border: 0; padding: 4px 0; color: var(--chat-muted); font: inherit; font-size: 13px; cursor: pointer; }
+.chat-q-gen-text:hover { color: var(--chat-text); }
+.chat-q-gen-text:disabled { opacity: .4; cursor: default; }
+.chat-q-gen-go { border: 0; border-radius: 5px; padding: 5px 9px; background: var(--chat-accent); color: var(--chat-on-accent); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.chat-q-gen-go:hover { opacity: .9; }
+.chat-q-gen-go:disabled { background: var(--chat-control-strong, var(--chat-control)); color: var(--chat-muted); cursor: default; opacity: 1; }
+.chat-q-gen-error { margin: 8px 14px 0; font-size: 12.5px; line-height: 1.45; color: var(--chat-danger); }
+@media (prefers-reduced-motion: reduce) {
+  .chat-q-gen-mark[data-live], .chat-q-gen-opt { animation: none; }
+  .chat-q-gen-state[data-live] { animation: none; color: var(--chat-muted); background: none; }
+}

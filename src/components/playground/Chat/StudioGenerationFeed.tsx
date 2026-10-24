@@ -246,7 +246,7 @@ export function ChatGenerationCard({ id, onUsePrompt, onAttach }: { id: string; 
   useEffect(() => { setCurrent(id); }, [id]);
   useEffect(() => {
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
-    const load = async () => { try { const value = await generations.get(current, controller.signal); if (controller.signal.aborted) return; setRecord(value); setNow(Date.now()); if (!isGenerationTerminal(value.state)) timer = setTimeout(load, 2500); } catch { if (!controller.signal.aborted) timer = setTimeout(load, 5000); } };
+    const load = async () => { try { const value = await generations.get(current, controller.signal); if (controller.signal.aborted) return; if (value.replacedBy) { setCurrent(value.replacedBy); return; } setRecord(value); setNow(Date.now()); if (!isGenerationTerminal(value.state)) timer = setTimeout(load, 2500); } catch { if (!controller.signal.aborted) timer = setTimeout(load, 5000); } };
     void load(); return () => { controller.abort(); clearTimeout(timer); };
   }, [current, reload]);
   useEffect(() => { if (!record || isGenerationTerminal(record.state)) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [record]);
@@ -398,7 +398,8 @@ export function StudioGenerationFeed({ type, modelNames, activeId, reloadKey, on
       try {
         const list = options.load ? await options.load(controller.signal) : await generations.list(onlyFavorites ? { type, favorite: 'true' } : { type }, controller.signal);
         if (controller.signal.aborted) return;
-        setRecords(list); setError('');
+        // a proposal the person approved with their own settings is shown once: as the version that ran
+        setRecords(list.filter((g) => !g.replacedBy)); setError('');
         // Poll only while something is still moving; a finished feed costs nothing.
         if (list.some(g => !isGenerationTerminal(g.state))) timer = setTimeout(load, 2500);
       } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Your generations could not be loaded.'); }

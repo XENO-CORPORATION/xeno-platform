@@ -42,6 +42,7 @@ tmp-*
 # left untracked-but-unignored, so a generated file was one `git add -A` from
 # being committed. A pattern cannot be forgotten the way a list can.
 scripts/harness/.*.generated.mjs
+scripts/harness/.generation-card/
 
 # DR: Postgres backup dumps live under backups/ on the server checkout — never commit them
 backups/

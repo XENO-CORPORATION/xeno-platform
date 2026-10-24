@@ -99,7 +99,7 @@ export async function quoteGeneration(db,value,input,options={}){
   const payload={actor:options.approvalActorId||actor.id,payer:actor.payerId,requestHash:requestHash(request),tariffRevision:tariff.revision,maxRetailMicro:tariff.maxRetailMicro,expiresAt:(options.now?.()??Date.now())+300000};
   return {quoteToken:tokenFor(payload,options),requestHash:payload.requestHash,tariffRevision:tariff.revision,maxRetailCredits:tariff.maxRetailCredits,expiresAt:new Date(payload.expiresAt).toISOString()};
 }
-export function generationView(row){return {id:row.id,type:row.request.type,state:row.state,request:row.request,requestHash:row.request_hash,version:row.version,quote:row.quote,resultAssetIds:row.result_asset_ids,error:row.error_code?{code:row.error_code}:null,favorite:row.favorite===true,area:row.area??null,retailCostMicro:Number(row.retail_cost_micro),upstreamBilling:row.upstream_billing,createdAt:row.created_at,updatedAt:row.updated_at,url:`/workspace/studio/generate/${row.request.type}/g/${row.id}`};}
+export function generationView(row){return {id:row.id,type:row.request.type,state:row.state,request:row.request,requestHash:row.request_hash,version:row.version,quote:row.quote,resultAssetIds:row.result_asset_ids,error:row.error_code?{code:row.error_code}:null,replacedBy:row.replaced_by??null,favorite:row.favorite===true,area:row.area??null,retailCostMicro:Number(row.retail_cost_micro),upstreamBilling:row.upstream_billing,createdAt:row.created_at,updatedAt:row.updated_at,url:`/workspace/studio/generate/${row.request.type}/g/${row.id}`};}
 export async function createGeneration(db,value,input,options={}){return create(db,value,input,false,options);}
 export async function proposeGeneration(db,value,input,options={}){return create(db,value,input,true,options);}
 async function create(db,value,input,forceProposal,options){
@@ -139,8 +139,41 @@ export async function listGenerations(db,value,{type=null,projectId=null,convers
   const rows=(await db.query(`SELECT * FROM media_generations WHERE owner_user_id=$1 AND ($2::text IS NULL OR request->>'type'=$2) AND ($3::uuid IS NULL OR project_id=$3) AND ($4::uuid IS NULL OR actor_user_id=$4) AND ($5::uuid IS NULL OR conversation_id=$5) AND removed_at IS NULL AND ($6::boolean IS NOT TRUE OR favorite) AND (NOT $7::boolean OR area IS NOT DISTINCT FROM $8::text) ORDER BY created_at DESC LIMIT 100`,[actor.payerId,type,projectId,actor.kind==='agent'?actor.id:null,conversationId,favorite===true,area.filter===true,area.area??null])).rows;
   return rows.map(generationView);
 }
+/**
+ * The person approves a proposal with different SETTINGS (ratio, quality…) than the agent chose. The proposal's request
+ * never changes (the immutability trigger refuses it), so their version is a new generation: priced for exactly those
+ * settings (the quote names its request hash), created and approved by the person, placed where the proposal was. The
+ * proposal is then cancelled and points at it. Only settings can differ — never the prompt, model, references or place —
+ * and they are validated against the model's catalogue like any request. Idempotent: the same edit gives the same one.
+ */
+async function approveEdited(db,value,actor,id,input,options){
+  const row=await ownedRow(db,actor,id);
+  if(input.version!==row.version)throw generationError('quote_changed',409);
+  if(row.state!=='awaiting_approval'){
+    if(row.replaced_by)return generationView(await ownedRow(db,actor,row.replaced_by));
+    throw generationError('generation_not_approvable',409);
+  }
+  const {requestKey:_k,quoteToken:_q,...base}=row.request;
+  const edited={...base,settings:input.settings};
+  const {request}=await validateGenerationRequest(edited,{models:options.gateway?.models||mediaGateway.models});
+  const hash=requestHash(request);
+  if(input.requestHash!==hash)throw generationError('quote_changed',409);
+  const created=await createGeneration(db,value,{...edited,requestKey:`edit:${id}:${hash.slice(0,32)}`,quoteToken:input.quoteToken},{...options,area:row.area});
+  await withTransaction(db,async tx=>{
+    const now=(await tx.query('SELECT state,replaced_by FROM media_generations WHERE id=$1 FOR UPDATE',[id])).rows[0];
+    if(now.state==='awaiting_approval'&&!now.replaced_by)await tx.query(`UPDATE media_generations SET state='cancelled',cancel_requested_at=now(),replaced_by=$2,updated_at=now() WHERE id=$1`,[id,created.id]);
+  });
+  return created;
+}
 export async function approveGeneration(db,value,id,input,options={}){
   const actor=await generationActor(db,value);if(actor.kind!=='human')throw generationError('human_approval_required',403);
+  if(input&&input.settings!==undefined){
+    if(!input.settings||typeof input.settings!=='object'||Array.isArray(input.settings))throw generationError('unsupported_setting');
+    const row=await ownedRow(db,actor,id);
+    // unchanged settings are an ordinary approval of the proposal itself
+    const same=JSON.stringify(Object.entries(row.request.settings||{}).sort())===JSON.stringify(Object.entries(input.settings).sort());
+    if(!same)return approveEdited(db,value,actor,id,input,options);
+  }
   await prepareAccountQuota(db,actor.id);
   return withTransaction(db,async tx=>{
     const row=await ownedRow(tx,actor,id,true);
