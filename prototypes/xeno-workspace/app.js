@@ -1129,6 +1129,7 @@
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
     if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
+      if (S.global === 'library' && S.item.startsWith('f/')) { const f = libFiles().find((x) => 'f/' + x.id === S.item); return `<a data-crumb="">${gn}</a>${sep}<b>${esc(f ? f.name : 'File')}</b>`; }   // a file's id address reads as its name
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
       const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Skills' && window.XENO_SKILLS?.label ? window.XENO_SKILLS.label(x, i, parts) : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
@@ -1296,7 +1297,13 @@
   function memItemOut(item) { const x = String(item).match(MEM); if (!x) return item; if (x[1] === 'Agents' && window.XENO_AGENTS?.served && window.XENO_AGENTS.isId(x[2])) return item; const id = memId(memList().find((m) => m.name === x[2])); return id ? x[1] + '/' + id : item; }
   function memItemIn(item) { const x = String(item || '').match(MEM); if (!x) return item; if (x[1] === 'Agents' && window.XENO_AGENTS?.served && window.XENO_AGENTS.isId(x[2])) return item; const m = memList().find((y) => memId(y) === x[2]); return m ? x[1] + '/' + m.name : item; }
   window.XENO_MEMBER_ROUTE = { out: memItemOut, in: memItemIn };
-  const itemOut = () => (!S.item ? S.item : S.view === 'global' && S.global === 'projects' ? projItemOut(S.item) : S.view === 'global' && S.global === 'workspace' ? memItemOut(S.item) : S.item);
+  // A Library file's page: /workspace/library/f/<file id>, never its name. A name has a dot (nginx serves anything
+  // with an extension as a file, so a refresh 404'd), can repeat, and changes on rename. Same translation, at the
+  // address only: a name handed to go() (search, Recent) becomes the id form when the file is known.
+  const libFiles = () => ((window.XENO_PG_LIBRARY || {}).items || []);
+  function libItemOut(item) { const it = String(item); if (it.startsWith('f/')) return it; const f = libFiles().find((x) => x.name === it); return f ? 'f/' + f.id : it; }
+  window.XENO_LIBRARY_ROUTE = { out: libItemOut };
+  const itemOut = () => (!S.item ? S.item : S.view === 'global' && S.global === 'projects' ? projItemOut(S.item) : S.view === 'global' && S.global === 'workspace' ? memItemOut(S.item) : S.view === 'global' && S.global === 'library' ? libItemOut(S.item) : S.item);
   const itemIn = (item) => (!item ? item : S.view === 'global' && S.global === 'projects' ? projItemIn(item) : S.view === 'global' && S.global === 'workspace' ? memItemIn(item) : item);
   function stateToHash() {
     const raw = itemOut();

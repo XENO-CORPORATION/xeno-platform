@@ -219,7 +219,9 @@
   // =====================================================================================
   function itemPage(name) {
     const x = X(), s = S(), fam = 'item';
-    const file = window.XENO_PG_LIBRARY.items.find((f) => f.name === name);
+    // a Library file's address is its id (/workspace/library/f/<id>); a name still opens it (old links, search, Recent)
+    const file = window.XENO_PG_LIBRARY.items.find((f) => 'f/' + f.id === name) || window.XENO_PG_LIBRARY.items.find((f) => f.name === name);
+    if (file) name = file.name;
     let run = null; Object.entries(window.XENO_PG_AREAS).forEach(([k, A]) => { const r = A.rows.find((rr) => rr[0] === name); if (r) run = { k, A, r }; });
     const pid = s.view === 'product' ? s.product : run ? run.r[run.r.length - 1] : file ? file.source.product : null;
     const owner = pid ? pname(pid) : s.view === 'zone' ? x.zoneNow().label : 'XENO';
@@ -578,7 +580,7 @@
     if (d.pgDd) return openDd(b);
     if (d.pgRetry) { const m = store.get('pgState', {}) || {}; m[d.pgRetry] = 'normal'; store.set('pgState', m); loaded.delete(d.pgRetry); return repaint(); }
     if (d.pgGoProject) return x.go('global', { global: 'projects', item: d.pgGoProject });
-    if (d.pgFile) { const u = ui('library'); if (s.global !== 'library') { const f = libItem(d.pgFile); return x.go('global', { global: 'library', item: f.name }); } if (e.detail > 1) return; if (e.ctrlKey || e.metaKey) return togglePick(d.pgFile); if (e.shiftKey) return rangePick(d.pgFile); return selectFile(d.pgFile); }
+    if (d.pgFile) { const u = ui('library'); if (s.global !== 'library') { const f = libItem(d.pgFile); return x.go('global', { global: 'library', item: 'f/' + f.id }); } if (e.detail > 1) return; if (e.ctrlKey || e.metaKey) return togglePick(d.pgFile); if (e.shiftKey) return rangePick(d.pgFile); return selectFile(d.pgFile); }
     if (d.pgUnsel !== undefined) return selectFile(null);
     if (d.pgStar && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.star([libItem(d.pgStar)]);
     if (d.pgTrash && window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.trash([libItem(d.pgTrash)]); }
@@ -640,7 +642,7 @@
       <p class="pg-dim">${inTrash ? 'Right-click to restore them or delete them for good.' : 'Right-click to star, move, download or trash them together.'}</p></aside>`;
   }
   // double-click a file to open it (a single click selects it — Finder, Drive, Dropbox)
-  document.addEventListener('dblclick', (e) => { const c = e.target.closest('#main .pg--lib [data-pg-file]'); if (!c) return; const f = libItem(c.dataset.pgFile); if (f) X().go('global', { global: 'library', item: f.name }); });
+  document.addEventListener('dblclick', (e) => { const c = e.target.closest('#main .pg--lib [data-pg-file]'); if (!c) return; const f = libItem(c.dataset.pgFile); if (f) X().go('global', { global: 'library', item: 'f/' + f.id }); });
   function undo(msg, fn) { window.XENO_HIST.record(msg, fn); }
   // leaving the page forgets the Library's picks, including a single selected file: state only, so no address is written (F-02)
   window.XENO_SEL?.onLeave?.(() => { ui('library').sel = null; });
@@ -655,7 +657,7 @@
     else if (e.key === 'Escape' && ui('library').sel && S().global === 'library') selectFile(null);
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !typing && document.querySelector('#main .pg--lib [data-pg-file]')) { e.preventDefault(); pickAll(); }
     const row = document.activeElement?.closest?.('#main .pg [data-pg-go-project],#main .pg [data-pg-file],#main .pg [data-pg-item],#main .pg .pg-tr[tabindex],#main .pg .pg-card[tabindex]');
-    if (row && !typing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (e.key === 'Enter' && row.dataset.pgFile && S().global === 'library') { const f = libItem(row.dataset.pgFile); return X().go('global', { global: 'library', item: f.name }); } row.click(); }
+    if (row && !typing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (e.key === 'Enter' && row.dataset.pgFile && S().global === 'library') { const f = libItem(row.dataset.pgFile); return X().go('global', { global: 'library', item: 'f/' + f.id }); } row.click(); }
     if (row && !typing && /^Arrow(Down|Up|Left|Right)$/.test(e.key)) { const all = [...document.querySelectorAll('#main .pg [data-pg-results] [tabindex="0"]')]; const i = all.indexOf(row); if (i < 0) return; const grid = row.classList.contains('pg-card'); const cols = grid ? Math.max(1, Math.round(row.parentElement.clientWidth / row.offsetWidth)) : 1; const step = { ArrowDown: cols, ArrowUp: -cols, ArrowRight: grid ? 1 : 0, ArrowLeft: grid ? -1 : 0 }[e.key]; const n = all[i + step]; if (n) { e.preventDefault(); n.focus(); if (e.shiftKey && n.dataset.pgFile && row.dataset.pgFile) { const u = ui('library'); if (!u.anchor) u.anchor = u.picked.size ? u.anchor || u.sel : row.dataset.pgFile; rangePick(n.dataset.pgFile, true); } } }
   });
   // uploads: a real file picker and real drag-and-drop onto the Library page
@@ -676,7 +678,7 @@
   (function registerPageMenus() {
     const C = window.XCM; if (!C) return; const H = C.H;
     libBatch = (fs) => batchMenu(fs);
-    const libHash = (name) => `#/${X().inOv() ? 'overview' : S().mode}/g/library/${encodeURIComponent(name)}`;
+    const libHash = (name) => `#/${X().inOv() ? 'overview' : S().mode}/g/library/${encodeURIComponent(name)}`;   // name may be 'f/<id>'
     const sync = () => window.XENO_PG_SYNC_NAV?.();
     const onLib = () => !!document.querySelector('#main .pg--lib');
     async function renameFile(f) {
@@ -744,9 +746,9 @@
       const f = libItem(n.dataset.pgFile); if (!f) return null;
       const many = onLib() ? picks() : [];
       if (many.length > 1 && many.includes(f.id)) return batchMenu(many.map(libItem));
-      if (window.XENO_LIB && window.XENO_LIB.served && f.live) { if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id); return window.XENO_LIB.fileMenu(f, { open: () => X().go('global', { global: 'library', item: f.name }), details: () => { store.set('pgLibInfo', true); repaint(); }, copy: H.copy }); }
+      if (window.XENO_LIB && window.XENO_LIB.served && f.live) { if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id); return window.XENO_LIB.fileMenu(f, { open: () => X().go('global', { global: 'library', item: 'f/' + f.id }), details: () => { store.set('pgLibInfo', true); repaint(); }, copy: H.copy }); }
       if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id);   // right-click selects what it acts on (Finder, Drive)
-      const open = () => X().go('global', { global: 'library', item: f.name }), h = libHash(f.name);
+      const open = () => X().go('global', { global: 'library', item: 'f/' + f.id }), h = libHash(f.name);
       if (f.trashedAt) return [[{ label: 'Restore', icon: 'undo', run: () => { f.trashedAt = null; ui('library').sel = null; sync(); repaint(); X().toast(`Restored “${f.name}”`); } }],
         [{ label: 'Copy name', icon: 'copy', run: () => H.copy(f.name, 'Name copied') }],
         [{ label: 'Delete forever…', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => purgeFile(f) }]];
