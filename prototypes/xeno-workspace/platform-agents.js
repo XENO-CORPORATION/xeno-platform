@@ -991,6 +991,22 @@
       '.xag-idbtn{border:0;background:none;padding:0;color:var(--muted);font:11.5px ui-monospace,Consolas,monospace;cursor:pointer}.xag-idbtn:hover{color:var(--text)}',
       '.xag-skel{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;padding-top:60px}.xag-skel i{height:132px;border-radius:14px;background:var(--panel);animation:xags 1.2s ease-in-out infinite alternate}@keyframes xags{to{opacity:.5}}',
       // the redesigned agent page: small corners, squares not circles, emphasis by lightness (DESIGN_SYSTEM.md)
+      // ── the locked design (claude.ai artifact "Agent page redesign", 2026-10-24): content capped at 1180 px; every
+      // section on the Overview is a PANEL (a card on the darker page) with its heading, count and link INSIDE; the
+      // heading and its count sit together on the left and the link on the right; the side column opens with a compact
+      // identity row, not a large avatar block.
+      '.xag-one{max-width:1180px;width:100%;box-sizing:border-box}',
+      // the design's ground and surfaces: page on the canvas (#0a0a0a dark), cards one step up (#171717 = --rail), card
+      // edges #242424 (--rail-stroke). Through the theme's own tokens, so the light theme follows.
+      '.pg.xag{background:var(--canvas)}.pg.xag .xag-one{--panel:var(--rail);--n31:var(--rail-stroke)}',
+      '.xag-main>.pg-sec{margin:0;border:1px solid var(--n31);border-radius:6px;background:var(--panel);overflow:hidden}',
+      '.xag-main>.pg-sec>.pg-sec-h{justify-content:flex-start;gap:8px;padding:14px 16px 6px}.xag-main>.pg-sec>.pg-sec-h h3{margin:0;font-size:13px;font-weight:600}',
+      '.xag-main>.pg-sec>.pg-sec-h small{margin:0}.xag-main>.pg-sec>.pg-sec-h .pg-link{margin-left:auto}',
+      '.xag-main>.pg-sec .xag-rows{border:0;border-radius:0}.xag-main>.pg-sec .xag-row{border-bottom:0;border-top:1px solid var(--border);padding:12px 16px}',
+      '.xag-main>.pg-sec .xag-logs{padding:2px 8px 8px}.xag-main>.pg-sec .xag-empty{border:0;margin:0;padding:6px 16px 16px;text-align:left}.xag-main>.pg-sec .xag-empty p{margin:0}',
+      '.xag-side .xag-id{flex-direction:row;align-items:center;text-align:left;gap:10px;padding:0 0 14px;margin:0;flex-wrap:wrap}',
+      '.xag-side .xag-id .xag-mono--lg{width:32px;height:32px;font-size:12px;border-radius:4px}.xag-side .xag-id b{font-size:14px}',
+      '.xag-side .xag-id .xag-avail{flex-basis:100%;margin:0}',
       '.xag-one{display:flex;flex-direction:column;gap:18px}.xag-cols{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}.xag-main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:18px}.xag-side{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;gap:14px}',
       '.xag-sq{display:inline-block;width:7px;height:7px;border-radius:1px;background:var(--text);flex:none}.xag-sq.off{background:transparent;border:1.5px solid var(--muted);box-sizing:border-box}',
       '.xag-k{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim)}.xag-pill{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:2px;background:var(--n24);font-size:11px;font-weight:500}',
