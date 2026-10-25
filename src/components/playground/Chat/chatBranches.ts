@@ -55,3 +55,22 @@ export function branchInfo<T extends BranchRow>(rows: T[], messageId: string | u
   const at = siblings.findIndex((row) => row.id === messageId);
   return { current: at < 0 ? 1 : at + 1, total: Math.max(1, siblings.length), siblings };
 }
+
+/**
+ * Every generation a message HOLDS in its turn, in any branch. The thread re-adds a generation no message holds (its
+ * reply was never saved) as a reply at the moment it was made. A generation held by a message on ANOTHER branch is not
+ * an orphan: after a regenerate it belongs to version 1 of the reply and must leave the screen with it, not be slotted
+ * back in by time above version 2. Turns are read defensively — a stored turn is data from the server.
+ */
+export function heldGenerationIds(rows: ReadonlyArray<{ turn?: unknown } | null | undefined>): Set<string> {
+  const held = new Set<string>();
+  for (const row of rows) {
+    const steps = (row?.turn as { steps?: unknown } | null | undefined)?.steps;
+    if (!Array.isArray(steps)) continue;
+    for (const step of steps) {
+      const s = step as { kind?: unknown; generationId?: unknown } | null;
+      if (s && s.kind === 'generation' && typeof s.generationId === 'string') held.add(s.generationId);
+    }
+  }
+  return held;
+}
