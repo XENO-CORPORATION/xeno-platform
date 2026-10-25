@@ -227,6 +227,13 @@ try {
   await p.evaluate(() => { location.hash = '#/overview/g/library'; }); await wait(1500);
   ok(db.gets.at(-1).area === null, 'back on Overview it asks for everything again');
 
+  // a Library file's address is its id, never its name (owner rule 2026-10-11; a name with a dot 404'd on refresh)
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Session notes.md' })); await wait(900);
+  let ad = await p.evaluate(() => ({ path: location.pathname, title: (document.querySelector('#main .pg-ttl h1')?.textContent || '') + ' @ ' + (document.querySelector('#main .crumbs')?.textContent || ''), text: !!document.querySelector('#main [data-lib-text]') }));
+  ok(/\/workspace\/library\/f\/file(:|%3A)/i.test(ad.path) && !/\.md/.test(ad.path) && ad.text && /Session notes\.md/.test(ad.title), 'opening a file puts its id in the address, not its name, and the page still shows the name (' + ad.path + ' · ' + ad.title + ')');
+  await p.reload({ waitUntil: 'networkidle0' }); await wait(1200);
+  ad = await p.evaluate(() => ({ path: location.pathname, text: !!document.querySelector('#main [data-lib-text]'), title: (document.querySelector('#main .pg-ttl h1')?.textContent || '') + ' @ ' + (document.querySelector('#main .crumbs')?.textContent || '') }));
+  ok(ad.text && ad.title.endsWith('Library/Session notes.md') && /\/library\/f\//.test(ad.path), 'a refresh on that address opens the same file (' + ad.path + ')');
   // a text file opens as its text: Markdown rendered, anything else as text (owner, 2026-10-25)
   await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Session notes.md' })); await wait(900);
   let tv = await p.evaluate(() => { const n = document.querySelector('#main [data-lib-text]'); return n && { h: n.querySelector('.pg-md h4')?.textContent, b: n.querySelector('.pg-md b')?.textContent, link: n.querySelector('.pg-md a')?.getAttribute('href'), pre: n.querySelector('.pg-md pre code')?.textContent, scripts: n.querySelectorAll('script').length, pwned: !!window.__pwned, raw: /&lt;script|<script>window/.test(n.textContent), busy: n.getAttribute('aria-busy') }; });
