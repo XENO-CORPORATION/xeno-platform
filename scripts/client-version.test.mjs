@@ -281,3 +281,9 @@ test('XENO Engine is known by its OIDC client and its header (a floor is a no-op
   assert.equal(m.productForOidcClient('xeno-engine'), 'engine')
   assert.deepEqual(m.identifyClient({ headers: { 'x-xeno-client': 'xeno-engine/0.5.0 (win32)' } }), { product: 'engine', version: '0.5.0', source: 'header' })
 })
+
+test('XENO Architect is known by its OIDC client and its header', async () => {
+  const m = await import('../src/server/services/clientVersion.js')
+  assert.equal(m.productForOidcClient('xeno-architect'), 'architect')
+  assert.deepEqual(m.identifyClient({ headers: { 'x-xeno-client': 'xeno-architect/0.2.0 (win32)' } }), { product: 'architect', version: '0.2.0', source: 'header' })
+})
