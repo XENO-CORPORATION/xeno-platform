@@ -314,6 +314,7 @@
     "test:generation-frontend": "node --test scripts/generation-frontend.test.mjs",
     "test:generation-card": "node --test scripts/generation-card.browser.test.mjs",
     "test:chat-generation-image": "node --test scripts/chat-generation-image.browser.test.mjs",
+    "test:gated-update-feed": "node src/server/tests/gated-update-feed.test.mjs",
     "test:studio-feed": "node scripts/studio-feed-browser.test.mjs",
     "test:chat-composer-placement": "node --test scripts/chat-composer-placement.test.mjs",
     "test:chat-project-pins": "node --test scripts/chat-project-pins.test.mjs",
