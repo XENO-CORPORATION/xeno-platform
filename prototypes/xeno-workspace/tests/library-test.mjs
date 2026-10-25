@@ -21,11 +21,12 @@ const db = {
     file(4, 'Brand guide.pdf', 'application/pdf', 4096, { workspace_id: WS, place_kind: 'workspace', workspace_name: 'Analytical Engines Ltd' }),
     file(5, 'Not mine to trash.pdf', 'application/pdf', 512, { workspace_id: WS, place_kind: 'workspace', workspace_name: 'Analytical Engines Ltd' }),
     { ...file(9, 'Bernoulli numbers', 'text/plain', 900), id: 'artifact:' + fid(9), source: 'artifact', item_type: 'code', asset_id: null, conversation_id: 'c1', conversation_title: 'Programs for the engine' },
+    file(11, 'Session notes.md', 'application/octet-stream', 200), file(12, 'settings.json', 'application/octet-stream', 40),
     { ...file(10, 'a difference engine, brass', 'image/png', 0), id: 'generation:' + fid(10) + ':1', source: 'generation', asset_id: null, preview_url: null }],
   linked: new Set([fid(3)]), notOwner: new Set([fid(5)]), calls: [], gets: [], uploads: [], expect: [], next: 20,
 };
 const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
-const EMPTY = { '/api/workspace/needs': { success: true, items: [] }, '/api/tasks': { success: true, tasks: [] }, '/api/notifications': { success: true, unread: 0, items: [] }, '/api/tasks/views': { success: true, views: [] }, '/api/forum/threads': { success: true, threads: [], total: 0 }, '/api/forum/me': { success: true, actor: {}, capabilities: {} }, '/api/workspace/summary': { success: true, days: 7, areas: {} }, '/api/workspace/pins': { success: true, items: [] }, '/api/v2/ledger/usage': { rows: [] }, '/api/account/overview': { success: true, overview: { user: {}, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/chat/projects': { success: true, projects: [] }, '/api/chat/conversations': { success: true, conversations: [] } };
+const EMPTY = { '/api/automate/catalogue': { success: true, nodes: [] }, '/api/agents/presence': { success: true, presence: [] }, '/api/customers/summary': { success: true, summary: {} }, '/api/automate': { success: true, workflows: [] }, '/api/message/realtime': { success: true }, '/api/agents': { success: true, agents: [] }, '/api/divisions': { success: true, divisions: [] }, '/api/skills': { success: true, skills: [] }, '/api/library/storage': { success: true }, '/api/message/conversations': { success: true, conversations: [] }, '/api/mail/status': { success: true, configured: false }, '/api/publish/status': { success: true, configured: false }, '/api/auth/activation-status': { success: true, activated: true }, '/api/agents/presence/stream': { success: true }, '/api/v2/me/modes': { success: true, modes: [] }, '/api/workspace/needs': { success: true, items: [] }, '/api/tasks': { success: true, tasks: [] }, '/api/notifications': { success: true, unread: 0, items: [] }, '/api/tasks/views': { success: true, views: [] }, '/api/forum/threads': { success: true, threads: [], total: 0 }, '/api/forum/me': { success: true, actor: {}, capabilities: {} }, '/api/workspace/summary': { success: true, days: 7, areas: {} }, '/api/workspace/pins': { success: true, items: [] }, '/api/v2/ledger/usage': { rows: [] }, '/api/account/overview': { success: true, overview: { user: {}, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/chat/projects': { success: true, projects: [] }, '/api/chat/conversations': { success: true, conversations: [] } };
 const refuse = (status, code) => json(status, { success: false, error: 'refused', code });
 function answer(q) {
   const u = new URL(q.url()), m = q.method(), p = u.pathname;
@@ -40,7 +41,7 @@ function answer(q) {
     return json(200, { success: true, items, tab: 'all', sort: 'updated', limit, offset, view, place: '', total: all.length, has_more: offset + items.length < all.length });
   }
   const content = p.match(/^\/api\/library\/assets\/([^/]+)\/content$/);
-  if (content && m === 'GET') { const it = db.items.find((x) => x.asset_id === content[1] && !x.trashed_at); if (!it) return json(404, { success: false, error: 'Library asset not found' }); return /^image/.test(it.mime_type) ? { status: 200, contentType: 'image/png', body: PNG } : { status: 200, contentType: it.mime_type, body: Buffer.from('%PDF-1.4 the stored bytes of ' + it.name) }; }
+  if (content && m === 'GET') { const it = db.items.find((x) => x.asset_id === content[1] && !x.trashed_at); if (!it) return json(404, { success: false, error: 'Library asset not found' }); if (/\.md$/.test(it.name)) return { status: 200, contentType: 'application/octet-stream', body: Buffer.from('# Session history\n\n- **Started:** today\n- see [docs](https://example.test/d)\n\n<script>window.__pwned=1</script>\n\n```\ncode block\n```\n') }; if (/\.json$/.test(it.name)) return { status: 200, contentType: 'application/octet-stream', body: Buffer.from('{"a": 1, "b": "<i>x</i>"}') }; return /^image/.test(it.mime_type) ? { status: 200, contentType: 'image/png', body: PNG } : { status: 200, contentType: it.mime_type, body: Buffer.from('%PDF-1.4 the stored bytes of ' + it.name) }; }
   if (p === '/api/library/trash' && m === 'DELETE') { const mine = db.items.filter((x) => x.trashed_at && !db.notOwner.has(x.source_id)); db.items = db.items.filter((x) => !mine.includes(x)); return json(200, { success: true, purged: mine.length }); }
   const purge = p.match(/^\/api\/library\/trash\/([^/]+)\/([^/]+)$/);
   if (purge && m === 'DELETE') { const it = db.items.find((x) => x.source === purge[1] && x.source_id === purge[2]); if (!it) return refuse(404, 'not_found'); if (!it.trashed_at) return refuse(409, 'not_in_trash'); db.items = db.items.filter((x) => x !== it); return json(200, { success: true }); }
@@ -80,7 +81,7 @@ try {
   ok(db.gets.some((g) => g.view === 'active') && db.gets.some((g) => g.view === 'trash'), 'it asks for the Library and for the trash');
   await goLib(); let t = await main();
   const list = await names();
-  ok(list.length === 7 && ['Engine diagram.png', 'Notes on the engine.pdf', 'Bernoulli numbers', 'Brand guide.pdf'].every((n) => list.includes(n) && t.includes(n)), 'the files are the real ones (' + list.length + ')');
+  ok(list.length === 9 && ['Engine diagram.png', 'Notes on the engine.pdf', 'Bernoulli numbers', 'Brand guide.pdf'].every((n) => list.includes(n) && t.includes(n)), 'the files are the real ones (' + list.length + ')');
   await p.click('#main [data-pg-view="library"][data-v="grid"]'); await wait(700);
   const pics = await p.evaluate(() => [...document.querySelectorAll('#main [data-pg-file]')].map((c) => ({ name: c.querySelector('b')?.textContent, img: c.querySelector('.pg-thumb img')?.getAttribute('src') || null, loaded: !!c.querySelector('.pg-thumb img')?.naturalWidth, icon: !!c.querySelector('.pg-thumb--ic') })));
   const png = pics.find((x) => x.name === 'Engine diagram.png'), pdf = pics.find((x) => x.name === 'Notes on the engine.pdf');
@@ -137,7 +138,7 @@ try {
   db.expect.push('Letter to Babbage.txt'); await paste('Letter to Babbage.txt', 'text/plain'); await settle();
   c = db.calls.find((x) => x.p === '/api/upload');
   ok(!!c && c.type.startsWith('multipart/form-data') && c.csrf === 'csrf-test-token' && db.uploads.length === 1, 'adding a file uploads it to the platform, as a form upload with the CSRF token');
-  ok((await names()).includes('Letter to Babbage.txt') && (await names()).length === 8, 'the uploaded file is in the Library after the platform confirms it');
+  ok((await names()).includes('Letter to Babbage.txt') && (await names()).length === 10, 'the uploaded file is in the Library after the platform confirms it');
   db.calls.length = 0; db.expect.push('virus.exe'); await paste('virus.exe', 'application/x-msdownload'); await wait(900);
   const refusal = await dialog();
   await p.evaluate(() => document.querySelector('.xd [data-xd-ok]')?.click()); await settle();
@@ -226,7 +227,17 @@ try {
   await p.evaluate(() => { location.hash = '#/overview/g/library'; }); await wait(1500);
   ok(db.gets.at(-1).area === null, 'back on Overview it asks for everything again');
 
-  ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
+  // a text file opens as its text: Markdown rendered, anything else as text (owner, 2026-10-25)
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Session notes.md' })); await wait(900);
+  let tv = await p.evaluate(() => { const n = document.querySelector('#main [data-lib-text]'); return n && { h: n.querySelector('.pg-md h4')?.textContent, b: n.querySelector('.pg-md b')?.textContent, link: n.querySelector('.pg-md a')?.getAttribute('href'), pre: n.querySelector('.pg-md pre code')?.textContent, scripts: n.querySelectorAll('script').length, pwned: !!window.__pwned, raw: /&lt;script|<script>window/.test(n.textContent), busy: n.getAttribute('aria-busy') }; });
+  ok(tv && tv.h === 'Session history' && tv.b === 'Started:' && tv.link === 'https://example.test/d' && tv.pre === 'code block' && tv.busy === null, 'a .md file stored as octet-stream opens as rendered Markdown, not an empty picture box (' + JSON.stringify(tv) + ')');
+  ok(tv && tv.scripts === 0 && !tv.pwned && tv.raw, 'HTML inside the Markdown is shown as text and never runs');
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'settings.json' })); await wait(900);
+  tv = await p.evaluate(() => { const n = document.querySelector('#main [data-lib-text]'); return n && { code: n.querySelector('.pg-item-code code')?.textContent, md: !!n.querySelector('.pg-md'), i: n.querySelectorAll('i').length }; });
+  ok(tv && tv.code === '{"a": 1, "b": "<i>x</i>"}' && !tv.md && tv.i === 0, 'another text file (JSON) is shown as plain text, exactly as stored (' + JSON.stringify(tv) + ')');
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Notes on the engine.pdf' })); await wait(600);
+  ok(await p.evaluate(() => !document.querySelector('#main [data-lib-text]')), 'a PDF is not treated as text');
+  ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)]) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
 await b.close(); await server.close();
