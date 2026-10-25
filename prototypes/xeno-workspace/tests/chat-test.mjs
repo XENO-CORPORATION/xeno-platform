@@ -145,6 +145,8 @@ try {
     await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__effort(true)); row = await rhythm();
     ok(row.micToSend === 7 && row.lastToMic === 7 && row.nameToPill > 8 && row.nameToPill < 20, 'a model with an effort control: the pill ends 7px from the mic, and sits right after the name with no dead space (' + JSON.stringify(row) + ')');
     await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__effort(false));
+    // start from DARK explicitly: headless Chrome reports a light system theme, so 'light' alone changed nothing
+    await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'dark'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(300); c = await dressed();
     const before = c.bg; await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'light'); localStorage.setItem('xeno_platform_theme_brightness', '100'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(300); c = await dressed();
     ok(c.bg !== before && c.bg === c.pageBg, 'when the theme changes the input box changes with the page (' + before + ' → ' + c.bg + ')');
     await p.evaluate(() => { localStorage.setItem('xeno_platform_theme', 'dark'); localStorage.setItem('xeno_platform_theme_brightness', '0'); dispatchEvent(new CustomEvent('xeno_platform_theme_change')); }); await wait(200);
@@ -280,7 +282,8 @@ try {
     reset(); db.convs[0].area = 'dev'; db.convs[1].area = 'studio'; db.asked = [];
     const { p, errs } = await open('#/overview/p/chat'); let v = await view(p);
     const tags = () => p.evaluate(() => [...document.querySelectorAll('#panel [data-chat-live]')].map((r) => r.querySelector('.t').textContent + (r.querySelector('[data-chat-area]') ? ' [' + r.querySelector('[data-chat-area]').textContent + ']' : '')).join(' | '));
-    ok(v.rows.length === 3 && db.asked.at(-1) === null && await p.evaluate(() => window.XENO_CHAT.area()) === null, 'on Overview the list asks for everything, and there is no area');
+    // the chat list's own request is the first; Overview's "not filed in any area" list (platform-area.js) asks area=none on its own
+    ok(v.rows.length === 3 && db.asked[0] === null && db.asked.every((x) => x === null || x === 'none') && await p.evaluate(() => window.XENO_CHAT.area()) === null, 'on Overview the list asks for everything, and there is no area (rows ' + v.rows.length + ', asked ' + JSON.stringify(db.asked) + ')');
     ok((await tags()).split(' | ').sort().join(' | ') === 'Budget <b>questions</b> | New chat [Studio] | Plan the launch week [Dev]', 'each chat that lives in an area says which, by its name (' + await tags() + ')');
     await p.evaluate(() => { location.hash = '#/dev/p/chat'; }); await wait(1200); v = await view(p);
     ok(await p.evaluate(() => window.XENO_CHAT.area()) === 'dev' && db.asked.at(-1) === 'dev', 'in Dev the area is dev, which the real chat reads when it makes a chat, and the list asks for that area');
@@ -328,6 +331,51 @@ try {
     await p.evaluate(() => { location.hash = '#/office'; }); await wait(900); await p.evaluate(() => document.querySelector('#panel [data-recent-chat]').click()); await wait(1200);   // (an area’s first-visit intro covers the panel here; the row itself is what is under test)
     ok((await p.evaluate(() => window.XENO_ADDR.current())).startsWith('#/office/p/chat/') &&(await p.evaluate(() => window.XENO_CHAT.state().current)) === A, 'a recent chat opens that conversation, in the area it was opened from (' + await p.evaluate(() => window.XENO_ADDR.current()) + ')');
     ok(errs.length === 0, 'no page errors with areas (' + errs.slice(0, 2).join(' | ') + ')');
+    await p.close(); }
+  { // a SIDE CHAT beside the main one, a chat in a NEW TAB (owner, 2026-10-25)
+    reset(); const { p, errs } = await open('#/overview/p/chat/' + A); await wait(800);
+    await p.evaluate(() => { window.__opened = []; window.open = (u, t) => { window.__opened.push([String(u), t]); return null; }; });
+    const sv = () => p.evaluate(() => { const f = document.getElementById('xw-chat-frame'), s = document.getElementById('xw-chat-side'), slot = document.querySelector('#main .live-chat-host[data-chat-frame]');
+      const fr = f?.getBoundingClientRect(), sr = s?.getBoundingClientRect(), lr = slot?.getBoundingClientRect(), bar = document.querySelector('#xw-chat-side-ui .xw-side-bar');
+      return { side: s ? s.contentWindow.location.pathname : null, sideOn: !!s && getComputedStyle(s).visibility !== 'hidden', search: location.search, main: f.contentWindow.location.pathname,
+        beside: !!(fr && sr && lr) && fr.left - lr.left < 1 && fr.right <= sr.left && Math.abs(sr.right - lr.right) < 1 && fr.width > 200 && sr.width > 200, bar: bar ? bar.innerText : '', sidePicks: s ? s.contentWindow.__picks.slice() : [], mainPicks: f.contentWindow.__picks.slice(), opened: window.__opened.slice() }; });
+    // Open beside, from a chat row's menu
+    await p.click(`#panel [data-chat-live="${B}"]`, { button: 'right' }); await wait(300);
+    const items = await p.evaluate(() => [...document.querySelectorAll('.xcm [role="menuitem"], .xcm button, .xcm .item')].map((x) => x.innerText.trim()).filter(Boolean));
+    ok(items.some((t) => /Open in new tab/.test(t)) && items.some((t) => /Open beside/.test(t)), 'a chat row’s menu offers Open in new tab and Open beside (' + items.slice(0, 6).join(' | ') + ')');
+    await p.keyboard.press('Escape'); await p.evaluate((B) => window.XENO_CHAT_SIDE.open(B), B); await wait(1200); let v = await sv();
+    ok(v.side === `/chat/c/${B}` && v.sideOn && v.main === `/chat/c/${A}` && v.beside && v.search === `?side=${B}`, `Open beside shows that chat next to the main one, each its own chat, and the address carries it (main ${v.main} side ${v.side} ${v.search} beside ${v.beside})`);
+    ok(/Side chat/.test(v.bar), 'the side chat has its own bar (swap, new tab, close)');
+    // its model menu answers IT, not the main chat
+    await p.evaluate(() => document.getElementById('xw-chat-side').contentDocument.querySelector('[data-chat-model-trigger]').click()); await wait(300);
+    await p.click('#apmenu .row[data-model="m-c"]'); await wait(300); v = await sv();
+    ok(v.sidePicks.join() === 'm-c' && v.mainPicks.length === 0, `a model chosen in the side chat goes to the side chat only (side ${v.sidePicks.join()} · main ${v.mainPicks.join()})`);
+    // the side chat moves by itself (it starts a conversation): the address follows
+    await p.evaluate((D) => document.getElementById('xw-chat-side').contentWindow.goTo('/chat/c/' + D), D); await wait(600); v = await sv();
+    ok(v.search === `?side=${D}`, 'when the side chat moves to another conversation, the address follows (' + v.search + ')');
+    // the main chat navigating keeps the side chat
+    await p.click(`#panel [data-chat-live="${B}"]`); await wait(900); v = await sv();
+    ok(v.search === `?side=${D}` && v.side === `/chat/c/${D}` && v.sideOn, 'choosing another chat on the left keeps the side chat open (' + v.search + ')');
+    // a refresh brings both back
+    await p.reload({ waitUntil: 'domcontentloaded' }); await wait(1800);
+    await p.evaluate(() => { window.__opened = []; window.open = (u, t) => { window.__opened.push([String(u), t]); return null; }; }); v = await sv();
+    ok(v.side === `/chat/c/${D}` && v.sideOn && v.beside, 'a refresh brings back both chats (' + v.side + ')');
+    // swap
+    await p.click('#xw-chat-side-ui [data-side="swap"]'); await wait(1200); v = await sv();
+    ok(v.main === `/chat/c/${D}` && v.side !== `/chat/c/${D}` && new URLSearchParams(v.search).get('side'), 'swap puts the side chat on the left and the left one on the side (' + v.main + ' | ' + v.side + ')');
+    // close
+    await p.click('#xw-chat-side-ui [data-side="close"][aria-label]'); await wait(500); v = await sv();
+    ok(v.side === null && v.search === '' && !v.beside, 'closing the side chat takes it away and out of the address');
+    // new tab: Ctrl+click a row, and the row menu
+    await p.keyboard.down('Control'); await p.click(`#panel [data-chat-live="${A}"]`); await p.keyboard.up('Control'); await wait(300); v = await sv();
+    ok(v.opened.length === 1 && v.opened[0][1] === '_blank' && v.opened[0][0].includes('/workspace/') && v.opened[0][0].includes('chat') && v.opened[0][0].endsWith(A), 'Ctrl+click on a chat opens it in a new tab, at its own address (' + (v.opened[0] || []).join(' ') + ')');
+    await p.keyboard.down('Control'); await p.keyboard.down('Shift'); await p.click(`#panel [data-chat-live="${B}"]`); await p.keyboard.up('Shift'); await p.keyboard.up('Control'); await wait(1200); v = await sv();
+    ok(v.side === `/chat/c/${B}` && v.search === `?side=${B}`, 'Ctrl+Shift+click opens it beside');
+    // narrow: the side chat takes the whole slot, with a way back
+    await p.setViewport({ width: 860, height: 800 }); await wait(500);
+    const nar = await p.evaluate(() => { const f = document.getElementById('xw-chat-frame'), s = document.getElementById('xw-chat-side'); return { mainHidden: getComputedStyle(f).visibility === 'hidden', sideW: s.getBoundingClientRect().width, back: getComputedStyle(document.querySelector('#xw-chat-side-ui .xw-side-main')).display !== 'none' }; });
+    ok(nar.mainHidden && nar.sideW > 300 && nar.back, 'on a narrow window the side chat takes the whole space and offers Main chat (' + JSON.stringify(nar) + ')');
+    ok(errs.length === 0, 'no page errors with a side chat (' + errs.slice(0, 2).join(' | ') + ')');
     await p.close(); }
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
 await b.close(); await server.close();
