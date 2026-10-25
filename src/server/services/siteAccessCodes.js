@@ -43,7 +43,7 @@ export const countryOf = (req) => {
 const view = (r) => ({
   id: r.id, label: r.label, scope: r.scope, createdAt: r.created_at, createdBy: r.created_by_name || null,
   expiresAt: r.expires_at, maxUses: r.max_uses, uses: r.uses, revokedAt: r.revoked_at, lastUsedAt: r.last_used_at,
-  lastUsedCountry: r.last_used_country, accounts: Number(r.accounts || 0),
+  lastUsedCountry: r.last_used_country, accounts: Number(r.accounts || 0), opened: Number(r.opened || 0),
   live: !r.revoked_at && new Date(r.expires_at) > new Date() && (r.max_uses == null || r.uses < r.max_uses),
 });
 
@@ -71,10 +71,35 @@ export async function createCode(db, { label, scope = 'pages', days = CODE_DEFAU
 export async function listCodes(db) {
   const { rows } = await db.query(
     `SELECT c.*, u.email AS created_by_name,
-            (SELECT count(*) FROM site_access_code_events e WHERE e.code_id = c.id AND e.event = 'used_by_account') AS accounts
+            (SELECT count(*) FROM site_access_code_events e WHERE e.code_id = c.id AND e.event = 'used_by_account') AS accounts,
+            (SELECT count(*) FROM site_access_code_events e WHERE e.code_id = c.id AND e.event = 'opened') AS opened
        FROM site_access_codes c LEFT JOIN users u ON u.id = c.created_by
       ORDER BY c.created_at DESC LIMIT 500`);
   return rows.map(view);
+}
+
+/** A code LINK (xenosystem.ai/?code=…) was opened by someone the gate already lets in — signed-in staff, or a browser
+ *  holding an earlier cookie. They never see Coming soon, so nothing is redeemed, but the link was used and the
+ *  usage list must say so. Spends no use (max uses counts redemptions) and mints nothing. A reload within ten minutes
+ *  by the same account (or, signed out, the same country) is the same visit and is not recorded twice. */
+const OPENED_DEDUPE = '10 minutes';
+export async function noteLinkOpened(db, typed, country = null, actorId = null) {
+  if (normalizeCode(typed).length < 16) return false;
+  const { rows } = await db.query(
+    `SELECT id FROM site_access_codes WHERE code_hash = $1 AND revoked_at IS NULL AND expires_at > now()`, [hashCode(typed)]);
+  if (!rows[0]) return false;
+  const { rowCount } = await db.query(
+    `INSERT INTO site_access_code_events (code_id, event, actor_id, country, via)
+     SELECT $1, 'opened', $2, $3, 'link'
+      WHERE NOT EXISTS (SELECT 1 FROM site_access_code_events WHERE code_id = $1 AND event = 'opened'
+                          AND actor_id IS NOT DISTINCT FROM $2 AND country IS NOT DISTINCT FROM $3
+                          AND at > now() - interval '${OPENED_DEDUPE}')`, [rows[0].id, actorId, country]);
+  return rowCount === 1;
+}
+
+/** The `code` query parameter of the address the gate is checking (nginx passes it as X-Original-URI). */
+export function linkedCodeOf(originalUri) {
+  try { return new URL(String(originalUri || ''), 'https://x.invalid').searchParams.get('code') || null; } catch { return null; }
 }
 
 export async function codeEvents(db, id) {
