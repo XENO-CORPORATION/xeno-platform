@@ -25,7 +25,7 @@ const view = (a) => ({ webhook: null, owner: { kind: 'personal' }, accountable: 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
 const br = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
-const p = await br.newPage(); await p.setViewport({ width: 1400, height: 900 }); const errs = [], cerrs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') cerrs.push(m.text() + ' @ ' + ((m.location() || {}).url || '')); });
+const p = await br.newPage(); await p.setViewport({ width: 1400, height: 900 }); if (process.env.AGENT_SHOTS_DARK) await p.evaluateOnNewDocument(() => { try { localStorage.setItem('xeno_platform_theme', 'dark'); } catch {} }); const errs = [], cerrs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => { if (m.type() === 'error') cerrs.push(m.text() + ' @ ' + ((m.location() || {}).url || '')); });
 // the Open in Spawn link renders only on the two real issuers; the test serves from 127.0.0.1, so it names its own origin as one
 await p.evaluateOnNewDocument((o) => { window.XENO_SPAWN_TEST_ISSUER = o; }, base);
 const SHOTS = process.env.AGENT_SHOTS || '', TAG = process.env.AGENT_SHOTS_TAG || 'after';

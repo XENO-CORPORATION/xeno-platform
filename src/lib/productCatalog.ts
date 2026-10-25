@@ -119,7 +119,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-architect' },
 
   // ── Office ────────────────────────────────────────────────
-  { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-docs' },
+  { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-docs' },
   // Sheets 0.2.0 (2026-07-27) is the first build that actually carries the formula
   // engine — the withdrawn 0.1.0 scaffold was packaged ~70 min BEFORE the engine
   // commit landed. Verified in the packaged asar, not just the build log: the
@@ -147,7 +147,7 @@ export const PRODUCTS: Product[] = [
   // now carries scripts/packaged-smoke.mjs so the next release must launch too.
   // Windows only, experimental + unsigned, and NO in-app updater — electron-updater
   // is not even a dependency. Framing lives in src/content/products/slides.ts.
-  { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-slides' },
+  { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-slides' },
   { slug: 'pdf', name: 'XENO PDF', tagline: 'Edit, convert, sign and chat with PDFs.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-pdf' },
 
   // ── Library ───────────────────────────────────────────────
