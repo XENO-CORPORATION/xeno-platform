@@ -116,7 +116,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-canvas' },
   { slug: 'layout', name: 'XENO Layout', tagline: 'Multi-page layouts for print and digital.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-layout' },
   { slug: 'form', name: 'XENO Form', tagline: '3D modeling, sculpting, animation and rendering.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-form' },
-  { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-architect' },
+  { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-architect' },
 
   // ── Office ────────────────────────────────────────────────
   { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-docs' },
