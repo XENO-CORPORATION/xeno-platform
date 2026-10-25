@@ -1,7 +1,7 @@
 {
   "name": "@xenosystem/licence",
-  "version": "0.1.0",
-  "description": "The main-process entitlement check every XENO desktop app runs: signed in, allowed for THIS product, not below the version floor. Fail open on a network error, closed on a refusal, 14-day grace. XENO AUTH - AUTH GATE DELTA §9.",
+  "version": "0.2.0",
+  "description": "The main-process entitlement check every XENO desktop app runs: signed in, allowed for THIS product, not below the version floor. Fail open on a network error, closed on a refusal, 14-day grace. XENO AUTH - AUTH GATE DELTA §9. `/door`: the sign-in door every app runs in its main process (OIDC session, door state, auth.log, X-Xeno-Client).",
   "license": "UNLICENSED",
   "author": "XENO Corporation <emilian@bnkrsys.com>",
   "type": "module",
@@ -14,6 +14,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./door": {
+      "types": "./dist/door/index.d.ts",
+      "import": "./dist/door.js",
+      "require": "./dist/door.cjs"
     }
   },
   "files": [
