@@ -119,6 +119,14 @@
     + '.topbar .tb-mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;white-space:nowrap;cursor:pointer}'
     + '.topbar .tb-mid:hover{color:var(--text);background:var(--hover)}.topbar .tb-mid:focus-visible{outline:1px solid var(--text);outline-offset:2px}.topbar .tb-mid svg.i{width:13px;height:13px}.topbar .tb-mid.done{color:var(--text)}'
     + '@media (max-width:1100px){.topbar .tb-mid span{display:none}.topbar .tb-mid{padding:0 8px}}'
+    + '#xw-chat-side{position:fixed;z-index:4;border:0;background:var(--panel);visibility:hidden}'
+    + '#xw-chat-side-ui{display:none}#xw-chat-side-ui.on{display:block}'
+    + '#xw-chat-side-ui .xw-split{position:fixed;z-index:5;cursor:col-resize;background:var(--panel-stroke,var(--border))}#xw-chat-side-ui .xw-split:hover,#xw-chat-side-ui .xw-split:focus-visible,html.xw-splitting #xw-chat-side-ui .xw-split{background:var(--muted);outline:none}'
+    + 'html.xw-splitting iframe{pointer-events:none}'
+    + '#xw-chat-side-ui .xw-side-bar{position:fixed;z-index:5;display:flex;align-items:center;gap:4px;padding:0 8px;box-sizing:border-box;background:var(--panel);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}'
+    + '#xw-chat-side-ui .xw-side-l{flex:1}#xw-chat-side-ui .xw-side-bar button{height:26px;min-width:26px;padding:0 6px;border:0;border-radius:4px;background:none;color:var(--muted);font:inherit;cursor:pointer}'
+    + '#xw-chat-side-ui .xw-side-bar button:hover,#xw-chat-side-ui .xw-side-bar button:focus-visible{background:var(--hover);color:var(--text);outline:none}'
+    + '#xw-chat-side-ui .xw-side-main{display:none}#xw-chat-side-ui.narrow .xw-side-main{display:inline-block}#xw-chat-side-ui.narrow .xw-side-l{flex:1}'
     + 'html.xw-chat-on #xp-note{display:none}html.xw-chat-on #main .topbar > .ib[aria-label="More"]{display:none}';
   document.head.appendChild(style);
   let frame = null, loaded = false, slot = null, ro = null, hideT = 0;
@@ -211,7 +219,7 @@
   }
   function place() {
     const el = document.querySelector('#main .live-chat-host[data-chat-frame]');
-    if (!el) { if (slot) { slot = null; ro?.disconnect(); } clearTimeout(hideT); hideT = setTimeout(() => { if (!document.querySelector('#main .live-chat-host[data-chat-frame]')) { frame?.classList.remove('on'); document.documentElement.classList.remove('xw-chat-on'); } }, 160); return; }
+    if (!el) { if (slot) { slot = null; ro?.disconnect(); } clearTimeout(hideT); hideT = setTimeout(() => { if (!document.querySelector('#main .live-chat-host[data-chat-frame]')) { frame?.classList.remove('on'); side?.classList.remove('on'); sideUi?.classList.remove('on'); document.documentElement.classList.remove('xw-chat-on'); } }, 160); return; }
     clearTimeout(hideT);
     if (el !== slot) { slot = el; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); ro.observe(document.getElementById('main')); }
     // moved to another area: its own list, not the last one's
@@ -221,15 +229,103 @@
     const framePath = generation ? generation.framePath : pathFor(want);
     if (!frame) ensureFrame(framePath); else if ((want || null) !== (S.current || null)) show(framePath, true);   // the address changed (Back, a link): follow it
     S.current = want;
-    fit(); frame.classList.add('on'); document.documentElement.classList.add('xw-chat-on'); paintViewer();
+    frame.classList.add('on'); keepSideInAddress(); syncSide(); fit(); document.documentElement.classList.add('xw-chat-on'); paintViewer();
   }
   function fit() {
     if (!slot || !frame) return; const r = slot.getBoundingClientRect(), main = document.getElementById('main');
-    Object.assign(frame.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, r.width) + 'px', height: Math.max(0, r.height) + 'px' });
+    // a side chat takes the right part of the slot (owner, 2026-10-25); below SIDE_MIN wide it takes the whole slot
+    const split = sideItem() !== undefined && !!side && frame.classList.contains('on'), narrow = r.width < SIDE_MIN;
+    const leftW = split ? (narrow ? 0 : Math.round((r.width - SPLIT_GAP) * ratio())) : r.width;
+    Object.assign(frame.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, leftW) + 'px', height: Math.max(0, r.height) + 'px', visibility: split && narrow ? 'hidden' : '' });
+    fitSide(r, split, narrow, leftW);
     if (main) { const br = getComputedStyle(main).borderBottomLeftRadius; frame.style.borderRadius = `0 0 ${br} ${br}`; }
     if (loadingEl) Object.assign(loadingEl.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, r.width) + 'px', height: Math.max(0, r.height) + 'px' });
   }
   addEventListener('resize', fit);
+
+  // ---------- the SIDE CHAT (owner, 2026-10-25): a second chat beside the first, in the same window ----------
+  // Each pane is a whole chat — its own composer, model, streaming and queue — so one answering never blocks the
+  // other (VS Code / Cursor editor groups, Arc Split View, Slack's thread pane; one composer for two panes confuses).
+  // The side chat is in the ADDRESS (?side=<item>, or ?side=new), so refresh, Back and a shared link bring both back.
+  // A divider resizes it (remembered per browser, arrow keys too), the bar swaps, pops out or closes it. Below SIDE_MIN
+  // wide the side chat takes the whole slot, with "Main chat" to go back.
+  const SIDE_MIN = 900, SPLIT_GAP = 6, NEW_SIDE = 'new', RATIO_KEY = 'xw-chat-split';
+  let side = null, sideLoaded = false, sideUi = null, sideShown, menuFrame = null;
+  const clampRatio = (v) => Math.min(0.75, Math.max(0.25, v));
+  const ratio = () => { let v = 0.5; try { v = Number(localStorage.getItem(RATIO_KEY)) || 0.5; } catch {} return clampRatio(v); };
+  const setRatio = (v) => { try { localStorage.setItem(RATIO_KEY, String(clampRatio(v))); } catch {} fit(); };
+  /** the side chat's item from the address: undefined = no side chat, 'new' = a new chat, else a chat item */
+  const sideItem = () => { const v = new URLSearchParams(location.search).get('side'); if (v === null) return undefined; if (v === NEW_SIDE) return NEW_SIDE; const it = itemIn('/chat/' + v) || (ID.test(v) ? v : null); return it || undefined; };
+  const sidePath = (it) => (it === NEW_SIDE || !it ? NEW : pathFor(it));
+  function setSideParam(it) {
+    const u = new URL(location.href); if (it === undefined) u.searchParams.delete('side'); else u.searchParams.set('side', it);
+    if (u.href !== location.href) history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+  }
+  function openSide(it) { setSideParam(it || NEW_SIDE); syncSide(true); fit(); try { side?.focus(); } catch {} }
+  function closeSide() { setSideParam(undefined); syncSide(); fit(); try { frame?.focus(); } catch {} }
+  function swapSides() {
+    const right = sideItem(); if (right === undefined) return;
+    const left = S.current || null, go = right === NEW_SIDE ? null : right;
+    // move the left chat first (the workspace rewrites its address), then put the old left chat on the side
+    S.current = go; toChat(go); show(sidePath(go), false);
+    setSideParam(left || NEW_SIDE); syncSide(true); repaint(); fit();
+  }
+  function ensureSideUi() {
+    if (sideUi) return sideUi;
+    sideUi = document.createElement('div'); sideUi.id = 'xw-chat-side-ui';
+    sideUi.innerHTML = '<div class="xw-split" role="separator" aria-orientation="vertical" aria-label="Resize the side chat" tabindex="0"></div>'
+      + '<div class="xw-side-bar"><button type="button" class="xw-side-main" data-side="close">‹ Main chat</button><span class="xw-side-l">Side chat</span>'
+      + '<button type="button" data-side="swap" title="Swap the two chats" aria-label="Swap the two chats">⇄</button>'
+      + '<button type="button" data-side="tab" title="Open the side chat in a new tab" aria-label="Open the side chat in a new tab">↗</button>'
+      + '<button type="button" data-side="close" title="Close the side chat" aria-label="Close the side chat">✕</button></div>';
+    document.body.appendChild(sideUi);
+    sideUi.addEventListener('click', (e) => { const b = e.target.closest('[data-side]'); if (!b) return; const k = b.dataset.side;
+      if (k === 'close') closeSide(); else if (k === 'swap') swapSides();
+      else if (k === 'tab') { const it = sideItem(); window.open(chatUrl(it === NEW_SIDE ? null : it), '_blank', 'noopener'); } });
+    const bar = sideUi.querySelector('.xw-split');
+    bar.addEventListener('pointerdown', (e) => { if (!slot) return; e.preventDefault(); bar.setPointerCapture(e.pointerId); document.documentElement.classList.add('xw-splitting');
+      const move = (ev) => { const r = slot.getBoundingClientRect(); setRatio((ev.clientX - r.left) / r.width); };
+      const up = () => { bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); document.documentElement.classList.remove('xw-splitting'); };
+      bar.addEventListener('pointermove', move); bar.addEventListener('pointerup', up); });
+    bar.addEventListener('keydown', (e) => { if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return; e.preventDefault(); setRatio(ratio() + (e.key === 'ArrowLeft' ? -0.05 : 0.05)); });
+    return sideUi;
+  }
+  /** make the side frame match the address: create it, point it at its chat, or take it away */
+  function syncSide(force) {
+    const it = sideItem();
+    if (it === undefined) { if (side) { side.remove(); side = null; sideLoaded = false; } sideUi?.classList.remove('on'); sideShown = undefined; return; }
+    ensureSideUi();
+    const path = sidePath(it);
+    if (!side) {
+      side = document.createElement('iframe'); side.id = 'xw-chat-side'; side.title = 'Side chat'; side.setAttribute('allow', 'clipboard-read; clipboard-write; microphone');
+      // the same composer design the main chat wears (dress), copied from it once the side chat has loaded
+      side.addEventListener('load', () => { sideLoaded = true; try { const d = side.contentDocument, css = frame?.contentDocument?.getElementById('xw-composer')?.textContent; if (d && css) { let st = d.getElementById('xw-composer'); if (!st) { st = d.createElement('style'); st.id = 'xw-composer'; (d.head || d.documentElement).appendChild(st); } st.textContent = css; } } catch {} });
+      side.src = path; document.body.appendChild(side);
+    } else if (force && it !== sideShown) {
+      let w = null; try { w = side.contentWindow; if (!sideLoaded || !w || w.location.origin !== location.origin) w = null; } catch { w = null; }
+      if (it === NEW_SIDE || !w) { sideLoaded = false; side.src = path; }
+      else { try { w.history.pushState({}, '', path); w.dispatchEvent(new w.PopStateEvent('popstate', { state: {} })); } catch { sideLoaded = false; side.src = path; } }
+    }
+    sideShown = it; side.classList.add('on'); sideUi.classList.add('on');
+  }
+  function fitSide(r, split, narrow, leftW) {
+    if (!side || !sideUi) return;
+    if (!split) { side.style.visibility = 'hidden'; sideUi.classList.remove('on'); return; }
+    const x = narrow ? r.left : r.left + leftW + SPLIT_GAP, w = narrow ? r.width : r.width - leftW - SPLIT_GAP, barH = 34;
+    Object.assign(side.style, { left: x + 'px', top: (r.top + barH) + 'px', width: Math.max(0, w) + 'px', height: Math.max(0, r.height - barH) + 'px', visibility: 'visible' });
+    sideUi.classList.add('on'); sideUi.classList.toggle('narrow', narrow);
+    Object.assign(sideUi.querySelector('.xw-side-bar').style, { left: x + 'px', top: r.top + 'px', width: Math.max(0, w) + 'px', height: barH + 'px' });
+    Object.assign(sideUi.querySelector('.xw-split').style, { left: (r.left + leftW) + 'px', top: r.top + 'px', width: SPLIT_GAP + 'px', height: r.height + 'px', display: narrow ? 'none' : '' });
+  }
+  // The workspace's own navigation writes its address without ?side=; the side chat is kept in memory and put back.
+  // Back and Forward are the exception: there the address is the truth (a step without ?side= closes it).
+  let popping = false;
+  function keepSideInAddress() { if (!popping && sideShown !== undefined && sideItem() === undefined) setSideParam(sideShown); popping = false; }
+  addEventListener('popstate', () => { popping = true; syncSide(true); fit(); setTimeout(() => { popping = false; }, 0); });
+  /** a chat's address in this workspace — for "Open in new tab" */
+  const chatUrl = (it) => window.XENO_ADDR.url('#/' + (X()?.inOv?.() ? 'overview' : X()?.S?.mode) + '/p/chat' + (it ? '/' + String(it).split('/').map(encodeURIComponent).join('/') : ''));
+  window.XENO_CHAT_SIDE = { open: (it) => openSide(it), close: closeSide, swap: swapSides, item: sideItem };
+
   const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); new MutationObserver(place).observe(main, { childList: true }); main.addEventListener('transitionend', fit); place(); };
 
   // Back/Forward between generations of one type: tell the mounted frame, do not rebuild it.
@@ -241,8 +337,16 @@
   // ---------- the chat tells the workspace where it is ----------
   let reloadT = 0;
   addEventListener('message', (e) => {
-    if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
+    if (e.origin !== location.origin || !frame) return;
+    const from = e.source === frame.contentWindow ? frame : side && e.source === side.contentWindow ? side : null; if (!from) return;
     const m = e.data; if (!m || m.source !== 'xeno-chat') return;
+    // the SIDE chat (owner, 2026-10-25): its place goes into ?side= of this page's address, its menus are drawn here and
+    // answer IT. Everything else (Share, transcript, viewer, generations) belongs to the main chat.
+    if (from === side) {
+      if (m.type === 'location') { const item = itemIn(m.path); if ((item || NEW_SIDE) !== sideItem()) { setSideParam(item || NEW_SIDE); sideShown = item || NEW_SIDE; } clearTimeout(reloadT); reloadT = setTimeout(load, 1200); return; }
+      if (m.type === 'changed') { clearTimeout(reloadT); reloadT = setTimeout(load, 300); return; }
+      if (!['model-menu', 'model-menu-close', 'effort-menu', 'effort-menu-close'].includes(m.type)) return;
+    }
     if (m.type === 'report-open') { if (!document.querySelector('dialog[open],.xd')) window.XENO_REPORT?.open().catch(error => console.warn(error.message)); return; }
     if (m.type === 'generation-view') { window.XENO_GENERATIONS?.showView?.(window.XENO_GENERATIONS.asView(m.view)); return; }
     if (m.type === 'generation-grid-size') { window.XENO_GENERATIONS?.showSize?.(m.size); return; }
@@ -265,6 +369,7 @@
       if (window.XENO_GENERATIONS?.route?.()) return;
       const item = itemIn(m.path), id = convOf(item); S.path = m.path;
       if (item !== S.current) { S.current = item; X()?.setChatItem?.(item); }
+      keepSideInAddress();
       // a conversation that is not in the list yet was just started; and a title may have been written
       clearTimeout(reloadT); reloadT = setTimeout(load, id && !S.convs.some((c) => c.id === id) ? 600 : 2500);
       repaint();
@@ -274,7 +379,8 @@
     if (m.type === 'model-menu' && Array.isArray(m.models) && m.rect) {
       // pressing a trigger again closes its menu; the @ list is driven by typing and by Up/Down, so it is redrawn in place
       if (X()?.modelMenuOpen?.() && !(m.menu === 'gen-at' && S.picker?.menu === 'gen-at')) return void X().closeModelMenu();
-      const f = frame.getBoundingClientRect(), r = m.rect;   // the trigger's place, in this page's coordinates
+      menuFrame = from;
+      const f = from.getBoundingClientRect(), r = m.rect;   // the trigger's place, in this page's coordinates
       const box = { left: f.left + r.left, top: f.top + r.top, right: f.left + r.right, bottom: f.top + r.bottom, width: r.width, height: r.height };
       // The same menu serves every list the composer offers (models, and in generate mode the type, the image models and
       // each setting): `menu` names which list it is and comes back with the pick; a row may carry a short `note` (where
@@ -290,7 +396,8 @@
     if (m.type === 'viewer-copied' && S.viewer) X()?.toast?.('Link copied');
     // the chat's effort pill was pressed: this page's own effort menu opens, on the chat's real levels
     if (m.type === 'effort-menu' && Array.isArray(m.levels) && m.levels.length && m.rect) {
-      const f = frame.getBoundingClientRect(), r = m.rect;
+      menuFrame = from;
+      const f = from.getBoundingClientRect(), r = m.rect;
       const box = { left: f.left + r.left, top: f.top + r.top, right: f.left + r.right, bottom: f.top + r.bottom, width: r.width, height: r.height };
       S.effort = { levels: m.levels.filter((x) => x && typeof x.id === 'string').map((x) => ({ id: x.id, label: String(x.label || x.id), title: String(x.title || '') })), selected: String(m.selected || ''), anchor: { getBoundingClientRect: () => box } };
       X()?.openEffortMenu?.(S.effort.anchor);
@@ -302,17 +409,25 @@
 
   // ---------- the sidebar's clicks ----------
   const toChat = (item) => { const x = X(); if (!x) return; if (!(x.S.view === 'product' && x.S.product === 'chat')) x.go('product', { product: 'chat', item: item || null }); else if ((x.S.item || null) !== (item || null)) x.setChatItem?.(item || null); };
-  function open(id) { const item = itemFor(id); S.current = item; toChat(item); show(pathFor(item), false); repaint(); }
+  function open(id) { const item = itemFor(id); S.current = item; toChat(item); show(pathFor(item), false); repaint(); setTimeout(keepSideInAddress, 0); }
   // a project's home in the real chat, by id: its composer files the new conversation in the project
   function openProjectId(pid) { if (!/^[0-9a-f-]{36}$/i.test(String(pid || ''))) return false; const item = 'projects/' + pid; S.current = item; toChat(item); show(pathFor(item), false); repaint(); return true; }
   function openProject(name) { const pid = projectId(name); return pid ? openProjectId(pid) : false; }
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-more]')) return;   // the row's menu button is the app's: it opens the menu registered below
-    const row = e.target.closest('[data-chat-live]'); if (row) { e.preventDefault(); e.stopPropagation(); return open(row.dataset.chatLive); }
+    const row = e.target.closest('[data-chat-live]'); if (row) { e.preventDefault(); e.stopPropagation();
+      // Ctrl/Cmd click: a new tab, as every web app does; Ctrl+Shift click: beside this chat
+      const id = row.dataset.chatLive;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey) return openSide(itemFor(id));
+      if (e.ctrlKey || e.metaKey) return void window.open(chatUrl(itemFor(id)), '_blank', 'noopener');
+      return open(id); }
     if (e.target.closest('[data-chat-retry]')) { e.preventDefault(); e.stopPropagation(); S.status = 'loading'; repaint(); return void load(); }
     const fresh = e.target.closest('[data-newchat]'); if (fresh) { e.preventDefault(); e.stopPropagation(); return open(null); }
     const inP = e.target.closest('[data-newin]'); if (inP && openProject(inP.dataset.newin)) { e.preventDefault(); e.stopPropagation(); }
   }, true);
+
+  // middle click on a chat row: a new tab
+  document.addEventListener('auxclick', (e) => { if (e.button !== 1) return; const row = e.target.closest('[data-chat-live]'); if (!row) return; e.preventDefault(); window.open(chatUrl(itemFor(row.dataset.chatLive)), '_blank', 'noopener'); }, true);
 
   // Share, in this page's top bar, is the chat's own Share: the chat's top bar is not shown, its button still works
   document.addEventListener('click', (e) => {
@@ -383,7 +498,7 @@
       onSubmit: async (v) => { const text = String(v.text || '').trim().slice(0, MAX_INSTRUCTIONS);
         const r = await api('PATCH', '/api/user-data/settings', { updates: [{ path: 'areas.' + here + '.instructions', value: text }] }).catch(() => null);
         if (!r || !r.ok) return say(r, 'The instructions couldn’t be saved. Nothing changed.');
-        toChatFrame({ type: 'area-settings', areas: { ...areasNow, [here]: { ...(areasNow[here] || {}), instructions: text } } });
+        const areaMsg = { type: 'area-settings', areas: { ...areasNow, [here]: { ...(areasNow[here] || {}), instructions: text } } }; toChatFrame(areaMsg); if (side) toChatFrame(areaMsg, side);
         saved = true; X()?.toast?.(text ? 'Instructions saved for ' + areaName(here) : 'Instructions cleared for ' + areaName(here)); return null; } });
     return saved;
   }
@@ -396,14 +511,24 @@
   }
   document.addEventListener('click', (e) => { const t = e.target.closest('#panel [data-chat-instructions]'); if (!t) return; e.preventDefault(); e.stopPropagation(); instructions(); }, true);
   const menu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-live', sel: '[data-chat-live]', priority: 3, build: (n) => { const id = n.dataset.chatLive;
-    return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(window.XENO_ADDR.url('#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id)), 'Link copied') }],
+    return [[{ label: 'Open', icon: 'chat', run: () => open(id) }, { label: 'Open in new tab', icon: 'external', kbd: 'Ctrl click', run: () => window.open(chatUrl(itemFor(id)), '_blank', 'noopener') }, { label: 'Open beside', icon: 'sidebar', kbd: 'Ctrl Shift click', run: () => openSide(itemFor(id)) }, { label: 'Copy link', icon: 'link', run: () => C.H.copy(window.XENO_ADDR.url('#/' + (X().inOv() ? 'overview' : X().S.mode) + '/p/chat/' + encodeURIComponent(id)), 'Link copied') }],
       [{ label: 'Pinned', icon: 'pin', checked: S.pins.includes(String(id)), run: () => pin(id, !S.pins.includes(String(id))) }, { label: 'Rename', icon: 'edit', run: () => rename(id) }, { label: 'Move to…', icon: 'folder', run: () => move(id) }], [{ label: 'Delete', icon: 'trash', danger: true, run: () => remove(id) }]]; } }); };
-  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', menu); else menu();
+  // the chat sidebar's own menu (its empty space and header): the generic one, plus new tab / beside / close the side chat
+  const panelMenu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-panel', sel: '#panel .pv', priority: 0, when: () => X()?.S?.view === 'product' && X()?.S?.product === 'chat', build: (n) => {
+    const primary = n.querySelector('.pbody > .act.primary');
+    return [[{ label: 'New chat', icon: 'plus', run: () => (primary ? primary.click() : open(null)) }, { label: 'New chat in new tab', icon: 'external', run: () => window.open(chatUrl(null), '_blank', 'noopener') }, { label: 'New chat beside', icon: 'sidebar', run: () => openSide(NEW_SIDE) }],
+      [{ label: 'Expand all sections', icon: 'down', run: () => n.querySelectorAll('.sec').forEach((s) => s.classList.remove('closed')) },
+        { label: 'Collapse all sections', icon: 'up', run: () => n.querySelectorAll('.sec').forEach((s) => s.classList.add('closed')) }],
+      [...(sideItem() !== undefined ? [{ label: 'Close the side chat', icon: 'x', run: closeSide }] : []), { label: 'Hide sidebar', icon: 'sidebar', kbd: 'Ctrl \\', run: () => document.querySelector('[data-collapse]')?.click() }]];
+  } }); };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', () => { menu(); panelMenu(); }); else { menu(); panelMenu(); }
 
-  const toChatFrame = (msg) => { try { frame.contentWindow.postMessage({ source: 'xeno-workspace', ...msg }, location.origin); } catch {} };
-  const pickModel = (id) => toChatFrame({ type: 'pick-model', id, menu: S.picker?.menu || 'model' });
-  const pickerClosed = () => { if (S.effort) { S.effort = null; toChatFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toChatFrame({ type: 'model-menu-closed' }); } };
-  const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toChatFrame({ type: 'pick-effort', id }); };
+  const toChatFrame = (msg, to = frame) => { try { to.contentWindow.postMessage({ source: 'xeno-workspace', ...msg }, location.origin); } catch {} };
+  // a menu's answer goes to the chat that opened it — the main one or the side one
+  const toMenuFrame = (msg) => toChatFrame(msg, menuFrame && menuFrame.isConnected ? menuFrame : frame);
+  const pickModel = (id) => toMenuFrame({ type: 'pick-model', id, menu: S.picker?.menu || 'model' });
+  const pickerClosed = () => { if (S.effort) { S.effort = null; toMenuFrame({ type: 'effort-menu-closed' }); } if (S.picker) { S.picker = null; toMenuFrame({ type: 'model-menu-closed' }); } };
+  const pickEffort = (id) => { if (S.effort) S.effort.selected = id; toMenuFrame({ type: 'pick-effort', id }); };
   window.XENO_CHAT = { served: true, openProjectId, trail, area, areaName, instructions, pin, pins: () => S.pins.slice(), get picker() { return S.picker; }, get effort() { return S.effort || null; }, pickModel, pickEffort, pickerClosed, data, title, open, load, rename, remove, dress, host: () => '<div class="live-chat-host" data-chat-frame aria-label="Chat"></div>', state: () => ({ area: area(), listed: S.area, viewer: S.viewer || null, ready: chatReady(), status: S.status, count: S.convs.length, current: convOf(S.current), item: S.current, path: S.path, shown: !!frame && frame.classList.contains('on') }) };
   Promise.resolve(P.ready).then((user) => { if (!user) return; P.first(load()); watch(); });
 })();
