@@ -161,7 +161,7 @@ export const PRODUCTS: Product[] = [
   // are compiled in and GraphView is rendered from App.tsx, notes:findBacklinks is in the
   // main bundle, and the app launches. Windows only. Experimental + unsigned; search is
   // MiniSearch (lexical), NOT semantic — see src/content/products/notes.ts.
-  { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-notes' },
+  { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-notes' },
 
   // ── Connect ───────────────────────────────────────────────
   // Internal alpha, not a beta: unsigned installer, alpha test accounts, agents + E2EE
