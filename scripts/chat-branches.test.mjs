@@ -116,3 +116,31 @@ test('worker: a scheduled run lands ON the thread (parent = the active leaf) and
   assert.match(worker, /\[conversationId, task\.run_as_user_id, assistantText, task\.model_id, nextIndex \+ 1, run\.id, userMessageId\]/);
   assert.match(worker, /UPDATE chat_conversations SET active_leaf_id = \$2 WHERE id = \$1/);
 });
+
+// Regenerate keeps version 1's generation cards with version 1 (2026-10-25): the thread re-adds only a generation NO
+// message holds; one held by a message on another branch belongs to that version and leaves the screen with it.
+test('heldGenerationIds: every generation any branch holds, read defensively', async () => {
+  const { heldGenerationIds } = await import('../src/components/playground/Chat/chatBranches.ts');
+  const g1 = '11111111-1111-4111-8111-111111111111', g2 = '22222222-2222-4222-8222-222222222222';
+  const rows = [
+    { id: 'u', role: 'user' },
+    { id: 'a1', role: 'assistant', parent_id: 'u', turn: { steps: [{ kind: 'generation', generationId: g1 }, { kind: 'text' }] } },
+    { id: 'a2', role: 'assistant', parent_id: 'u', turn: { steps: [{ kind: 'generation', generationId: g2 }] } },
+    { id: 'x', role: 'assistant', turn: 'not a turn' }, null,
+  ];
+  const held = heldGenerationIds(rows);
+  assert.deepEqual([...held].sort(), [g1, g2]);
+  // the screen shows version 2 (a2); version 1's generation is held elsewhere, so it is not re-added as an orphan
+  const placed = heldGenerationIds([rows[0], rows[2]]);
+  const orphans = [g1, g2, '33333333-3333-4333-8333-333333333333'].filter((g) => !placed.has(g) && !held.has(g));
+  assert.deepEqual(orphans, ['33333333-3333-4333-8333-333333333333'], 'only a generation no message holds is an orphan');
+});
+
+test('the transcript re-adds only generations no branch holds (wiring, not just the function)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/components/playground/Chat/ChatWithLLM.tsx', import.meta.url), 'utf8');
+  const memo = src.slice(src.indexOf('const threadMessages = useMemo('), src.indexOf('}, [messages, durableGenerations, studioType, branchRows]);'));
+  assert.ok(memo.length > 0, 'threadMessages memo found, keyed on branchRows');
+  assert.match(memo, /const heldElsewhere = heldGenerationIds\(branchRows\)/);
+  assert.match(memo, /durableGenerations\.filter\(g => !placed\.has\(g\.id\) && !heldElsewhere\.has\(g\.id\) && !heldThisSessionRef\.current\.has\(g\.id\)\)/);
+});
