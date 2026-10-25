@@ -84,6 +84,35 @@
   const NOT_YET = { duplicate: 'Duplicating a file', move: 'Moving a file to a project' };
   function refuse(action) { if (!NOT_YET[action]) return false; toast(`${NOT_YET[action]} isn’t available on XENO yet`); return true; }
   const VIEW_NOT_YET = { 'Shared with me': ['share', 'Shared with me isn’t available yet', 'A file can’t be shared with one person on XENO yet. Files of a workspace you belong to are in your Library, marked with the workspace they live in.'] };
+  // ---------- a TEXT file opened in the Library is shown as its text (owner, 2026-10-25) ----------
+  // Markdown is rendered (the Tasks page's renderer: everything escaped first, links http(s) only); any other text file
+  // is shown as it is, in a monospace block. The bytes are read from the file's own content route, never guessed from
+  // its stored type: uploads often arrive as application/octet-stream, which is why a .md used to show an empty box.
+  const TEXT_EXT = /\.(md|markdown|mdx|txt|text|log|csv|tsv|json|jsonl|ya?ml|toml|ini|cfg|conf|env\.example|xml|html?|css|scss|js|mjs|cjs|jsx|ts|tsx|py|rb|go|rs|java|kt|c|h|cpp|hpp|cs|php|sh|bash|ps1|sql|graphql|svg)$/i;
+  const MD_EXT = /\.(md|markdown|mdx)$/i, TEXT_MAX = 2 * 1024 * 1024;
+  const isText = (f) => !!(f && f.live && f.live.assetId && !f.trashedAt && (TEXT_EXT.test(f.name) || /^text\//.test(f.live.mime || '')));
+  /** the item page's preview for a text file: a placeholder the hydrator fills, or null when the file is not text */
+  const textPreview = (f) => (isText(f) ? `<div class="pg-item-pv pg-item-text" data-lib-text="${esc(f.id)}" aria-busy="true"><div class="pg-item-text-in"><p class="pg-item-text-note">Loading ${esc(f.name)}…</p></div></div>` : null);
+  const textCache = new Map();
+  async function hydrateText(node) {
+    if (node.dataset.libTextDone) return; node.dataset.libTextDone = '1';
+    const f = (window.XENO_PG_LIBRARY.items || []).find((x) => x.id === node.dataset.libText), box = node.querySelector('.pg-item-text-in');
+    const fail = (msg) => { box.innerHTML = `<p class="pg-item-text-note">${esc(msg)}</p>`; node.removeAttribute('aria-busy'); };
+    if (!f) return fail('This file could not be found.');
+    if (f.bytes > TEXT_MAX) return fail('This file is too large to show here. Download it to read it.');
+    let text = textCache.get(f.id);
+    if (text === undefined) {
+      try { const r = await fetch(`/api/library/assets/${encodeURIComponent(f.live.assetId)}/content`, { credentials: 'same-origin' }); if (!r.ok) return fail('The file could not be read (' + r.status + ').'); text = await r.text(); textCache.set(f.id, text); }
+      catch { return fail('The file could not be read. Check your connection and open it again.'); }
+    }
+    if (!node.isConnected) return;
+    const mdOk = MD_EXT.test(f.name) && window.XENO_TASKS && typeof window.XENO_TASKS.md === 'function';
+    box.innerHTML = mdOk ? `<article class="pg-md">${window.XENO_TASKS.md(text, null)}</article>` : `<pre class="pg-item-code"><code>${esc(text)}</code></pre>`;
+    node.removeAttribute('aria-busy');
+  }
+  const scanText = () => document.querySelectorAll('#main [data-lib-text]:not([data-lib-text-done])').forEach((n) => { hydrateText(n); });
+  new MutationObserver(scanText).observe(document.documentElement, { childList: true, subtree: true });
+
   const viewNotYet = (view, h) => (VIEW_NOT_YET[view] ? h.page(h.head({ eyebrow: 'Library', title: view, sub: '' }) + h.box(VIEW_NOT_YET[view][0], VIEW_NOT_YET[view][1], esc(VIEW_NOT_YET[view][2])), 'pg--lib') : null);
 
   // ---------- saves, through the one save door ----------
@@ -234,6 +263,6 @@
       [{ label: `Move ${N} to Trash`, icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => trash(fs) }]]; };
 
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-pg-retry="library"]'); if (t && L.status === 'error') { pstate('loading'); paint(); load(); } }, true);
-  window.XENO_LIB = { served: true, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
+  window.XENO_LIB = { served: true, textPreview, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();
