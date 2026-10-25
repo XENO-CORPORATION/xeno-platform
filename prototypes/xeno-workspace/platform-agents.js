@@ -991,11 +991,12 @@
       '.xag-idbtn{border:0;background:none;padding:0;color:var(--muted);font:11.5px ui-monospace,Consolas,monospace;cursor:pointer}.xag-idbtn:hover{color:var(--text)}',
       '.xag-skel{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;padding-top:60px}.xag-skel i{height:132px;border-radius:14px;background:var(--panel);animation:xags 1.2s ease-in-out infinite alternate}@keyframes xags{to{opacity:.5}}',
       // the redesigned agent page: small corners, squares not circles, emphasis by lightness (DESIGN_SYSTEM.md)
-      // ── the locked design (claude.ai artifact "Agent page redesign", 2026-10-24): content capped at 1180 px; every
+      // ── the locked design (claude.ai artifact "Agent page redesign", 2026-10-24), full width; every
       // section on the Overview is a PANEL (a card on the darker page) with its heading, count and link INSIDE; the
       // heading and its count sit together on the left and the link on the right; the side column opens with a compact
       // identity row, not a large avatar block.
-      '.xag-one{max-width:1180px;width:100%;box-sizing:border-box}',
+      // full viewport (owner, 2026-10-25): the page uses the whole width; the design's 1180 px cap is dropped
+      '.xag-one{width:100%;box-sizing:border-box}',
       // the design's ground and surfaces: page on the canvas (#0a0a0a dark), cards one step up (#171717 = --rail), card
       // edges #242424 (--rail-stroke). Through the theme's own tokens, so the light theme follows.
       '.pg.xag{background:var(--canvas)}.pg.xag .xag-one{--panel:var(--rail);--n31:var(--rail-stroke)}',
