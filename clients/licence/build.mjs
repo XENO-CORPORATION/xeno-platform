@@ -16,11 +16,14 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 rmSync(join(here, 'dist'), { recursive: true, force: true });
 
-const common = { entryPoints: [join(here, 'src/index.ts')], bundle: true, platform: 'node', target: 'node20', logLevel: 'warning' };
-await build({ ...common, format: 'esm', outfile: join(here, 'dist/index.js') });
-await build({ ...common, format: 'cjs', outfile: join(here, 'dist/index.cjs') });
+const common = { bundle: true, platform: 'node', target: 'node20', logLevel: 'warning' };
+// `door` bundles its own copy of the licence check, so an app importing only the door gets one module graph.
+for (const [entry, out] of [['src/index.ts', 'dist/index'], ['src/door/index.ts', 'dist/door']]) {
+  await build({ ...common, entryPoints: [join(here, entry)], format: 'esm', outfile: join(here, `${out}.js`) });
+  await build({ ...common, entryPoints: [join(here, entry)], format: 'cjs', outfile: join(here, `${out}.cjs`) });
+}
 
 const require = createRequire(import.meta.url);
 const tsc = join(dirname(require.resolve('typescript/package.json')), 'bin', 'tsc');
 execFileSync(process.execPath, [tsc, '-p', join(here, 'tsconfig.json')], { stdio: 'inherit' });
-console.log('built dist/index.js, dist/index.cjs, dist/index.d.ts');
+console.log('built dist/index.{js,cjs,d.ts} and dist/door.{js,cjs} + dist/door/index.d.ts');

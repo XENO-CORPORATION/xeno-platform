@@ -44,3 +44,30 @@ The durable protection is server-side: sign-in, sync, the agent and inference ar
 builds below the floor.
 
 Contract: `xeno-platform/docs/LICENCE-ENFORCEMENT.md`.
+
+## `@xenosystem/licence/door` — the sign-in door, in every app's main process
+
+One door for every XENO desktop app (owner, 2026-10-25: one unified core, never a copy per app). Extracted from XENO
+Canvas, the reference implementation of `XENO APP ENFORCEMENT - PLAYBOOK.md`: the OIDC session (loopback + system
+browser, PKCE, DPoP-bound tokens, refresh token in the OS keystore only), the door state pushed to every window
+(`auth-gate:state`, rendered by `@xenosystem/blocks/auth`), the licence verdict, `<userData>/auth.log` (never a
+credential) and `X-Xeno-Client: <product>/<version>` on every platform call including the token exchange.
+
+The app injects its own Electron and its own vendored account SDK, so this package keeps zero dependencies:
+
+```ts
+import { app, BrowserWindow, ipcMain, shell, safeStorage } from 'electron'
+import * as account from '@xeno-corporation/account'
+import { createNodeDpopSigner } from '@xeno-corporation/account/node'
+import { createDoor } from '@xenosystem/licence/door'
+
+export const door = createDoor({
+  product: 'pixel', productName: 'XENO Pixel', clientId: 'xeno-pixel',
+  scopes: ['openid', 'profile', 'email', 'ledger', 'inference:run'],   // what the client is registered for
+  electron: { app, BrowserWindow, ipcMain, shell, safeStorage },
+  account: { ...account, createNodeDpopSigner },
+})
+app.whenReady().then(() => { door.start(); /* create windows */ })
+app.on('before-quit', () => door.stop())
+// signed platform calls from main: await door.platformAuthHeaders('GET', url); door.identifiedFetch(url, …)
+```
