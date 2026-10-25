@@ -258,3 +258,36 @@ test('update and download stay SEPARABLE, on one named seam', () => {
   assert.ok(route.includes('assertEntitlement(req.db, userId, UPDATE_CAPABILITY)'),
     'the update endpoint no longer goes through its own capability constant');
 });
+
+/* ── 6 · The updater's FEED behind the plan (owner, 2026-10-25) ─────────── */
+
+test('the gated feed is refused before anything is read', () => {
+  const start = route.indexOf("updateGrantRouter.get('/:slug/feed/:file'");
+  assert.ok(start > -1, 'the gated feed route is gone');
+  const body = route.slice(start);
+  const gate = body.indexOf('assertEntitlement(req.db, userId, UPDATE_CAPABILITY)');
+  assert.ok(gate > -1, 'the feed does not assert the update capability');
+  assert.ok(gate < body.indexOf('await loadReleases(slug)'), 'the feed looks a release up before the paywall');
+  assert.ok(gate < body.indexOf('await fetch('), 'the feed reads R2 before the paywall, leaking that an update exists');
+});
+
+test('the gated feed mints under the same cap and audit as every other grant', () => {
+  const body = route.slice(route.indexOf("updateGrantRouter.get('/:slug/feed/:file'"));
+  assert.ok(body.indexOf('enforceGrantCap(req, userId)') > -1, 'the feed mints grants with no per-account cap');
+  assert.ok(body.indexOf('auditGrant(req,') > -1, 'the feed mints grants with no audit row');
+  const mint = body.indexOf('mintDownloadGrant(');
+  assert.ok(body.slice(mint, body.indexOf(')', mint)).includes('version: release.version'), 'the feed grant is not bound to the resolved version');
+});
+
+test('the feed rewrite points every file at the grant route and keeps the checksum', async () => {
+  const { rewriteFeed } = await import('../src/server/routes/productDownloadRoutes.js');
+  const feed = "version: 0.42.22\nfiles:\n  - url: v0.42.22/XENO Canvas Setup 0.42.22.exe\n    sha512: ABC==\n    size: 135276996\npath: v0.42.22/XENO Canvas Setup 0.42.22.exe\nsha512: ABC==\nreleaseDate: '2026-10-25T00:23:30.908Z'\n";
+  const out = rewriteFeed(feed, { slug: 'canvas', os: 'windows', version: '0.42.22', grant: 'g.1' });
+  assert.ok(out, 'a matching feed was refused');
+  assert.equal((out.match(/\/product\/canvas\/download\/win\/0\.42\.22\?grant=g\.1/g) || []).length, 2, 'not every url/path was rewritten');
+  assert.ok(!out.includes('v0.42.22/XENO'), 'a public CDN path survived the rewrite');
+  assert.equal((out.match(/sha512: ABC==/g) || []).length, 2, 'the checksum the updater verifies was changed');
+  assert.ok(out.includes('size: 135276996'), 'the size was changed');
+  assert.equal(rewriteFeed(feed, { slug: 'canvas', os: 'windows', version: '0.42.23', grant: 'g' }), null,
+    'a feed naming another version than the release was served anyway');
+});
