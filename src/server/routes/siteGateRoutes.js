@@ -67,28 +67,43 @@ export function createSiteGateRouter({ env = process.env, attempt = createAttemp
   const secret = env.SITE_GATE_SECRET || env.JWT_SECRET;
   const code = String(env.SITE_GATE_CODE || '');
 
+  // A code LINK opened by someone already let in still counts as the link being used (see noteLinkOpened). Only on an
+  // allowed request: a refused one is answered by Coming soon, which redeems the code through POST /unlock itself.
+  const noteLink = async (req) => {
+    const linked = codes.linkedCodeOf ? codes.linkedCodeOf(req.headers['x-original-uri']) : null;
+    if (!linked) return;
+    await codes.noteLinkOpened(req.db, linked, accessCodes.countryOf(req), req.browserSession?.userId || req.user?.id || null)
+      .catch(() => console.error('[site-gate] could not record a code link'));
+  };
+
   router.get('/check', async (req, res) => {
     res.set('cache-control', 'no-store');
     if (env.SITE_GATE !== 'on') return res.status(204).end();
+    const allowed = await gateDecision(req);
+    if (allowed) await noteLink(req);
+    return res.status(allowed ? 204 : 401).end();
+  });
+
+  /** true = let in. Fail CLOSED: an error must never open the site. */
+  async function gateDecision(req) {
     const cookie = readCookie(req.headers.cookie, gateCookieName(env));
-    if (gateCookieValid(cookie, code, secret)) return res.status(204).end();
+    if (gateCookieValid(cookie, code, secret)) return true;
     const userId = req.browserSession?.userId;
     const codeId = codeCookieId(cookie, secret);
     try {
       // A per-person code's cookie: valid only while that code is (re-read every time, so revoking it shuts the door).
       if (codeId && await codes.codeIsLive(req.db, codeId)) {
         if (userId) await codes.noteAccount(req.db, codeId, userId).catch(() => {});
-        return res.status(204).end();
+        return true;
       }
-      if (!userId) return res.status(401).end();
+      if (!userId) return false;
       const { rows } = await req.db.query('SELECT email, role, is_active, status FROM users WHERE id = $1', [userId]);
-      return res.status(hasSiteAccess(rows[0], parseAllow(env.SITE_GATE_ALLOW)) ? 204 : 401).end();
+      return hasSiteAccess(rows[0], parseAllow(env.SITE_GATE_ALLOW));
     } catch (e) {
-      // Fail CLOSED: an error must never open the site.
       console.error('[site-gate]', e.message);
-      return res.status(401).end();
+      return false;
     }
-  });
+  }
 
   const cookieOpts = (maxAge) => ({ httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge });
 

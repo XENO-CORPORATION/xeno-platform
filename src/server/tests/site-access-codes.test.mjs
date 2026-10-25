@@ -77,6 +77,22 @@ async function main() {
     check((await req('POST', '/g/unlock', { body: { code: pagesOnly.code } })).status === 401, 'max uses is enforced');
     check(await checkPages(pc) === 204, 'a cookie already issued is not a new use');
 
+    // ── a code LINK opened by someone already let in (owner, 2026-10-25) ──
+    const linkCode = await (await req('POST', '/g/codes', { body: { label: 'Link opened by staff', days: 30 }, as: admin })).json();
+    const viaLink = (cookie, uri, country) => fetch(`${base}/g/check`, { headers: { ...(cookie ? { cookie } : {}), 'x-original-uri': uri, ...(country ? { 'cf-ipcountry': country } : {}) } }).then((r) => r.status);
+    const openedOf = async (id) => (await (await req('GET', `/g/codes/${id}/events`, { as: admin })).json()).events.filter((e) => e.event === 'opened');
+    check(await viaLink(c1, `/?code=${encodeURIComponent(linkCode.code)}`, 'RO') === 204, 'a visitor already let in opens a code link and is let in');
+    let opened = await openedOf(linkCode.accessCode.id);
+    check(opened.length === 1 && opened[0].via === 'link' && opened[0].country === 'RO', 'the link is recorded as opened, by link, with the country');
+    const listed = (await (await req('GET', '/g/codes', { as: admin })).json()).codes.find((c) => c.id === linkCode.accessCode.id);
+    check(listed.opened === 1 && listed.uses === 0, 'the list shows it opened, and it spent no use');
+    await viaLink(c1, `/?code=${encodeURIComponent(linkCode.code)}`, 'RO');
+    check((await openedOf(linkCode.accessCode.id)).length === 1, 'a reload within ten minutes is the same visit');
+    await viaLink(c1, '/?code=XENO-AAAAA-AAAAA-AAAAA-AAAAA', 'RO');
+    check((await pool.query(`SELECT count(*)::int AS n FROM site_access_code_events WHERE event = 'opened'`)).rows[0].n === 1, 'an unknown code records nothing');
+    check(await viaLink(null, `/?code=${encodeURIComponent(linkCode.code)}`, 'RO') === 401, 'a visitor not let in still gets Coming soon (which redeems it)');
+    check((await openedOf(linkCode.accessCode.id)).length === 1, 'and a refused request records no opening');
+
     // which account browsed under the code
     await req('GET', '/g/check', { cookie: c1 });
     // (browserSession is not wired in this harness; record directly through the service it calls)
