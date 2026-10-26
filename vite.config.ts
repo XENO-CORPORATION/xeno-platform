@@ -64,6 +64,8 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 4000,
+    // the tool page (tool-host.html, src/toolHost) is its own entry: XENO tools run there, not in the app bundle
+    rollupOptions: { input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), toolHost: fileURLToPath(new URL('./tool-host.html', import.meta.url)) } },
   },
   server: {
     host: true, // Accept connections from any host

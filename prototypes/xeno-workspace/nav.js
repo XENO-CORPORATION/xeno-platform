@@ -64,13 +64,12 @@ window.XENO_MODE_ZONES = {
     { id: 'compute', label: 'Compute', icon: 'server', blurb: 'Machines for agents, billed by the hour', products: [] },
     { id: 'sdks', label: 'SDKs', icon: 'download', blurb: 'Runtimes and libraries', products: ['rt', 'lib'] },
   ],
-  tools: [
-    { id: 'image', label: 'Image', icon: 'spark', blurb: 'Image tools', products: ['tool-resize', 'tool-bg', 'tool-upscale'] },
-    { id: 'video', label: 'Video', icon: 'film', blurb: 'Video tools', products: ['tool-trim'] },
-    { id: 'audio', label: 'Audio', icon: 'play', blurb: 'Audio tools', products: ['tool-transcribe'] },
-    { id: 'documents', label: 'Documents', icon: 'doc', blurb: 'Document tools', products: ['tool-pdfmerge'] },
-    { id: 'data', label: 'Data', icon: 'grid', blurb: 'Data tools', products: ['tool-csv'] },
-    { id: 'developer', label: 'Developer', icon: 'box', blurb: 'Developer tools', products: ['tool-json'] },
+  tools: [  // the real XENO tools (platform-tools.js): the same signed packages Hub runs, on the web
+    { id: 'image', label: 'Image', icon: 'spark', blurb: 'Resize, cut out, upscale and convert images', products: [] },
+    { id: 'design', label: 'Design', icon: 'grid', blurb: 'Fonts, UI kits, materials and styles', products: [] },
+    { id: 'video', label: 'Video', icon: 'film', blurb: 'Motion and animation', products: [] },
+    { id: 'audio', label: 'Audio', icon: 'play', blurb: 'Transcribe speech', products: [] },
+    { id: 'documents', label: 'Documents', icon: 'doc', blurb: 'PDF and LaTeX', products: [] },
   ],
   // Research: one product, five areas — what a lab does with a result, in the order it does it
   research: [
