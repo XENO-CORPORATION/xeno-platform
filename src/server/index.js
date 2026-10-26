@@ -23,6 +23,7 @@ import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
 import { startAutomateWorker } from './workers/automateWorker.js';
+import { startComputeMeter } from './workers/computeMeter.js';
 import messageRoutes from './routes/messageRoutes.js';
 import commsIdentityRoutes from './routes/commsIdentityRoutes.js';
 import mailRoutes from './routes/mailRoutes.js';
@@ -157,6 +158,7 @@ import forumRoutes from './routes/forumRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
 import releaseRoutes from './routes/releaseRoutes.js';
 import customersRoutes from './routes/customersRoutes.js';
+import computeRoutes from './routes/computeRoutes.js';
 import schedulingRoutes from './routes/schedulingRoutes.js';
 import { sendDueReminders as sendSchedulingReminders } from './services/scheduling.js';
 import { requireActivated } from './services/accountActivation.js';
@@ -904,6 +906,7 @@ app.use('/api/support', databaseMiddleware, supportRoutes);
 app.use('/api/releases', databaseMiddleware, releaseRoutes);
 // XENO Customers — Corpo › Customers (customers.js): the workspace CRM; agents read and draft, people keep and delete.
 app.use('/api/customers', databaseMiddleware, customersRoutes);
+app.use('/api/compute', databaseMiddleware, computeRoutes);
 // Corpo › Scheduling (services/scheduling.js): workspace booking pages + public guest booking/manage pages + ICS feed.
 app.use('/api/scheduling', databaseMiddleware, schedulingRoutes);
 // Agent identity — a PLATFORM primitive shared with Marketplace, Company and
@@ -4236,6 +4239,8 @@ backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, del
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
 // Dev › Automate: the ONE delivery loop for workspace workflows (schedules due → runs queued → the XENO Workflow runner)
 backgroundLeader.whenLeader(() => startAutomateWorker(pool));
+// XENO Compute: settle running machines' hours and reserve the next, on the leader only (workers/computeMeter.js)
+backgroundLeader.whenLeader(() => startComputeMeter(pool));
 // Invitation mail is CLAIMED durably before it is dispatched, so a crash between the
 // commit and the send cannot lose an invitation — which the previous inline send could.
 // Leader-elected because two replicas draining one queue would double-send: the claim

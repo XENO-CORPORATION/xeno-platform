@@ -61,6 +61,7 @@ window.XENO_MODE_ZONES = {
     { id: 'automate', label: 'Automate', icon: 'flow', blurb: 'Workflows and apps', products: ['workflow', 'apps'],
       work: ['Runs', [['Nightly asset sync', 'Done · 1 cr', 'workflow'], ['Weekly report', 'Mon 09:00', 'workflow'], ['Lead enrich', 'Failed', 'workflow']]] },
     { id: 'build', label: 'Build', icon: 'box', blurb: 'Engine, Shell and Spawn', products: ['engine', 'shell', 'spawn'] },
+    { id: 'compute', label: 'Compute', icon: 'server', blurb: 'Machines for agents, billed by the hour', products: [] },
     { id: 'sdks', label: 'SDKs', icon: 'download', blurb: 'Runtimes and libraries', products: ['rt', 'lib'] },
   ],
   tools: [
