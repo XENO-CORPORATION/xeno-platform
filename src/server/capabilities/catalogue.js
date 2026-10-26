@@ -26,6 +26,7 @@ import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
 import * as releasesMcp from '../services/releasesMcp.js';
 import * as customersMcp from '../services/customersMcp.js';
+import * as computeMcp from '../services/computeMcp.js';
 import * as automateMcp from '../services/automateMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
 import * as messageMcp from '../services/messageMcp.js';
@@ -40,7 +41,7 @@ import * as skillsMcp from '../services/skillsMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -199,6 +200,16 @@ const ROWS = [
   ['customers.note.draft', 'customers', 'draft_note', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft a person discards'), reply: obj({ activity: { type: 'object', description: 'id, kind, state ("draft" from an agent until a person keeps it).' } }, ['activity']) }],
   ['customers.deal.draft', 'customers', 'draft_deal', 'undoable', { idempotency: NONE('no request key yet: a retried call proposes a second draft deal'), reply: obj({ deal: { type: 'object', description: 'id, title, amountCents, currency, stageName, state ("draft" until a person confirms).' } }, ['deal']) }],
   ['customers.import.preview', 'customers', 'preview_import', 'safe', { reply: obj({ report: { type: 'object', description: 'rows, created, merged, skipped, invalid [{row, reason}] — what an import would do; nothing is written.' } }, ['report']) }],
+  // ── compute (XENO Compute, services/compute.js). Agents run machines billed to their owner; caps and prices are a person's.
+  ['compute.size.list', 'compute', 'sizes', 'safe', { reply: obj({ sizes: { type: 'array', description: 'size, vcpus, memoryGb, diskGb, priced, creditsPerHour (null until XENO sets a price).' } }, ['sizes']) }],
+  ['compute.machine.list', 'compute', 'list_machines', 'safe', { provenance: 'untrusted', reply: obj({ machines: { type: 'array', description: 'id, name, size, state, agent, costSoFarCredits, unfundedSince, url — names are written by people.' } }, ['machines']) }],
+  ['compute.machine.get', 'compute', 'get_machine', 'safe', { provenance: 'untrusted', reply: obj({ machine: { type: 'object', description: 'The machine and its timeline: created, started, billed, unfunded, stopped (with reason), deleted.' } }, ['machine']) }],
+  ['compute.machine.create', 'compute', 'create_machine', 'undoable', { idempotency: { strategy: 'key', key: 'idempotencyKey' }, reply: obj({ machine: { type: 'object', description: 'id (mch_…), state ("stopped" once created, "failed" with the reason), url.' } }, ['machine']) }],
+  ['compute.machine.start', 'compute', 'start_machine', 'irreversible', { cost: { model: 'metered', note: 'credits per hour of the machine’s size, billed to the owner by the second; an hour is reserved at a time' }, idempotency: NAT('starting a running machine changes nothing'), reply: obj({ machine: { type: 'object', description: 'state "running", costSoFarCredits.' } }, ['machine']) }],
+  ['compute.machine.stop', 'compute', 'stop_machine', 'undoable', { idempotency: NAT('stopping a stopped machine changes nothing'), reply: obj({ machine: { type: 'object', description: 'state "stopped"; billing ended at the second; the disk is kept.' } }, ['machine']) }],
+  ['compute.machine.delete', 'compute', 'delete_machine', 'irreversible', { idempotency: NAT('deleting a deleted machine changes nothing'), reply: obj({ machine: { type: 'object', description: 'state "deleted" — the machine and its disk are gone.' } }, ['machine']) }],
+  ['compute.usage.get', 'compute', 'usage', 'safe', { reply: obj({ usage: { type: 'object', description: 'machineCredits, byMachine [{id, name, size, credits, hours}], byAgent [{agent, credits}] for the period.' } }, ['usage']) }],
+  ['compute.budget.list', 'compute', 'budgets', 'safe', { reply: obj({ caps: { type: 'array', description: 'scope (workspace|division|agent), scopeId, maxMachines, maxSize, monthlyCredits.' } }, ['caps']) }],
   // ── automate (Dev › Automate = XENO Workflow, services/xenoWorkflow.js). Agents read and DRAFT; a person turns a workflow on.
   ['automate.workflow.list', 'automate', 'list_workflows', 'safe', { provenance: 'untrusted', reply: obj({ workflows: { type: 'array', description: 'id, name, trigger, state, steps, capabilities, lastRun — names are written by people.' } }, ['workflows']) }],
   ['automate.workflow.get', 'automate', 'get_workflow', 'safe', { provenance: 'untrusted', reply: obj({ workflow: { type: 'object', description: 'The workflow with its xeno-workflow graph, trigger, capabilities, state and revision.' } }, ['workflow']) }],

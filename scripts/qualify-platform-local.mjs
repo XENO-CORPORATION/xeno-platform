@@ -183,6 +183,8 @@ const BACKEND_SUITES = [
   'workspace-agent-surface',
   // On disk and run by NOTHING until 2026-10-20 (the gates-reachable gate was red on main): register them here
   'marketplace-seller-workspace', 'ownership-contract', 'ownership-principles', 'plan-on-workspace', 'service-account-grants',
+  // XENO Compute (2026-10-26): machine time on the ledger — hourly holds, settles, caps, the meter
+  'compute',
 ];
 
 const BACKEND_EVIDENCE = {

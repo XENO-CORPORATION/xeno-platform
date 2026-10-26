@@ -31,6 +31,7 @@ import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
 import * as releasesMcp from './releasesMcp.js';
 import * as customersMcp from './customersMcp.js';
+import * as computeMcp from './computeMcp.js';
 import * as automateMcp from './automateMcp.js';
 import * as publishMcp from './publishMcp.js';
 import * as messageMcp from './messageMcp.js';
@@ -160,6 +161,14 @@ export const SERVICES = Object.freeze([
     tools: () => customersMcp.TOOLS,
     call: (db, actor, name, args) => customersMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof customersMcp.CustomersMcpError,
+  },
+  // XENO Compute (computeMcp.js): machines for agents, billed to their owner by the hour. No tool sets a cap or a price.
+  {
+    category: 'compute', title: 'Compute', version: '1.0.0', timeoutMs: 40_000,
+    description: 'Compute: list, create, start, stop and delete machines that work for you, read their cost and the workspace’s machine budgets.',
+    tools: () => computeMcp.TOOLS,
+    call: (db, actor, name, args) => computeMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof computeMcp.ComputeMcpError,
   },
   // XENO Automate (automateMcp.js) = XENO Workflow: read workflows and runs, DRAFT workflows a person turns on, turn one off.
   {

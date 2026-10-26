@@ -2130,6 +2130,132 @@
    ]
   },
   {
+   "name": "compute.size.list",
+   "wire": "compute__size__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_sizes"
+   ]
+  },
+  {
+   "name": "compute.machine.list",
+   "wire": "compute__machine__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_list_machines"
+   ]
+  },
+  {
+   "name": "compute.machine.get",
+   "wire": "compute__machine__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_get_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.create",
+   "wire": "compute__machine__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_create_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.start",
+   "wire": "compute__machine__start",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_start_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.stop",
+   "wire": "compute__machine__stop",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_stop_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.delete",
+   "wire": "compute__machine__delete",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_delete_machine"
+   ]
+  },
+  {
+   "name": "compute.usage.get",
+   "wire": "compute__usage__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_usage"
+   ]
+  },
+  {
+   "name": "compute.budget.list",
+   "wire": "compute__budget__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_budgets"
+   ]
+  },
+  {
    "name": "automate.workflow.list",
    "wire": "automate__workflow__list",
    "version": "1.0.0",

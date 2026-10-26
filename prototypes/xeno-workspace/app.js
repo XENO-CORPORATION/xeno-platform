@@ -75,6 +75,7 @@
     play: '<path d="M8 5.5v13l10-6.5z"/>',
     flow: '<path d="M4 5h6v5H4zM14 14h6v5h-6zM7 10v4.5a2 2 0 0 0 2 2h5"/>',
     box: '<path d="M12 3.5 20 8v8l-8 4.5L4 16V8z"/><path d="M4 8l8 4.5L20 8M12 12.5v8"/>',
+    server: '<path d="M4.5 4.5h15v6h-15zM4.5 13.5h15v6h-15z"/><path d="M8 7.5h.01M8 16.5h.01M12 7.5h4M12 16.5h4"/>',
     grid: '<path d="M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z"/>',
     download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/>',
     activity: '<path d="M3.5 12h4l2.5-6 4 12 2.5-6h4"/>',
