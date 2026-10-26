@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>XENO Tool</title>
+    <!-- The tool page (src/toolHost). Its import map must come before any module: a tool package's bare imports
+         resolve to the page's own React and kit (scripts/gen-tool-host-shims.mjs writes the files and checks this map). -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "/tool-host/modules/react@18.2.0.js",
+          "react/jsx-runtime": "/tool-host/modules/react-jsx-runtime@18.2.0.js",
+          "@xeno-tools/kit": "/tool-host/modules/xeno-tools-kit@1.js"
+        }
+      }
+    </script>
+    <style>
+      html, body, #root { height: 100%; margin: 0; background: #0b0b0b; color: #ece7df; font-family: Inter, system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/toolHost/main.tsx"></script>
+  </body>
+</html>

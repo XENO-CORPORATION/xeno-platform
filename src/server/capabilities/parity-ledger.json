@@ -158,7 +158,9 @@
     "xenoTasksRoutes.js": "tasks",
     "youtubeRoutes.js": "studio",
     "platform-compute.js": "compute",
-    "spawnSkillRoutes.js": "agents"
+    "spawnSkillRoutes.js": "agents",
+    "toolsRoutes.js": "platform",
+    "platform-tools.js": "workspace-ui"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -10281,6 +10283,27 @@
       "class": "reversible",
       "scope": "agents:write",
       "because": "XENO Spawn's view of the skills library; agents already reach skills through the skills.* capabilities"
+    },
+    "route:toolsRoutes.js:GET /": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "the public tool registry and its verified package bytes, mirrored from R2; nothing to act on"
+    },
+    "route:toolsRoutes.js:GET /:id/:version/:file": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "the public tool registry and its verified package bytes, mirrored from R2; nothing to act on"
+    },
+    "ui:platform-tools.js:data-tl-page=ready": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "which tool page is showing; a tool's own work goes through the platform's metered AI and image routes"
     }
   }
 }
