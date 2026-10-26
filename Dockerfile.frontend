@@ -57,7 +57,7 @@ COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY vite.config.ts ./
 COPY tailwind.config.js postcss.config.js ./
 COPY components.json ./
-COPY index.html ./
+COPY index.html tool-host.html ./
 
 # Copy static assets
 COPY public/ ./public/

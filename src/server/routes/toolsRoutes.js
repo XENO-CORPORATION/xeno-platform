@@ -2,6 +2,7 @@
  * /api/tools — XENO tools on the platform (services/toolPackages.js).
  *
  *   GET /                         every tool in the registry, with where it runs (web or needs Hub for …)
+ *   GET /suggest?q=…              the tools that fit what a person typed (best first)
  *   GET /:id/:version/:file       one file of a VERIFIED package — the only place the tool page loads tool code from
  *
  * Public reads, like the registry on R2 they mirror: nothing here is private. What a tool DOES (AI, image
@@ -16,6 +17,11 @@ const fail = (res, e) => res.status(e.status || 500).json({ success: false, erro
 
 router.get('/', async (_req, res) => {
   try { res.set('Cache-Control', 'public, max-age=60'); res.json({ success: true, tools: await tools.listTools() }); }
+  catch (e) { console.error('[tools]', e.message); fail(res, e); }
+});
+
+router.get('/suggest', async (req, res) => {
+  try { res.json({ success: true, tools: await tools.suggestTools(String(req.query.q || '').slice(0, 500)) }); }
   catch (e) { console.error('[tools]', e.message); fail(res, e); }
 });
 

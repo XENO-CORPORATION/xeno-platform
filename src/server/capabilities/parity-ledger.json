@@ -10304,6 +10304,13 @@
       "class": "safe",
       "scope": "none",
       "because": "which tool page is showing; a tool's own work goes through the platform's metered AI and image routes"
+    },
+    "route:toolsRoutes.js:GET /suggest": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "public suggestions over the public tool registry; nothing to act on"
     }
   }
 }
