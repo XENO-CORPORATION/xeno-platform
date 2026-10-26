@@ -31,11 +31,10 @@ import type { ProductContent } from './_types';
  *   · sorting/filtering — the engine implements it; there is no UI entry point
  * If you wire any of these up, verify in the asar and THEN edit this file.
  *
- * ⚠ autoUpdates is FALSE and that is not a placeholder: `electron-updater` is a
- * declared dependency but is NEVER imported anywhere in src/. latest.yml IS
- * published to R2 and resolves, but nothing in the app polls it, so an install can
- * only move forward by reinstalling (or via XENO Hub, which polls version.json).
- * Do not flip this to true until something actually calls autoUpdater. */
+ * autoUpdates is TRUE from 0.3.0: `src/main/updater.ts` polls latest.yml and was
+ * verified running from the PACKAGED asar (scripts/smoke-door.mjs `updater` gate,
+ * 2026-10-26). Through 0.2.x nothing called autoUpdater, so 0.2.x installs must
+ * reinstall once to reach 0.3.0. */
 const sheets: ProductContent = {
   slug: 'sheets',
   hero: {
@@ -158,9 +157,9 @@ const sheets: ProductContent = {
   },
   specs: [
     { label: 'Platform', value: 'Windows x64 only (no macOS or Linux build)' },
-    { label: 'Formula engine', value: 'HyperFormula' },
+    { label: 'Formula engine', value: 'XENO formula engine · 408 functions' },
     { label: 'Formats', value: '.xsheet · .xlsx · .csv · PDF export' },
-    { label: 'Status', value: 'Experimental 0.2.0 · unsigned' },
+    { label: 'Status', value: 'Experimental 0.3.0 · unsigned' },
     { label: 'Updates', value: 'Manual — this build does not self-update' },
   ],
   faq: [
@@ -180,8 +179,8 @@ const sheets: ProductContent = {
   // derived from the catalog by experimentalNotice() and already rendered above this
   // block. See the contract on `downloadNotice` in _types.ts.
   downloadNotice:
-    'This build does NOT update itself. XENO Sheets 0.2.0 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. Windows x64 is the only build we have produced; there is no macOS or Linux installer. Pivot tables, sorting and filtering are not wired up in this build, and the .xsheet document format is not frozen yet, so keep a copy of anything important. AI features require a XENO account and draw on credits.',
-  autoUpdates: false,
+    'XENO Sheets needs a XENO account with an active plan: it opens on the XENO sign-in, in your browser, and does not need XENO Hub. From 0.3.0 it updates itself; if you have 0.2.x, install 0.3.0 over it once. Windows x64 is the only build we have produced; there is no macOS or Linux installer. Pivot tables, sorting and filtering are not wired up in this build, and the .xsheet document format is not frozen yet, so keep a copy of anything important. AI features require a XENO account and draw on credits.',
+  autoUpdates: true,
 };
 
 export default sheets;
