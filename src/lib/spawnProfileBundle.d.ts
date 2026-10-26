@@ -6,7 +6,7 @@ export interface SpawnProfileBundle {
   name: string;
   vendor: SpawnProfileVendor;
   provider: SpawnProfileProvider;
-  agentId: null;
+  agentId: string | null;
   files: Record<string, string>;
 }
 export const SPAWN_PROFILE_VENDORS: SpawnProfileVendor[];
@@ -16,3 +16,4 @@ export function buildSpawnProfileBundle(input: {
   vendor: SpawnProfileVendor;
   provider: SpawnProfileProvider;
 }): SpawnProfileBundle;
+export function renameSpawnProfileBundle(bundle: SpawnProfileBundle, name: string): SpawnProfileBundle;
