@@ -444,7 +444,12 @@ export async function importFromCorpus(db, me, { name, sidecar, revisions = null
   });
   const decode = (b64, what) => { if (typeof b64 !== 'string' || !B64.test(b64) || b64.length % 4) refuse([`${what} did not arrive as base64`]); return Buffer.from(b64, 'base64'); };
   if (!Array.isArray(files) || !Array.isArray(objects) || objects.length > 4096) refuse(['files and objects must be lists']);
-  const current = files.map((f) => ({ rel: String(f && f.rel), bytes: decode(f && f.base64, String(f && f.rel)) }));
+  // the working copy arrives as Corpus stores it, `<name>/<rel>` (the docstring above); a bundle-relative list is also
+  // accepted. Strip the folder before Corpus's verifyBundle, and refuse a list that mixes the two or leaves the folder.
+  const rels = files.map((f) => String(f && f.rel));
+  const pre = `${name}/`, prefixed = rels.filter((r) => r.startsWith(pre)).length;
+  if (prefixed && prefixed !== rels.length) refuse(rels.filter((r) => !r.startsWith(pre)).map((r) => `FILE_OUTSIDE_SKILL: ${r} is not inside ${name}/`));
+  const current = files.map((f, i) => ({ rel: prefixed ? rels[i].slice(pre.length) : rels[i], bytes: decode(f && f.base64, rels[i]) }));
   const cur = verifyBundle(current, { bundleDigest: rec.bundleDigest, files: rec.files });
   if (!cur.ok) refuse(cur.problems);
   const store = new Map();
