@@ -66,6 +66,22 @@ try {
   ok(await t2.p.$('[data-tl-tool="asset-extractor"]') !== null, 'a fresh tab on the address lands on the tool');
   await t2.p.close();
 
+  // xenosystem.ai/tools: say what you want, get the tools for it; Create my own says coming soon; a card opens /tools/<id>
+  const t4 = await open('/tools');
+  for (let i = 0; i < 20 && !(await t4.p.$('[data-tools-card]')); i++) await wait(300);
+  ok(await t4.p.$('[data-tools-picker] [data-tools-all] [data-tools-card="whisper"]') !== null, '/tools lists every tool');
+  await t4.p.type('[data-tools-input]', 'remove the background from my logo'); await t4.p.keyboard.press('Enter'); await wait(1500);
+  const first = await t4.p.$eval('[data-tools-results] [data-tools-card]', (e) => e.dataset.toolsCard).catch(() => null);
+  ok(first === 'background-removal', `what you type picks the tool for it (${first})`);
+  await t4.p.click('[data-tools-create]'); await wait(200);
+  ok(await t4.p.$('[data-tools-soon="shown"]') !== null, 'Create my own says it is coming soon');
+  await shot(t4.p, 'tools-site');
+  await t4.p.click('[data-tools-results] [data-tools-card="background-removal"]'); await wait(3500);
+  const site = await t4.p.evaluate(() => ({ path: location.pathname, m: document.querySelector('[data-tool-mounted]')?.dataset.toolMounted, back: !!document.querySelector('[data-tools-back]') }));
+  ok(site.path === '/tools/background-removal' && site.m === 'background-removal' && site.back, `a tool opens full page at /tools/<id> (${JSON.stringify(site)})`);
+  ok(!t4.errs.length, `no page errors on the tools site (${t4.errs.join(' | ')})`);
+  await t4.p.close();
+
   // a changed byte: the server refuses the package, so the page has nothing to run
   const real = globalThis.fetch;
   toolPkgs.setFetch(async (u, ...a) => { const r = await real(u, ...a); if (!String(u).endsWith('/index.js')) return r; const buf = Buffer.from(await r.arrayBuffer()); return new Response(Buffer.concat([buf, Buffer.from('\n;alert(1)')]), { status: 200 }); });

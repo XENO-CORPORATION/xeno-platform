@@ -1,12 +1,15 @@
 /**
- * The tool page: /tool-host.html?tool=<id>&v=<version>. The workspace shows it in a frame
- * (prototypes/xeno-workspace/platform-tools.js). It loads ONE verified package from /api/tools and mounts it with
+ * The tool page. Two addresses, one page:
+ *   /tools                  the picker (Picker.tsx) — what do you want to do?   tools.xenosystem.ai redirects here
+ *   /tools/<id>             one tool, its newest version, full page
+ *   /tool-host.html?tool=<id>&v=<version>   one exact version, in the workspace's frame (platform-tools.js) It loads ONE verified package from /api/tools and mounts it with
  * the web ToolHost — the same way Hub mounts a runtime tool (xeno-hub tools/runtimeTools.ts), on the web.
  */
 import React, { useEffect, useState } from 'react';
 import * as ReactJsxRuntime from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
 import { createWebHost } from './webHost';
+import { Picker } from './Picker';
 import type { ToolModule, NotifyLevel } from './contract';
 
 // what the import map's shims hand a tool: this page's own React and the kit's runtime (defineTool)
@@ -17,8 +20,10 @@ import type { ToolModule, NotifyLevel } from './contract';
 };
 
 const params = new URLSearchParams(location.search);
-const toolId = params.get('tool') || '';
-const version = params.get('v') || '';
+const onSite = /^\/tools(\/|$)/.test(location.pathname);
+const toolId = onSite ? decodeURIComponent(location.pathname.split('/')[2] || '') : params.get('tool') || '';
+const pinned = onSite ? '' : params.get('v') || '';
+const framed = window.parent !== window;
 const SAFE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 function Toasts({ items }: { items: { id: number; level: NotifyLevel; message: string }[] }) {
@@ -31,7 +36,22 @@ function Toasts({ items }: { items: { id: number; level: NotifyLevel; message: s
   );
 }
 
+function Bar({ name }: { name: string }) {
+  if (framed) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#060606', fontSize: 13 }}>
+      <a href="/tools" data-tools-back style={{ color: '#948d83', textDecoration: 'none' }}>← All tools</a>
+      <span style={{ color: '#ece7df', fontWeight: 600 }}>{name}</span>
+    </div>
+  );
+}
+
 function App() {
+  if (onSite && !toolId) return <Picker onOpen={(id) => { location.href = '/tools/' + encodeURIComponent(id); }} />;
+  return <ToolPage />;
+}
+
+function ToolPage() {
   const [mod, setMod] = useState<ToolModule | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<{ id: number; level: NotifyLevel; message: string }[]>([]);
@@ -42,7 +62,12 @@ function App() {
   }));
 
   useEffect(() => {
-    if (!SAFE.test(toolId) || !SAFE.test(version)) { setError('No tool was named.'); return; }
+    (async () => {
+    let version = pinned;
+    if (SAFE.test(toolId) && !version) {
+      try { const j = await (await fetch('/api/tools')).json(); const t = (j.tools || []).find((x: { id: string; contract: string }) => x.id === toolId && x.contract === 'tool@1'); version = t ? t.version : ''; } catch { /* fall through to the error below */ }
+    }
+    if (!SAFE.test(toolId) || !SAFE.test(version)) { setError(toolId ? `There is no tool called ${toolId}.` : 'No tool was named.'); return; }
     const base = `/api/tools/${toolId}/${version}`;
     // the stylesheet first, so the tool never paints unstyled; both come only from the verified package
     const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = `${base}/index.css`;
@@ -50,14 +75,17 @@ function App() {
     import(/* @vite-ignore */ `${base}/index.js`)
       .then((m) => { const t = (m.default || m) as ToolModule; if (!t || !t.Component) throw new Error('This package is not a XENO tool.'); setMod(t); document.title = `${t.manifest?.name || toolId} — XENO`; window.parent?.postMessage({ type: 'xeno-tool:ready', tool: toolId }, location.origin); })
       .catch((e) => setError(`This tool could not be opened: ${e && e.message ? e.message : e}`));
+    })();
   }, []);
 
-  if (error) return <div data-tool-error style={{ padding: 32, color: '#948d83' }}>{error}</div>;
-  if (!mod) return <div data-tool-loading style={{ padding: 32, color: '#69635b' }}>Opening the tool…</div>;
+  if (error) return <><Bar name="" /><div data-tool-error style={{ padding: 32, color: '#948d83' }}>{error}</div></>;
+  if (!mod) return <><Bar name="" /><div data-tool-loading style={{ padding: 32, color: '#69635b' }}>Opening the tool…</div></>;
   const C = mod.Component;
+  const close = () => (framed ? window.parent.postMessage({ type: 'xeno-tool:close', tool: toolId }, location.origin) : (location.href = '/tools'));
   return (
-    <div data-tool-mounted={toolId} style={{ height: '100%' }}>
-      <C host={host} onClose={() => window.parent?.postMessage({ type: 'xeno-tool:close', tool: toolId }, location.origin)} />
+    <div data-tool-mounted={toolId} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Bar name={mod.manifest?.name || toolId} />
+      <div style={{ flex: 1, minHeight: 0 }}><C host={host} onClose={close} /></div>
       <Toasts items={toasts} />
     </div>
   );

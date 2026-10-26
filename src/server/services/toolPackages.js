@@ -110,3 +110,47 @@ export async function loadPackage(id, version) {
   verified.set(key, pkg);
   return pkg;
 }
+
+/**
+ * Which tools fit what a person typed ("make this logo transparent", "turn my voice memo into text"): each tool's
+ * name, description and the words people use for its job, scored by overlap. No model call, so it is free, instant and
+ * the same for everyone, signed in or not. The words per tool are hand-kept here; a tool missing from it still
+ * matches on its own name and description.
+ */
+const WORDS = {
+  'background-removal': 'background remove cutout cut out transparent png erase subject isolate',
+  'image-resize': 'resize size dimensions scale crop reframe banner thumbnail social linkedin instagram aspect fit',
+  upscaler: 'upscale enlarge sharpen bigger resolution 4k enhance blurry low res',
+  compressor: 'compress smaller file size optimize reduce weight jpg webp',
+  converter: 'convert format jpg png webp heic avif change file type',
+  'asset-extractor': 'sprite sheet tileset icons extract split grid crop assets game',
+  'capture-manager': 'screenshot capture screen annotate arrow markup',
+  'font-finder': 'font identify which font typeface what font',
+  'font-generator': 'font create typeface generate letters glyphs',
+  'hud-restyle': 'hud game ui restyle reskin theme',
+  'material-generator': 'material texture pbr seamless tile surface',
+  'ui-extractor': 'ui screenshot extract components design mockup',
+  'ui-asset-extractor': 'ui assets icons buttons extract export',
+  'motion-2d': 'animation animate motion video 2d explainer',
+  whisper: 'transcribe transcript speech text voice audio subtitles captions dictation meeting',
+  'pdf-merge': 'pdf merge combine join documents',
+  'latex-compiler': 'latex tex paper equation math compile',
+};
+const tokens = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 1);
+const STOP = new Set(['the', 'my', 'a', 'an', 'to', 'of', 'and', 'or', 'for', 'in', 'on', 'it', 'this', 'that', 'into', 'with', 'want', 'need', 'make', 'how', 'can', 'do', 'me', 'from', 'is', 'some']);
+export async function suggestTools(text, { limit = 6 } = {}) {
+  const list = (await listTools()).filter((t) => t.contract === 'tool@1');
+  const q = tokens(text).filter((w) => !STOP.has(w));
+  if (!q.length) return list.map((t) => ({ ...t, score: 0 }));
+  const scored = list.map((t) => {
+    const name = new Set(tokens(t.name)), words = new Set([...tokens(WORDS[t.id]), ...tokens(t.description), ...tokens(t.category)]);
+    let score = 0;
+    for (const w of q) {
+      if (name.has(w)) score += 3;
+      else if (words.has(w)) score += 2;
+      else if ([...words, ...name].some((x) => x.length > 3 && w.length > 3 && (x.startsWith(w) || w.startsWith(x)))) score += 1;
+    }
+    return { ...t, score };
+  });
+  return scored.filter((t) => t.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}

@@ -31,7 +31,7 @@ test('the trusted keys are Hub’s', () => {
   for (const k of T.TRUSTED_PUBLIC_KEYS) assert.ok(src.includes(k), 'Hub does not trust ' + k);
 });
 test('the shims on disk match the live modules, and tool-host.html carries the same import map', () => {
-  for (const [s, v] of Object.entries(SPECIFIERS)) assert.equal(fs.readFileSync(`${OUT}/${v.file}`, 'utf8'), shimSource(s, v.names), `${v.file} is stale: run node scripts/gen-tool-host-shims.mjs`);
+  for (const [s, v] of Object.entries(SPECIFIERS)) assert.equal(fs.readFileSync(`${OUT}/${v.file}`, 'utf8').replace(/\r\n/g, '\n'), shimSource(s, v.names), `${v.file} is stale: run node scripts/gen-tool-host-shims.mjs`);
   const html = fs.readFileSync(new URL('../tool-host.html', import.meta.url), 'utf8');
   const map = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(map, importMap());

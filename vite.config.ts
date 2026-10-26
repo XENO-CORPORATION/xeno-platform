@@ -30,7 +30,9 @@ if (!/^https?:\/\/[^\s]+$/i.test(developmentApiTarget)) {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), xenoWorkspace(fileURLToPath(new URL('.', import.meta.url)))],
+  plugins: [react(), xenoWorkspace(fileURLToPath(new URL('.', import.meta.url))),
+    // /tools and /tools/<id> are the tool page (nginx does the same in production: default.conf `location ^~ /tools`)
+    { name: 'xeno-tools-page', configureServer(server) { server.middlewares.use((req, _res, next) => { if (req.url && /^\/tools(\/[^.?]*)?(\?.*)?$/.test(req.url)) req.url = '/tool-host.html'; next(); }); } }],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
