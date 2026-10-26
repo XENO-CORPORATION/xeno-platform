@@ -92,6 +92,18 @@ async function main() {
     const wsImp = await call('POST', '/api/v2/spawn/skills/import', { tok: A, body: { ...corpusSkill(`teamimp-${n}`, [{ rel: 'SKILL.md', bytes: B(md(`teamimp-${n}`, 'x')) }]), workspaceId: ws } });
     check(wsImp.s === 403 || wsImp.s === 404, `a workspace they can only view refuses an import (${wsImp.s})`);
 
+    const pfx = (body) => ({ ...body, files: body.files.map((f) => ({ ...f, rel: `${body.name}/${f.rel}` })) });
+    const sm = `smoke-${n}`, smBody = pfx(corpusSkill(sm, [{ rel: 'SKILL.md', bytes: B(`---
+name: ${sm}
+description: The Spawn release smoke.
+---
+Nothing to do.
+`) }]));
+    const p1 = await call('POST', '/api/v2/spawn/skills/import', { tok: A, body: smBody });
+    check(p1.s === 201 && p1.j.skill.imported === 'new', `a record with Corpus's own <name>/ rels imports (${p1.s} ${p1.j && p1.j.error})`);
+    const mixed = { ...smBody, files: [...smBody.files, { rel: 'elsewhere.md', base64: B('x').toString('base64') }] };
+    const p2 = await call('POST', '/api/v2/spawn/skills/import', { tok: A, body: mixed });
+    check(p2.s === 422 && /FILE_OUTSIDE_SKILL/.test(JSON.stringify(p2.j)), 'a file outside <name>/ is refused');
     const isAgent = (await pool.query('SELECT 1 FROM agent_identities WHERE user_id = $1', [bot])).rows.length;
     if (isAgent) check((await call('GET', '/api/v2/spawn/skills', { tok: token(bot) })).s === 403, 'an agent token is refused');
     else console.log('  skip agent token (could not create an agent identity row here)');
