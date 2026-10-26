@@ -157,7 +157,32 @@ export function compareVersions(a, b) {
    * of "0.1.0" would admit every 0.1.0-beta it exists to exclude. */
   if (A.pre && !B.pre) return -1;
   if (!A.pre && B.pre) return 1;
-  if (A.pre && B.pre) return A.pre < B.pre ? -1 : A.pre > B.pre ? 1 : 0;
+  if (A.pre && B.pre) return comparePrerelease(A.pre, B.pre);
+  return 0;
+}
+
+/* SemVer 2.0.0 §11.4: prerelease identifiers compare one by one, NUMERIC ones
+ * numerically. Comparing the whole string made `beta.10` sort below `beta.9`,
+ * so a floor of `0.1.0-beta.9` would have refused the next beta it was meant
+ * to admit. Numeric < alphanumeric; a shorter set sorts first when all else ties. */
+function comparePrerelease(a, b) {
+  const A = a.split('.');
+  const B = b.split('.');
+  const len = Math.max(A.length, B.length);
+  for (let i = 0; i < len; i += 1) {
+    if (A[i] === undefined) return -1;
+    if (B[i] === undefined) return 1;
+    const an = /^\d+$/.test(A[i]);
+    const bn = /^\d+$/.test(B[i]);
+    if (an && bn) {
+      const d = Number(A[i]) - Number(B[i]);
+      if (d !== 0) return d < 0 ? -1 : 1;
+    } else if (an !== bn) {
+      return an ? -1 : 1;
+    } else if (A[i] !== B[i]) {
+      return A[i] < B[i] ? -1 : 1;
+    }
+  }
   return 0;
 }
 
