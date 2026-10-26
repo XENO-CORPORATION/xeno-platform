@@ -76,6 +76,12 @@ test('🔴 a prerelease sorts BELOW its release', () => {
   assert.ok(compareVersions('0.1.0-beta.2', '0.1.0') < 0);
   assert.ok(compareVersions('0.1.0', '0.1.0-beta.2') > 0);
   assert.ok(compareVersions('0.1.0-beta.1', '0.1.0-beta.2') < 0);
+  // 🔴 prerelease identifiers compare NUMERICALLY (SemVer §11.4): a beta.9 floor must admit beta.10
+  assert.ok(compareVersions('0.1.0-beta.10', '0.1.0-beta.9') > 0, 'beta.10 sorted below beta.9 — string comparison');
+  assert.ok(compareVersions('0.1.0-beta.9', '0.1.0-beta.10') < 0);
+  assert.ok(compareVersions('1.0.0-alpha', '1.0.0-alpha.1') < 0, 'a shorter identifier set sorts first');
+  assert.ok(compareVersions('1.0.0-1', '1.0.0-alpha') < 0, 'numeric identifiers sort below alphanumeric');
+  assert.ok(compareVersions('1.0.0-alpha.beta', '1.0.0-beta') < 0);
 });
 
 /* ── 3 · When it fires ───────────────────────────────────────────────────── */
