@@ -138,6 +138,7 @@ import oauth2Routes from './routes/oauth2Routes.js';
 import shellSessionRoutes from './routes/shellSessionRoutes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
 import spawnProfileRoutes from './routes/spawnProfileRoutes.js';
+import spawnSkillRoutes from './routes/spawnSkillRoutes.js';
 import spawnDeviceRoutes from './routes/spawnDeviceRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
@@ -765,6 +766,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
   app.use('/api/v2/spawn/profiles', databaseMiddleware, oidcAuth, spawnProfileRoutes);
+  app.use('/api/v2/spawn/skills', databaseMiddleware, oidcAuth, spawnSkillRoutes);
   app.use('/api/v2/spawn/devices', databaseMiddleware, oidcAuth, spawnDeviceRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
   // Per-product inference routing + the provider-key vault.

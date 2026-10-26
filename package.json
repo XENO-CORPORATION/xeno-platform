@@ -108,6 +108,7 @@
     "test:agent-overview": "node src/server/tests/agent-overview.test.mjs",
     "test:agent-identity": "node src/server/tests/agent-identity.test.mjs",
     "test:skills-library": "node src/server/tests/skills-library.test.mjs",
+    "test:spawn-skills": "node src/server/tests/spawn-skills.test.mjs",
     "test:marketplace-skills": "node src/server/tests/marketplace-skills.test.mjs",
     "test:skills-corpus-import": "node src/server/tests/skills-corpus-import.test.mjs",
     "test:project-files-tab": "node --test scripts/project-files-tab.test.mjs",
