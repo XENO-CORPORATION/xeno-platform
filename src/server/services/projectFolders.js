@@ -64,6 +64,34 @@ export async function projectFolder(db, userId, app, projectId, need = 'view') {
   return folder;
 }
 
+/**
+ * Every project folder the person can open: their own, their workspaces', and personal ones shared with them directly.
+ * The candidates are narrowed in SQL; each one is then decided by Storage's own `folderAccess`, so this list can never
+ * show a folder that opening it would refuse. Newest activity first.
+ */
+export async function listProjectFolders(db, userId) {
+  const { rows } = await db.query(
+    `SELECT pf.app, pf.project_id, pf.folder_id, pf.created_at, w.name AS workspace_name,
+            (SELECT max(f.updated_at) FROM project_files f WHERE f.app = pf.app AND f.project_id = pf.project_id) AS files_updated_at
+       FROM project_folders pf
+       JOIN storage_folders sf ON sf.id = pf.folder_id
+       LEFT JOIN workspaces w ON w.id = sf.workspace_id
+      WHERE (sf.workspace_id IS NULL AND sf.owner_user_id = $1)
+         OR (sf.workspace_id IS NOT NULL AND EXISTS (SELECT 1 FROM relationship_tuples rt WHERE rt.object_type = 'workspace'
+               AND rt.object_id = sf.workspace_id::text AND rt.subject_type = 'user' AND rt.subject_id = $1::text))
+         OR EXISTS (SELECT 1 FROM storage_access a WHERE a.kind = 'folder' AND a.user_id = $1 AND a.target_id = sf.id)`, [userId]);
+  const out = [];
+  for (const r of rows) {
+    const folder = await folderAccess(db, userId, r.folder_id, 'view');
+    if (!folder) continue;
+    const updatedAt = r.files_updated_at || r.created_at;
+    out.push({ app: r.app, projectId: r.project_id, folderId: folder.id, name: folder.name, workspaceId: folder.workspace_id || null,
+      workspaceName: folder.workspace_id ? r.workspace_name || null : null, shared: !folder.workspace_id && folder.owner_user_id !== userId,
+      updatedAt: updatedAt ? new Date(updatedAt).toISOString() : null });
+  }
+  return out.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
 /** Who a change in the project folder is made as: the workspace member themselves in a team folder, else the owner. */
 const actorFor = (folder, userId) => (folder.workspace_id ? userId : folder.owner_user_id);
 

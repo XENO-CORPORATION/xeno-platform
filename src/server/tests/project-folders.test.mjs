@@ -135,6 +135,19 @@ async function main() {
     const gd = await call('DELETE', `${W}/files?path=notes/guest.md`, G);
     assert.equal(gd.status, 200, `a collaborator can remove a path: ${JSON.stringify(gd.body)}`);
 
+    // ── the list of projects (GET /): what each person can open, decided by the same folder rule ──
+    const listed = async (auth) => { const r = await call('GET', '', auth); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body.projects; };
+    const mine = await listed(O);
+    const ownP = mine.find((p) => p.projectId === P), ownT = mine.find((p) => p.projectId === T);
+    assert.ok(ownP && ownT, 'the owner sees the personal and the company project');
+    assert.equal(ownP.folderId, made.body.folder.id); assert.equal(ownP.workspaceId, null); assert.equal(ownP.app, 'xeno-workshop');
+    assert.equal(ownT.workspaceId, company); assert.equal(ownT.workspaceName, 'Acme');
+    const mates = (await listed(M)).map((p) => p.projectId);
+    assert.ok(mates.includes(T) && !mates.includes(P), 'a colleague sees the company project, not the owner’s personal one');
+    const guests = await listed(G);
+    assert.ok(guests.some((p) => p.projectId === P && p.shared === true), 'a person the project folder is shared with sees it, marked shared');
+    assert.deepEqual((await listed(S)).filter((p) => p.projectId === P || p.projectId === T), [], 'a stranger sees neither');
+
     // ── shared one level up (the whole "XENO Workshop" folder as editor): what does a project under it allow? Pinned,
     //    whichever way Storage materialises inherited access (review of #921) ──
     const appFolder = (await pool.query('SELECT parent_id FROM storage_folders WHERE id = $1', [made.body.folder.id])).rows[0].parent_id;

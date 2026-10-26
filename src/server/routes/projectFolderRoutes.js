@@ -9,18 +9,26 @@
  *   POST   /:app/:projectId/files/move      { from, to }, If-Match?     rename or move a path, keeping the file and its history
  *   GET    /:app/:projectId/changes?since=                              what changed since a cursor, by anyone, by any route
  *
+ *   GET    /                                                            every project folder the person can open
+ *
  * Called AS THE PERSON. An app's own OIDC token reaches only that app's projects (its client id is the `:app`), so one
  * product cannot walk another's project folders; the person's own platform session may open any of theirs.
  */
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { ProjectFolderError, ensureProjectFolder, listProjectFiles, readProjectFile, writeProjectFile, removeProjectFile, moveProjectFile, projectChanges } from '../services/projectFolders.js';
+import { ProjectFolderError, ensureProjectFolder, listProjectFolders, listProjectFiles, readProjectFile, writeProjectFile, removeProjectFile, moveProjectFile, projectChanges } from '../services/projectFolders.js';
 
 const MAX_BYTES = 100 * 1024 * 1024;   // the same ceiling as any Storage upload
 
 export default function projectFolderRoutes({ uploadsDir }) {
   const router = express.Router();
   router.use(authMiddleware);
+  // The list is Storage's own browsing (names and folder ids the person can already open): an app token needs storage:read.
+  router.get('/', async (req, res) => {
+    if (req.auth?.kind === 'oidc' && !String(req.auth.scope || '').split(/\s+/).includes('storage:read')) return res.status(403).json({ success: false, code: 'scope_missing', error: 'This sign-in lacks storage:read; sign in again to allow it' });
+    try { res.json({ success: true, projects: await listProjectFolders(req.db, req.user.id) }); }
+    catch (error) { console.error('[ProjectFolders] list', error); res.status(500).json({ success: false, error: 'Project storage failed' }); }
+  });
   router.use('/:app', (req, res, next) => {
     if (req.auth?.kind === 'oidc') {
       if (req.auth.clientId !== req.params.app) return res.status(403).json({ success: false, code: 'wrong_app', error: 'This app can only reach its own projects' });
