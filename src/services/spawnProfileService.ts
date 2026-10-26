@@ -1,5 +1,6 @@
 import {
   buildSpawnProfileBundle,
+  renameSpawnProfileBundle,
   type SpawnProfileBundle,
   type SpawnProfileProvider,
   type SpawnProfileVendor,
@@ -25,8 +26,8 @@ export class SpawnProfileApiError extends Error {
   }
 }
 
-async function spawnProfileFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`/api/v2/spawn/profiles${path}`, {
+async function spawnFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, {
     ...options,
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -42,6 +43,7 @@ async function spawnProfileFetch<T>(path: string, options: RequestInit = {}): Pr
   }
   return data as T;
 }
+const spawnProfileFetch = <T,>(path: string, options: RequestInit = {}) => spawnFetch<T>(`/api/v2/spawn/profiles${path}`, options);
 
 export const listSpawnProfiles = async (): Promise<SpawnSyncedProfile[]> => {
   const data = await spawnProfileFetch<{ profiles?: SpawnSyncedProfile[] }>('');
@@ -60,4 +62,43 @@ export const createSpawnProfile = async (input: {
     body: JSON.stringify({ baseRev: 0, bundle }),
   });
   return { profileId: done.profileId, rev: done.rev, bundle, updatedAt: new Date().toISOString() };
+};
+
+/** A 409 from rename or remove means the profile changed on a device, or in another tab, since this page read it. */
+export const isStaleProfile = (error: unknown) => error instanceof SpawnProfileApiError && error.status === 409;
+
+/** Rename on the account. Only the name changes: the rest of the definition, config files included, is sent back as it was. */
+export const renameSpawnProfile = async (profile: SpawnSyncedProfile, name: string): Promise<SpawnSyncedProfile> => {
+  if (!profile.bundle) throw new SpawnProfileApiError('This profile has no definition to rename.', 400);
+  const bundle = renameSpawnProfileBundle(profile.bundle, name);
+  const done = await spawnProfileFetch<{ profileId: string; rev: number }>(`/${encodeURIComponent(profile.profileId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ baseRev: profile.rev, bundle }),
+  });
+  return { ...profile, rev: done.rev, bundle, updatedAt: new Date().toISOString() };
+};
+
+/** Remove from the account. Each device that has it is then asked whether to remove its own copy; none is removed on its own. */
+export const removeSpawnProfile = async (profile: SpawnSyncedProfile): Promise<void> => {
+  await spawnProfileFetch(`/${encodeURIComponent(profile.profileId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ baseRev: profile.rev }),
+  });
+};
+
+export interface SpawnSyncDevice {
+  deviceId: string;
+  name: string;
+  version: string | null;
+  profiles: number;
+  conflicts: number;
+  lastSyncAt: string;
+}
+
+export const listSpawnDevices = async (): Promise<SpawnSyncDevice[]> =>
+  (await spawnFetch<{ devices?: SpawnSyncDevice[] }>('/api/v2/spawn/devices')).devices ?? [];
+
+/** Forget a device from the list. It signs nothing out; the device appears again on its next sync. */
+export const forgetSpawnDevice = async (deviceId: string): Promise<void> => {
+  await spawnFetch(`/api/v2/spawn/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' });
 };

@@ -15,3 +15,12 @@ export function buildSpawnProfileBundle({ id, name, vendor, provider }) {
   if (provider !== null && provider !== 'vendor' && provider !== 'xeno') throw new Error('Choose how the profile should sign in.');
   return { schema: 1, id, name: cleanName, vendor, provider, agentId: null, files: {} };
 }
+
+// A rename from the website keeps everything else in the bundle as it is, config files included: rebuilding the bundle
+// from the name alone would sync empty config to every device. Only the name changes.
+export function renameSpawnProfileBundle(bundle, name) {
+  if (!bundle || bundle.schema !== 1 || typeof bundle.id !== 'string') throw new Error('This Spawn profile cannot be renamed here.');
+  const cleanName = String(name ?? '').trim();
+  if (!cleanName || cleanName.length > 60) throw new Error('Give the Spawn profile a name of 1 to 60 characters.');
+  return { ...bundle, name: cleanName };
+}
