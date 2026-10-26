@@ -157,7 +157,8 @@
     "xenoRoutes.js": "studio",
     "xenoTasksRoutes.js": "tasks",
     "youtubeRoutes.js": "studio",
-    "platform-compute.js": "compute"
+    "platform-compute.js": "compute",
+    "spawnSkillRoutes.js": "agents"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -10262,6 +10263,24 @@
       "class": "safe",
       "scope": "compute:read",
       "because": "the screen's actions are the /api/compute routes and the compute.* tools; caps and prices are a person's act"
+    },
+    "route:spawnSkillRoutes.js:GET /": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "agents:read",
+      "because": "XENO Spawn's view of the skills library; agents already reach skills through the skills.* capabilities"
+    },
+    "route:spawnSkillRoutes.js:GET /:id": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "agents:read",
+      "because": "XENO Spawn's view of the skills library; agents already reach skills through the skills.* capabilities"
+    },
+    "route:spawnSkillRoutes.js:POST /import": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "agents:write",
+      "because": "XENO Spawn's view of the skills library; agents already reach skills through the skills.* capabilities"
     }
   }
 }

@@ -4,12 +4,12 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1837 actions · 206 agent capability · 1318 planned (debt) · 313 excluded · **coverage 13.5%** of the 1524 owed.
+**Total:** 1840 actions · 206 agent capability · 1321 planned (debt) · 313 excluded · **coverage 13.5%** of the 1527 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 302 | 53 | 244 | 5 | 17.8% |
-| agents | 196 | 0 | 136 | 60 | 0% |
+| agents | 199 | 0 | 139 | 60 | 0% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | workspace-ui | 171 | 4 | 101 | 66 | 3.8% |
 | chat | 101 | 0 | 100 | 1 | 0% |
@@ -99,7 +99,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:settings.js:data-set=route`
 - `ui:settings.js:data-set=shortcuts`
 
-## agents — 136 planned
+## agents — 139 planned
 
 - `route:agentRoutes.js:DELETE /:handle`
 - `route:agentRoutes.js:GET /`
@@ -163,6 +163,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:spawnProfileRoutes.js:DELETE /:profileId`
 - `route:spawnProfileRoutes.js:GET /`
 - `route:spawnProfileRoutes.js:PUT /:profileId`
+- `route:spawnSkillRoutes.js:GET /`
+- `route:spawnSkillRoutes.js:GET /:id`
+- `route:spawnSkillRoutes.js:POST /import`
 - `route:xenoMcpRoutes.js:DELETE /connections/:id (management)`
 - `route:xenoMcpRoutes.js:GET /activity (management)`
 - `route:xenoMcpRoutes.js:GET /connections (management)`
