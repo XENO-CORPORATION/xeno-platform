@@ -31,21 +31,31 @@ import type { ProductContent } from './_types';
  *  · "AI semantic search over vector embeddings" was FALSE. Search is
  *    MiniSearch (engine/search.ts) — lexical BM25 with prefix + fuzzy 0.2 and
  *    title/tag boosting. Zero hits for embedding / vector / hnsw / faiss
- *    anywhere in the repo. It is good keyword search; it is not semantic. */
+ *    anywhere in the repo. It is good keyword search; it is not semantic.
+ *
+ * UPDATED 2026-10-26 for 0.3.1, verified against xeno-notes main (8f8b028) and its packaged builds:
+ *  · Linux now ships: 0.3.0 and 0.3.1 publish an x64 AppImage beside the Windows installer (both launch-tested).
+ *    Still no macOS build.
+ *  · Search is now the XENO Corpus engine (corpusWorker.ts: semantic: 'local'): meaning + typo correction + learning
+ *    from what you open, all on the machine. The two corrections above were TRUE for 0.2.0 and are kept as history.
+ *  · Any folder of Markdown files opens as a vault (the built-in library stays in ~/.xeno/notes).
+ *  · Notes opens behind the XENO sign-in (door.ts); after a check it works offline for up to 14 days
+ *    (@xenosystem/licence DEFAULT_GRACE_MS).
+ *  · Still NO in-app updater: electron-updater is still never imported. */
 const notes: ProductContent = {
   slug: 'notes',
   hero: {
     headline: 'Your second brain — local, linked, and AI-native.',
     sub: 'A block-based knowledge base that keeps your notes as plain files on your own machine. Bi-directional links and a graph view connect everything; databases give it structure; instant full-text search finds anything; and an AI layer writes with you and tags as you go.',
     media: { type: 'mockup', src: 'notes-hero', alt: 'XENO Notes — the page-tree sidebar, block editor with a wiki-link and an AI summary, and the formatting toolbar' },
-    badges: ['Windows only', 'Local-first · your files', 'Bi-directional links', 'Works offline'],
-    note: 'Free to download. Windows is the only build we have produced — macOS and Linux are intended but have never been built. This build does not update itself. Mobile and real-time collaboration are on the roadmap.',
+    badges: ['Windows · Linux', 'Plain Markdown · your files', 'Bi-directional links', 'Search by meaning'],
+    note: 'Free to download, with a XENO account. Windows and Linux builds; macOS is not built yet. This build does not update itself. Mobile and real-time collaboration are on the roadmap.',
   },
-  trust: ['Part of the XENO platform — one sign-in', 'Your notes live in ~/.xeno/notes as plain files', 'Works fully offline · git-backed page history'],
+  trust: ['Part of the XENO platform — one sign-in', 'Open any folder of Markdown files — an Obsidian vault works as is', 'Works fully offline · git-backed page history'],
   highlights: [
     { value: 'Local-first', label: 'Plain files, works offline' },
     { value: 'Bi-directional', label: 'Links, backlinks & graph' },
-    { value: 'Fast search', label: 'Full-text over your vault' },
+    { value: 'Search by meaning', label: 'Typo-tolerant, on your computer' },
     { value: '5 database views', label: 'Table · board · calendar…' },
   ],
   features: [
@@ -92,10 +102,10 @@ const notes: ProductContent = {
       eyebrow: 'Search & AI',
       icon: 'Sparkles',
       accent: 'radial-gradient(ellipse at 72% 26%, rgba(200,150,220,0.16), transparent 60%), linear-gradient(165deg,#170f18,#070707 74%)',
-      title: 'Fast search over everything, and AI in the editor',
-      desc: 'Full-text search covers your whole vault instantly, weighted so a title match beats a body match and tolerant of typos. Separately, the editor’s AI dropdown summarizes, expands, rewrites, fixes grammar and translates — and it tags pages for you.',
+      title: 'Search that understands you, and AI in the editor',
+      desc: 'Search runs on the XENO Corpus engine: it finds notes by meaning as well as words, fixes typos against your own vocabulary, and learns from the notes you open — all on your computer, nothing sent anywhere. Separately, the editor’s AI dropdown summarizes, expands, rewrites, fixes grammar and translates — and it tags pages for you.',
       bullets: [
-        'Instant full-text search over titles, tags and content, with typo tolerance',
+        'Search by meaning and by words, with typo correction against your own notes',
         'Ranked results — title and tag matches outrank body matches',
         'Summarize · expand · rewrite · fix grammar · translate',
         'AI auto-tagging with keyword-extraction fallback, on the XENO agent runtime',
@@ -134,7 +144,7 @@ const notes: ProductContent = {
     { title: 'Private, offline research', icon: 'Lock', desc: 'Clip the web, take daily notes, and study with spaced-repetition flashcards — all in a local vault that never has to touch the cloud.' },
   ],
   howItWorks: [
-    { step: '1', title: 'Download & install', desc: 'Grab the experimental Windows build. It is unsigned, so SmartScreen will warn once — choose “More info → Run anyway”.' },
+    { step: '1', title: 'Download & install', desc: 'Grab the experimental Windows or Linux build and sign in with your XENO account. The Windows installer is unsigned, so SmartScreen will warn once — choose “More info → Run anyway”.' },
     { step: '2', title: 'Write & link', desc: 'Type “/” for any block or “[[” to link a page. Import your existing Markdown, Notion or Evernote notes to start fast.' },
     { step: '3', title: 'Let AI help', desc: 'Search your whole vault instantly, ask the AI to summarize or rewrite, and let it tag pages — all without leaving the editor.' },
   ],
@@ -145,40 +155,40 @@ const notes: ProductContent = {
       { feature: 'Bi-directional links + graph view', xeno: true, them: 'Some' },
       { feature: 'Local-first plain-file vault (offline)', xeno: true, them: 'Cloud-first' },
       { feature: 'Built-in full-text search', xeno: true, them: true },
-      { feature: 'Semantic / embedding search', xeno: 'Not yet', them: 'Add-ons' },
+      { feature: 'Search by meaning', xeno: true, them: 'Add-ons' },
       { feature: 'Git-backed version history', xeno: true, them: false },
       { feature: 'Real-time collaboration & cloud sync', xeno: 'On the roadmap', them: true },
       { feature: 'Mobile apps', xeno: 'Desktop first', them: true },
     ],
   },
   specs: [
-    { label: 'Platform', value: 'Windows (macOS & Linux intended, never built)' },
-    { label: 'Storage', value: 'Local files · ~/.xeno/notes' },
-    { label: 'Search', value: 'Full-text (MiniSearch) — not embeddings' },
+    { label: 'Platform', value: 'Windows x64 · Linux x64 (AppImage) · macOS not built yet' },
+    { label: 'Storage', value: 'Plain Markdown in any folder you open, or the built-in library (~/.xeno/notes)' },
+    { label: 'Search', value: 'XENO Corpus engine — meaning + words, typo correction, on-device' },
     { label: 'Editor', value: 'TipTap / ProseMirror' },
-    { label: 'Status', value: 'Experimental 0.2.0 · unsigned' },
+    { label: 'Status', value: 'Experimental 0.3.1 · unsigned' },
     { label: 'Updates', value: 'Manual — this build does not self-update' },
   ],
   faq: [
-    { q: 'Where are my notes stored?', a: 'On your own machine, in ~/.xeno/notes, as plain files — pages, databases, assets and a search index. There’s no cloud dependency and no subscription lock-in; you can back the folder up or move it like any other files.' },
-    { q: 'Does it work offline?', a: 'Yes. XENO Notes is local-first and fully functional without an internet connection. AI features call the XENO agent runtime, but writing, linking, databases and search over your vault work offline.' },
-    { q: 'What will the AI do at launch?', a: 'An in-editor writing assistant (summarize, expand, rewrite, fix grammar, translate) and AI auto-tagging — those are built. Search is fast full-text search, not semantic: it matches words, with typo tolerance and title/tag weighting, rather than meaning. Earlier copy on this page described embedding-based semantic search; that was wrong, and finding notes by meaning is on the roadmap alongside whole-vault Q&A and page generation.' },
+    { q: 'Where are my notes stored?', a: 'On your own machine, as plain Markdown files: open any folder as your vault (an Obsidian vault works as is), or use the built-in library in ~/.xeno/notes. Notes edits files in place and never converts them. There’s no cloud dependency and no subscription lock-in; you can back the folder up or move it like any other files.' },
+    { q: 'Does it work offline?', a: 'Yes, once you have signed in: Notes checks your XENO account when it can, and keeps working offline for up to 14 days between checks. AI features call the XENO agent runtime, but writing, linking, databases and search over your vault work offline.' },
+    { q: 'What will the AI do at launch?', a: 'An in-editor writing assistant (summarize, expand, rewrite, fix grammar, translate) and AI auto-tagging — those are built. Search finds notes by meaning as well as by words, on your computer, using the XENO Corpus engine. Whole-vault Q&A and page generation are on the roadmap.' },
     { q: 'Can I import my existing notes?', a: 'Yes — import from Markdown files, Notion export ZIPs, Evernote .enex files and OneNote exports. You can export back out to Markdown, PDF or HTML at any time.' },
-    { q: 'Which desktop platforms will it run on?', a: 'Windows is the only build that has ever been produced. macOS and Linux are intended and the build configuration targets them, but no .dmg or .AppImage has been made yet — so treat them as planned, not supported. Mobile, real-time multi-user editing (CRDT) and multi-device cloud sync are all planned, not shipping.' },
-    { q: 'What does “experimental” actually mean here?', a: 'It means this is an early build we are publishing openly rather than sitting on. The engine works and 681 automated tests cover it, but it has not been through a wide user shake-down: expect rough edges and keep a backup of your vault. Your notes are plain files in ~/.xeno/notes, so nothing is trapped in a proprietary store if you walk away.' },
+    { q: 'Which desktop platforms will it run on?', a: 'Windows (x64 installer) and Linux (x64 AppImage). macOS is intended but no .dmg has been built yet, so treat it as planned, not supported. Mobile, real-time multi-user editing (CRDT) and multi-device cloud sync are all planned, not shipping.' },
+    { q: 'What does “experimental” actually mean here?', a: 'It means this is an early build we are publishing openly rather than sitting on. The engine works and 734 automated tests cover it, but it has not been through a wide user shake-down: expect rough edges and keep a backup of your vault. Your notes are plain Markdown files, so nothing is trapped in a proprietary store if you walk away.' },
     { q: 'Why does Windows warn me about the installer?', a: 'Because it is not code-signed yet. Windows SmartScreen shows “Windows protected your PC” for any installer without a signing certificate, regardless of what it contains. Choose “More info”, then “Run anyway”. Code signing is planned; until then we would rather tell you the warning is coming than pretend it is not.' },
     { q: 'Will it update itself?', a: 'No. This build has no in-app updater — it will never prompt you and never upgrade on its own. When a newer version is published you will need to come back here and install it over the top. XENO Hub, which polls for new versions, can tell you when one is out.' },
     { q: 'What does it cost?', a: 'Downloading the experimental build requires a XENO account with an active plan. AI features draw on credits. Pricing for the finished product will be announced closer to a stable release.' },
   ],
   seo: {
     title: 'XENO Notes — the local-first, AI-native knowledge base',
-    description: 'A block-based notes and knowledge base with bi-directional links, a graph view, databases, instant full-text search and a built-in AI writing assistant. Local-first, offline, git-backed. Experimental unsigned build for Windows.',
+    description: 'A block-based notes and knowledge base with bi-directional links, a graph view, databases, search by meaning and a built-in AI writing assistant. Plain Markdown, local-first, git-backed. Experimental unsigned build for Windows and Linux.',
   },
   // Product-specific caveats ONLY — the experimental/unsigned/SmartScreen posture is
   // derived from the catalog by experimentalNotice() and already rendered above this
   // block. See the contract on `downloadNotice` in _types.ts.
   downloadNotice:
-    'This build does NOT update itself. XENO Notes 0.2.0 ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top. Windows x64 is the only build we have produced; there is no macOS or Linux installer. Search is keyword-based, not semantic — it matches words, not meaning. Your notes are plain files in ~/.xeno/notes, but keep a backup of the folder anyway. AI features require a XENO account and draw on credits.',
+    'This build does NOT update itself. XENO Notes ships without an in-app updater, so it will never prompt you and never upgrade — when a newer version is published you will need to come back here and install it over the top (XENO Hub can tell you when one is out). Builds exist for Windows x64 and Linux x64; there is no macOS build yet. Notes needs a XENO account to open. Your notes are plain Markdown files, but keep a backup of the folder anyway. AI features draw on credits.',
   autoUpdates: false,
 };
 
