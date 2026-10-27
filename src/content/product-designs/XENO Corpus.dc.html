@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#047857}
+input[type=range]{accent-color:#34D399}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="https://xenostudio.ai" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+
+<section data-screen-label="Hero" style="background:#0A120F; color:#E3F1EB; padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#34D399">Verified project truth</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">Every claim<br><span style="color:#34D399">comes with its test.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#95ABA1; text-wrap:pretty">XENO Corpus replaces hand-written agent context files. Each fact about a project is a tenet bound to an assay that can disprove it, and CLAUDE.md is generated from what still holds. Run the pulse below and watch a stale fact get caught.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="/product/corpus/download/win" style="background:#34D399; color:#0A120F; font-size:15px; font-weight:600; padding:12px 18px; border-radius:8px">Download for Windows</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5E7369">v0.1.0 · Windows x64 · experimental · unsigned</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; border-radius:14px; overflow:hidden; background:#101A16; box-shadow:0 0 0 1px #1E2E27, 0 40px 80px -40px rgba(0,0,0,.9); display:grid; grid-template-columns:{{ cCols }}">
+      <div style="display:flex; flex-direction:column; min-width:0; border-right:1px solid #1E2E27">
+        <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #1E2E27; flex-wrap:wrap"><span style="font-weight:600; font-size:13px">Tenets · xeno-canvas</span><button onClick="{{ pulse }}" style="margin-left:auto; height:30px; padding:0 13px; border:none; border-radius:7px; background:#34D399; color:#0A120F; font:inherit; font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; cursor:pointer">{{ pulseL }}</button></div>
+        <sc-for list="{{ tenets }}" as="t" hint-placeholder-count="5"><div style="display:grid; grid-template-columns:78px minmax(0,1fr); gap:12px; padding:12px; border-bottom:1px solid #16241E; background:{{ t.bg }}; transition:background .3s"><span style="align-self:start; font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-align:center; padding:3px 0; border-radius:4px; background:{{ t.vBg }}; color:{{ t.vFg }}">{{ t.v }}</span><div style="display:flex; flex-direction:column; gap:4px; min-width:0"><span style="font-size:14px; line-height:1.4">{{ t.c }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#5E7369; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">assay › {{ t.a }}</span><span style="display:{{ t.eD }}; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#FCA5A5">{{ t.e }}</span></div></div></sc-for>
+      </div>
+      <div style="display:flex; flex-direction:column; min-width:0">
+        <div style="display:flex; align-items:center; gap:6px; padding:8px 12px; border-bottom:1px solid #1E2E27; flex-wrap:wrap"><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#95ABA1">corpus project --for</span><sc-for list="{{ tgts }}" as="g"><button onClick="{{ g.on }}" style="height:26px; padding:0 9px; border:none; border-radius:5px; background:{{ g.bg }}; color:{{ g.fg }}; font:inherit; font-family:'IBM Plex Mono',monospace; font-size:11px; cursor:pointer">{{ g.l }}</button></sc-for></div>
+        <div style="padding:10px 12px; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid #1E2E27"><span style="display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#95ABA1"><span>--budget {{ budget }} tokens</span><span>{{ used }} used</span></span><input type="range" min="40" max="220" step="10" value="{{ budget }}" onInput="{{ setBudget }}" onChange="{{ setBudget }}" style="accent-color:#34D399"></div>
+        <pre style="flex:1; margin:0; padding:12px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.6; color:#CFE3DA; white-space:pre-wrap; min-height:260px">{{ proj }}</pre>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Replaces</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Hand-written CLAUDE.md, AGENTS.md, .cursorrules</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Ground truth</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">The running system</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Output</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Budgeted, whatever the corpus size</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Runs</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Standalone on any project</div></div></div></section>
+<section id="schema" data-screen-label="Schema" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#047857">The problem is staleness</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">The file was found instantly. And it was wrong.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Every recorded failure was the same: the context file said one thing and the running system said another. Corpus makes the running system the ground truth, and keeps what agents are told small however big the corpus grows.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-top:40px"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#047857">tenet</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">A claim about the project</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#047857">assay</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">The procedure that can disprove it</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#047857">verdict</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">What the last run concluded</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#047857">lapse</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">A tenet whose assay no longer passes</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#047857">pulse</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">Run every assay and record verdicts</span></div></div>
+  </div>
+</section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#047857">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Out now for Windows, as an experimental app.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO Corpus.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">The desktop app runs on Windows 10 and 11 (x64), behind your XENO account, and updates itself. The installer is not code-signed yet: if Windows SmartScreen warns, choose More info → Run anyway.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><div style="border:1px solid #1D1B18; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Desktop app for Windows</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">v0.1.0 · x64 · experimental · unsigned</div></div><a href="/product/corpus/download/win" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">Download</a></div><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">CLI and local interface</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">node corpus.mjs</div></div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">inside the desktop app; not published separately</span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#047857">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#A7F3D0">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Corpus&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Built","#2FA36B",["The engine: tenets, assays, verdicts, lapses and pulse","Budgeted context projection that stays small as the corpus grows","Generated CLAUDE.md and other agent files","Ingesting tenets from existing documents","A local interface with tenets, verdicts and an inspector","A Windows desktop app with sign-in and in-app updates"]],["Not yet","#C9962E",["macOS and Linux","Team sharing and a hosted corpus","A code-signed installer"]],["Boundaries","#8C867C",["Not a notes app: that is XENO Notes","XENO Index consumes Corpus, it doesn’t contain it"]]];
+  FAQ = [["What problem does it solve?","Stale context. Agents find their context files instantly, and the files are often wrong. Corpus ties every claim to a test, so a stale claim is caught instead of repeated."],["Do I still get a CLAUDE.md?","Yes, but it is generated from the corpus, containing only what currently holds, within the token budget you set."],["What if something can’t be tested automatically?","A person can attest it. Attested tenets have their own state and are never shown as tested."],["Does it only work on XENO projects?","No. It is built to run standalone on any project."],["Can I use it?","Yes, on Windows 10 and 11 (x64): download the desktop app and sign in with your XENO account. It is an experimental, unsigned build. Your corpus stays in your project as plain files."]];
+
+  TN = [['Canvas documents the current version in its README', 'grep version README.md == package.json', 34, 'README says v0.0.2 · package.json is 0.35.1', true], ['Figma import ships in the build', 'npm run test:import-fig', 22, '', false], ['Default shortcuts match Figma (V, F, R, T, Shift+A)', 'npm run test:shortcuts', 28, '', false], ['Every export path has a round-trip test', 'npm run test:export -- --roundtrip', 30, '', false], ['Tool names in the agent demo are illustrative', 'human attestation', 24, '', 'att']];
+  pulse = () => { if (this.state.run) return; clearInterval(this._p); this.setState({ run: true, done: -1 }); let i = -1; this._p = setInterval(() => { i++; this.setState({ done: i }); if (i >= this.TN.length - 1) { clearInterval(this._p); this.setState({ run: false, ran: true }); } }, 480); };
+  mountX() { this.setState({ done: -1, ran: false, tgt: 'claude-code', budget: 120 }); }
+  unmountX() { clearInterval(this._p); }
+  valsX(S, wide) { const done = S.done ?? -1, ran = !!S.ran, budget = S.budget || 120;
+    const verd = (t, i) => i > done ? (ran ? null : 'UNRUN') : t[4] === 'att' ? 'ATTESTED' : t[4] ? 'LAPSED' : 'HELD';
+    const tenets = this.TN.map((t, i) => { const v = verd(t, i) || 'UNRUN'; return { c: t[0], a: t[1], v, vBg: v === 'HELD' ? '#123828' : v === 'LAPSED' ? '#3B1515' : v === 'ATTESTED' ? '#1E2A3F' : '#16241E', vFg: v === 'HELD' ? '#A7F3D0' : v === 'LAPSED' ? '#FCA5A5' : v === 'ATTESTED' ? '#BFDBFE' : '#5E7369', e: t[3], eD: v === 'LAPSED' ? 'block' : 'none', bg: i === done && S.run ? '#13231C' : 'transparent' }; });
+    const hold = this.TN.map((t, i) => [t, verd(t, i)]).filter(x => x[1] === 'HELD' || x[1] === 'ATTESTED' || (!ran && done < 0)); let used = 18, lines = [], cut = 0; hold.forEach(x => { if (used + x[0][2] <= budget) { lines.push('- ' + x[0][0] + (x[1] === 'ATTESTED' ? ' (attested)' : '')); used += x[0][2]; } else cut++; });
+    const head = S.tgt === 'agents-md' ? '# AGENTS.md' : S.tgt === 'cursor' ? '# .cursorrules' : '# CLAUDE.md';
+    const proj = head + '\n# generated by corpus · do not edit by hand\n\n' + (ran || done >= 0 ? '' : '# (not yet pulsed: showing unverified tenets)\n') + lines.join('\n') + (cut ? '\n\n# ' + cut + ' more tenet' + (cut > 1 ? 's' : '') + ' held but left out to stay within budget' : '') + (ran ? '\n\n# excluded: 1 lapsed tenet (README version)' : '');
+    return { cCols: S.vw >= 980 ? 'minmax(0,1.1fr) minmax(0,1fr)' : 'minmax(0,1fr)', tenets, pulse: this.pulse, pulseL: S.run ? 'pulsing…' : ran ? '↻ node pulse.mjs' : '▶ node pulse.mjs',
+      tgts: [['claude-code', 'claude-code'], ['agents-md', 'agents-md'], ['cursor', 'cursor']].map(g => ({ l: g[1], on: () => this.setState({ tgt: g[0] }), bg: S.tgt === g[0] ? '#34D399' : '#1E2E27', fg: S.tgt === g[0] ? '#0A120F' : '#CFE3DA' })), budget, used: used, setBudget: e => this.setState({ budget: +e.target.value }), proj };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'Corpus').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#047857' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>

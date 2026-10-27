@@ -27,13 +27,14 @@ import anima from './anima';
 import shell from './shell';
 import spawn from './spawn';
 import storage from './storage';
+import corpus from './corpus';
 import research from './research';
 
 /* Registry of rich landing-page content modules. A product listed here renders
  * the full ProductLanding; any product NOT here falls back to the lean
  * ProductPage (PRODUCT-LANDING-SPEC L3). Add a product = author its module and
  * import it here. */
-const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, form, photo, anima, shell, spawn, research, storage];
+const MODULES: ProductContent[] = [comms, agent, agentCli, pixel, post, canvas, motion, hub, extension, workflow, acp, sdk, docs, sheets, notes, slides, use, engine, rt, architect, sound, browser, form, photo, anima, shell, spawn, research, storage, corpus];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

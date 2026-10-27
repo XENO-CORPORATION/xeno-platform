@@ -28,8 +28,13 @@ const authoredDir = join(root, 'src', 'content', 'product-designs');
 // Product pages designed in this repo rather than in the handoff zip.
 const AUTHORED = {
   'XENO Storage.dc.html': 'storage',
+  // XENO Corpus shipped (desktop 0.1.0, 2026-10-27): the handoff's waitlist page, released — download, status, FAQ.
+  'XENO Corpus.dc.html': 'corpus',
 };
 // …and their cards on the /products index, which the handoff never listed.
+// Status lines on handoff cards that a release made false. Applied on every import, both modes, so a re-import of
+// the zip cannot bring "built, private" back for a product people can download.
+const CARD_STATUS = { corpus: { from: 'built, private', to: 'v0.1.0 · Windows' } };
 const AUTHORED_CARDS = [
   { slug: 'storage', section: 'Platform', name: 'XENO Storage', desc: 'Your clouds as drives on Windows', status: 'v0.1.0', color: '#2D5BD7' },
 ];
@@ -50,7 +55,7 @@ const MAP = {
   'XENO Agent CLI.dc.html': 'agent-cli', 'XENO Agent.dc.html': 'agent', 'XENO RT.dc.html': 'rt',
   'XENO Spawn.dc.html': 'spawn', 'XENO Shell.dc.html': 'shell', 'XENO Anima.dc.html': 'anima',
   'XENO Developers.dc.html': 'developers', 'XENO Company.dc.html': 'company',
-  'XENO Corpus.dc.html': 'corpus', 'XENO Forum.dc.html': 'forum', 'XENO GameDev.dc.html': 'gamedev',
+  'XENO Forum.dc.html': 'forum', 'XENO GameDev.dc.html': 'gamedev',
   'XENO Mail.dc.html': 'mail', 'XENO Marketplace.dc.html': 'marketplace', 'XENO Meet.dc.html': 'meet',
   'XENO Places.dc.html': 'places', 'XENO Polis.dc.html': 'polis', 'XENO Sites.dc.html': 'sites',
   'XENO Spectra.dc.html': 'spectra',
@@ -165,7 +170,16 @@ cpSync(join(root, 'node_modules/@babel/standalone/babel.min.js'), join(assetsDir
 // Run on every import, both modes: the handoff index carries colour placeholders.
 {
   const indexPath = join(pagesDir, 'index.html');
-  const withCards = addProductCards(readFileSync(indexPath, 'utf8'), AUTHORED_CARDS);
+  let indexHtml = readFileSync(indexPath, 'utf8');
+  for (const [slug, { from, to }] of Object.entries(CARD_STATUS)) {
+    const start = indexHtml.indexOf(`<a href="/product/${slug}" style="position:relative;`);
+    const end = start < 0 ? -1 : indexHtml.indexOf('</a>', start);
+    const card = end < 0 ? '' : indexHtml.slice(start, end);
+    if (card.includes(`>${to}<`)) continue;
+    if (!card.includes(`>${from}<`)) throw new Error(`products index: the ${slug} card no longer says "${from}" — update CARD_STATUS`);
+    indexHtml = indexHtml.slice(0, start) + card.replace(`>${from}<`, `>${to}<`) + indexHtml.slice(end);
+  }
+  const withCards = addProductCards(indexHtml, AUTHORED_CARDS);
   if (withCards.added.length) console.log(`products index: added ${withCards.added.join(', ')}`);
   const { html, stamped, missing } = stampProductIcons(withCards.html, join(root, 'public'));
   writeFileSync(indexPath, html);

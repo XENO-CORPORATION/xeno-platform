@@ -49,6 +49,9 @@ export const FIRST_PARTY_CLIENTS = [
   // uses the same /api/library routes as the web Storage page. Its version floor and door are operator rows
   // (client_version_policy, product_access_policy for 'storage'), set when it ships, never by this seed.
   { id: 'xeno-storage', name: 'XENO Storage', loopback: true },
+  // XENO Corpus desktop (xeno-corpus/desktop): loopback PKCE like every desktop app. Its door asks only
+  // "who is this, and may they use Corpus"; the corpus itself is local files, so it needs no product scopes.
+  { id: 'xeno-corpus', name: 'XENO Corpus', loopback: true },
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
   { id: 'xeno-anima', name: 'XENO Anima', loopback: true },

@@ -275,6 +275,9 @@ export const PRODUCTS: Product[] = [
   { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop you can share, with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
   // XENO Storage desktop 0.1.0 (2026-10-21): experimental, unsigned, Windows x64. Drive letters for XENO Storage
   // and Google Drive (through XENO Connect), each showing its own account's name and space via Dokany.
+  // XENO Corpus desktop 0.1.0 (2026-10-27): experimental, unsigned, Windows x64, with an in-app updater. The Corpus
+  // interface behind the XENO sign-in door; the corpus itself stays in the project (.xeno/corpus/).
+  { slug: 'corpus', name: 'XENO Corpus', tagline: 'Know which of your project’s claims are still true.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-corpus' },
   { slug: 'storage', name: 'XENO Storage', tagline: 'Your XENO files and your Google Drive, as drives on this PC.', category: 'Platform', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-storage' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
