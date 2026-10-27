@@ -169,6 +169,26 @@ async function main() {
   check((await compute.readMachineFile(pool, E, m1.id, { path: 'a/b.txt' })).toString('utf8') === 'h\u00e9', 'and reads the same bytes back');
   check(await code(() => compute.readMachineFile(pool, V, m1.id, { path: 'a/b.txt' })) === 'editor_required', 'a viewer cannot read a machine’s files');
 
+  // idle: a machine nobody uses stops by itself
+  check((await compute.getMachine(pool, E, m1.id)).idleStopMinutes === 30, 'a new machine stops itself after 30 idle minutes by default');
+  check(await code(() => compute.setIdleStop(pool, E, m1.id, { idleStopMinutes: 2 })) === 'invalid_idle', 'an idle limit under 5 minutes is refused');
+  check(await code(() => compute.setIdleStop(pool, V, m1.id, { idleStopMinutes: 60 })) === 'editor_required', 'a viewer cannot change the idle limit');
+  check((await compute.setIdleStop(pool, E, m1.id, { idleStopMinutes: 10 })).idleStopMinutes === 10, 'an editor sets the idle limit');
+  await pool.query("UPDATE compute_machines SET last_active_at = now() - interval '9 minutes' WHERE id = $1", [m1.id]);
+  check((await compute.meterRunningMachines(pool)).idle === 0 && (await compute.getMachine(pool, E, m1.id)).state === 'running', 'a machine used 9 minutes ago keeps running under a 10 minute limit');
+  await compute.execMachine(pool, E, m1.id, { argv: ['id'], timeoutMs: 20 * 60_000 });
+  const busyUntil = new Date((await compute.getMachine(pool, E, m1.id)).lastActiveAt).getTime();
+  check(busyUntil > Date.now() + 19 * 60_000, 'a command keeps the machine in use until its deadline');
+  await pool.query("UPDATE compute_machines SET last_active_at = now() - interval '11 minutes' WHERE id = $1", [m1.id]);
+  const ri = await compute.meterRunningMachines(pool);
+  const idled = await compute.getMachine(pool, E, m1.id);
+  check(ri.idle === 1 && idled.state === 'stopped' && idled.events.some((e) => e.kind === 'stopped' && e.detail.reason === 'idle'), 'past its idle limit the meter stops it, with "idle" on its timeline');
+  check(!(await pool.query("SELECT 1 FROM compute_sessions WHERE machine_id = $1 AND ended_at IS NULL", [m1.id])).rows.length, 'and its billing session is closed');
+  check((await compute.setIdleStop(pool, E, m1.id, { idleStopMinutes: null })).idleStopMinutes === null, 'the idle stop can be turned off');
+  await compute.startMachine(pool, E, m1.id);
+  await pool.query("UPDATE compute_machines SET last_active_at = now() - interval '3 days' WHERE id = $1", [m1.id]);
+  check((await compute.meterRunningMachines(pool)).idle === 0 && (await compute.getMachine(pool, E, m1.id)).state === 'running', 'with it off, a machine is never stopped for idleness');
+
   // delete
   check(await code(() => compute.deleteMachine(pool, E, m1.id)) === 'still_running', 'a running machine cannot be deleted');
   await compute.stopMachine(pool, E, m1.id);

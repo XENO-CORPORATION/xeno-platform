@@ -39,6 +39,17 @@ export class ComputeError extends Error {
 export const SURFACE = 'xeno_compute';
 export const SEGMENT_SECONDS = 3600;
 export const UNFUNDED_GRACE_SECONDS = 900;
+export const IDLE_DEFAULT_MINUTES = 30;
+function idleMinutes(v) {
+  if (v === null || v === 'never' || v === 0) return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 5 || n > 1440) throw new ComputeError('idleStopMinutes must be 5..1440, or null to never stop for idleness', 'invalid_idle');
+  return n;
+}
+/** Mark a machine as in use until at least `untilMs` (a running command keeps it busy until its deadline). */
+async function touch(db, machineId, untilMs = Date.now()) {
+  await db.query('UPDATE compute_machines SET last_active_at = GREATEST(COALESCE(last_active_at, to_timestamp(0)), to_timestamp($2 / 1000.0)) WHERE id = $1', [machineId, untilMs]);
+}
 export const STATES = ['creating', 'running', 'stopped', 'deleted', 'failed'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MACHINE_ID = /^mch_[0-9a-f]{32}$/;
@@ -115,6 +126,7 @@ async function shapeMachine(db, m) {
   return {
     id: m.id, workspaceId: String(m.workspace_id), name: m.name, size: m.size, purpose: m.purpose, image: m.image,
     state: m.state, failure: m.failure || null, unfundedSince: m.unfunded_since || null,
+    idleStopMinutes: m.idle_stop_minutes ?? null, lastActiveAt: m.last_active_at || null,
     agent: agent ? { id: agent.public_id, name: agent.name } : null,
     costSoFarCredits: credits(Number(s.settled) + running),
     createdAt: m.created_at, updatedAt: m.updated_at, deletedAt: m.deleted_at,
@@ -221,7 +233,8 @@ export async function getMachine(db, actor, machineId, { workspace } = {}) {
 }
 
 // ─────────────────────────────────────────── create / start / stop / delete
-export async function createMachine(db, actor, { workspace, name, size, purpose, image, agentId, idempotencyKey } = {}) {
+export async function createMachine(db, actor, { workspace, name, size, purpose, image, agentId, idempotencyKey, idleStopMinutes } = {}) {
+  const idle = idleStopMinutes === undefined ? IDLE_DEFAULT_MINUTES : idleMinutes(idleStopMinutes);
   const ctx = await workspaceFor(db, actor, workspace, 'editor');
   const label = String(name ?? '').trim().slice(0, 80) || 'Machine';
   const r = (await db.query('SELECT * FROM compute_rates WHERE size = $1', [String(size || '')])).rows[0];
@@ -233,9 +246,9 @@ export async function createMachine(db, actor, { workspace, name, size, purpose,
   const agentUserId = await agentFor(db, ctx, agentId);
   await assertCaps(db, { workspaceId: ctx.workspaceId, agentUserId, size: r.size, sizeRank: r.rank, newMachine: true, addMicro: null });
   const id = newMachineId();
-  const m = (await db.query(`INSERT INTO compute_machines (id, workspace_id, created_by_user_id, agent_user_id, name, size, purpose, image, idempotency_key)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-  [id, ctx.workspaceId, ctx.userId, agentUserId, label, r.size, purpose ? String(purpose).slice(0, 500) : null, image ? String(image).slice(0, 200) : null, idempotencyKey ? String(idempotencyKey) : null])).rows[0];
+  const m = (await db.query(`INSERT INTO compute_machines (id, workspace_id, created_by_user_id, agent_user_id, name, size, purpose, image, idempotency_key, idle_stop_minutes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+  [id, ctx.workspaceId, ctx.userId, agentUserId, label, r.size, purpose ? String(purpose).slice(0, 500) : null, image ? String(image).slice(0, 200) : null, idempotencyKey ? String(idempotencyKey) : null, idle])).rows[0];
   await event(db, id, 'created', ctx.userId, { size: r.size, agent: !!agentUserId });
   try {
     const out = await computeBackend().create({ id, workspaceId: ctx.workspaceId, size: r.size, image: m.image });
@@ -310,7 +323,7 @@ export async function startMachine(db, actor, machineId, { workspace } = {}) {
     await event(db, m.id, 'failed', ctx.userId, { stage: 'start', code: e.code || null, reason: String(e.message).slice(0, 300) });
     throw new ComputeError(e.message, e.code === 'compute_unavailable' ? 'compute_unavailable' : 'start_failed', e.code === 'compute_unavailable' ? 503 : 502);
   }
-  const running = (await db.query("UPDATE compute_machines SET state = 'running', unfunded_since = NULL WHERE id = $1 RETURNING *", [m.id])).rows[0];
+  const running = (await db.query("UPDATE compute_machines SET state = 'running', unfunded_since = NULL, last_active_at = now() WHERE id = $1 RETURNING *", [m.id])).rows[0];
   await event(db, m.id, 'started', ctx.userId, { payer: payer.kind, creditsPerHour: credits(r.rate_micro_per_hour) });
   return shapeMachine(db, running);
 }
@@ -342,6 +355,18 @@ export async function stopMachine(db, actor, machineId, { workspace } = {}) {
   }
 }
 
+/** Change how long a machine may sit unused before it stops itself (null = never). Anyone who may stop it may set it. */
+export async function setIdleStop(db, actor, machineId, { idleStopMinutes, workspace } = {}) {
+  const { ctx, m } = await ctxForMachine(db, actor, machineId, 'editor', workspace);
+  if (ctx.agentId && m.agent_user_id && String(m.agent_user_id) !== ctx.agentId) throw new ComputeError('That machine works for another agent', 'not_your_machine', 403);
+  if (m.state === 'deleted') throw new ComputeError('A deleted machine cannot change', 'invalid_state', 409);
+  if (idleStopMinutes === undefined) throw new ComputeError('idleStopMinutes is required (5..1440, or null for never)', 'invalid_idle');
+  const idle = idleMinutes(idleStopMinutes);
+  const out = (await db.query('UPDATE compute_machines SET idle_stop_minutes = $2 WHERE id = $1 RETURNING *', [m.id, idle])).rows[0];
+  await event(db, m.id, 'idle_stop_set', ctx.userId, { minutes: idle });
+  return shapeMachine(db, out);
+}
+
 export async function deleteMachine(db, actor, machineId, { workspace } = {}) {
   const { ctx, m } = await ctxForMachine(db, actor, machineId, 'editor', workspace);
   if (ctx.agentId && m.agent_user_id && String(m.agent_user_id) !== ctx.agentId) throw new ComputeError('That machine works for another agent', 'not_your_machine', 403);
@@ -367,12 +392,20 @@ export async function deleteMachine(db, actor, machineId, { workspace } = {}) {
  * and is stopped only after UNFUNDED_GRACE_SECONDS — with that reason on its timeline. Its disk is kept.
  */
 export async function meterRunningMachines(db, { now = Date.now() } = {}) {
-  const open = (await db.query(`SELECT s.*, m.size, m.workspace_id, m.agent_user_id, m.backend_ref, m.unfunded_since, m.state
+  const open = (await db.query(`SELECT s.*, m.size, m.workspace_id, m.agent_user_id, m.backend_ref, m.unfunded_since, m.state,
+      m.idle_stop_minutes, m.last_active_at
       FROM compute_sessions s JOIN compute_machines m ON m.id = s.machine_id WHERE s.ended_at IS NULL AND m.state = 'running'`)).rows;
-  const out = { rolled: 0, unfunded: 0, stopped: 0 };
+  const out = { rolled: 0, unfunded: 0, stopped: 0, idle: 0 };
   for (const s of open) {
     const m = { id: s.machine_id, size: s.size, workspace_id: s.workspace_id, agent_user_id: s.agent_user_id, backend_ref: s.backend_ref };
     const age = (now - new Date(s.segment_started_at).getTime()) / 1000;
+    // Nobody used it for its idle limit: stop it, so a forgotten machine does not keep billing.
+    const lastUse = new Date(s.last_active_at || s.started_at).getTime();
+    if (s.idle_stop_minutes != null && now - lastUse >= s.idle_stop_minutes * 60_000) {
+      await stopRow(db, { ...m, workspace_id: s.workspace_id }, null, 'idle');
+      out.idle++;
+      continue;
+    }
     if (s.unfunded_since && (now - new Date(s.unfunded_since).getTime()) / 1000 >= UNFUNDED_GRACE_SECONDS) {
       await stopRow(db, { ...m, workspace_id: s.workspace_id }, null, 'unfunded');
       out.stopped++;
@@ -509,6 +542,7 @@ export function execRequest({ argv, cwd, stdin, env, timeoutMs } = {}) {
 export async function execMachineStream(db, actor, machineId, input = {}) {
   const req = execRequest(input);
   const { m } = await runningMachineFor(db, actor, machineId, input.workspace);
+  await touch(db, m.id, Date.now() + req.timeoutMs); // busy until the command's deadline at the latest
   try { return await computeBackend().exec({ id: m.id, ref: m.backend_ref }, req); }
   catch (e) { throw new ComputeError(e.message, e.code === 'compute_unavailable' ? 'compute_unavailable' : (e.code || 'exec_failed'), e.statusCode || 502); }
 }
@@ -542,6 +576,7 @@ export async function execMachine(db, actor, machineId, input = {}) {
 export async function readMachineFile(db, actor, machineId, { path, workspace } = {}) {
   if (!path || typeof path !== 'string') throw new ComputeError('path is required', 'invalid_path');
   const { m } = await runningMachineFor(db, actor, machineId, workspace);
+  await touch(db, m.id);
   const buf = await computeBackend().readFile({ id: m.id, ref: m.backend_ref }, path).catch((e) => { throw new ComputeError(e.message, e.code || 'read_failed', e.statusCode || 502); });
   if (buf.length > FILE_MAX_BYTES) throw new ComputeError('File too large to read through XENO; move it with XENO Storage', 'too_large', 413);
   return buf;
@@ -552,6 +587,7 @@ export async function writeMachineFile(db, actor, machineId, { path, content, wo
   const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content ?? ''), 'utf8');
   if (buf.length > FILE_MAX_BYTES) throw new ComputeError('File too large to write through XENO; move it with XENO Storage', 'too_large', 413);
   const { m } = await runningMachineFor(db, actor, machineId, workspace);
+  await touch(db, m.id);
   const r = await computeBackend().writeFile({ id: m.id, ref: m.backend_ref }, path, buf).catch((e) => { throw new ComputeError(e.message, e.code || 'write_failed', e.statusCode || 502); });
   return { path: r.path || path, bytes: buf.length };
 }

@@ -2214,6 +2214,20 @@
    ]
   },
   {
+   "name": "compute.machine.idle_set",
+   "wire": "compute__machine__idle_set",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_set_idle_stop"
+   ]
+  },
+  {
    "name": "compute.machine.delete",
    "wire": "compute__machine__delete",
    "version": "1.0.0",
