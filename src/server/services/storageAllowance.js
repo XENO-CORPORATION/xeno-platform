@@ -40,19 +40,8 @@ const HELD = `(f.deleted_at IS NULL OR EXISTS (SELECT 1 FROM library_trash lt WH
 const PERSONAL = `f.workspace_id IN (SELECT pw.id FROM workspaces pw WHERE pw.workspace_type = 'personal' AND pw.owner_user_id = $1)`;
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
-// compute_machines.home_bytes arrives with the Compute migration that saves a machine's home folder. Until that
-// migration has run there is nothing to count; once the column is seen it is remembered (columns are never dropped).
-let homeBytesColumn = false;
-async function hasHomeBytes(db) {
-  if (homeBytesColumn) return true;
-  const { rows } = await db.query(
-    `SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'compute_machines' AND column_name = 'home_bytes'`);
-  return (homeBytesColumn = rows.length > 0);
-}
-
 /** The saved home folders of a scope's machines that still exist: `{ bytes, machines }`. `scope` is SQL over `m`. */
 async function machineBytes(db, scope, args) {
-  if (!(await hasHomeBytes(db))) return { bytes: 0, machines: 0 };
   const { rows } = await db.query(
     `SELECT COALESCE(SUM(m.home_bytes), 0)::bigint AS bytes, COUNT(m.home_bytes)::int AS machines
        FROM compute_machines m WHERE ${scope} AND m.state <> 'deleted' AND m.home_bytes IS NOT NULL`, args);
