@@ -609,24 +609,16 @@ async function main() {
     assert.equal(registrationDecision('a@b.test', { shareInvite: true }).allowed, true, 'a link holder can create an account');
 
     // XENO Compute: a machine's saved home folder counts in its workspace's pool until the machine is deleted
-    // (xeno-compute SPEC §2a). Before the Compute migration adds home_bytes there is nothing to count.
+    // (xeno-compute SPEC §2a).
     const { ensurePersonalWorkspace: ensurePW } = await import('../services/personalWorkspace.js');
     const mOwner = await user('sto_machine');
     const mPersonal = (await ensurePW(pool, mOwner)).id;
     const mTeam = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Sto Machines', 'sto-machines') RETURNING id`, [mOwner])).rows[0].id;
-    const hasCol = async () => (await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'compute_machines' AND column_name = 'home_bytes'`)).rows.length > 0;
     const machine = async (ws, state, bytes) => {
       const id = `mch_${crypto.randomUUID().replace(/-/g, '')}`;
-      await pool.query(`INSERT INTO compute_machines (id, workspace_id, created_by_user_id, name, size, state, deleted_at) VALUES ($1, $2, $3, 'box', 'small', $4, CASE WHEN $4 = 'deleted' THEN now() END)`, [id, ws, mOwner, state]);
-      if (await hasCol()) await pool.query('UPDATE compute_machines SET home_bytes = $2 WHERE id = $1', [id, bytes]);
+      await pool.query(`INSERT INTO compute_machines (id, workspace_id, created_by_user_id, name, size, state, deleted_at, home_bytes) VALUES ($1, $2, $3, 'box', 'small', $4, CASE WHEN $4 = 'deleted' THEN now() END, $5)`, [id, ws, mOwner, state, bytes]);
       return id;
     };
-    if (!(await hasCol())) {
-      await machine(mPersonal, 'stopped', null);
-      assert.equal((await storageUsage(pool, mOwner)).usedBytes, 0, 'without the column the meter is unchanged and does not fail');
-      // the shape the Compute migration adds (platform session, 2026-10-27): nullable until the first save
-      await pool.query('ALTER TABLE compute_machines ADD COLUMN IF NOT EXISTS home_bytes bigint, ADD COLUMN IF NOT EXISTS home_saved_at timestamptz');
-    }
     const mAllowance = await storageAllowance(pool, mOwner);
     await machine(mPersonal, 'stopped', mAllowance - 10);
     await machine(mPersonal, 'deleted', 7 * GB);            // deleted: its copy is gone, never counted
