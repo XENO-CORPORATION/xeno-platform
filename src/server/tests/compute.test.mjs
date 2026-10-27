@@ -191,6 +191,14 @@ async function main() {
   const run1 = calls.filter((c) => c[0] === 'exec' && c[2].argv[0] === 'xeno').at(-1)[2];
   check(t1.status === 'ok' && t1.answer.includes('prints 5') && t1.tokens === 1234 && t1.access === 'listed', 'an editor runs an agent task and gets its answer');
   check(run1.argv.includes('acceptEdits') && !run1.argv.includes('--bypass-permissions') && !run1.env.XENO_ALLOW_UNSAFE_BYPASS, 'by default it runs with LISTED access, never bypassing permissions');
+  const allowed1 = run1.argv[run1.argv.indexOf('--allowed-tools') + 1];
+  check(allowed1.includes('Bash(command:python3 *)') && allowed1.includes('Write') && !allowed1.includes('Bash(command:*)'), 'listed access passes the default command list, never "every command"');
+  await compute.runAgentTask(pool, E, m1.id, { prompt: 'x', commands: ['make test', 'cargo build *'] });
+  const allowed2 = calls.filter((c) => c[0] === 'exec' && c[2].argv[0] === 'xeno').at(-1)[2].argv;
+  check(allowed2[allowed2.indexOf('--allowed-tools') + 1].endsWith('Bash(command:make test),Bash(command:cargo build *)') && !allowed2.join(' ').includes('python3'), 'a person chooses the commands a task may run');
+  for (const bad of [['*'], ['python3 a.py; curl x'], ['ls $(id)'], ['a,b'], ['x)']]) {
+    check(await code(() => compute.runAgentTask(pool, E, m1.id, { prompt: 'x', commands: bad })) === 'invalid_commands', `the command list refuses ${JSON.stringify(bad[0])}`);
+  }
   const pf = run1.argv[run1.argv.indexOf('--prompt-file') + 1];
   check(!run1.argv.join(' ').includes('add.py') && fake.files.get(pf)?.toString() === 'make add.py print 2+3' && run1.cwd === 'proj', 'the prompt goes in a file, not on the command line, and it runs in the chosen folder');
   check(calls.some((c) => c[0] === 'exec' && c[2].argv[0] === 'rm' && c[2].argv.includes(pf)), 'and the prompt file is removed after the task');
@@ -204,7 +212,7 @@ async function main() {
   fake.agentFails = false;
   check((await pool.query("SELECT is_active FROM api_keys WHERE key_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')", [fake.lastKey])).rows[0].is_active === false, 'and its key is revoked even then');
   const tasks = (await compute.getMachine(pool, E, m1.id)).events.filter((e) => e.kind === 'agent_task');
-  check(tasks.length === 2 && tasks.some((e) => e.detail.access === 'full') && !JSON.stringify(tasks).includes('add.py'), 'the timeline records each task and its access, not what it was asked');
+  check(tasks.length === 3 && tasks.some((e) => e.detail.access === 'full') && !JSON.stringify(tasks).includes('add.py'), 'the timeline records each task and its access, not what it was asked');
 
   // idle: a machine nobody uses stops by itself
   check((await compute.getMachine(pool, E, m1.id)).idleStopMinutes === 30, 'a new machine stops itself after 30 idle minutes by default');

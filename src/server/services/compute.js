@@ -605,8 +605,9 @@ export async function writeMachineFile(db, actor, machineId, { path, content, wo
 // ─────────────────────────────────────────── the XENO Agent on a machine
 // One task, run to completion by the CLI baked into the machine image (`xeno run`). Two ways to run, chosen per task
 // (owner, 2026-10-27: "full scale with full access mode and permission based listed commands"):
-//   listed (default) — the agent may read and edit files; commands only from an approved list. Until the CLI can approve
-//                      a list unattended, no commands run in this mode (raised with the CLI session, 2026-10-27).
+//   listed (default) — the agent may read and edit files and run only the listed commands (patterns like `python3 *`);
+//                      the CLI refuses anything else, and a listed command chained to another (; && | $( …) too.
+//                      Needs CLI >= 0.5.145 in the machine image (image 0.5.0).
 //   full             — no permission checks at all. The machine is the person's own and nothing else lives on it; every
 //                      use is on the machine's timeline.
 // The model key is minted for THIS task (a session key on the person's credits, attributed to the agent when an agent
@@ -622,18 +623,36 @@ async function inTx(db, fn) {
   finally { if (client !== db) client.release(); }
 }
 
+/** What a listed-access task may run when the caller names nothing: common build and inspection tools. */
+export const DEFAULT_AGENT_COMMANDS = ['python3 *', 'pip install *', 'node *', 'npm *', 'npx *', 'git *', 'ls *', 'cat *', 'mkdir *', 'pytest *'];
+const LISTED_TOOLS = ['Read', 'Write', 'Edit', 'LS', 'Glob', 'Grep'];
+
+/** Check the commands a listed task may run: patterns, not shell; never "everything" (that is full access). */
+export function readAgentCommands(commands) {
+  if (commands == null) return DEFAULT_AGENT_COMMANDS;
+  if (!Array.isArray(commands) || commands.length > 50) throw new ComputeError('commands must be a list of at most 50 patterns', 'invalid_commands');
+  return commands.map((c) => {
+    const p = String(c ?? '').trim();
+    if (!p || p.length > 200 || /[()\n\r,`$;&|<>]/.test(p)) throw new ComputeError(`"${p.slice(0, 40)}" is not a command pattern (no shell symbols, commas or brackets)`, 'invalid_commands');
+    if (/^[*\s]+$/.test(p)) throw new ComputeError('Allowing every command is full access; choose access "full" instead', 'invalid_commands');
+    return p;
+  });
+}
+
 /**
  * The CLI's argv for one task. The prompt is read from a file the platform writes for the task and removes after,
- * never put on the command line. (`--prompt-file -` should read stdin; CLI 0.5.143 reads a file named "-" instead.)
+ * never put on the command line.
  */
-export function agentTaskArgv({ access = 'listed', model, promptFile } = {}) {
+export function agentTaskArgv({ access = 'listed', model, promptFile, commands } = {}) {
   if (!AGENT_ACCESS.includes(access)) throw new ComputeError('access must be "listed" or "full"', 'invalid_access');
   if (model != null && !/^[A-Za-z0-9._:/-]{1,100}$/.test(String(model))) throw new ComputeError('Unknown model name', 'invalid_model');
   return ['xeno', 'run', '--json', ...(model ? ['--model', String(model)] : []),
-    ...(access === 'full' ? ['--bypass-permissions'] : ['--permission-mode', 'acceptEdits']), '--prompt-file', String(promptFile)];
+    ...(access === 'full' ? ['--bypass-permissions']
+      : ['--permission-mode', 'acceptEdits', '--allowed-tools', [...LISTED_TOOLS, ...readAgentCommands(commands).map((c) => `Bash(command:${c})`)].join(',')]),
+    '--prompt-file', String(promptFile)];
 }
 
-export async function runAgentTask(db, actor, machineId, { prompt, access = 'listed', model, folder, timeoutMinutes = 15, maxCredits, workspace } = {}) {
+export async function runAgentTask(db, actor, machineId, { prompt, access = 'listed', model, folder, commands, timeoutMinutes = 15, maxCredits, workspace } = {}) {
   const text = String(prompt ?? '').trim();
   if (!text) throw new ComputeError('Say what the agent should do', 'invalid_prompt');
   if (text.length > AGENT_PROMPT_MAX) throw new ComputeError(`The task is too long (at most ${AGENT_PROMPT_MAX} characters)`, 'invalid_prompt');
@@ -644,7 +663,7 @@ export async function runAgentTask(db, actor, machineId, { prompt, access = 'lis
   const cap = maxCredits == null ? undefined : Math.round(Number(maxCredits) * MICRO_PER_CREDIT);
   if (cap !== undefined && !(cap > 0)) throw new ComputeError('maxCredits must be more than 0', 'invalid_cap');
   const promptFile = `${AGENT_STATE_DIR}/tasks/${crypto.randomBytes(8).toString('hex')}.txt`;
-  const argv = agentTaskArgv({ access, model, promptFile });
+  const argv = agentTaskArgv({ access, model, promptFile, commands });
   const { ctx, m } = await runningMachineFor(db, actor, machineId, workspace);
 
   const person = (await db.query('SELECT id, email FROM users WHERE id = $1', [ctx.userId])).rows[0];
