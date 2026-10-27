@@ -191,7 +191,9 @@ async function main() {
   const run1 = calls.filter((c) => c[0] === 'exec' && c[2].argv[0] === 'xeno').at(-1)[2];
   check(t1.status === 'ok' && t1.answer.includes('prints 5') && t1.tokens === 1234 && t1.access === 'listed', 'an editor runs an agent task and gets its answer');
   check(run1.argv.includes('acceptEdits') && !run1.argv.includes('--bypass-permissions') && !run1.env.XENO_ALLOW_UNSAFE_BYPASS, 'by default it runs with LISTED access, never bypassing permissions');
-  check(!run1.argv.join(' ').includes('add.py') && Buffer.from(run1.stdin, 'base64').toString() === 'make add.py print 2+3' && run1.cwd === 'proj', 'the prompt goes on stdin, not the command line, in the chosen folder');
+  const pf = run1.argv[run1.argv.indexOf('--prompt-file') + 1];
+  check(!run1.argv.join(' ').includes('add.py') && fake.files.get(pf)?.toString() === 'make add.py print 2+3' && run1.cwd === 'proj', 'the prompt goes in a file, not on the command line, and it runs in the chosen folder');
+  check(calls.some((c) => c[0] === 'exec' && c[2].argv[0] === 'rm' && c[2].argv.includes(pf)), 'and the prompt file is removed after the task');
   check(/^xeno-[0-9a-f]{48}$/.test(run1.env.XENO_API_KEY) && fake.keyLive === true, 'it gets its own model key, live while it runs');
   check((await pool.query("SELECT is_active FROM api_keys WHERE key_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')", [fake.lastKey])).rows[0].is_active === false, 'and the key is revoked when the task ends');
   await compute.runAgentTask(pool, E, m1.id, { prompt: 'do anything', access: 'full' });
