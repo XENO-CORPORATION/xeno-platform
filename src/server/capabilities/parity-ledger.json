@@ -2596,6 +2596,13 @@
       "class": "safe",
       "scope": "storage:read"
     },
+    "route:libraryRoutes.js:GET /changes": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "library:read",
+      "because": "the desktop drive's sync feed (which folders to relist since a cursor), not an action; an agent lists the files themselves with library.file.list"
+    },
     "route:libraryRoutes.js:GET /folder-links/:id/activity": {
       "status": "planned",
       "class": "safe",
