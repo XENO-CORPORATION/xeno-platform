@@ -24,7 +24,10 @@ export async function readCheckoutStatus(pool, stripe, userId, sessionId) {
     const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
     if (subId) {
       const workspaceId = session.metadata?.xenoWorkspaceId;
-      const result = workspaceId
+      // A storage pack is fulfilled by its grant, not by a plan row (billingService reconcileStoragePack).
+      const result = session.metadata?.kind === 'storage'
+        ? await pool.query('SELECT 1 FROM storage_grants WHERE user_id = $1 AND stripe_subscription_id = $2 AND revoked_at IS NULL', [String(userId), subId])
+        : workspaceId
         ? await pool.query("SELECT 1 FROM workspaces WHERE id = $1 AND metadata->'billing'->>'stripe_subscription_id' = $2", [workspaceId, subId])
         : await pool.query('SELECT 1 FROM xeno_account_plans WHERE user_id = $1 AND stripe_subscription_id = $2', [String(userId), subId]);
       fulfilled = result.rows.length > 0;

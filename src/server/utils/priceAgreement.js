@@ -18,7 +18,7 @@
  */
 
 /**
- * @param {{id:string, kind:'credits'|'subscription', price:number, currency:string, interval?:string}} item
+ * @param {{id:string, kind:'credits'|'subscription'|'storage', price:number, currency:string, interval?:string}} item
  * @param {{active?:boolean, unit_amount?:number, currency?:string, type?:string, billing_scheme?:string, custom_unit_amount?:unknown, transform_quantity?:unknown, recurring?:{interval?:string, interval_count?:number, usage_type?:string}|null}} price
  * @returns {string[]} human-readable problems; empty means they agree
  */
@@ -47,7 +47,8 @@ export function priceIssues(item, price) {
     issues.push(`is in ${String(price.currency).toUpperCase()} but the catalogue says ${String(item.currency).toUpperCase()}`);
   }
 
-  if (item.kind === 'subscription') {
+  // A storage pack renews monthly like a plan.
+  if (item.kind === 'subscription' || item.kind === 'storage') {
     if (price.type !== 'recurring') {
       issues.push('is a ONE-TIME price on a subscription item — the plan would never renew');
     } else if (item.interval && price.recurring?.interval !== item.interval) {

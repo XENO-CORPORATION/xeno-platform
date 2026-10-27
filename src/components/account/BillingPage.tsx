@@ -50,6 +50,7 @@ const BillingPage: React.FC = () => {
   const [pendingItem, setPendingItem] = useState<BillingItem | null>(null);
   const [showPacks, setShowPacks] = useState(false);
   const [buyingPack, setBuyingPack] = useState<string | null>(null);
+  const [storagePacks, setStoragePacks] = useState<BillingItem[]>([]);
   const loadGeneration = useRef(0);
 
   const load = useCallback(async () => {
@@ -72,10 +73,11 @@ const BillingPage: React.FC = () => {
         checkout === 'open' ? 'Checkout has not completed. No payment has been confirmed for this checkout.' :
         'We could not verify this checkout. Refresh billing or contact support before trying another purchase.' });
       setPacks((cfg.catalog || []).filter((i) => i.kind === 'credits'));
+      setStoragePacks((cfg.catalog || []).filter((i) => i.kind === 'storage'));
       setUpgradeItem((cfg.catalog || []).find((i) => i.available && i.kind === 'subscription' && i.plan === 'pro' && i.interval === 'month') || null);
       return true;
     } catch {
-      if (generation === loadGeneration.current) { setSummary(null); setPacks([]); setUpgradeItem(null); }
+      if (generation === loadGeneration.current) { setSummary(null); setPacks([]); setStoragePacks([]); setUpgradeItem(null); }
       return false;
     } finally {
       if (generation === loadGeneration.current) setLoading(false);
@@ -117,10 +119,16 @@ const BillingPage: React.FC = () => {
     const item = availablePacks.find((pack) => pack.id === id);
     if (item) setPendingItem(item);
   };
+  const availableStorage = storagePacks.filter((p) => p.available);
+  const buyStorage = (id: string) => {
+    setNotice(null);
+    const item = availableStorage.find((pack) => pack.id === id);
+    if (item) setPendingItem(item);
+  };
 
   const proceedToCheckout = async (item: BillingItem, consentId: string) => {
     setPendingItem(null);
-    if (item.kind === 'credits') setBuyingPack(item.id);
+    if (item.kind === 'credits' || item.kind === 'storage') setBuyingPack(item.id);
     else setBusy('upgrade');
     const r = await startCheckout(item.id, undefined, consentId);
     if (!r.ok) {
@@ -265,6 +273,37 @@ const BillingPage: React.FC = () => {
         <p className="xeno-billing-note">
           Credits are optional — only for premium (frontier) AI models and the marketplace. Everyday tools on
           your own key or our in-house models don't use credits. Purchased credits never expire.
+        </p>
+      </section>
+
+      {/* Extra XENO Storage space, monthly (billingService CATALOG kind 'storage'). Address: /account/billing#storage */}
+      <section id="storage" className="xeno-credit-card">
+        <div className="xeno-billing-card-heading">
+          <div>
+            <div className="xeno-billing-meta">More storage</div>
+            <div className="text-base font-semibold">Extra space for your files and saved machine disks</div>
+          </div>
+        </div>
+        {availableStorage.length === 0 ? (
+          <p className="xeno-billing-note">Extra storage is not on sale yet.</p>
+        ) : (
+          <div className="grid sm:grid-cols-3 gap-3 mt-4">
+            {availableStorage.map((p) => (
+              <button key={p.id} onClick={() => buyStorage(p.id)} disabled={buyingPack !== null || busy !== null || !summary.enabled}
+                className="xeno-credit-pack">
+                <div className="text-base font-semibold">{p.label}</div>
+                <div className="xeno-billing-meta">{formatPrice(p.price, p.currency)} a month</div>
+                <div className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: ACCENT }}>
+                  {buyingPack === p.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {buyingPack === p.id ? 'Redirecting…' : 'Add →'}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="xeno-billing-note">
+          Packs add to your plan's space every month until you cancel them in Manage billing. When a pack ends nothing
+          is deleted: if you are over your space, new files are refused until you free some up.
         </p>
       </section>
       </div>
