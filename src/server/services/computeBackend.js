@@ -18,6 +18,9 @@ const unavailable = {
   async start() { throw new ComputeUnavailable(); },
   async stop() { throw new ComputeUnavailable(); },
   async remove() { throw new ComputeUnavailable(); },
+  async exec() { throw new ComputeUnavailable(); },
+  async readFile() { throw new ComputeUnavailable(); },
+  async writeFile() { throw new ComputeUnavailable(); },
 };
 
 function httpBackend(baseUrl, token) {
@@ -32,8 +35,23 @@ function httpBackend(baseUrl, token) {
     if (!res.ok) throw Object.assign(new Error(data.error || `XENO Compute refused (${res.status})`), { code: data.code || 'compute_refused', statusCode: 502 });
     return data;
   };
+  const auth = token ? { authorization: `Bearer ${token}` } : {};
+  const refused = async (res) => {
+    const data = await res.json().catch(() => ({}));
+    return Object.assign(new Error(data.error || `XENO Compute refused (${res.status})`), { code: data.code || 'compute_refused', statusCode: res.status === 409 ? 409 : 502 });
+  };
+  const io = async (path, init, timeoutMs) => {
+    const res = await fetch(new URL(path, baseUrl), { ...init, headers: { ...auth, ...(init.headers || {}) }, signal: AbortSignal.timeout(timeoutMs) })
+      .catch((e) => { throw new ComputeUnavailable(`XENO Compute did not answer: ${e.message}`); });
+    if (!res.ok) throw await refused(res);
+    return res;
+  };
   return {
     name: 'http',
+    /** Run one command; resolves to the machine's streaming NDJSON Response. */
+    exec: (m, body) => io(`/v1/machines/${m.id}/exec`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, body.timeoutMs + 30_000),
+    readFile: async (m, path) => Buffer.from(await (await io(`/v1/machines/${m.id}/files?path=${encodeURIComponent(path)}`, { method: 'GET' }, 120_000)).arrayBuffer()),
+    writeFile: async (m, path, buf) => (await io(`/v1/machines/${m.id}/files?path=${encodeURIComponent(path)}`, { method: 'PUT', body: buf }, 120_000)).json(),
     create: (m) => call('/v1/machines', { machineId: m.id, workspaceId: m.workspaceId, size: m.size, image: m.image }),
     start: (m) => call(`/v1/machines/${m.id}/start`, {}),
     stop: (m) => call(`/v1/machines/${m.id}/stop`, {}),

@@ -31,11 +31,20 @@ export const TOOLS = [
     description: 'Start a machine. An hour is reserved on your owner’s credits and settled for the time used. Refused when the size is not priced, a cap would be exceeded, or the credits cannot cover the next hour.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
   { name: 'stop_machine', title: 'Stop a machine', annotations: RW,
-    description: 'Stop a machine. Its disk is kept; billing stops at the second.',
+    description: 'Stop a machine. Billing stops at the second. Files on the machine are not kept after a stop yet: save what matters to XENO Storage first.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
   { name: 'delete_machine', title: 'Delete a machine', annotations: DEL,
     description: 'Delete a stopped machine and its disk. This cannot be undone.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
+  { name: 'exec', title: 'Run a command on a machine', annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    description: 'Run one program on a running machine that works for you and wait for it: exit code, stdout and stderr (each up to 1 MB). argv is the program and its arguments, not a shell line; use ["sh","-c","…"] for shell syntax. timeoutMs defaults to 60000, at most 1800000.',
+    inputSchema: { type: 'object', required: ['machineId', 'argv'], properties: { workspace: WS, machineId: MID, argv: { type: 'array', items: { type: 'string' }, minItems: 1 }, cwd: { type: 'string', description: 'Working folder; relative paths are from the home folder.' }, stdin: { type: 'string' }, env: { type: 'object', additionalProperties: { type: 'string' } }, timeoutMs: { type: 'integer', minimum: 1, maximum: 1800000 } }, additionalProperties: false } },
+  { name: 'read_file', title: 'Read a file on a machine', annotations: RO,
+    description: 'Read a file from a running machine (up to 25 MB). Text comes back as text; anything else as base64.',
+    inputSchema: { type: 'object', required: ['machineId', 'path'], properties: { workspace: WS, machineId: MID, path: { type: 'string' } }, additionalProperties: false } },
+  { name: 'write_file', title: 'Write a file on a machine', annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    description: 'Write a file on a running machine (up to 25 MB), creating folders as needed and replacing what was there. Pass text in content, or bytes in contentBase64.',
+    inputSchema: { type: 'object', required: ['machineId', 'path'], properties: { workspace: WS, machineId: MID, path: { type: 'string' }, content: { type: 'string' }, contentBase64: { type: 'string' } }, additionalProperties: false } },
   { name: 'usage', title: 'Machine usage', annotations: RO,
     description: 'Machine time in the workspace for a period (default: this month), by machine and by agent, in credits.',
     inputSchema: { type: 'object', properties: { workspace: WS, from: { type: 'string', description: 'ISO date' }, to: { type: 'string', description: 'ISO date' } }, additionalProperties: false } },
@@ -54,6 +63,13 @@ export async function callTool(db, actor, name, a = {}) {
       case 'start_machine': return ok({ machine: await compute.startMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'stop_machine': return ok({ machine: await compute.stopMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'delete_machine': return ok({ machine: await compute.deleteMachine(db, actor, a.machineId, { workspace: a.workspace }) });
+      case 'exec': return ok({ result: await compute.execMachine(db, actor, a.machineId, a) });
+      case 'read_file': {
+        const buf = await compute.readMachineFile(db, actor, a.machineId, a);
+        const text = buf.toString('utf8');
+        return ok(Buffer.from(text, 'utf8').equals(buf) ? { path: a.path, bytes: buf.length, content: text } : { path: a.path, bytes: buf.length, contentBase64: buf.toString('base64') });
+      }
+      case 'write_file': return ok({ file: await compute.writeMachineFile(db, actor, a.machineId, { ...a, content: a.contentBase64 != null ? Buffer.from(a.contentBase64, 'base64') : a.content }) });
       case 'usage': return ok({ usage: await compute.usage(db, actor, a) });
       case 'budgets': return ok({ caps: await compute.listCaps(db, actor, a) });
       default: throw new ComputeMcpError(`Unknown tool ${name}`, 'unknown_tool');

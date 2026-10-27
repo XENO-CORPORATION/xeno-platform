@@ -1542,6 +1542,30 @@
       "class": "irreversible",
       "scope": "compute:write"
     },
+    "route:computeRoutes.js:POST /machines/:id/exec": {
+      "status": "capability",
+      "capability": "compute.machine.exec",
+      "class": "irreversible",
+      "scope": "compute:write"
+    },
+    "route:computeRoutes.js:POST /machines/:id/exec/stream": {
+      "status": "capability",
+      "capability": "compute.machine.exec",
+      "class": "irreversible",
+      "scope": "compute:write"
+    },
+    "route:computeRoutes.js:GET /machines/:id/files": {
+      "status": "capability",
+      "capability": "compute.file.read",
+      "class": "safe",
+      "scope": "compute:read"
+    },
+    "route:computeRoutes.js:PUT /machines/:id/files": {
+      "status": "capability",
+      "capability": "compute.file.write",
+      "class": "irreversible",
+      "scope": "compute:write"
+    },
     "route:computeRoutes.js:POST /machines/:id/stop": {
       "status": "capability",
       "capability": "compute.machine.stop",

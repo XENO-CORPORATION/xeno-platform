@@ -481,6 +481,81 @@ export async function setCap(db, actor, { workspace, scope = 'workspace', scopeI
 }
 
 /** Platform staff (a human admin) set a size's price — the owner's decision, entered as data. `null` unprices it. */
+// ─────────────────────────────────────────── commands and files on a running machine
+// The machine is the wall between customers (owner, 2026-10-27), so a command runs directly on it; XENO Box is added
+// on the machine only when a workload needs it. Who may reach a machine is decided here: an editor of its workspace,
+// and an agent only on a machine that works for it. The machine must be RUNNING, i.e. billed.
+const EXEC_MAX_TIMEOUT_MS = 30 * 60_000;
+const EXEC_MAX_OUTPUT = 1024 * 1024;     // per stream, for the buffered call
+const FILE_MAX_BYTES = 25 * 1024 * 1024; // through the platform; bigger files belong in XENO Storage
+
+async function runningMachineFor(db, actor, machineId, workspace) {
+  const { ctx, m } = await ctxForMachine(db, actor, machineId, 'editor', workspace);
+  if (ctx.agentId && m.agent_user_id && String(m.agent_user_id) !== ctx.agentId) throw new ComputeError('That machine works for another agent', 'not_your_machine', 403);
+  if (m.state !== 'running') throw new ComputeError('Start the machine first', 'machine_not_running', 409);
+  return { ctx, m };
+}
+
+export function execRequest({ argv, cwd, stdin, env, timeoutMs } = {}) {
+  if (!Array.isArray(argv) || !argv.length || argv.some((a) => typeof a !== 'string')) throw new ComputeError('argv must be a non-empty list of strings (a program and its arguments, not a shell line)', 'invalid_argv');
+  const t = Number(timeoutMs ?? 60_000);
+  if (!(t > 0 && t <= EXEC_MAX_TIMEOUT_MS)) throw new ComputeError(`timeoutMs must be 1..${EXEC_MAX_TIMEOUT_MS}`, 'invalid_timeout');
+  if (env != null && (typeof env !== 'object' || Object.values(env).some((v) => typeof v !== 'string'))) throw new ComputeError('env must map names to strings', 'invalid_env');
+  return { argv, cwd: cwd ? String(cwd) : undefined, env: env || undefined, timeoutMs: t,
+    stdin: stdin == null ? undefined : Buffer.from(String(stdin), 'utf8').toString('base64') };
+}
+
+/** Run a command and return the machine's NDJSON stream (for the streaming route). */
+export async function execMachineStream(db, actor, machineId, input = {}) {
+  const req = execRequest(input);
+  const { m } = await runningMachineFor(db, actor, machineId, input.workspace);
+  try { return await computeBackend().exec({ id: m.id, ref: m.backend_ref }, req); }
+  catch (e) { throw new ComputeError(e.message, e.code === 'compute_unavailable' ? 'compute_unavailable' : (e.code || 'exec_failed'), e.statusCode || 502); }
+}
+
+/** Run a command to completion: exit code plus stdout/stderr as text (each capped at 1 MB). */
+export async function execMachine(db, actor, machineId, input = {}) {
+  const res = await execMachineStream(db, actor, machineId, input);
+  const out = { stdout: [], stderr: [] }; const size = { stdout: 0, stderr: 0 };
+  let truncated = false; let done = null; let rest = '';
+  const take = (line) => {
+    if (!line.trim()) return;
+    const o = JSON.parse(line);
+    if (o.done) { done = o; return; }
+    const b = Buffer.from(o.data, 'base64');
+    if (size[o.stream] + b.length > EXEC_MAX_OUTPUT) { truncated = true; return; }
+    out[o.stream].push(b); size[o.stream] += b.length;
+  };
+  for await (const chunk of res.body) {
+    rest += Buffer.from(chunk).toString('utf8');
+    const lines = rest.split('\n'); rest = lines.pop();
+    lines.forEach(take);
+  }
+  take(rest);
+  if (!done) throw new ComputeError('The machine stopped answering before the command finished', 'exec_interrupted', 502);
+  // Decode once at the end: a UTF-8 character can be split across two chunks.
+  return { exitCode: done.exitCode, signal: done.signal || null, timedOut: !!done.timedOut, truncated,
+    stdout: Buffer.concat(out.stdout).toString('utf8'), stderr: Buffer.concat(out.stderr).toString('utf8'),
+    ...(done.error ? { error: done.error } : {}) };
+}
+
+export async function readMachineFile(db, actor, machineId, { path, workspace } = {}) {
+  if (!path || typeof path !== 'string') throw new ComputeError('path is required', 'invalid_path');
+  const { m } = await runningMachineFor(db, actor, machineId, workspace);
+  const buf = await computeBackend().readFile({ id: m.id, ref: m.backend_ref }, path).catch((e) => { throw new ComputeError(e.message, e.code || 'read_failed', e.statusCode || 502); });
+  if (buf.length > FILE_MAX_BYTES) throw new ComputeError('File too large to read through XENO; move it with XENO Storage', 'too_large', 413);
+  return buf;
+}
+
+export async function writeMachineFile(db, actor, machineId, { path, content, workspace } = {}) {
+  if (!path || typeof path !== 'string') throw new ComputeError('path is required', 'invalid_path');
+  const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content ?? ''), 'utf8');
+  if (buf.length > FILE_MAX_BYTES) throw new ComputeError('File too large to write through XENO; move it with XENO Storage', 'too_large', 413);
+  const { m } = await runningMachineFor(db, actor, machineId, workspace);
+  const r = await computeBackend().writeFile({ id: m.id, ref: m.backend_ref }, path, buf).catch((e) => { throw new ComputeError(e.message, e.code || 'write_failed', e.statusCode || 502); });
+  return { path: r.path || path, bytes: buf.length };
+}
+
 export async function setRate(db, actor, { size, creditsPerHour }) {
   if (!actor || actor.kind === 'agent' || actor.kind === 'service' || actor.role !== 'admin') throw new ComputeError('Only XENO staff set prices', 'staff_only', 403);
   const micro = creditsPerHour == null ? null : Math.round(Number(creditsPerHour) * MICRO_PER_CREDIT);

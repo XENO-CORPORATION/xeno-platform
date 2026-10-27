@@ -11,6 +11,8 @@
  *   - caps (workspace / division / agent; machines, size, monthly credits) refuse a start or a bigger machine; only a
  *     person sets them
  *   - the database refuses an illegal state change and a session on an unpriced size even past the service
+ *   - a command or file reaches only a RUNNING machine, by an editor or the agent it works for; output survives a
+ *     UTF-8 character split across chunks; argv is a list and the timeout is bounded
  *
  *   node src/server/tests/compute.test.mjs   (DATABASE_URL = a disposable database)
  */
@@ -31,7 +33,17 @@ const code = async (fn) => { try { await fn(); return null; } catch (e) { return
 const tag = `cmp${Date.now().toString(36)}`;
 const calls = [];
 const fake = { name: 'fake', create: async (m) => { calls.push(['create', m.id]); return { ref: `fake-${m.id}` }; },
-  start: async (m) => { calls.push(['start', m.id]); }, stop: async (m) => { calls.push(['stop', m.id]); }, remove: async (m) => { calls.push(['remove', m.id]); } };
+  start: async (m) => { calls.push(['start', m.id]); }, stop: async (m) => { calls.push(['stop', m.id]); }, remove: async (m) => { calls.push(['remove', m.id]); },
+  // exec answers like the machine: NDJSON lines, base64 chunks. 'é' (c3 a9) is split across two chunks on purpose.
+  exec: async (m, body) => { calls.push(['exec', m.id, body]);
+    const line = (o) => JSON.stringify(o) + '\n';
+    const parts = [line({ stream: 'stdout', data: Buffer.from([0x68, 0xc3]).toString('base64') }),
+      line({ stream: 'stdout', data: Buffer.from([0xa9, 0x0a]).toString('base64') }) + line({ stream: 'stderr', data: Buffer.from('warn').toString('base64') }).slice(0, 10),
+      line({ stream: 'stderr', data: Buffer.from('warn').toString('base64') }).slice(10) + line({ done: true, exitCode: 3, signal: null, timedOut: false })];
+    return new Response(new ReadableStream({ start(c) { for (const x of parts) c.enqueue(new TextEncoder().encode(x)); c.close(); } })); },
+  files: new Map(),
+  readFile: async (m, path) => { if (!fake.files.has(path)) throw Object.assign(new Error('No such file'), { code: 'not_found', statusCode: 502 }); return fake.files.get(path); },
+  writeFile: async (m, path, buf) => { fake.files.set(path, Buffer.from(buf)); return { path: `/home/xeno/${path}`, bytes: buf.length }; } };
 const back = async (machineId, minutes) => pool.query(`UPDATE compute_sessions SET segment_started_at = segment_started_at - ($2 || ' minutes')::interval,
   started_at = started_at - ($2 || ' minutes')::interval WHERE machine_id = $1 AND ended_at IS NULL`, [machineId, String(minutes)]);
 
@@ -138,8 +150,26 @@ async function main() {
   check(ar.state === 'running' && String(au.payer_id) === String(owner), 'an agent’s machine time is paid by its owner (one quota per human)');
   await compute.stopMachine(pool, A, am.id);
 
-  // delete
+  // commands and files
+  check(await code(() => compute.execMachine(pool, E, m1.id, { argv: ['id'] })) === 'machine_not_running', 'a command on a stopped machine is refused');
   await compute.startMachine(pool, E, m1.id);
+  const ex = await compute.execMachine(pool, E, m1.id, { argv: ['sh', '-c', 'x'], stdin: 'in', timeoutMs: 5000 });
+  check(ex.exitCode === 3 && ex.stdout === 'h\u00e9\n' && ex.stderr === 'warn' && !ex.timedOut, 'an editor runs a command: exit code, and text that survives a character split across chunks');
+  const sent = calls.filter((c) => c[0] === 'exec').at(-1)[2];
+  check(Buffer.from(sent.stdin, 'base64').toString() === 'in' && sent.timeoutMs === 5000, 'stdin and the timeout reach the machine');
+  check(await code(() => compute.execMachine(pool, V, m1.id, { argv: ['id'] })) === 'editor_required', 'a viewer cannot run a command');
+  check(await code(() => compute.execMachine(pool, S, m1.id, { argv: ['id'] })) === 'not_a_member', 'a stranger cannot run a command');
+  check(await code(() => compute.execMachine(pool, E, m1.id, { argv: 'rm -rf /' })) === 'invalid_argv', 'a shell line is refused: argv is a list');
+  check(await code(() => compute.execMachine(pool, E, m1.id, { argv: ['id'], timeoutMs: 31 * 60_000 })) === 'invalid_timeout', 'a command cannot run without a bounded timeout');
+  await compute.startMachine(pool, A, am.id);
+  check(await code(() => compute.execMachine(pool, A2, am.id, { argv: ['id'] })) === 'not_your_machine', 'an agent cannot run commands on another agent’s machine');
+  check((await compute.execMachine(pool, A, am.id, { argv: ['id'] })).exitCode === 3, 'an agent runs commands on its own machine');
+  await compute.stopMachine(pool, A, am.id);
+  check((await compute.writeMachineFile(pool, E, m1.id, { path: 'a/b.txt', content: 'h\u00e9' })).bytes === 3, 'an editor writes a file');
+  check((await compute.readMachineFile(pool, E, m1.id, { path: 'a/b.txt' })).toString('utf8') === 'h\u00e9', 'and reads the same bytes back');
+  check(await code(() => compute.readMachineFile(pool, V, m1.id, { path: 'a/b.txt' })) === 'editor_required', 'a viewer cannot read a machine’s files');
+
+  // delete
   check(await code(() => compute.deleteMachine(pool, E, m1.id)) === 'still_running', 'a running machine cannot be deleted');
   await compute.stopMachine(pool, E, m1.id);
   const del = await compute.deleteMachine(pool, E, m1.id);
