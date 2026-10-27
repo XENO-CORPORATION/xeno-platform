@@ -622,12 +622,15 @@ async function inTx(db, fn) {
   finally { if (client !== db) client.release(); }
 }
 
-/** The CLI's argv for one task. The prompt goes on stdin (`--prompt-file -`), never on the command line. */
-export function agentTaskArgv({ access = 'listed', model } = {}) {
+/**
+ * The CLI's argv for one task. The prompt is read from a file the platform writes for the task and removes after,
+ * never put on the command line. (`--prompt-file -` should read stdin; CLI 0.5.143 reads a file named "-" instead.)
+ */
+export function agentTaskArgv({ access = 'listed', model, promptFile } = {}) {
   if (!AGENT_ACCESS.includes(access)) throw new ComputeError('access must be "listed" or "full"', 'invalid_access');
   if (model != null && !/^[A-Za-z0-9._:/-]{1,100}$/.test(String(model))) throw new ComputeError('Unknown model name', 'invalid_model');
   return ['xeno', 'run', '--json', ...(model ? ['--model', String(model)] : []),
-    ...(access === 'full' ? ['--bypass-permissions'] : ['--permission-mode', 'acceptEdits']), '--prompt-file', '-'];
+    ...(access === 'full' ? ['--bypass-permissions'] : ['--permission-mode', 'acceptEdits']), '--prompt-file', String(promptFile)];
 }
 
 export async function runAgentTask(db, actor, machineId, { prompt, access = 'listed', model, folder, timeoutMinutes = 15, maxCredits, workspace } = {}) {
@@ -640,7 +643,8 @@ export async function runAgentTask(db, actor, machineId, { prompt, access = 'lis
   if (!/^[A-Za-z0-9._/-]{1,200}$/.test(dir) || dir.split('/').includes('..') || dir.startsWith('/')) throw new ComputeError('folder must be a path inside the home folder', 'invalid_folder');
   const cap = maxCredits == null ? undefined : Math.round(Number(maxCredits) * MICRO_PER_CREDIT);
   if (cap !== undefined && !(cap > 0)) throw new ComputeError('maxCredits must be more than 0', 'invalid_cap');
-  const argv = agentTaskArgv({ access, model });
+  const promptFile = `${AGENT_STATE_DIR}/tasks/${crypto.randomBytes(8).toString('hex')}.txt`;
+  const argv = agentTaskArgv({ access, model, promptFile });
   const { ctx, m } = await runningMachineFor(db, actor, machineId, workspace);
 
   const person = (await db.query('SELECT id, email FROM users WHERE id = $1', [ctx.userId])).rows[0];
@@ -655,9 +659,11 @@ export async function runAgentTask(db, actor, machineId, { prompt, access = 'lis
   let res;
   try {
     await execMachine(db, actor, machineId, { argv: ['mkdir', '-p', dir], timeoutMs: 10_000, workspace });
-    res = await execMachine(db, actor, machineId, { argv, cwd: dir, stdin: text, timeoutMs: minutes * 60_000, workspace,
+    await writeMachineFile(db, actor, machineId, { path: promptFile, content: text, workspace });
+    res = await execMachine(db, actor, machineId, { argv, cwd: dir, timeoutMs: minutes * 60_000, workspace,
       env: { XENO_API_KEY: key.token, XENO_AGENT_HOME: AGENT_STATE_DIR, ...(access === 'full' ? { XENO_ALLOW_UNSAFE_BYPASS: '1' } : {}) } });
   } finally {
+    await execMachine(db, actor, machineId, { argv: ['rm', '-f', promptFile], timeoutMs: 10_000, workspace }).catch(() => {});
     await inTx(db, async (c) => {
       await revokeSessionKey(c, person, key.id).catch((e) => { if (e.code !== 'NOT_FOUND') throw e; });
       await recordSecurityEventTransactional(c, EVENTS.SESSION_KEY_REVOKED, { userId: ctx.userId, metadata: { keyId: key.id, machineId: m.id } });
