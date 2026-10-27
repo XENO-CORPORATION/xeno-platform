@@ -19,7 +19,7 @@ const corpus: ProductContent = {
     sub: 'XENO Corpus keeps the facts your project depends on — “tests pass”, “ports stay in range”, “every package is proprietary” — each tied to the check that can prove it false. Run a pulse and see what holds, what broke, and what nobody has checked.',
     media: { type: 'mockup', src: 'corpus-shape', alt: 'The XENO Corpus Shape canvas: a project corpus with claims marked held, lapsed and unknown, filtered to “False now”' },
     badges: ['Windows', 'Experimental', 'Unsigned build', 'XENO account'],
-    note: 'Experimental · v0.1.1 · Windows x64 only. Updates itself.',
+    note: 'Experimental · v0.1.2 · Windows x64 only. Updates itself.',
   },
   trust: [
     'Your corpus is files in your project, under .xeno/corpus/ — it stays on your PC',
