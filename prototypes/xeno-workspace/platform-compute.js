@@ -106,6 +106,7 @@
       <aside class="sp-console"><h3>Cost so far</h3><p data-cm-cost><b>${esc(cr(m.costSoFarCredits))}</b></p>
         <h3>Stops by itself</h3><p><select data-cm-idle aria-label="Stop by itself after">${IDLE_CHOICES.map(([v, l]) => `<option value="${v}"${String(m.idleStopMinutes ?? 'never') === String(v) ? ' selected' : ''}>${l === 'Never' ? l : 'After ' + l + ' idle'}</option>`).join('')}${m.idleStopMinutes != null && !IDLE_CHOICES.some(([v]) => v === m.idleStopMinutes) ? `<option value="${m.idleStopMinutes}" selected>After ${m.idleStopMinutes} minutes idle</option>` : ''}</select></p>
         <p class="pg-dim">Idle means no command or file call. A server left running in the background does not count as use, so choose Never for one.</p>
+        <h3>Saved files</h3><p data-cm-home>${m.homeBytes != null ? `${size(m.homeBytes)} in the home folder, kept between runs.` : 'Nothing saved yet. The home folder is saved when the machine stops.'}</p>
         <h3>Works for</h3><p>${m.agent ? esc(m.agent.name) : 'People in this workspace'}</p>
         <h3>Address</h3><p class="pg-dim"><code>${esc(m.id)}</code></p><p class="pg-dim">Created ${esc(when(m.createdAt))}</p></aside></div>`;
   }

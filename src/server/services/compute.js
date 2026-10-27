@@ -127,6 +127,7 @@ async function shapeMachine(db, m) {
     id: m.id, workspaceId: String(m.workspace_id), name: m.name, size: m.size, purpose: m.purpose, image: m.image,
     state: m.state, failure: m.failure || null, unfundedSince: m.unfunded_since || null,
     idleStopMinutes: m.idle_stop_minutes ?? null, lastActiveAt: m.last_active_at || null,
+    homeBytes: m.home_bytes == null ? null : Number(m.home_bytes), homeSavedAt: m.home_saved_at || null,
     agent: agent ? { id: agent.public_id, name: agent.name } : null,
     costSoFarCredits: credits(Number(s.settled) + running),
     createdAt: m.created_at, updatedAt: m.updated_at, deletedAt: m.deleted_at,
@@ -339,7 +340,11 @@ async function stopRow(db, m, actorUserId, reason) {
     charged = await settleSegment(db, session, m);
     await db.query('UPDATE compute_sessions SET ended_at = now() WHERE id = $1', [session.id]);
   }
-  const stopped = (await db.query("UPDATE compute_machines SET state = 'stopped', unfunded_since = NULL WHERE id = $1 RETURNING *", [m.id])).rows[0];
+  // the saved size is what XENO Storage counts; a failed save keeps the previous copy, so the previous size stands
+  const savedBytes = Number.isFinite(Number(out?.saved?.bytes)) && out?.saved ? Number(out.saved.bytes) : null;
+  const stopped = (await db.query(`UPDATE compute_machines SET state = 'stopped', unfunded_since = NULL,
+      home_bytes = COALESCE($2, home_bytes), home_saved_at = CASE WHEN $2::bigint IS NULL THEN home_saved_at ELSE now() END
+      WHERE id = $1 RETURNING *`, [m.id, savedBytes])).rows[0];
   await event(db, m.id, 'stopped', actorUserId, { reason, charged: credits(charged),
     savedBytes: out?.saved?.bytes ?? null, saveError: out?.saveError ? String(out.saveError).slice(0, 300) : null });
   return stopped;

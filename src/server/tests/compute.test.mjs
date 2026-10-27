@@ -95,6 +95,7 @@ async function main() {
   check(stopped.state === 'stopped' && stopped.costSoFarCredits === 18, 'a stop settles the seconds used: 30 minutes at 36/h = 18 credits');
   const tl = (await compute.getMachine(pool, E, m1.id)).events;
   check(tl.some((e) => e.kind === 'stopped' && e.detail.savedBytes === 4096) && tl.some((e) => e.kind === 'started' && e.detail.restoredBytes === 2048), 'the timeline says the home folder was put back on start and saved on stop');
+  check((await compute.getMachine(pool, E, m1.id)).homeBytes === 4096, 'the machine records how big its saved home folder is (what Storage counts)');
   const u = (await pool.query("SELECT actual_cost_micro, dimensions FROM api_usage_logs WHERE surface = 'xeno_compute' AND dimensions->>'machine_id' = $1", [m1.id])).rows[0];
   check(u && Number(u.actual_cost_micro) === 18_000_000 && u.dimensions.workspace_id === ws, 'the usage row names the machine and workspace');
   const split = await compute.aiVsMachines(pool, editor);
