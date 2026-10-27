@@ -17,7 +17,7 @@ import { registrationDecision } from '../middleware/registrationGate.js';
 import { mintShareInvite, shareInviteValid } from '../utils/shareInvite.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
-import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
+import { storageUsage, storageAllowance, StorageFullError, workspaceUsedBytes, workspaceMachineKind } from '../services/storageAllowance.js';
 import { syncFileObjects, fileObjectKey, evictLocalCopies, sweepOrphanObjects, localLibraryPath } from '../services/storageObjects.js';
 import { addVersion, latestFor, revisionFor } from '../services/storageVersions.js';
 import { setFileStorageForTests } from '../services/artifactStorage.js';
@@ -607,6 +607,39 @@ async function main() {
     assert.equal(shareInviteValid(inv, { JWT_SECRET: 'k' }), true); assert.equal(shareInviteValid(inv, { JWT_SECRET: 'other' }), false);
     assert.equal(shareInviteValid(inv, { JWT_SECRET: 'k' }, Date.now() + 25 * 3600 * 1000), false, 'the invitation expires');
     assert.equal(registrationDecision('a@b.test', { shareInvite: true }).allowed, true, 'a link holder can create an account');
+
+    // XENO Compute: a machine's saved home folder counts in its workspace's pool until the machine is deleted
+    // (xeno-compute SPEC §2a). Before the Compute migration adds home_bytes there is nothing to count.
+    const { ensurePersonalWorkspace: ensurePW } = await import('../services/personalWorkspace.js');
+    const mOwner = await user('sto_machine');
+    const mPersonal = (await ensurePW(pool, mOwner)).id;
+    const mTeam = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Sto Machines', 'sto-machines') RETURNING id`, [mOwner])).rows[0].id;
+    const hasCol = async () => (await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'compute_machines' AND column_name = 'home_bytes'`)).rows.length > 0;
+    const machine = async (ws, state, bytes) => {
+      const id = `mch_${crypto.randomUUID().replace(/-/g, '')}`;
+      await pool.query(`INSERT INTO compute_machines (id, workspace_id, created_by_user_id, name, size, state, deleted_at) VALUES ($1, $2, $3, 'box', 'small', $4, CASE WHEN $4 = 'deleted' THEN now() END)`, [id, ws, mOwner, state]);
+      if (await hasCol()) await pool.query('UPDATE compute_machines SET home_bytes = $2 WHERE id = $1', [id, bytes]);
+      return id;
+    };
+    if (!(await hasCol())) {
+      await machine(mPersonal, 'stopped', null);
+      assert.equal((await storageUsage(pool, mOwner)).usedBytes, 0, 'without the column the meter is unchanged and does not fail');
+      // the shape the Compute migration adds (platform session, 2026-10-27): nullable until the first save
+      await pool.query('ALTER TABLE compute_machines ADD COLUMN IF NOT EXISTS home_bytes bigint, ADD COLUMN IF NOT EXISTS home_saved_at timestamptz');
+    }
+    const mAllowance = await storageAllowance(pool, mOwner);
+    await machine(mPersonal, 'stopped', mAllowance - 10);
+    await machine(mPersonal, 'deleted', 7 * GB);            // deleted: its copy is gone, never counted
+    await machine(mPersonal, 'running', null);              // never saved: nothing to count
+    await machine(mTeam, 'stopped', 3 * GB);                // another pool
+    const mUse = await storageUsage(pool, mOwner);
+    assert.equal(mUse.usedBytes, mAllowance - 10, 'the stopped machine counts; the deleted and the unsaved do not');
+    assert.deepEqual(mUse.byKind.find((k) => k.kind === 'machine'), { kind: 'machine', bytes: mAllowance - 10, files: 1 }, 'shown as its own kind');
+    assert.equal(await workspaceUsedBytes(pool, mTeam), 3 * GB, 'a team machine counts in the team pool');
+    assert.deepEqual(await workspaceMachineKind(pool, mTeam), { kind: 'machine', bytes: 3 * GB, files: 1 }, 'and is reported as its own kind');
+    await assert.rejects(add(mOwner, 'after-machine.txt', 'x'.repeat(100), { workspaceId: mPersonal, enforceAllowance: true }), StorageFullError, 'a pool full of machine disk refuses new files');
+    await pool.query("UPDATE compute_machines SET state = 'deleted', deleted_at = now() WHERE workspace_id = $1 AND state = 'stopped'", [mPersonal]);
+    assert.equal((await storageUsage(pool, mOwner)).usedBytes, 0, 'deleting the machine frees its space');
 
     console.log('storage-allowance: all checks passed');
   } finally {

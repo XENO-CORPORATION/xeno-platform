@@ -11,6 +11,11 @@
  * Over the allowance: new files are refused (507 storage_full). Nothing is ever deleted, and reading,
  * downloading, renaming, trashing and deleting always work, so a person can always get back under.
  *
+ * A stopped XENO Compute machine's saved home folder counts too, in the pool of the workspace that owns the machine,
+ * until the machine is deleted (xeno-compute SPEC §2a, owner 2026-10-26: "Storage holds what you KEEP"). It is
+ * shown as its own `machine` kind. Saving a machine is never refused for a full pool (that would lose work); a full
+ * pool refuses new files, as for anything else.
+ *
  * The allowance comes from the plan (accountPlan.js `storageBytes`). The meter reads the rows themselves on
  * every call; there is no counter to drift.
  */
@@ -35,12 +40,35 @@ const HELD = `(f.deleted_at IS NULL OR EXISTS (SELECT 1 FROM library_trash lt WH
 const PERSONAL = `f.workspace_id IN (SELECT pw.id FROM workspaces pw WHERE pw.workspace_type = 'personal' AND pw.owner_user_id = $1)`;
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
-async function personalBytes(db, userId) {
+// compute_machines.home_bytes arrives with the Compute migration that saves a machine's home folder. Until that
+// migration has run there is nothing to count; once the column is seen it is remembered (columns are never dropped).
+let homeBytesColumn = false;
+async function hasHomeBytes(db) {
+  if (homeBytesColumn) return true;
   const { rows } = await db.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'compute_machines' AND column_name = 'home_bytes'`);
+  return (homeBytesColumn = rows.length > 0);
+}
+
+/** The saved home folders of a scope's machines that still exist: `{ bytes, machines }`. `scope` is SQL over `m`. */
+async function machineBytes(db, scope, args) {
+  if (!(await hasHomeBytes(db))) return { bytes: 0, machines: 0 };
+  const { rows } = await db.query(
+    `SELECT COALESCE(SUM(m.home_bytes), 0)::bigint AS bytes, COUNT(m.home_bytes)::int AS machines
+       FROM compute_machines m WHERE ${scope} AND m.state <> 'deleted' AND m.home_bytes IS NOT NULL`, args);
+  return { bytes: Number(rows[0].bytes), machines: rows[0].machines };
+}
+const PERSONAL_MACHINES = PERSONAL.replace('f.workspace_id', 'm.workspace_id');
+
+async function personalBytes(db, userId) {
+  const [{ rows }, machines] = await Promise.all([db.query(
     `SELECT COALESCE(SUM(f.file_size), 0)::bigint AS bytes, COUNT(*)::int AS files,
             COALESCE(SUM(f.file_size) FILTER (WHERE f.deleted_at IS NOT NULL), 0)::bigint AS trash_bytes
-       FROM user_files f WHERE ${PERSONAL} AND ${HELD}`, [userId]);
-  return { bytes: Number(rows[0].bytes), files: rows[0].files, trashBytes: Number(rows[0].trash_bytes) };
+       FROM user_files f WHERE ${PERSONAL} AND ${HELD}`, [userId]), machineBytes(db, PERSONAL_MACHINES, [userId])]);
+  return {
+    bytes: Number(rows[0].bytes) + machines.bytes, files: rows[0].files, trashBytes: Number(rows[0].trash_bytes),
+    machineBytes: machines.bytes, machines: machines.machines,
+  };
 }
 
 /** The storage a plan includes, in bytes. `null` = no limit (internal accounts). */
@@ -72,7 +100,10 @@ export async function storageUsage(db, userId) {
     usedBytes: mine.bytes, files: mine.files, trashBytes: mine.trashBytes,
     allowanceBytes, remainingBytes: allowanceBytes === null ? null : Math.max(0, allowanceBytes - mine.bytes),
     full: allowanceBytes !== null && mine.bytes >= allowanceBytes,
-    byKind: kinds.rows.map(r => ({ kind: r.kind, bytes: Number(r.bytes), files: r.files })),
+    byKind: [
+      ...kinds.rows.map(r => ({ kind: r.kind, bytes: Number(r.bytes), files: r.files })),
+      ...(mine.machineBytes > 0 ? [{ kind: 'machine', bytes: mine.machineBytes, files: mine.machines }] : []),
+    ].sort((a, b) => b.bytes - a.bytes),
     // files this person put in workspaces: they count toward those workspaces, shown for information
     workspaces: shared.rows.map(r => ({ id: r.id, bytes: Number(r.bytes), files: r.files })),
   };
@@ -116,8 +147,18 @@ export async function workspaceStorageAllowance(db, workspaceId) {
   return perPlan * (Number.isInteger(seats) && seats >= 1 ? seats : 1);
 }
 
+/** A shared workspace's saved machine disks, as a `byKind` row (`null` when there are none). */
+export async function workspaceMachineKind(db, workspaceId) {
+  const m = await machineBytes(db, 'm.workspace_id = $1', [workspaceId]);
+  return m.bytes > 0 ? { kind: 'machine', bytes: m.bytes, files: m.machines } : null;
+}
+
 export async function workspaceUsedBytes(db, workspaceId) {
-  return Number((await db.query(`SELECT COALESCE(SUM(f.file_size), 0)::bigint AS bytes FROM user_files f WHERE f.workspace_id = $1 AND ${HELD}`, [workspaceId])).rows[0].bytes);
+  const [files, machines] = await Promise.all([
+    db.query(`SELECT COALESCE(SUM(f.file_size), 0)::bigint AS bytes FROM user_files f WHERE f.workspace_id = $1 AND ${HELD}`, [workspaceId]),
+    machineBytes(db, 'm.workspace_id = $1', [workspaceId]),
+  ]);
+  return Number(files.rows[0].bytes) + machines.bytes;
 }
 
 async function assertWorkspaceRoom(tx, workspaceId, bytes) {
