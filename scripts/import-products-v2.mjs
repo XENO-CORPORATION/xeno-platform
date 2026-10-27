@@ -34,7 +34,7 @@ const AUTHORED = {
 // …and their cards on the /products index, which the handoff never listed.
 // Status lines on handoff cards that a release made false. Applied on every import, both modes, so a re-import of
 // the zip cannot bring "built, private" back for a product people can download.
-const CARD_STATUS = { corpus: { from: ['built, private', 'v0.1.0 · Windows'], to: 'v0.1.1 · Windows' } };
+const CARD_STATUS = { corpus: { from: ['built, private', 'v0.1.0 · Windows', 'v0.1.1 · Windows'], to: 'v0.1.2 · Windows' } };
 const AUTHORED_CARDS = [
   { slug: 'storage', section: 'Platform', name: 'XENO Storage', desc: 'Your clouds as drives on Windows', status: 'v0.1.0', color: '#2D5BD7' },
 ];
