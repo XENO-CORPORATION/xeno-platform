@@ -38,7 +38,8 @@ function canonicalCatalog(catalog) {
     demand(item.currency === 'eur' && Number.isFinite(item.price), 'invalid_currency_or_price');
     const unitAmount = Math.round(item.price * 100);
     demand(Number.isSafeInteger(unitAmount) && unitAmount > 0 && Math.abs(item.price * 100 - unitAmount) < 1e-7, 'invalid_minor_amount');
-    demand(['credits', 'subscription'].includes(item.kind), 'invalid_kind');
+    // 'storage' = a monthly extra-space pack: recurring like a subscription, never a plan.
+    demand(['credits', 'subscription', 'storage'].includes(item.kind), 'invalid_kind');
     demand(Number.isSafeInteger(item.credits) && item.credits >= 0, 'invalid_credits');
     demand(item.perSeat === undefined || typeof item.perSeat === 'boolean', 'invalid_seat_flag');
     if (item.kind === 'credits') demand(item.credits > 0 && item.interval == null && !item.perSeat, 'invalid_credit_pack');
@@ -214,7 +215,7 @@ function productParams(plan, item) {
 function priceParams(plan, item, productId) {
   return { product: productId, currency: item.currency, unit_amount: item.unit_amount,
     tax_behavior: 'inclusive', billing_scheme: 'per_unit', metadata: itemMetadata(plan, item),
-    ...(item.kind === 'subscription' ? { recurring: { interval: item.interval, interval_count: 1, usage_type: 'licensed' } } : {}) };
+    ...(item.kind === 'subscription' || item.kind === 'storage' ? { recurring: { interval: item.interval, interval_count: 1, usage_type: 'licensed' } } : {}) };
 }
 function webhookParams(plan) {
   return { url: plan.webhook.url, enabled_events: plan.webhook.events, api_version: API_VERSION,
