@@ -2228,6 +2228,48 @@
    ]
   },
   {
+   "name": "compute.machine.exec",
+   "wire": "compute__machine__exec",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_exec"
+   ]
+  },
+  {
+   "name": "compute.file.read",
+   "wire": "compute__file__read",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_read_file"
+   ]
+  },
+  {
+   "name": "compute.file.write",
+   "wire": "compute__file__write",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_write_file"
+   ]
+  },
+  {
    "name": "compute.usage.get",
    "wire": "compute__usage__get",
    "version": "1.0.0",

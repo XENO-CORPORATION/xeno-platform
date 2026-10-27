@@ -50,6 +50,32 @@ router.get('/machines/:id', ...A, run(async (req) => ({ machine: await compute.g
 router.post('/machines/:id/start', ...A, run(async (req) => ({ machine: await compute.startMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
 router.post('/machines/:id/stop', ...A, run(async (req) => ({ machine: await compute.stopMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
 router.delete('/machines/:id', ...A, run(async (req) => ({ machine: await compute.deleteMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
+router.post('/machines/:id/exec', ...A, run(async (req) => ({ result: await compute.execMachine(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }) })));
+// Streaming: the machine's NDJSON lines ({stream, data(base64)} … {done, exitCode}) passed through as they arrive.
+router.post('/machines/:id/exec/stream', ...A, async (req, res) => {
+  let upstream;
+  try { upstream = await compute.execMachineStream(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }); }
+  catch (e) {
+    if (e instanceof compute.ComputeError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+    console.error('[compute] exec stream', e); return res.status(500).json({ success: false, error: 'XENO Compute is unavailable right now' });
+  }
+  res.status(200).set({ 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no' });
+  const reader = upstream.body.getReader();
+  req.on('close', () => reader.cancel().catch(() => {}));   // caller gone: the machine kills the command
+  try { for (;;) { const { done, value } = await reader.read(); if (done) break; res.write(Buffer.from(value)); } }
+  catch { /* upstream closed */ }
+  res.end();
+});
+router.get('/machines/:id/files', ...A, async (req, res) => {
+  try {
+    const buf = await compute.readMachineFile(req.db, req.actor, req.params.id, { path: req.query.path, workspace: ws(req) });
+    res.status(200).set({ 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }).send(buf);
+  } catch (e) {
+    if (e instanceof compute.ComputeError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+    console.error('[compute] read file', e); return res.status(500).json({ success: false, error: 'XENO Compute is unavailable right now' });
+  }
+});
+router.put('/machines/:id/files', ...A, express.raw({ type: () => true, limit: '25mb' }), run(async (req) => ({ file: await compute.writeMachineFile(req.db, req.actor, req.params.id, { path: req.query.path, content: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), workspace: req.query.workspace }) })));
 router.get('/usage', ...A, run(async (req) => ({ usage: await compute.usage(req.db, req.actor, { workspace: ws(req), from: req.query.from, to: req.query.to }) })));
 router.get('/usage/split', ...A, run(async (req) => ({ split: await compute.aiVsMachines(req.db, req.actor.kind === 'agent' && req.actor.owner ? req.actor.owner.id : req.actor.id, { from: req.query.from }) })));
 router.get('/caps', ...A, run(async (req) => ({ caps: await compute.listCaps(req.db, req.actor, { workspace: ws(req) }) })));
