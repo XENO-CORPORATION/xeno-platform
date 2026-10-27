@@ -1,6 +1,6 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Corpus desktop documentation — reconciled against xeno-corpus desktop 0.1.0 (Windows), 2026-10-27.
+/* XENO Corpus desktop documentation — reconciled against xeno-corpus desktop 0.1.1 (Windows), 2026-10-27.
  * Every claim traces to that release: desktop/main.cjs (door, project opening, .xcorpus, menus),
  * desktop/lib/engine.cjs (the engine as a child process, `corpus init` on a folder with no corpus),
  * desktop/lib/updater.cjs (in-app updater, apps/corpus/ feed), desktop/lib/authLog.cjs (auth.log),
@@ -10,7 +10,7 @@ const corpus: ProductDocs = {
   slug: 'corpus',
   productName: 'XENO Corpus',
   tagline: 'Your project’s claims, each bound to the check that can prove it false.',
-  version: '0.1.0',
+  version: '0.1.1',
   updated: '2026-10-27',
   seo: {
     title: 'XENO Corpus documentation',
@@ -29,8 +29,8 @@ const corpus: ProductDocs = {
         {
           slug: 'installation',
           title: 'Installation',
-          description: 'Download and install XENO Corpus 0.1.0 on Windows.',
-          body: "## Installation\n\nXENO Corpus 0.1.0 is available for **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/corpus), choose **Download for Windows**.\n2. Run `XENO-Corpus-Setup-0.1.0.exe`. It installs for your user; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **UNSIGNED BUILD** badge sits in its window.\n\n## Updates\n\nXENO Corpus checks for a new version when it starts and every few hours. It downloads it in the background and asks before restarting; if you choose **Later**, it installs the next time you quit.\n\n## Uninstalling\n\nUse **Settings → Apps → XENO Corpus → Uninstall**. Your projects and their corpora are not touched.",
+          description: 'Download and install XENO Corpus 0.1.1 on Windows.',
+          body: "## Installation\n\nXENO Corpus 0.1.1 is available for **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/corpus), choose **Download for Windows**.\n2. Run `XENO-Corpus-Setup-0.1.1.exe`. It installs for your user; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **UNSIGNED BUILD** badge sits in its window.\n\n## Updates\n\nXENO Corpus checks for a new version when it starts and every few hours. It downloads it in the background and asks before restarting; if you choose **Later**, it installs the next time you quit.\n\n## Uninstalling\n\nUse **Settings → Apps → XENO Corpus → Uninstall**. Your projects and their corpora are not touched.",
         },
         {
           slug: 'signing-in',

@@ -34,7 +34,7 @@ const AUTHORED = {
 // …and their cards on the /products index, which the handoff never listed.
 // Status lines on handoff cards that a release made false. Applied on every import, both modes, so a re-import of
 // the zip cannot bring "built, private" back for a product people can download.
-const CARD_STATUS = { corpus: { from: 'built, private', to: 'v0.1.0 · Windows' } };
+const CARD_STATUS = { corpus: { from: ['built, private', 'v0.1.0 · Windows'], to: 'v0.1.1 · Windows' } };
 const AUTHORED_CARDS = [
   { slug: 'storage', section: 'Platform', name: 'XENO Storage', desc: 'Your clouds as drives on Windows', status: 'v0.1.0', color: '#2D5BD7' },
 ];
@@ -176,8 +176,10 @@ cpSync(join(root, 'node_modules/@babel/standalone/babel.min.js'), join(assetsDir
     const end = start < 0 ? -1 : indexHtml.indexOf('</a>', start);
     const card = end < 0 ? '' : indexHtml.slice(start, end);
     if (card.includes(`>${to}<`)) continue;
-    if (!card.includes(`>${from}<`)) throw new Error(`products index: the ${slug} card no longer says "${from}" — update CARD_STATUS`);
-    indexHtml = indexHtml.slice(0, start) + card.replace(`>${from}<`, `>${to}<`) + indexHtml.slice(end);
+    // `from` lists every earlier status this card may carry (the handoff's, then each release's).
+    const was = [from].flat().find((f) => card.includes(`>${f}<`));
+    if (!was) throw new Error(`products index: the ${slug} card says none of ${JSON.stringify(from)} — update CARD_STATUS`);
+    indexHtml = indexHtml.slice(0, start) + card.replace(`>${was}<`, `>${to}<`) + indexHtml.slice(end);
   }
   const withCards = addProductCards(indexHtml, AUTHORED_CARDS);
   if (withCards.added.length) console.log(`products index: added ${withCards.added.join(', ')}`);
