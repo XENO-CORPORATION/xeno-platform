@@ -180,7 +180,11 @@ test('invoice creation and the descriptor apply to PAYMENTS, not subscriptions',
     const i = billing.indexOf(field);
     assert.ok(i > -1, `${field} is gone`);
     const before = billing.slice(Math.max(0, i - 200), i);
-    assert.ok(/item\.kind === 'subscription' \? \{\} :/.test(before),
+    assert.ok(/recurring \? \{\} :/.test(before),
       `${field} is applied unconditionally — Stripe refuses it on a subscription session`);
   }
+  /* Every recurring kind takes the subscription branch: a plan AND a storage pack (2026-10-27). A pack missing from
+   * `recurring` would send payment_intent_data to Stripe on a subscription session, and Stripe refuses it. */
+  assert.match(billing, /const recurring = item\.kind === 'subscription' \|\| item\.kind === 'storage';/,
+    'a recurring kind (plan or storage pack) no longer takes the subscription branch');
 });
