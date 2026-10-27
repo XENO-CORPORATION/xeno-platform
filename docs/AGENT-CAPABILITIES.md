@@ -191,9 +191,9 @@ What an agent can do on the XENO platform: **204 capabilities**. What it cannot 
 - **`compute.machine.start`** — Start a machine. An hour is reserved on your owner’s credits and settled for the time used. Refused when the size is not priced, a cap would be exceeded, or the credits cannot cover the next hour.
   - arguments: `workspace` string, `machineId`* string
   - reply: `machine` — state "running", costSoFarCredits.
-- **`compute.machine.stop`** — Stop a machine. Billing stops at the second. Files on the machine are not kept after a stop yet: save what matters to XENO Storage first.
+- **`compute.machine.stop`** — Stop a machine. Billing stops at the second. The home folder (/home/xeno, where relative paths go) is saved and put back on the next start; anything outside it, and running programs, are not kept.
   - arguments: `workspace` string, `machineId`* string
-  - reply: `machine` — state "stopped"; billing ended at the second; files on the machine are not kept after a stop yet.
+  - reply: `machine` — state "stopped"; billing ended at the second; the home folder (/home/xeno) is saved for the next start (its timeline says if saving failed), nothing outside it is kept.
 - **`compute.machine.idle_set`** — Set how many minutes a running machine may go without a command or file call before it stops itself and billing ends (5..1440), or null to never. Turn it off before leaving a background server running.
   - arguments: `workspace` string, `machineId`* string, `idleStopMinutes`* integer,null
   - reply: `machine` — the machine with idleStopMinutes (null = never) and lastActiveAt.

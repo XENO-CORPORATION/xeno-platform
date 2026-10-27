@@ -32,7 +32,7 @@ export const TOOLS = [
     description: 'Start a machine. An hour is reserved on your owner’s credits and settled for the time used. Refused when the size is not priced, a cap would be exceeded, or the credits cannot cover the next hour.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
   { name: 'stop_machine', title: 'Stop a machine', annotations: RW,
-    description: 'Stop a machine. Billing stops at the second. Files on the machine are not kept after a stop yet: save what matters to XENO Storage first.',
+    description: 'Stop a machine. Billing stops at the second. The home folder (/home/xeno, where relative paths go) is saved and put back on the next start; anything outside it, and running programs, are not kept.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
   { name: 'set_idle_stop', title: 'Set when a machine stops itself', annotations: RW,
     description: 'Set how many minutes a running machine may go without a command or file call before it stops itself and billing ends (5..1440), or null to never. Turn it off before leaving a background server running.',

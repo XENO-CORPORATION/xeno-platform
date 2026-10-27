@@ -33,7 +33,7 @@ const code = async (fn) => { try { await fn(); return null; } catch (e) { return
 const tag = `cmp${Date.now().toString(36)}`;
 const calls = [];
 const fake = { name: 'fake', create: async (m) => { calls.push(['create', m.id]); return { ref: `fake-${m.id}` }; },
-  start: async (m) => { calls.push(['start', m.id]); }, stop: async (m) => { calls.push(['stop', m.id]); }, remove: async (m) => { calls.push(['remove', m.id]); },
+  start: async (m) => { calls.push(['start', m.id]); return { state: 'running', restored: { bytes: 2048 } }; }, stop: async (m) => { calls.push(['stop', m.id]); return { state: 'stopped', saved: { bytes: 4096 }, saveError: null }; }, remove: async (m) => { calls.push(['remove', m.id]); },
   // exec answers like the machine: NDJSON lines, base64 chunks. 'é' (c3 a9) is split across two chunks on purpose.
   exec: async (m, body) => { calls.push(['exec', m.id, body]);
     const line = (o) => JSON.stringify(o) + '\n';
@@ -93,6 +93,8 @@ async function main() {
   await back(m1.id, 30);
   const stopped = await compute.stopMachine(pool, E, m1.id);
   check(stopped.state === 'stopped' && stopped.costSoFarCredits === 18, 'a stop settles the seconds used: 30 minutes at 36/h = 18 credits');
+  const tl = (await compute.getMachine(pool, E, m1.id)).events;
+  check(tl.some((e) => e.kind === 'stopped' && e.detail.savedBytes === 4096) && tl.some((e) => e.kind === 'started' && e.detail.restoredBytes === 2048), 'the timeline says the home folder was put back on start and saved on stop');
   const u = (await pool.query("SELECT actual_cost_micro, dimensions FROM api_usage_logs WHERE surface = 'xeno_compute' AND dimensions->>'machine_id' = $1", [m1.id])).rows[0];
   check(u && Number(u.actual_cost_micro) === 18_000_000 && u.dimensions.workspace_id === ws, 'the usage row names the machine and workspace');
   const split = await compute.aiVsMachines(pool, editor);
