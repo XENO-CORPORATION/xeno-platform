@@ -1566,6 +1566,12 @@
       "class": "irreversible",
       "scope": "compute:write"
     },
+    "route:computeRoutes.js:PUT /machines/:id/idle-stop": {
+      "status": "capability",
+      "capability": "compute.machine.idle_set",
+      "class": "reversible",
+      "scope": "compute:write"
+    },
     "route:computeRoutes.js:POST /machines/:id/stop": {
       "status": "capability",
       "capability": "compute.machine.stop",
@@ -10282,6 +10288,12 @@
       "status": "planned",
       "class": "reversible",
       "scope": "agents:write"
+    },
+    "ui:platform-compute.js:data-cm-idle": {
+      "status": "capability",
+      "capability": "compute.machine.idle_set",
+      "class": "reversible",
+      "scope": "compute:write"
     },
     "ui:platform-compute.js:data-cm-page": {
       "status": "capability",

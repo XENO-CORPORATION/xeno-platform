@@ -13,6 +13,7 @@ const DEL = { readOnlyHint: false, destructiveHint: true, openWorldHint: false }
 const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }], structuredContent: data });
 const WS = { type: 'string', description: 'Workspace id. Default: your owner’s Personal workspace.' };
 const MID = { type: 'string', description: 'Machine id (mch_…).' };
+const IDLE = { type: ['integer', 'null'], minimum: 5, maximum: 1440, description: 'Stop by itself after this many minutes with no command or file call (default 30). null = never; a server you start in the background is not seen as use.' };
 
 export const TOOLS = [
   { name: 'sizes', title: 'Machine sizes', annotations: RO,
@@ -26,13 +27,16 @@ export const TOOLS = [
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
   { name: 'create_machine', title: 'Create a machine', annotations: RW,
     description: 'Create a machine that works for you (stopped until started). Refused by the workspace’s caps: a machine limit or a largest size. Pass an idempotencyKey so a retry does not make a second one.',
-    inputSchema: { type: 'object', required: ['name', 'size'], properties: { workspace: WS, name: { type: 'string' }, size: { type: 'string' }, purpose: { type: 'string' }, image: { type: 'string' }, idempotencyKey: { type: 'string' } }, additionalProperties: false } },
+    inputSchema: { type: 'object', required: ['name', 'size'], properties: { workspace: WS, name: { type: 'string' }, size: { type: 'string' }, purpose: { type: 'string' }, image: { type: 'string' }, idempotencyKey: { type: 'string' }, idleStopMinutes: IDLE }, additionalProperties: false } },
   { name: 'start_machine', title: 'Start a machine', annotations: RW,
     description: 'Start a machine. An hour is reserved on your owner’s credits and settled for the time used. Refused when the size is not priced, a cap would be exceeded, or the credits cannot cover the next hour.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
   { name: 'stop_machine', title: 'Stop a machine', annotations: RW,
     description: 'Stop a machine. Billing stops at the second. Files on the machine are not kept after a stop yet: save what matters to XENO Storage first.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
+  { name: 'set_idle_stop', title: 'Set when a machine stops itself', annotations: RW,
+    description: 'Set how many minutes a running machine may go without a command or file call before it stops itself and billing ends (5..1440), or null to never. Turn it off before leaving a background server running.',
+    inputSchema: { type: 'object', required: ['machineId', 'idleStopMinutes'], properties: { workspace: WS, machineId: MID, idleStopMinutes: IDLE }, additionalProperties: false } },
   { name: 'delete_machine', title: 'Delete a machine', annotations: DEL,
     description: 'Delete a stopped machine and its disk. This cannot be undone.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
@@ -61,6 +65,7 @@ export async function callTool(db, actor, name, a = {}) {
       case 'get_machine': return ok({ machine: await compute.getMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'create_machine': return ok({ machine: await compute.createMachine(db, actor, a) });
       case 'start_machine': return ok({ machine: await compute.startMachine(db, actor, a.machineId, { workspace: a.workspace }) });
+      case 'set_idle_stop': return ok({ machine: await compute.setIdleStop(db, actor, a.machineId, { idleStopMinutes: a.idleStopMinutes, workspace: a.workspace }) });
       case 'stop_machine': return ok({ machine: await compute.stopMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'delete_machine': return ok({ machine: await compute.deleteMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'exec': return ok({ result: await compute.execMachine(db, actor, a.machineId, a) });

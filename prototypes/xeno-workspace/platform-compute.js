@@ -21,7 +21,8 @@
   const said = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
   const VIEWS = [['machines', 'Machines'], ['usage', 'Usage'], ['budgets', 'Budgets']];
   const STATE = { creating: 'Creating', running: 'Running', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed' };
-  const EVENT = { created: 'Created', started: 'Started', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed', billed: 'Billed', unfunded: 'Not funded', funded: 'Funded again', capped: 'Budget reached' };
+  const EVENT = { created: 'Created', started: 'Started', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed', billed: 'Billed', unfunded: 'Not funded', funded: 'Funded again', capped: 'Budget reached', idle_stop_set: 'Idle stop changed' };
+  const IDLE_CHOICES = [[15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [240, '4 hours'], [1440, '24 hours'], ['never', 'Never']];
   const S = { status: 'idle', ws: undefined, machines: [], sizes: [], usage: null, split: null, caps: null, machine: null, machineId: null, error: null };
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served ? window.XENO_SCOPE.uuid() : null);
   const q = (extra = {}) => { const p = new URLSearchParams(); if (S.ws) p.set('workspace', S.ws); for (const [k, v] of Object.entries(extra)) if (v !== '' && v != null) p.set(k, v); const s = p.toString(); return s ? '?' + s : ''; };
@@ -102,15 +103,18 @@
         ${m.purpose ? `<p>${esc(m.purpose)}</p>` : ''}<div class="cr-row">${actions}</div>
         <h3>Timeline</h3><div class="cr-list" data-cm-timeline>${events}</div></div>
       <aside class="sp-console"><h3>Cost so far</h3><p data-cm-cost><b>${esc(cr(m.costSoFarCredits))}</b></p>
+        <h3>Stops by itself</h3><p><select data-cm-idle aria-label="Stop by itself after">${IDLE_CHOICES.map(([v, l]) => `<option value="${v}"${String(m.idleStopMinutes ?? 'never') === String(v) ? ' selected' : ''}>${l === 'Never' ? l : 'After ' + l + ' idle'}</option>`).join('')}${m.idleStopMinutes != null && !IDLE_CHOICES.some(([v]) => v === m.idleStopMinutes) ? `<option value="${m.idleStopMinutes}" selected>After ${m.idleStopMinutes} minutes idle</option>` : ''}</select></p>
+        <p class="pg-dim">Idle means no command or file call. A server left running in the background does not count as use, so choose Never for one.</p>
         <h3>Works for</h3><p>${m.agent ? esc(m.agent.name) : 'People in this workspace'}</p>
         <h3>Address</h3><p class="pg-dim"><code>${esc(m.id)}</code></p><p class="pg-dim">Created ${esc(when(m.createdAt))}</p></aside></div>`;
   }
   function eventText(e) {
     const d = e.detail || {};
     if (e.kind === 'started') return `Billing to ${d.payer === 'workspace' ? 'the workspace wallet' : 'the person who started it'}${d.creditsPerHour ? `, ${cr(d.creditsPerHour)} an hour` : ''}.`;
-    if (e.kind === 'stopped') return `${d.reason === 'unfunded' ? 'Stopped because the next hour could not be paid for.' : 'Stopped.'} Charged ${cr(d.charged)} for this run.`;
+    if (e.kind === 'stopped') return `${d.reason === 'unfunded' ? 'Stopped because the next hour could not be paid for.' : d.reason === 'idle' ? 'Stopped by itself: nobody used it for its idle limit.' : 'Stopped.'} Charged ${cr(d.charged)} for this run.`;
     if (e.kind === 'unfunded' || e.kind === 'capped') return `${d.reason || 'The next hour could not be funded.'} It stops in ${Math.round((d.stopsInSeconds || 0) / 60)} minutes unless funding resumes.`;
     if (e.kind === 'funded') return 'Funding resumed.';
+    if (e.kind === 'idle_stop_set') return d.minutes == null ? 'It now never stops by itself.' : `It now stops by itself after ${d.minutes} idle minutes.`;
     if (e.kind === 'failed') return d.reason || 'Failed.';
     if (e.kind === 'created') return `Created as ${d.size || ''}${d.agent ? ', for an agent' : ''}.`;
     return '';
@@ -176,6 +180,13 @@
       if (!window.confirm(`Delete ${S.machine.name}? The machine and its disk are removed for good.`)) return;
       if (await act('DELETE', `/api/compute/machines/${mid}` + q(), null, 'Deleted')) { await load(); goItem('machines'); }
     }
+  }, true);
+
+  document.addEventListener('change', async (e) => {
+    const t = e.target.closest('[data-cm-idle]');
+    if (!t || !t.closest('[data-cm-page]') || !S.machine) return;
+    const v = t.value === 'never' ? null : Number(t.value);
+    if (await act('PUT', `/api/compute/machines/${S.machine.id}/idle-stop` + q(), { idleStopMinutes: v }, v == null ? 'It will not stop by itself' : 'Idle stop saved')) { S.machineId = null; await load(); }
   }, true);
 
   P.lazyZone(window.XENO_ZONE_LIVE['dev.compute'], () => load(), () => load());
