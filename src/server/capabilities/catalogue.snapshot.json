@@ -2214,6 +2214,20 @@
    ]
   },
   {
+   "name": "compute.agent.run",
+   "wire": "compute__agent__run",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_run_agent_task"
+   ]
+  },
+  {
    "name": "compute.machine.idle_set",
    "wire": "compute__machine__idle_set",
    "version": "1.0.0",

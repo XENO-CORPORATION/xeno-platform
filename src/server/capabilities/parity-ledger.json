@@ -1566,6 +1566,12 @@
       "class": "irreversible",
       "scope": "compute:write"
     },
+    "route:computeRoutes.js:POST /machines/:id/agent-tasks": {
+      "status": "capability",
+      "capability": "compute.agent.run",
+      "class": "irreversible",
+      "scope": "compute:write"
+    },
     "route:computeRoutes.js:PUT /machines/:id/idle-stop": {
       "status": "capability",
       "capability": "compute.machine.idle_set",
@@ -10288,6 +10294,12 @@
       "status": "planned",
       "class": "reversible",
       "scope": "agents:write"
+    },
+    "ui:platform-compute.js:data-cm-agent-form": {
+      "status": "capability",
+      "capability": "compute.agent.run",
+      "class": "irreversible",
+      "scope": "compute:write"
     },
     "ui:platform-compute.js:data-cm-idle": {
       "status": "capability",

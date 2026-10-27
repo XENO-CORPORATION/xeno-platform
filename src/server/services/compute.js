@@ -31,6 +31,8 @@ import { holdV2, settleHoldV2, voidHoldV2, MICRO_PER_CREDIT } from '../utils/cre
 import { ensureQuota } from './quotaService.js';
 import { getEffectivePlan } from './effectivePlan.js';
 import { computeBackend } from './computeBackend.js';
+import { createSessionKey, revokeSessionKey } from './inferenceSessionKeys.js';
+import { recordSecurityEventTransactional, EVENTS } from './securityEvents.js';
 
 export class ComputeError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'ComputeError'; this.code = code; this.statusCode = status; }
@@ -598,6 +600,81 @@ export async function writeMachineFile(db, actor, machineId, { path, content, wo
   await touch(db, m.id);
   const r = await computeBackend().writeFile({ id: m.id, ref: m.backend_ref }, path, buf).catch((e) => { throw new ComputeError(e.message, e.code || 'write_failed', e.statusCode || 502); });
   return { path: r.path || path, bytes: buf.length };
+}
+
+// ─────────────────────────────────────────── the XENO Agent on a machine
+// One task, run to completion by the CLI baked into the machine image (`xeno run`). Two ways to run, chosen per task
+// (owner, 2026-10-27: "full scale with full access mode and permission based listed commands"):
+//   listed (default) — the agent may read and edit files; commands only from an approved list. Until the CLI can approve
+//                      a list unattended, no commands run in this mode (raised with the CLI session, 2026-10-27).
+//   full             — no permission checks at all. The machine is the person's own and nothing else lives on it; every
+//                      use is on the machine's timeline.
+// The model key is minted for THIS task (a session key on the person's credits, attributed to the agent when an agent
+// asked), handed to the one process through its environment, and revoked when the task ends, whatever happens.
+export const AGENT_ACCESS = ['listed', 'full'];
+const AGENT_PROMPT_MAX = 20_000;
+const AGENT_STATE_DIR = '/home/xeno/.xeno-agent';
+
+async function inTx(db, fn) {
+  const client = typeof db.connect === 'function' ? await db.connect() : db;
+  try { await client.query('BEGIN'); const out = await fn(client); await client.query('COMMIT'); return out; }
+  catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
+  finally { if (client !== db) client.release(); }
+}
+
+/** The CLI's argv for one task. The prompt goes on stdin (`--prompt-file -`), never on the command line. */
+export function agentTaskArgv({ access = 'listed', model } = {}) {
+  if (!AGENT_ACCESS.includes(access)) throw new ComputeError('access must be "listed" or "full"', 'invalid_access');
+  if (model != null && !/^[A-Za-z0-9._:/-]{1,100}$/.test(String(model))) throw new ComputeError('Unknown model name', 'invalid_model');
+  return ['xeno', 'run', '--json', ...(model ? ['--model', String(model)] : []),
+    ...(access === 'full' ? ['--bypass-permissions'] : ['--permission-mode', 'acceptEdits']), '--prompt-file', '-'];
+}
+
+export async function runAgentTask(db, actor, machineId, { prompt, access = 'listed', model, folder, timeoutMinutes = 15, maxCredits, workspace } = {}) {
+  const text = String(prompt ?? '').trim();
+  if (!text) throw new ComputeError('Say what the agent should do', 'invalid_prompt');
+  if (text.length > AGENT_PROMPT_MAX) throw new ComputeError(`The task is too long (at most ${AGENT_PROMPT_MAX} characters)`, 'invalid_prompt');
+  const minutes = Number(timeoutMinutes);
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 30) throw new ComputeError('timeoutMinutes must be 1..30', 'invalid_timeout');
+  const dir = folder == null || folder === '' ? 'work' : String(folder);
+  if (!/^[A-Za-z0-9._/-]{1,200}$/.test(dir) || dir.split('/').includes('..') || dir.startsWith('/')) throw new ComputeError('folder must be a path inside the home folder', 'invalid_folder');
+  const cap = maxCredits == null ? undefined : Math.round(Number(maxCredits) * MICRO_PER_CREDIT);
+  if (cap !== undefined && !(cap > 0)) throw new ComputeError('maxCredits must be more than 0', 'invalid_cap');
+  const argv = agentTaskArgv({ access, model });
+  const { ctx, m } = await runningMachineFor(db, actor, machineId, workspace);
+
+  const person = (await db.query('SELECT id, email FROM users WHERE id = $1', [ctx.userId])).rows[0];
+  const agent = ctx.agentId ? (await db.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [ctx.agentId])).rows[0] : null;
+  const key = await inTx(db, async (c) => {
+    const out = await createSessionKey(c, person, { ttlMinutes: Math.max(5, minutes + 5), label: `XENO Compute ${m.id}`, clientId: 'xeno-compute',
+      agent: agent ? { id: agent.public_id, userId: ctx.agentId } : null, maxSpendMicro: cap });
+    await recordSecurityEventTransactional(c, EVENTS.SESSION_KEY_ISSUED, { userId: ctx.userId, metadata: { ...out.audit, machineId: m.id } });
+    return out.key;
+  });
+  const startedAt = Date.now();
+  let res;
+  try {
+    await execMachine(db, actor, machineId, { argv: ['mkdir', '-p', dir], timeoutMs: 10_000, workspace });
+    res = await execMachine(db, actor, machineId, { argv, cwd: dir, stdin: text, timeoutMs: minutes * 60_000, workspace,
+      env: { XENO_API_KEY: key.token, XENO_AGENT_HOME: AGENT_STATE_DIR, ...(access === 'full' ? { XENO_ALLOW_UNSAFE_BYPASS: '1' } : {}) } });
+  } finally {
+    await inTx(db, async (c) => {
+      await revokeSessionKey(c, person, key.id).catch((e) => { if (e.code !== 'NOT_FOUND') throw e; });
+      await recordSecurityEventTransactional(c, EVENTS.SESSION_KEY_REVOKED, { userId: ctx.userId, metadata: { keyId: key.id, machineId: m.id } });
+    });
+  }
+  let out = null;
+  for (const line of res.stdout.trim().split('\n').reverse()) { try { out = JSON.parse(line); break; } catch { /* not the result line */ } }
+  const status = res.timedOut ? 'timed_out' : out?.status || (res.exitCode === 0 ? 'ok' : 'error');
+  const result = {
+    status, access, folder: dir, exitCode: res.exitCode, timedOut: res.timedOut, seconds: Math.round((Date.now() - startedAt) / 1000),
+    answer: out?.answer ?? null, error: out?.error ?? (out ? null : (res.stderr || res.stdout).slice(-2000) || null),
+    tokens: out?.token_usage?.total ?? null, tools: out?.tool_summary || null, sessionId: out?.session_id || null,
+  };
+  // the timeline says THAT a task ran and how; the task text and the answer stay with the caller
+  await event(db, m.id, 'agent_task', ctx.userId, { access, status, folder: dir, tokens: result.tokens, seconds: result.seconds,
+    agent: agent ? agent.public_id : null, permissionDenied: out?.tool_summary?.permission_denied ?? null });
+  return result;
 }
 
 export async function setRate(db, actor, { size, creditsPerHour }) {

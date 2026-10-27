@@ -36,6 +36,7 @@ async function open(url) {
     if (u.pathname === '/api/compute/machines' && q.method() === 'POST') { const m = { id: MID, name: sent.name, size: sent.size, state: 'stopped', agent: null, costSoFarCredits: 0, url: `/workspace/compute/machines/${MID}`, createdAt: new Date().toISOString() }; db.machines.push(m); return json({ success: true, machine: m }); }
     if (u.pathname === `/api/compute/machines/${MID}`) return json({ success: true, machine: machineFull(db.machines[0] || { id: MID, name: 'Build box', size: 'small', state: 'stopped', costSoFarCredits: 0 }) });
     if (u.pathname === `/api/compute/machines/${MID}/start`) { if (!db.priced) return json({ success: false, error: 'XENO Compute has no price for the small size yet, so it cannot run', code: 'no_price' }, 409); db.machines[0].state = 'running'; return json({ success: true, machine: db.machines[0] }); }
+    if (u.pathname === `/api/compute/machines/${MID}/agent-tasks` && q.method() === 'POST') { db.agentSent = sent; return json({ success: true, result: { status: 'ok', access: sent.access, answer: 'Created add.py; it prints 5.', tokens: 1234, seconds: 9 } }); }
     if (u.pathname === `/api/compute/machines/${MID}/idle-stop` && q.method() === 'PUT') { db.machines[0].idleStopMinutes = sent.idleStopMinutes; db.idleSent = sent; return json({ success: true, machine: db.machines[0] }); }
     if (u.pathname === `/api/compute/machines/${MID}/stop`) { db.machines[0].state = 'stopped'; db.machines[0].costSoFarCredits = 18; return json({ success: true, machine: db.machines[0] }); }
     if (u.pathname === '/api/compute/usage') return json({ success: true, usage: { machineCredits: 18, byMachine: [{ id: MID, name: 'Build box', size: 'small', credits: 18, hours: 0.5 }], byAgent: [{ agent: null, credits: 18 }] } });
@@ -77,6 +78,8 @@ try {
   db.unfunded = true;
   await t2.p.goto(base + url1, { waitUntil: 'domcontentloaded' }); await wait(1800);
   ok(await t2.p.$('[data-cm-unfunded]') !== null && await t2.p.$('[data-cm-event="unfunded"]') !== null, 'an unfunded machine says it keeps running and will stop, and its timeline shows why');
+  await t2.p.type('[data-cm-agent-prompt]', 'make add.py print 2+3'); await t2.p.click('[data-cm-agent-run]'); await wait(1800);
+  ok(db.agentSent && db.agentSent.prompt === 'make add.py print 2+3' && db.agentSent.access === 'listed' && (await t2.p.$eval('[data-cm-agent-result]', (e) => e.textContent)).includes('prints 5'), 'Run an agent task sends the task with listed access and shows the answer');
   await t2.p.select('[data-cm-idle]', 'never'); await wait(1200);
   ok(db.idleSent && db.idleSent.idleStopMinutes === null, 'choosing Never for "Stops by itself" saves no idle limit on the server');
   await t2.p.click('[data-cm-stop]'); await wait(1200);

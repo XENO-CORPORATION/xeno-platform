@@ -21,7 +21,7 @@
   const said = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
   const VIEWS = [['machines', 'Machines'], ['usage', 'Usage'], ['budgets', 'Budgets']];
   const STATE = { creating: 'Creating', running: 'Running', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed' };
-  const EVENT = { created: 'Created', started: 'Started', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed', billed: 'Billed', unfunded: 'Not funded', funded: 'Funded again', capped: 'Budget reached', idle_stop_set: 'Idle stop changed' };
+  const EVENT = { created: 'Created', started: 'Started', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed', billed: 'Billed', unfunded: 'Not funded', funded: 'Funded again', capped: 'Budget reached', idle_stop_set: 'Idle stop changed', agent_task: 'Agent task' };
   const size = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB');
   const IDLE_CHOICES = [[15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [240, '4 hours'], [1440, '24 hours'], ['never', 'Never']];
   const S = { status: 'idle', ws: undefined, machines: [], sizes: [], usage: null, split: null, caps: null, machine: null, machineId: null, error: null };
@@ -102,6 +102,12 @@
     return `<div class="cr-detail" data-cm-machine="${esc(m.id)}">
       <div class="cr-main"><h2>${esc(m.name)}</h2><p class="pg-dim">${esc(STATE[m.state] || m.state)} · ${esc(m.size)} — ${esc(sizeLine(sz))}</p>${warn}
         ${m.purpose ? `<p>${esc(m.purpose)}</p>` : ''}<div class="cr-row">${actions}</div>
+        ${m.state === 'running' ? `<h3>Run an agent task</h3><div data-cm-agent-form>
+          <textarea data-cm-agent-prompt rows="4" placeholder="What should the XENO Agent do on this machine?" aria-label="Agent task"></textarea>
+          <div class="cr-row"><select data-cm-agent-access aria-label="Access"><option value="listed" selected>Listed access: reads and edits files</option><option value="full">Full access: no permission checks</option></select>
+          <input data-cm-agent-folder value="work" aria-label="Folder in the home folder" size="12"> ${btn('data-cm-agent-run', 'Run', 'btn')}</div>
+          <p class="pg-dim">It works in that folder in the home folder, which is kept across stops, and is billed to your credits. Listed access cannot run commands yet; full access can do anything on this machine.</p>
+          <div data-cm-agent-result>${S.agentResult && S.agentResult.machine === m.id ? agentResultHtml(S.agentResult.r) : ''}</div></div>` : ''}
         <h3>Timeline</h3><div class="cr-list" data-cm-timeline>${events}</div></div>
       <aside class="sp-console"><h3>Cost so far</h3><p data-cm-cost><b>${esc(cr(m.costSoFarCredits))}</b></p>
         <h3>Stops by itself</h3><p><select data-cm-idle aria-label="Stop by itself after">${IDLE_CHOICES.map(([v, l]) => `<option value="${v}"${String(m.idleStopMinutes ?? 'never') === String(v) ? ' selected' : ''}>${l === 'Never' ? l : 'After ' + l + ' idle'}</option>`).join('')}${m.idleStopMinutes != null && !IDLE_CHOICES.some(([v]) => v === m.idleStopMinutes) ? `<option value="${m.idleStopMinutes}" selected>After ${m.idleStopMinutes} minutes idle</option>` : ''}</select></p>
@@ -110,12 +116,18 @@
         <h3>Works for</h3><p>${m.agent ? esc(m.agent.name) : 'People in this workspace'}</p>
         <h3>Address</h3><p class="pg-dim"><code>${esc(m.id)}</code></p><p class="pg-dim">Created ${esc(when(m.createdAt))}</p></aside></div>`;
   }
+  function agentResultHtml(r) {
+    if (r.running) return '<p class="pg-dim" data-cm-agent-status="running">The agent is working… this can take several minutes.</p>';
+    return `<div class="cr-li" data-cm-agent-status="${esc(r.status)}"><b>${esc(r.status === 'ok' ? 'Done' : r.status === 'permission_denied' ? 'Stopped: it needed a permission it does not have' : r.status === 'timed_out' ? 'Ran out of time' : 'It did not finish')}</b>
+      <small style="white-space:pre-wrap">${esc(r.answer || r.error || '')}</small>${r.tokens != null ? `<small>${esc(String(r.tokens))} tokens · ${esc(String(r.seconds))}s</small>` : ''}</div>`;
+  }
   function eventText(e) {
     const d = e.detail || {};
     if (e.kind === 'started') return `Billing to ${d.payer === 'workspace' ? 'the workspace wallet' : 'the person who started it'}${d.creditsPerHour ? `, ${cr(d.creditsPerHour)} an hour` : ''}.${d.restoredBytes != null ? ` Home folder put back (${size(d.restoredBytes)}).` : ''}`;
     if (e.kind === 'stopped') return `${d.reason === 'unfunded' ? 'Stopped because the next hour could not be paid for.' : d.reason === 'idle' ? 'Stopped by itself: nobody used it for its idle limit.' : 'Stopped.'} Charged ${cr(d.charged)} for this run.${d.saveError ? ` Its files could NOT be saved this time: ${d.saveError}` : d.savedBytes != null ? ` Home folder saved (${size(d.savedBytes)}).` : ''}`;
     if (e.kind === 'unfunded' || e.kind === 'capped') return `${d.reason || 'The next hour could not be funded.'} It stops in ${Math.round((d.stopsInSeconds || 0) / 60)} minutes unless funding resumes.`;
     if (e.kind === 'funded') return 'Funding resumed.';
+    if (e.kind === 'agent_task') return `${d.access === 'full' ? 'FULL ACCESS (no permission checks)' : 'Listed access'} · ${d.status}${d.tokens != null ? ` · ${d.tokens} tokens` : ''}${d.seconds != null ? ` · ${d.seconds}s` : ''}${d.agent ? ` · by ${d.agent}` : ''}.`;
     if (e.kind === 'idle_stop_set') return d.minutes == null ? 'It now never stops by itself.' : `It now stops by itself after ${d.minutes} idle minutes.`;
     if (e.kind === 'failed') return d.reason || 'Failed.';
     if (e.kind === 'created') return `Created as ${d.size || ''}${d.agent ? ', for an agent' : ''}.`;
@@ -166,7 +178,7 @@
   }
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-cm-reload],[data-cm-add],[data-cm-cap],[data-cm-view-go],[data-cm-open],[data-cm-start],[data-cm-stop],[data-cm-delete]');
+    const t = e.target.closest('[data-cm-reload],[data-cm-add],[data-cm-cap],[data-cm-view-go],[data-cm-open],[data-cm-start],[data-cm-stop],[data-cm-delete],[data-cm-agent-run]');
     if (!t || !(t.closest('[data-cm-page]') || t.closest('#main .topbar'))) return;
     e.preventDefault(); e.stopPropagation();
     const d = t.dataset, mid = S.machine && S.machine.id;
@@ -177,6 +189,16 @@
     if (d.cmViewGo) { S.usage = null; S.caps = null; return goItem(d.cmViewGo); }
     if (d.cmOpen) return goItem('machines/' + d.cmOpen);
     if ('cmStart' in d && mid) { if (await act('POST', `/api/compute/machines/${mid}/start` + q(), {}, 'Started')) again(); return; }
+    if ('cmAgentRun' in d && mid) {
+      const form = t.closest('[data-cm-agent-form]');
+      const prompt = form.querySelector('[data-cm-agent-prompt]').value.trim();
+      const access = form.querySelector('[data-cm-agent-access]').value;
+      if (!prompt) { toast('Say what the agent should do.'); return; }
+      if (access === 'full' && !window.confirm('Full access turns off every permission check for this task: the agent may run any command on this machine. Continue?')) return;
+      S.agentResult = { machine: mid, r: { running: true } }; again();
+      const r = await act('POST', `/api/compute/machines/${mid}/agent-tasks` + q(), { prompt, access, folder: form.querySelector('[data-cm-agent-folder]').value.trim() || 'work' }, null);
+      S.agentResult = r ? { machine: mid, r: r.result } : null; again(); return;
+    }
     if ('cmStop' in d && mid) { if (await act('POST', `/api/compute/machines/${mid}/stop` + q(), {}, 'Stopped')) again(); return; }
     if ('cmDelete' in d && mid) {
       if (!window.confirm(`Delete ${S.machine.name}? The machine and its disk are removed for good.`)) return;
