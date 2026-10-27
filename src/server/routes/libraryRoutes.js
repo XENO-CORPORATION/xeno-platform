@@ -29,6 +29,7 @@ import { requireResourceRelation, sendChatAuthorityError } from '../services/cha
 import {
   emptyLibraryTrash, placeLibraryItem, purgeLibraryItem, renameLibraryItem, restoreLibraryItem, starLibraryItem, trashLibraryItem,
 } from '../services/libraryOrganise.js';
+import { storageChanges } from '../services/storageChanges.js';
 import { readArea, readAreaFilter } from '../utils/resourceArea.js';
 
 const router = express.Router();
@@ -152,6 +153,8 @@ const folderReply = (res, result, body = {}) => {
 };
 const folderId = (value) => (value === null || value === undefined || value === '' || value === 'root' ? null : String(value));
 const folders = (run) => async (req, res) => { try { await run(req, res); } catch (error) { console.error('Storage folder request failed:', error); res.status(500).json({ success: false, error: 'Internal server error' }); } };
+// The desktop drive asks which folders changed since its cursor (services/storageChanges.js), instead of relisting all.
+router.get('/changes', folders(async (req, res) => { res.json({ success: true, ...(await storageChanges(req.db, req.user.id, req.query.since ? String(req.query.since) : null)) }); }));
 router.get('/folders', folders(async (req, res) => {
   if (req.query.shared === 'true') return res.json({ success: true, folders: await foldersSharedWith(req.db, req.user.id), path: [] });   // folders other people shared with me
   const team = req.query.workspace ? String(req.query.workspace) : null;   // a workspace's team folders
