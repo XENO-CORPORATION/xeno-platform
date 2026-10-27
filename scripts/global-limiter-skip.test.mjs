@@ -36,3 +36,28 @@ test('index.js wires the skip with the FULL path', () => {
   const src = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
   assert.match(src, /skip:\s*\(req\)\s*=>\s*globalLimiterSkips\(req\.baseUrl \+ req\.path\)/);
 });
+
+test('OIDC keys, discovery and token survive 201 calls to another route; token has its own failure-only bucket', async () => {
+  const { oauthTokenLimiterOptions } = await import('../src/server/utils/globalLimiterSkip.js');
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use('/api/', rateLimit({ windowMs: 60_000, max: 200, standardHeaders: true, legacyHeaders: false, skip: (req) => globalLimiterSkips(req.baseUrl + req.path) }));
+  app.post('/api/oauth2/token', rateLimit({ ...oauthTokenLimiterOptions(() => 'ip'), max: 2 }));
+  app.post('/api/oauth2/token', (q, r) => (q.body.ok ? r.json({ access_token: 'x' }) : r.status(400).json({ error: 'invalid_grant' })));
+  for (const p of ['/api/oauth2/jwks', '/api/oauth2/.well-known/openid-configuration']) app.get(p, (_q, r) => r.json({}));
+  app.get('/api/other', (_q, r) => r.json({ ok: true }));
+  const s = app.listen(0, '127.0.0.1'); await new Promise((r) => s.once('listening', r));
+  const url = (p) => `http://127.0.0.1:${s.address().port}${p}`;
+  const tok = (body) => fetch(url('/api/oauth2/token'), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+  try {
+    for (let i = 0; i < 201; i++) await fetch(url('/api/other'));
+    assert.equal((await fetch(url('/api/other'))).status, 429, 'the shared bucket is spent');
+    assert.equal((await fetch(url('/api/oauth2/jwks'))).status, 200);
+    assert.equal((await fetch(url('/api/oauth2/.well-known/openid-configuration'))).status, 200);
+    for (let i = 0; i < 5; i++) assert.equal((await tok('ok=1&client_id=a')).status, 200, `success #${i + 1} is never counted`);
+    assert.equal((await tok('client_id=a')).status, 400);
+    assert.equal((await tok('client_id=a')).status, 400);
+    assert.equal((await tok('client_id=a')).status, 429, 'failures are limited');
+    assert.equal((await tok('ok=1&client_id=b')).status, 200, 'another client is a different bucket');
+  } finally { s.close(); }
+});

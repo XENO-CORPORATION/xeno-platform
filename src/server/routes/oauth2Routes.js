@@ -78,15 +78,16 @@ async function requireDpopIfBound(req, res, next) {
 
 // GET /oauth2/jwks — public keys
 router.get('/jwks', async (req, res) => {
-  try { res.json(await jwks(req.db)); } catch (e) { res.status(500).json({ error: 'server_error' }); }
+  try { res.set('Cache-Control', 'public, max-age=300'); res.json(await jwks(req.db)); } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // Discovery — served at both /api/oauth2/openid-configuration and the standard
 // /api/oauth2/.well-known/openid-configuration.
-router.get('/openid-configuration', (req, res) => res.json(discovery()));
-router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery()));
+const publicMeta = (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.json(discovery()); };
+router.get('/openid-configuration', publicMeta);
+router.get('/.well-known/openid-configuration', publicMeta);
 // RFC 8414 authorization-server metadata — what MCP clients read (also served at the site root by nginx)
-router.get('/.well-known/oauth-authorization-server', (req, res) => res.json(discovery()));
+router.get('/.well-known/oauth-authorization-server', publicMeta);
 
 // POST /oauth2/register — RFC 7591 dynamic client registration, for MCP clients. Public,
 // PKCE-only, tasks:read/tasks:write only, own token audience; see registerDynamicClient.
