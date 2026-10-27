@@ -4,7 +4,7 @@
  * stayed unfunded past the grace — with the reason on its timeline (services/compute.meterRunningMachines).
  * A pass never overlaps the previous one.
  */
-import { meterRunningMachines } from '../services/compute.js';
+import { meterRunningMachines, saveRunningMachines } from '../services/compute.js';
 
 export function startComputeMeter(db, { intervalMs = 60_000 } = {}) {
   let busy = false;
@@ -19,6 +19,19 @@ export function startComputeMeter(db, { intervalMs = 60_000 } = {}) {
   };
   const timer = setInterval(tick, intervalMs);
   timer.unref?.();
+  // Saving home folders runs on its own loop: a large save takes minutes and must not delay billing.
+  let saving = false;
+  const save = async () => {
+    if (saving) return;
+    saving = true;
+    try {
+      const r = await saveRunningMachines(db);
+      if (r.saved || r.lost || r.failed) console.log('[Compute] saver', JSON.stringify(r));
+    } catch (e) { console.error('[Compute] saver failed:', e.message); }
+    finally { saving = false; }
+  };
+  const saver = setInterval(save, intervalMs);
+  saver.unref?.();
   console.log(`[Compute] meter every ${Math.round(intervalMs / 1000)}s (backend ${process.env.XENO_COMPUTE_API_URL ? 'configured' : 'NOT configured: machines cannot be created'})`);
-  return () => clearInterval(timer);
+  return () => { clearInterval(timer); clearInterval(saver); };
 }
