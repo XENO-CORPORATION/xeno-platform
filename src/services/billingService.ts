@@ -14,7 +14,7 @@ export function isAuthed(): boolean {
 
 export interface BillingItem {
   id: string;
-  kind: 'credits' | 'subscription';
+  kind: 'credits' | 'subscription' | 'storage';
   label: string;
   credits: number;
   price: number;        // display amount in `currency` (mirrors the Stripe Price)
