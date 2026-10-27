@@ -18,6 +18,7 @@ const unavailable = {
   async start() { throw new ComputeUnavailable(); },
   async stop() { throw new ComputeUnavailable(); },
   async remove() { throw new ComputeUnavailable(); },
+  async save() { throw new ComputeUnavailable(); },
   async exec() { throw new ComputeUnavailable(); },
   async readFile() { throw new ComputeUnavailable(); },
   async writeFile() { throw new ComputeUnavailable(); },
@@ -57,6 +58,8 @@ function httpBackend(baseUrl, token) {
     start: (m) => call(`/v1/machines/${m.id}/start`, {}, 15 * 60_000),
     stop: (m) => call(`/v1/machines/${m.id}/stop`, {}, 15 * 60_000),
     remove: (m) => call(`/v1/machines/${m.id}/delete`, {}),
+    /** Save a running machine's home folder now (it keeps running). */
+    save: (m) => call(`/v1/machines/${m.id}/save`, {}, 15 * 60_000),
   };
 }
 

@@ -34,6 +34,7 @@ const tag = `cmp${Date.now().toString(36)}`;
 const calls = [];
 const fake = { name: 'fake', create: async (m) => { calls.push(['create', m.id]); return { ref: `fake-${m.id}` }; },
   start: async (m) => { calls.push(['start', m.id]); return { state: 'running', restored: { bytes: 2048 } }; }, stop: async (m) => { calls.push(['stop', m.id]); return { state: 'stopped', saved: { bytes: 4096 }, saveError: null }; }, remove: async (m) => { calls.push(['remove', m.id]); },
+  save: async (m) => { calls.push(['save', m.id]); if (fake.lostIds?.has(m.id)) throw Object.assign(new Error('The machine is not running'), { code: 'machine_not_running' }); return { saved: { bytes: 7777 } }; },
   // exec answers like the machine: NDJSON lines, base64 chunks. 'é' (c3 a9) is split across two chunks on purpose.
   exec: async (m, body) => { calls.push(['exec', m.id, body]);
     const line = (o) => JSON.stringify(o) + '\n';
@@ -213,6 +214,22 @@ async function main() {
   check((await pool.query("SELECT is_active FROM api_keys WHERE key_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')", [fake.lastKey])).rows[0].is_active === false, 'and its key is revoked even then');
   const tasks = (await compute.getMachine(pool, E, m1.id)).events.filter((e) => e.kind === 'agent_task');
   check(tasks.length === 3 && tasks.some((e) => e.detail.access === 'full') && !JSON.stringify(tasks).includes('add.py'), 'the timeline records each task and its access, not what it was asked');
+
+  // saving while running: every 15 minutes, and a machine that vanished is stopped as lost
+  check((await compute.saveRunningMachines(pool)).saved === 0, 'a machine saved less than 15 minutes ago is not saved again');
+  await pool.query("UPDATE compute_machines SET home_saved_at = now() - interval '16 minutes' WHERE id = $1", [m1.id]);
+  await back(m1.id, 16);
+  check((await compute.saveRunningMachines(pool)).saved === 1 && (await compute.getMachine(pool, E, m1.id)).homeBytes === 7777, 'after 15 minutes a running machine is saved, and its saved size updated');
+  check((await compute.getMachine(pool, E, m1.id)).state === 'running', 'and it keeps running');
+  await pool.query("UPDATE compute_machines SET home_saved_at = now() - interval '16 minutes' WHERE id = $1", [m1.id]);
+  await back(m1.id, 16);
+  fake.lostIds = new Set([m1.id]);
+  const lr = await compute.saveRunningMachines(pool);
+  const lost = await compute.getMachine(pool, E, m1.id);
+  check(lr.lost === 1 && lost.state === 'stopped' && lost.events.some((e) => e.kind === 'stopped' && e.detail.reason === 'lost'), 'a machine xeno-compute says is not running is stopped as LOST, with the reason on its timeline');
+  check(!(await pool.query("SELECT 1 FROM compute_sessions WHERE machine_id = $1 AND ended_at IS NULL", [m1.id])).rows.length, 'and its billing ends');
+  fake.lostIds = null;
+  await compute.startMachine(pool, E, m1.id);
 
   // idle: a machine nobody uses stops by itself
   check((await compute.getMachine(pool, E, m1.id)).idleStopMinutes === 30, 'a new machine stops itself after 30 idle minutes by default');

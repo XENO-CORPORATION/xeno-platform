@@ -452,6 +452,38 @@ export async function meterRunningMachines(db, { now = Date.now() } = {}) {
 
 // ─────────────────────────────────────────── usage + caps
 /** Machine time in a workspace for a period: totals, by machine and by agent; and the AI-vs-machines split. */
+// ─────────────────────────────────────────── saving while running
+export const SAVE_EVERY_MINUTES = 15;
+/**
+ * Save the home folder of running machines whose last save is older than SAVE_EVERY_MINUTES (leader only, from the
+ * saver in workers/computeMeter.js), so a crash loses at most that much work. A machine xeno-compute says is not
+ * running has stopped without being asked (it crashed or Cloudflare removed it): it is stopped here with reason
+ * "lost", so billing ends, and its last saved copy is what the next start puts back.
+ */
+export async function saveRunningMachines(db, { now = Date.now(), limit = 5 } = {}) {
+  const due = (await db.query(`SELECT m.* FROM compute_machines m JOIN compute_sessions s ON s.machine_id = m.id AND s.ended_at IS NULL
+      WHERE m.state = 'running' AND COALESCE(GREATEST(m.home_saved_at, s.started_at), s.started_at) < to_timestamp($1 / 1000.0) - make_interval(mins => $2)
+      ORDER BY COALESCE(m.home_saved_at, s.started_at) LIMIT $3`, [now, SAVE_EVERY_MINUTES, limit])).rows;
+  const out = { saved: 0, lost: 0, failed: 0 };
+  for (const m of due) {
+    try {
+      const r = await computeBackend().save({ id: m.id, ref: m.backend_ref });
+      const bytes = Number(r?.saved?.bytes);
+      if (Number.isFinite(bytes)) await db.query('UPDATE compute_machines SET home_bytes = $2, home_saved_at = now() WHERE id = $1', [m.id, bytes]);
+      out.saved++;
+    } catch (e) {
+      if (e.code === 'machine_not_running') {
+        const fresh = (await db.query("SELECT * FROM compute_machines WHERE id = $1 AND state = 'running'", [m.id])).rows[0];
+        if (fresh) { await stopRow(db, fresh, null, 'lost'); out.lost++; }
+      } else {
+        out.failed++; // a failed save keeps the previous copy; it is tried again on the next pass
+        console.error(`[Compute] save ${m.id} failed: ${e.code || ''} ${String(e.message).slice(0, 200)}`);
+      }
+    }
+  }
+  return out;
+}
+
 export async function usage(db, actor, { workspace, from, to } = {}) {
   const ctx = await workspaceFor(db, actor, workspace, 'viewer');
   const start = from ? new Date(from) : new Date(new Date().toISOString().slice(0, 7) + '-01T00:00:00Z');
