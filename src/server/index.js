@@ -204,7 +204,7 @@ import {
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
-import { globalLimiterSkips } from './utils/globalLimiterSkip.js';
+import { globalLimiterSkips, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -764,6 +764,7 @@ app.use('/api/v2/inference/service', databaseMiddleware, inferenceServiceRoutes)
 // JWKS surface for "Sign in with XENO" across the ecosystem.
 if (process.env.OIDC_ENABLED === 'true') {
   // Mounted under /api/* because the edge only routes /api to the backend.
+  app.post('/api/oauth2/token', rateLimit(oauthTokenLimiterOptions(rateLimitKey)));
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
   app.use('/api/v2/spawn/profiles', databaseMiddleware, oidcAuth, spawnProfileRoutes);

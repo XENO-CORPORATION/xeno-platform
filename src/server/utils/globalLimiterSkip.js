@@ -10,8 +10,36 @@
  * The paths are FULL paths: the limiter is mounted on '/api/', where req.path has '/api' stripped, which is why
  * the health-check skip below never matched before.
  */
-const SKIP = new Set(['/api/status', '/api/site-gate/check']);
+const SKIP = new Set([
+  '/api/status', '/api/site-gate/check',
+  // 🔴 OIDC (2026-10-27, measured by the CLI session): one busy client on a network spent the shared 200/min, and the
+  // next jwks or token call answered 429, so every XENO app behind that IP read as "not signed in" right after a good
+  // refresh. Keys and discovery are public and cached (Cache-Control in oauth2Routes.js); the token endpoint has its
+  // OWN limiter below, which counts only failures, so it never loses to unrelated traffic.
+  '/api/oauth2/jwks',
+  '/api/oauth2/openid-configuration',
+  '/api/oauth2/.well-known/openid-configuration',
+  '/api/oauth2/.well-known/oauth-authorization-server',
+  '/api/oauth2/token',
+]);
 
 export function globalLimiterSkips(fullPath) {
   return SKIP.has(String(fullPath || '').replace(/\/+$/, '')) || fullPath === '/health';
+}
+
+/**
+ * The token endpoint's own limiter (express-rate-limit options): keyed by client IP + client_id, and only FAILED
+ * exchanges count. A refresh that succeeds is never what signs a person out; a guessing attacker fails.
+ */
+export function oauthTokenLimiterOptions(keyOf) {
+  return {
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { ip: false },
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => `${keyOf(req)}|${String(req.body?.client_id || '').slice(0, 128)}`,
+    message: { error: 'slow_down', error_description: 'Too many failed token requests, try again shortly.' },
+  };
 }
