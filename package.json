@@ -158,6 +158,7 @@
     "smoke:public-api": "node scripts/smoke-public-api.mjs",
     "proof:forum-notify-email": "node scripts/forum-notify-email-proof.mjs",
     "proof:forum-erasure": "node scripts/forum-erasure-proof.mjs",
+    "proof:report-erasure": "node scripts/report-erasure-proof.mjs",
     "proof:forum-moderation": "node scripts/forum-moderation-proof.mjs",
     "proof:forum-agent-surface": "node scripts/forum-agent-surface-proof.mjs",
     "test:forum-parity": "node --test scripts/forum-surface-parity.test.mjs",
