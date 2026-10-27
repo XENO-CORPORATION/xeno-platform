@@ -21,7 +21,7 @@
  *   * the payer is resolveBillingAccountId: a pooled workspace's wallet, else the person (an agent's owner) who started it
  *   * caps (workspace / division / agent) refuse a new start or a bigger size; they never stop running work silently.
  *     A running machine whose next hour cannot be funded (cap reached or wallet empty) keeps running, is flagged
- *     `unfunded`, and after UNFUNDED_GRACE_SECONDS is stopped with the reason on its timeline. Its disk is kept.
+ *     `unfunded`, and after UNFUNDED_GRACE_SECONDS is stopped with the reason on its timeline. Its home folder is kept.
  */
 import crypto from 'node:crypto';
 import { check } from '../utils/authzReBAC.js';
@@ -315,30 +315,33 @@ export async function startMachine(db, actor, machineId, { workspace } = {}) {
     throw e;
   }
   await db.query('UPDATE compute_sessions SET hold_id = $2, segment_started_at = now() WHERE id = $1', [session.id, holdId]);
+  let started;
   try {
-    await computeBackend().start({ id: m.id, ref: m.backend_ref });
+    started = await computeBackend().start({ id: m.id, ref: m.backend_ref });
   } catch (e) {
     await voidHoldV2(db, payer.id, holdId).catch(() => {});
     await db.query('DELETE FROM compute_sessions WHERE id = $1', [session.id]);
     await event(db, m.id, 'failed', ctx.userId, { stage: 'start', code: e.code || null, reason: String(e.message).slice(0, 300) });
-    throw new ComputeError(e.message, e.code === 'compute_unavailable' ? 'compute_unavailable' : 'start_failed', e.code === 'compute_unavailable' ? 503 : 502);
+    throw new ComputeError(e.message, e.code === 'compute_unavailable' ? 'compute_unavailable' : e.code === 'restore_failed' ? 'restore_failed' : 'start_failed', e.code === 'compute_unavailable' ? 503 : 502);
   }
   const running = (await db.query("UPDATE compute_machines SET state = 'running', unfunded_since = NULL, last_active_at = now() WHERE id = $1 RETURNING *", [m.id])).rows[0];
-  await event(db, m.id, 'started', ctx.userId, { payer: payer.kind, creditsPerHour: credits(r.rate_micro_per_hour) });
+  await event(db, m.id, 'started', ctx.userId, { payer: payer.kind, creditsPerHour: credits(r.rate_micro_per_hour), restoredBytes: started?.restored?.bytes ?? null });
   return shapeMachine(db, running);
 }
 
 /** Stop a running machine: settle the time used, then tell xeno-compute. Shared by people, agents and the meter. */
 async function stopRow(db, m, actorUserId, reason) {
   const session = (await db.query('SELECT * FROM compute_sessions WHERE machine_id = $1 AND ended_at IS NULL FOR UPDATE', [m.id])).rows[0];
-  await computeBackend().stop({ id: m.id, ref: m.backend_ref });
+  // xeno-compute saves the home folder (/home/xeno) before the machine goes; say on the timeline whether it did
+  const out = await computeBackend().stop({ id: m.id, ref: m.backend_ref });
   let charged = 0;
   if (session) {
     charged = await settleSegment(db, session, m);
     await db.query('UPDATE compute_sessions SET ended_at = now() WHERE id = $1', [session.id]);
   }
   const stopped = (await db.query("UPDATE compute_machines SET state = 'stopped', unfunded_since = NULL WHERE id = $1 RETURNING *", [m.id])).rows[0];
-  await event(db, m.id, 'stopped', actorUserId, { reason, charged: credits(charged) });
+  await event(db, m.id, 'stopped', actorUserId, { reason, charged: credits(charged),
+    savedBytes: out?.saved?.bytes ?? null, saveError: out?.saveError ? String(out.saveError).slice(0, 300) : null });
   return stopped;
 }
 
@@ -389,7 +392,7 @@ export async function deleteMachine(db, actor, machineId, { workspace } = {}) {
  * Roll every running machine's billing forward. Called on an interval by workers/computeMeter.js (leader only).
  * A segment older than an hour is settled and the next hour is reserved. If the next hour cannot be reserved (a cap,
  * an empty wallet, an allowance with paid credits off) the machine KEEPS RUNNING, is flagged unfunded with an event,
- * and is stopped only after UNFUNDED_GRACE_SECONDS — with that reason on its timeline. Its disk is kept.
+ * and is stopped only after UNFUNDED_GRACE_SECONDS — with that reason on its timeline. Its home folder is kept.
  */
 export async function meterRunningMachines(db, { now = Date.now() } = {}) {
   const open = (await db.query(`SELECT s.*, m.size, m.workspace_id, m.agent_user_id, m.backend_ref, m.unfunded_since, m.state,

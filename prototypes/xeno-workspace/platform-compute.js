@@ -22,6 +22,7 @@
   const VIEWS = [['machines', 'Machines'], ['usage', 'Usage'], ['budgets', 'Budgets']];
   const STATE = { creating: 'Creating', running: 'Running', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed' };
   const EVENT = { created: 'Created', started: 'Started', stopped: 'Stopped', deleted: 'Deleted', failed: 'Failed', billed: 'Billed', unfunded: 'Not funded', funded: 'Funded again', capped: 'Budget reached', idle_stop_set: 'Idle stop changed' };
+  const size = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB');
   const IDLE_CHOICES = [[15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [240, '4 hours'], [1440, '24 hours'], ['never', 'Never']];
   const S = { status: 'idle', ws: undefined, machines: [], sizes: [], usage: null, split: null, caps: null, machine: null, machineId: null, error: null };
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served ? window.XENO_SCOPE.uuid() : null);
@@ -96,7 +97,7 @@
     const actions = m.state === 'running' ? btn('data-cm-stop', 'Stop', 'btn')
       : m.state === 'stopped' ? `${btn('data-cm-start', 'Start', 'btn')} ${btn('data-cm-delete', 'Delete')}`
         : m.state === 'failed' ? btn('data-cm-delete', 'Delete') : '';
-    const warn = m.unfundedSince ? `<div class="pj-empty" data-cm-unfunded>The next hour could not be paid for (a budget is reached or the credits ran out). It keeps running for now and stops on its own soon, with its disk kept. Add credits or raise the budget to keep it going.</div>` : '';
+    const warn = m.unfundedSince ? `<div class="pj-empty" data-cm-unfunded>The next hour could not be paid for (a budget is reached or the credits ran out). It keeps running for now and stops on its own soon, with its home folder kept. Add credits or raise the budget to keep it going.</div>` : '';
     const events = (m.events || []).map((e) => `<div class="cr-li" data-cm-event="${esc(e.kind)}"><b>${esc(EVENT[e.kind] || e.kind)}</b><small>${esc(eventText(e))}</small><small>${esc(when(e.at))}</small></div>`).join('') || '<p class="pg-dim">Nothing yet.</p>';
     return `<div class="cr-detail" data-cm-machine="${esc(m.id)}">
       <div class="cr-main"><h2>${esc(m.name)}</h2><p class="pg-dim">${esc(STATE[m.state] || m.state)} · ${esc(m.size)} — ${esc(sizeLine(sz))}</p>${warn}
@@ -110,8 +111,8 @@
   }
   function eventText(e) {
     const d = e.detail || {};
-    if (e.kind === 'started') return `Billing to ${d.payer === 'workspace' ? 'the workspace wallet' : 'the person who started it'}${d.creditsPerHour ? `, ${cr(d.creditsPerHour)} an hour` : ''}.`;
-    if (e.kind === 'stopped') return `${d.reason === 'unfunded' ? 'Stopped because the next hour could not be paid for.' : d.reason === 'idle' ? 'Stopped by itself: nobody used it for its idle limit.' : 'Stopped.'} Charged ${cr(d.charged)} for this run.`;
+    if (e.kind === 'started') return `Billing to ${d.payer === 'workspace' ? 'the workspace wallet' : 'the person who started it'}${d.creditsPerHour ? `, ${cr(d.creditsPerHour)} an hour` : ''}.${d.restoredBytes != null ? ` Home folder put back (${size(d.restoredBytes)}).` : ''}`;
+    if (e.kind === 'stopped') return `${d.reason === 'unfunded' ? 'Stopped because the next hour could not be paid for.' : d.reason === 'idle' ? 'Stopped by itself: nobody used it for its idle limit.' : 'Stopped.'} Charged ${cr(d.charged)} for this run.${d.saveError ? ` Its files could NOT be saved this time: ${d.saveError}` : d.savedBytes != null ? ` Home folder saved (${size(d.savedBytes)}).` : ''}`;
     if (e.kind === 'unfunded' || e.kind === 'capped') return `${d.reason || 'The next hour could not be funded.'} It stops in ${Math.round((d.stopsInSeconds || 0) / 60)} minutes unless funding resumes.`;
     if (e.kind === 'funded') return 'Funding resumed.';
     if (e.kind === 'idle_stop_set') return d.minutes == null ? 'It now never stops by itself.' : `It now stops by itself after ${d.minutes} idle minutes.`;

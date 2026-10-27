@@ -24,12 +24,13 @@ const unavailable = {
 };
 
 function httpBackend(baseUrl, token) {
-  const call = async (path, body) => {
+  // start and stop move the machine's home folder (put back on start, saved on stop), which can take minutes
+  const call = async (path, body, timeoutMs = 30_000) => {
     const res = await fetch(new URL(path, baseUrl), {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     }).catch((e) => { throw new ComputeUnavailable(`XENO Compute did not answer: ${e.message}`); });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(data.error || `XENO Compute refused (${res.status})`), { code: data.code || 'compute_refused', statusCode: 502 });
@@ -53,8 +54,8 @@ function httpBackend(baseUrl, token) {
     readFile: async (m, path) => Buffer.from(await (await io(`/v1/machines/${m.id}/files?path=${encodeURIComponent(path)}`, { method: 'GET' }, 120_000)).arrayBuffer()),
     writeFile: async (m, path, buf) => (await io(`/v1/machines/${m.id}/files?path=${encodeURIComponent(path)}`, { method: 'PUT', body: buf }, 120_000)).json(),
     create: (m) => call('/v1/machines', { machineId: m.id, workspaceId: m.workspaceId, size: m.size, image: m.image }),
-    start: (m) => call(`/v1/machines/${m.id}/start`, {}),
-    stop: (m) => call(`/v1/machines/${m.id}/stop`, {}),
+    start: (m) => call(`/v1/machines/${m.id}/start`, {}, 15 * 60_000),
+    stop: (m) => call(`/v1/machines/${m.id}/stop`, {}, 15 * 60_000),
     remove: (m) => call(`/v1/machines/${m.id}/delete`, {}),
   };
 }
