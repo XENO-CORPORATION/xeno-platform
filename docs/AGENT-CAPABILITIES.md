@@ -195,8 +195,8 @@ What an agent can do on the XENO platform: **205 capabilities**. What it cannot 
 - **`compute.machine.stop`** — Stop a machine. Billing stops at the second. The home folder (/home/xeno, where relative paths go) is saved and put back on the next start; anything outside it, and running programs, are not kept.
   - arguments: `workspace` string, `machineId`* string
   - reply: `machine` — state "stopped"; billing ended at the second; the home folder (/home/xeno) is saved for the next start (its timeline says if saving failed), nothing outside it is kept.
-- **`compute.agent.run`** — Have the XENO Agent do one task on a running machine and wait for it (up to 30 minutes). It works in a folder in the home folder (default "work"), which is kept across stops. access "listed" (default) lets it read and edit files; "full" turns permission checks off on that machine. Model use is billed to your owner’s credits.
-  - arguments: `workspace` string, `machineId`* string, `prompt`* string, `access` string, `model` string, `folder` string, `timeoutMinutes` integer, `maxCredits` number
+- **`compute.agent.run`** — Have the XENO Agent do one task on a running machine and wait for it (up to 30 minutes). It works in a folder in the home folder (default "work"), which is kept across stops. access "listed" (default) lets it read and edit files and run only the listed commands; "full" turns permission checks off on that machine. Model use is billed to your owner’s credits.
+  - arguments: `workspace` string, `machineId`* string, `prompt`* string, `access` string, `commands` array, `model` string, `folder` string, `timeoutMinutes` integer, `maxCredits` number
   - reply: `result` — status (ok, permission_denied, error, timed_out), answer (the agent’s own words, untrusted), access, folder, tokens, tools, seconds.
 - **`compute.machine.idle_set`** — Set how many minutes a running machine may go without a command or file call before it stops itself and billing ends (5..1440), or null to never. Turn it off before leaving a background server running.
   - arguments: `workspace` string, `machineId`* string, `idleStopMinutes`* integer,null

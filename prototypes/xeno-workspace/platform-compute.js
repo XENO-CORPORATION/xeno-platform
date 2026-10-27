@@ -104,9 +104,10 @@
         ${m.purpose ? `<p>${esc(m.purpose)}</p>` : ''}<div class="cr-row">${actions}</div>
         ${m.state === 'running' ? `<h3>Run an agent task</h3><div data-cm-agent-form>
           <textarea data-cm-agent-prompt rows="4" placeholder="What should the XENO Agent do on this machine?" aria-label="Agent task"></textarea>
-          <div class="cr-row"><select data-cm-agent-access aria-label="Access"><option value="listed" selected>Listed access: reads and edits files</option><option value="full">Full access: no permission checks</option></select>
+          <div class="cr-row"><select data-cm-agent-access aria-label="Access"><option value="listed" selected>Listed access: edits files, runs listed commands</option><option value="full">Full access: no permission checks</option></select>
           <input data-cm-agent-folder value="work" aria-label="Folder in the home folder" size="12"> ${btn('data-cm-agent-run', 'Run', 'btn')}</div>
-          <p class="pg-dim">It works in that folder in the home folder, which is kept across stops, and is billed to your credits. Listed access cannot run commands yet; full access can do anything on this machine.</p>
+          <label class="pg-dim">Commands it may run (listed access), one pattern per line<textarea data-cm-agent-commands rows="3" aria-label="Commands it may run">python3 *\npip install *\nnode *\nnpm *\nnpx *\ngit *\nls *\ncat *\nmkdir *\npytest *</textarea></label>
+          <p class="pg-dim">It works in that folder in the home folder, which is kept across stops, and is billed to your credits. Listed access runs only the commands above (a command chained to another is refused); full access can do anything on this machine.</p>
           <div data-cm-agent-result>${S.agentResult && S.agentResult.machine === m.id ? agentResultHtml(S.agentResult.r) : ''}</div></div>` : ''}
         <h3>Timeline</h3><div class="cr-list" data-cm-timeline>${events}</div></div>
       <aside class="sp-console"><h3>Cost so far</h3><p data-cm-cost><b>${esc(cr(m.costSoFarCredits))}</b></p>
@@ -193,10 +194,11 @@
       const form = t.closest('[data-cm-agent-form]');
       const prompt = form.querySelector('[data-cm-agent-prompt]').value.trim();
       const access = form.querySelector('[data-cm-agent-access]').value;
+      const commands = form.querySelector('[data-cm-agent-commands]').value.split('\n').map((x) => x.trim()).filter(Boolean);
       if (!prompt) { toast('Say what the agent should do.'); return; }
       if (access === 'full' && !window.confirm('Full access turns off every permission check for this task: the agent may run any command on this machine. Continue?')) return;
       S.agentResult = { machine: mid, r: { running: true } }; again();
-      const r = await act('POST', `/api/compute/machines/${mid}/agent-tasks` + q(), { prompt, access, folder: form.querySelector('[data-cm-agent-folder]').value.trim() || 'work' }, null);
+      const r = await act('POST', `/api/compute/machines/${mid}/agent-tasks` + q(), { prompt, access, ...(access === 'listed' ? { commands } : {}), folder: form.querySelector('[data-cm-agent-folder]').value.trim() || 'work' }, null);
       S.agentResult = r ? { machine: mid, r: r.result } : null; again(); return;
     }
     if ('cmStop' in d && mid) { if (await act('POST', `/api/compute/machines/${mid}/stop` + q(), {}, 'Stopped')) again(); return; }
