@@ -37,6 +37,16 @@ const fake = { name: 'fake', create: async (m) => { calls.push(['create', m.id])
   // exec answers like the machine: NDJSON lines, base64 chunks. 'é' (c3 a9) is split across two chunks on purpose.
   exec: async (m, body) => { calls.push(['exec', m.id, body]);
     const line = (o) => JSON.stringify(o) + '\n';
+    if (body.argv[0] === 'xeno') {
+      // the agent CLI: record whether its key was live while it ran, then answer like `xeno run --json`
+      const k = body.env?.XENO_API_KEY || '';
+      fake.keyLive = (await pool.query("SELECT is_active FROM api_keys WHERE key_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')", [k])).rows[0]?.is_active === true;
+      fake.lastKey = k;
+      if (fake.agentFails) throw Object.assign(new Error('machine went away'), { code: 'exec_failed', statusCode: 502 });
+      const res = JSON.stringify({ status: 'ok', answer: 'Created add.py; it prints 5.', token_usage: { total: 1234 }, tool_summary: { total_calls: 2, permission_denied: 0 }, session_id: 's1' });
+      const out = line({ stream: 'stdout', data: Buffer.from(res + '\n').toString('base64') }) + line({ done: true, exitCode: 0, signal: null, timedOut: false });
+      return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(out)); c.close(); } }));
+    }
     const parts = [line({ stream: 'stdout', data: Buffer.from([0x68, 0xc3]).toString('base64') }),
       line({ stream: 'stdout', data: Buffer.from([0xa9, 0x0a]).toString('base64') }) + line({ stream: 'stderr', data: Buffer.from('warn').toString('base64') }).slice(0, 10),
       line({ stream: 'stderr', data: Buffer.from('warn').toString('base64') }).slice(10) + line({ done: true, exitCode: 3, signal: null, timedOut: false })];
@@ -171,6 +181,28 @@ async function main() {
   check((await compute.writeMachineFile(pool, E, m1.id, { path: 'a/b.txt', content: 'h\u00e9' })).bytes === 3, 'an editor writes a file');
   check((await compute.readMachineFile(pool, E, m1.id, { path: 'a/b.txt' })).toString('utf8') === 'h\u00e9', 'and reads the same bytes back');
   check(await code(() => compute.readMachineFile(pool, V, m1.id, { path: 'a/b.txt' })) === 'editor_required', 'a viewer cannot read a machine’s files');
+
+  // the XENO Agent on a machine: one task, its own short-lived key, two access modes
+  check(await code(() => compute.runAgentTask(pool, E, m1.id, { prompt: '  ' })) === 'invalid_prompt', 'an agent task needs a prompt');
+  check(await code(() => compute.runAgentTask(pool, E, m1.id, { prompt: 'x', access: 'root' })) === 'invalid_access', 'access is listed or full, nothing else');
+  check(await code(() => compute.runAgentTask(pool, E, m1.id, { prompt: 'x', folder: '../etc' })) === 'invalid_folder', 'the task folder stays inside the home folder');
+  check(await code(() => compute.runAgentTask(pool, V, m1.id, { prompt: 'x' })) === 'editor_required', 'a viewer cannot run an agent task');
+  const t1 = await compute.runAgentTask(pool, E, m1.id, { prompt: 'make add.py print 2+3', folder: 'proj' });
+  const run1 = calls.filter((c) => c[0] === 'exec' && c[2].argv[0] === 'xeno').at(-1)[2];
+  check(t1.status === 'ok' && t1.answer.includes('prints 5') && t1.tokens === 1234 && t1.access === 'listed', 'an editor runs an agent task and gets its answer');
+  check(run1.argv.includes('acceptEdits') && !run1.argv.includes('--bypass-permissions') && !run1.env.XENO_ALLOW_UNSAFE_BYPASS, 'by default it runs with LISTED access, never bypassing permissions');
+  check(!run1.argv.join(' ').includes('add.py') && Buffer.from(run1.stdin, 'base64').toString() === 'make add.py print 2+3' && run1.cwd === 'proj', 'the prompt goes on stdin, not the command line, in the chosen folder');
+  check(/^xeno-[0-9a-f]{48}$/.test(run1.env.XENO_API_KEY) && fake.keyLive === true, 'it gets its own model key, live while it runs');
+  check((await pool.query("SELECT is_active FROM api_keys WHERE key_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')", [fake.lastKey])).rows[0].is_active === false, 'and the key is revoked when the task ends');
+  await compute.runAgentTask(pool, E, m1.id, { prompt: 'do anything', access: 'full' });
+  const run2 = calls.filter((c) => c[0] === 'exec' && c[2].argv[0] === 'xeno').at(-1)[2];
+  check(run2.argv.includes('--bypass-permissions') && run2.env.XENO_ALLOW_UNSAFE_BYPASS === '1', 'FULL access turns permission checks off for that task only');
+  fake.agentFails = true;
+  check(await code(() => compute.runAgentTask(pool, E, m1.id, { prompt: 'x' })) === 'exec_failed', 'a task whose machine fails reports it');
+  fake.agentFails = false;
+  check((await pool.query("SELECT is_active FROM api_keys WHERE key_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')", [fake.lastKey])).rows[0].is_active === false, 'and its key is revoked even then');
+  const tasks = (await compute.getMachine(pool, E, m1.id)).events.filter((e) => e.kind === 'agent_task');
+  check(tasks.length === 2 && tasks.some((e) => e.detail.access === 'full') && !JSON.stringify(tasks).includes('add.py'), 'the timeline records each task and its access, not what it was asked');
 
   // idle: a machine nobody uses stops by itself
   check((await compute.getMachine(pool, E, m1.id)).idleStopMinutes === 30, 'a new machine stops itself after 30 idle minutes by default');

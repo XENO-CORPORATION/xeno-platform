@@ -34,6 +34,9 @@ export const TOOLS = [
   { name: 'stop_machine', title: 'Stop a machine', annotations: RW,
     description: 'Stop a machine. Billing stops at the second. The home folder (/home/xeno, where relative paths go) is saved and put back on the next start; anything outside it, and running programs, are not kept.',
     inputSchema: { type: 'object', required: ['machineId'], properties: { workspace: WS, machineId: MID }, additionalProperties: false } },
+  { name: 'run_agent_task', title: 'Run a XENO Agent task on a machine', annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    description: 'Have the XENO Agent do one task on a running machine and wait for it (up to 30 minutes). It works in a folder in the home folder (default "work"), which is kept across stops. access "listed" (default) lets it read and edit files; "full" turns permission checks off on that machine. Model use is billed to your owner’s credits.',
+    inputSchema: { type: 'object', required: ['machineId', 'prompt'], properties: { workspace: WS, machineId: MID, prompt: { type: 'string', maxLength: 20000 }, access: { type: 'string', enum: ['listed', 'full'] }, model: { type: 'string' }, folder: { type: 'string' }, timeoutMinutes: { type: 'integer', minimum: 1, maximum: 30 }, maxCredits: { type: 'number', exclusiveMinimum: 0 } }, additionalProperties: false } },
   { name: 'set_idle_stop', title: 'Set when a machine stops itself', annotations: RW,
     description: 'Set how many minutes a running machine may go without a command or file call before it stops itself and billing ends (5..1440), or null to never. Turn it off before leaving a background server running.',
     inputSchema: { type: 'object', required: ['machineId', 'idleStopMinutes'], properties: { workspace: WS, machineId: MID, idleStopMinutes: IDLE }, additionalProperties: false } },
@@ -65,6 +68,7 @@ export async function callTool(db, actor, name, a = {}) {
       case 'get_machine': return ok({ machine: await compute.getMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'create_machine': return ok({ machine: await compute.createMachine(db, actor, a) });
       case 'start_machine': return ok({ machine: await compute.startMachine(db, actor, a.machineId, { workspace: a.workspace }) });
+      case 'run_agent_task': return ok({ result: await compute.runAgentTask(db, actor, a.machineId, a) });
       case 'set_idle_stop': return ok({ machine: await compute.setIdleStop(db, actor, a.machineId, { idleStopMinutes: a.idleStopMinutes, workspace: a.workspace }) });
       case 'stop_machine': return ok({ machine: await compute.stopMachine(db, actor, a.machineId, { workspace: a.workspace }) });
       case 'delete_machine': return ok({ machine: await compute.deleteMachine(db, actor, a.machineId, { workspace: a.workspace }) });

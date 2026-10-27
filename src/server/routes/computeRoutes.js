@@ -8,6 +8,7 @@
  *   POST /machines {name, size, purpose?, image?, agentId?, idempotencyKey?}   machine.create
  *   GET  /machines/:id                           machine.get (with its timeline)
  *   POST /machines/:id/start · /stop · DELETE /machines/:id
+ *   POST /machines/:id/agent-tasks {prompt, access: listed|full, model?, folder?, timeoutMinutes?, maxCredits?}   machine.agent_run
  *   PUT  /machines/:id/idle-stop {idleStopMinutes: 5..1440 | null}   machine.idle_set
  *   GET  /usage (?from=&to=)                     machine.usage — by machine and by agent
  *   GET  /usage/split                            what the caller used: AI requests vs machine time (the quota view)
@@ -49,6 +50,7 @@ router.get('/machines', ...A, run(async (req) => ({ machines: await compute.list
 router.post('/machines', ...A, run(async (req) => ({ machine: await compute.createMachine(req.db, req.actor, { ...b(req), workspace: ws(req) }) })));
 router.get('/machines/:id', ...A, run(async (req) => ({ machine: await compute.getMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
 router.post('/machines/:id/start', ...A, run(async (req) => ({ machine: await compute.startMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
+router.post('/machines/:id/agent-tasks', ...A, run(async (req) => ({ result: await compute.runAgentTask(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }) })));
 router.put('/machines/:id/idle-stop', ...A, run(async (req) => ({ machine: await compute.setIdleStop(req.db, req.actor, req.params.id, { idleStopMinutes: b(req).idleStopMinutes, workspace: ws(req) }) })));
 router.post('/machines/:id/stop', ...A, run(async (req) => ({ machine: await compute.stopMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
 router.delete('/machines/:id', ...A, run(async (req) => ({ machine: await compute.deleteMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
