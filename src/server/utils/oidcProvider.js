@@ -541,7 +541,9 @@ async function recoverableRotation(tx, row, { rotationHash, dpopJkt }) {
 
 // A refresh on either host is allowed and is how a product moves: the same family continues under the provider it
 // now calls, and the new tokens carry that provider's issuer.
-export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null, rotationId = null, iss = issuer() }) {
+// `host` is only recorded on the refresh event: which host each client refreshes through is what decides when the staged
+// issuer move can be switched on (docs/decisions/2026-10-28-oidc-issuer-staged-move.md, "Before the switch is turned on").
+export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null, rotationId = null, iss = issuer(), host = null }) {
   if (rotationId !== null && rotationId !== undefined
       && (typeof rotationId !== 'string' || !ROTATION_ID_RE.test(rotationId))) {
     throw oauthError('invalid_request', 'rotation_id must be 16-128 characters of [A-Za-z0-9_-]');
@@ -597,7 +599,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
   }
   recordSecurityEventAsync(db, refreshEvent.recovered ? EVENTS.TOKEN_REFRESH_RECOVERED : EVENTS.TOKEN_REFRESHED, {
     userId: refreshEvent.userId,
-    metadata: { clientId, familyId: refreshEvent.familyId },
+    metadata: { clientId, familyId: refreshEvent.familyId, ...(host ? { host: String(host).toLowerCase().slice(0, 100) } : {}) },
   });
   return refreshed;
 }

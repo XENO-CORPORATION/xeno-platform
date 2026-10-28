@@ -99,6 +99,9 @@ async function main() {
   const moved = await refresh(NEW_HOST, ot.body.refresh_token);
   ok(moved.status === 200 && issOf(moved.body.access_token) === NEW, 'the same sign-in continues; the new tokens carry the new issuer');
   ok((await pool.query('SELECT issuer FROM oauth_refresh_tokens WHERE token_hash = $1', [sha(moved.body.refresh_token)])).rows[0].issuer === NEW, 'and its next refresh token is recorded under the new provider');
+  await new Promise((r) => setTimeout(r, 300)); // the refresh event is written asynchronously
+  const ev = (await pool.query("SELECT metadata FROM security_events WHERE event_type = 'token_refreshed' ORDER BY created_at DESC LIMIT 1")).rows[0];
+  ok(ev && ev.metadata.host === NEW_HOST && ev.metadata.clientId === CLIENT, 'the refresh event records the host it came through (the measurement that decides the switch)');
   const stay = await refresh(OLD_HOST, nt.body.refresh_token);
   ok(stay.status === 200 && issOf(stay.body.access_token) === OLD, 'and back: a refresh on the old host mints the old issuer');
 

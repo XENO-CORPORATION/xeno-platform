@@ -460,7 +460,7 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
     if (b.grant_type === 'refresh_token') {
       return res.json(await refreshTokenGrant(req.db, {
         refreshToken: b.refresh_token, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
-        rotationId: b.rotation_id, iss,
+        rotationId: b.rotation_id, iss, host: req.headers.host,
       }));
     }
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') {
