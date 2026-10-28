@@ -36,12 +36,17 @@ import * as compute from './compute.js';
 import { computeBackend } from './computeBackend.js';
 import { canvasesOnMachine } from './spawnCanvases.js';
 import { createServiceTicket } from './liveTickets.js';
+import { shellEnabledFor, connectionKey, endConnection } from './cloudShell.js';
 
 /** The named ports the platform forwards, and the audience each one's assertion is for. */
 // `discoveryHost` is where the server behind the port reads the platform's discovery; its assertions carry THAT
 // provider's issuer, so they match while the issuer moves host by host (docs/decisions/2026-10-28-oidc-issuer-staged-move.md).
 // Spawn reads https://xenosystem.ai (xeno-spawn forwardAssertion.js, rc.90).
-export const PORTS = Object.freeze({ spawn: { audience: 'xeno-spawn', typ: 'xeno-spawn-assertion+jwt', discoveryHost: 'xenosystem.ai' } });
+export const PORTS = Object.freeze({
+  spawn: { audience: 'xeno-spawn', typ: 'xeno-spawn-assertion+jwt', discoveryHost: 'xenosystem.ai' },
+  // Cloud Shell (services/cloudShell.js): behind SHELL_ENABLED, and each connection carries its own short-lived key.
+  shell: { audience: 'xeno-shell', typ: 'xeno-shell-assertion+jwt', discoveryHost: 'xenosystem.ai', gated: true },
+});
 export const PORT_PATH = /^\/api\/compute\/machines\/(mch_[0-9a-f]{32})\/ports\/([a-z][a-z0-9-]{0,31})(\/[^?#]*)?$/;
 export const TICKET_SECONDS = 60;
 export const ASSERTION_SECONDS = 60;
@@ -66,8 +71,9 @@ export async function actorFor(db, userId) {
 
 /** A one-use ticket to open the port's WebSocket from a browser. */
 export async function createTicket(db, actor, machineId, name, { workspace } = {}) {
-  portSpec(name);
+  const spec = portSpec(name);
   const { ctx, m } = await compute.portAccess(db, actor, machineId, { workspace });
+  if (spec.gated && (ctx.agentId || !(await shellEnabledFor(db, ctx.userId)))) throw new compute.ComputeError('Cloud Shell is not open to your account yet', 'shell_not_enabled', 403);
   const ticket = crypto.randomBytes(32).toString('base64url');
   const expires = new Date(Date.now() + TICKET_SECONDS * 1000);
   await db.query(`INSERT INTO compute_port_tickets (ticket_hash, machine_id, port, user_id, workspace_id, expires_at)
@@ -137,13 +143,17 @@ export async function handlePortConnection(client, req, db, { authenticate, rech
   const url = new URL(req.url, 'http://x');
   const [, machineId, name, rest] = url.pathname.match(PORT_PATH);
   const buffered = [];
-  let upstream = null, timer = null, closed = false;
+  let upstream = null, timer = null, closed = false, shellKeyId = null;
   client.on('message', (data, isBinary) => {
     if (upstream?.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
     else if (buffered.length < MAX_BUFFERED) buffered.push([data, isBinary]);
     else closeWith(client, 4429, 'Too much sent before the machine answered');
   });
-  const end = () => { if (closed) return; closed = true; clearInterval(timer); if (upstream) try { upstream.terminate(); } catch { /* gone */ } };
+  const end = () => {
+    if (closed) return; closed = true; clearInterval(timer);
+    if (upstream) try { upstream.terminate(); } catch { /* gone */ }
+    if (shellKeyId) endConnection(db, shellKeyId); // the shell's key dies with its connection
+  };
   client.on('close', end); client.on('error', end);
 
   try {
@@ -167,11 +177,15 @@ export async function handlePortConnection(client, req, db, { authenticate, rech
     const target = computeBackend().portSocket(access.m, name, (rest || '/') + url.search);
     // The Spawn server joins this machine's canvases on XENO Multiplayer as a service participant: its tickets ride
     // the forwarded connection, so the machine holds no credential (base64url JSON [{resource, ticket}], ≤ 20).
+    // Cloud Shell: the person's Cloud Shell agent gets a key for this connection only (revoked in end()).
+    let shellKey = null;
+    if (name === 'shell') { const k = await connectionKey(db, access.ctx); shellKey = k.key; shellKeyId = k.keyId; if (closed) { endConnection(db, shellKeyId); return; } }
     const live = name === 'spawn' ? await Promise.all((await canvasesOnMachine(db, machineId)).map(async (id) =>
       ({ resource: `spawn.canvas/${id}`, ticket: await createServiceTicket(db, machineId, `spawn.canvas/${id}`) }))) : [];
     upstream = new WebSocket(target.url, { headers: { ...target.headers, 'x-xeno-assertion': assertion,
       'x-xeno-forwarded-prefix': `/api/compute/machines/${machineId}/ports/${name}`,
-      ...(live.length ? { 'x-xeno-live-tickets': Buffer.from(JSON.stringify(live)).toString('base64url') } : {}) } });
+      ...(live.length ? { 'x-xeno-live-tickets': Buffer.from(JSON.stringify(live)).toString('base64url') } : {}),
+      ...(shellKey ? { 'x-xeno-shell-key': shellKey } : {}) } });
     upstream.on('open', () => {
       for (const [d, b] of buffered.splice(0)) upstream.send(d, { binary: b });
       compute.recordPortOpened(db, machineId, access.ctx, name).catch(() => {});

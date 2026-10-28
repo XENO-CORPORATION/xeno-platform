@@ -15,6 +15,8 @@
  *   GET  /caps · PUT /caps {scope, scopeId?, maxMachines?, maxSize?, monthlyCredits?}   budget.set (a person, admin)
  *   PUT  /rates/:size {creditsPerHour}           XENO staff only — the owner's prices, entered as data
  *   POST /machines/:id/port-tickets {port}       a one-use ticket to open wss …/machines/:id/ports/:port/ (services/computePorts.js)
+ *   GET  /cloud-shell                            {enabled, machineId?} — whether Cloud Shell is open to me, and my shell machine
+ *   POST /cloud-shell                            open Cloud Shell: the person's machine, started, and a ticket for its terminal
  */
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
@@ -22,6 +24,7 @@ import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import * as compute from '../services/compute.js';
 import { createTicket } from '../services/computePorts.js';
+import { openCloudShell, shellStatus, CloudShellError } from '../services/cloudShell.js';
 
 const router = express.Router();
 async function loadActor(req, res, next) {
@@ -58,6 +61,14 @@ router.post('/machines/:id/agent-tasks', ...A, run(async (req) => ({ result: awa
 router.put('/machines/:id/idle-stop', ...A, run(async (req) => ({ machine: await compute.setIdleStop(req.db, req.actor, req.params.id, { idleStopMinutes: b(req).idleStopMinutes, workspace: ws(req) }) })));
 router.post('/machines/:id/stop', ...A, run(async (req) => ({ machine: await compute.stopMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
 router.delete('/machines/:id', ...A, run(async (req) => ({ machine: await compute.deleteMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
+router.get('/cloud-shell', ...A, run(async (req) => ({ shell: await shellStatus(req.db, req.actor) })));
+router.post('/cloud-shell', ...A, async (req, res) => {
+  try { res.json({ success: true, shell: await openCloudShell(req.db, req.actor, { createTicket }) }); }
+  catch (e) {
+    if (e instanceof CloudShellError || e instanceof compute.ComputeError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+    console.error('[compute] cloud shell', e); return res.status(500).json({ success: false, error: 'Cloud Shell could not start' });
+  }
+});
 router.post('/machines/:id/port-tickets', ...A, run(async (req) => ({ connect: await createTicket(req.db, req.actor, req.params.id, String(b(req).port || ''), { workspace: ws(req) }) })));
 router.post('/machines/:id/exec', ...A, run(async (req) => ({ result: await compute.execMachine(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }) })));
 // Streaming: the machine's NDJSON lines ({stream, data(base64)} … {done, exitCode}) passed through as they arrive.
