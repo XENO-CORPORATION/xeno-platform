@@ -7,6 +7,7 @@
  *   - each connection carries a live xwk_ key for the person's Cloud Shell AGENT (never the person), with read-only
  *     grants in the machine's workspace and nothing that changes data; the key is revoked when the socket closes
  *   - the assertion is for aud xeno-shell
+ *   - while open the key is kept 60 minutes ahead; turning the switch off, or revoking the key elsewhere, ends the shell
  *
  *   node src/server/tests/cloud-shell.test.mjs   (DATABASE_URL = a disposable database)
  */
@@ -44,7 +45,7 @@ setComputeBackend({ name: 'fake', create: async () => ({ ref: 'f' }), start: asy
 
 const server = http.createServer((q, s) => { s.writeHead(404); s.end(); });
 const wss = new WebSocketServer({ server, handleProtocols: (p, req) => (isPortRequest(req) ? selectProtocol(p) : (p.values().next().value ?? false)) });
-wss.on('connection', (ws, req) => { if (isPortRequest(req)) handlePortConnection(ws, req, pool, { recheckMs: 60_000 }); });
+wss.on('connection', (ws, req) => { if (isPortRequest(req)) handlePortConnection(ws, req, pool, { recheckMs: 200 }); });
 await new Promise((r) => server.listen(0, r));
 const site = `ws://127.0.0.1:${server.address().port}`;
 const open = (path, protocols) => new Promise((resolve) => {
@@ -94,10 +95,35 @@ async function main() {
   check(grants.length > 0 && grants.every((g) => cls.get(g) === 'safe'), 'it may READ in the machine’s workspace and nothing that changes data until the person grants it');
   check(!h.cookie && h.authorization === 'Bearer worker-token', 'no platform cookie or sign-in reaches the machine');
 
+  // while open: the key is kept 60 minutes ahead
+  await pool.query("UPDATE workspace_agent_keys SET expires_at = now() + interval '1 minute' WHERE key_prefix = $1", [key.slice(0, 12)]);
+  await wait(600);
+  const left = (await pool.query('SELECT extract(epoch FROM expires_at - now())::int AS s FROM workspace_agent_keys WHERE key_prefix = $1', [key.slice(0, 12)])).rows[0].s;
+  check(left > 55 * 60 && left <= 60 * 60, `while the terminal is open its key is kept an hour ahead (${left} s left)`);
+
   // close → key revoked
   c.ws.close();
   await wait(300);
   check((await creds.resolveKey(pool, key)) === null, 'closing the terminal revokes its key');
+
+  const closedBy = (ws) => new Promise((r) => ws.on('close', (cc, rr) => r([cc, String(rr)])));
+  // a key revoked elsewhere (Settings › Connected apps) ends the shell
+  const s3 = await openCloudShell(pool, ME, { createTicket });
+  const c3 = await open(`${s3.connect.path}ws`, s3.connect.protocols);
+  const k3 = await creds.resolveKey(pool, String(seen.at(-1)['x-xeno-shell-key']));
+  const end3 = closedBy(c3.ws);
+  await creds.revokeRunKey(pool, k3.id);
+  check((await end3)[0] === 4401, 'revoking the shell’s key elsewhere ends the shell');
+
+  // turning Cloud Shell off for the person ends an open shell, and its key dies
+  const s4 = await openCloudShell(pool, ME, { createTicket });
+  const c4 = await open(`${s4.connect.path}ws`, s4.connect.protocols);
+  const key4 = String(seen.at(-1)['x-xeno-shell-key']);
+  const end4 = closedBy(c4.ws);
+  process.env.SHELL_ENABLED = `${tag}_other@xeno.test`;
+  check((await end4)[0] === 4403, 'turning Cloud Shell off ends an open shell');
+  await wait(300);
+  check((await creds.resolveKey(pool, key4)) === null, 'and its key is revoked');
 
   // a person without the switch, even with a ticket path, is refused at the ticket
   process.env.SHELL_ENABLED = `${tag}_me@xeno.test`;
