@@ -162,6 +162,7 @@ import supportRoutes from './routes/supportRoutes.js';
 import releaseRoutes from './routes/releaseRoutes.js';
 import customersRoutes from './routes/customersRoutes.js';
 import computeRoutes from './routes/computeRoutes.js';
+import liveRoutes from './routes/liveRoutes.js';
 import schedulingRoutes from './routes/schedulingRoutes.js';
 import { sendDueReminders as sendSchedulingReminders } from './services/scheduling.js';
 import { requireActivated } from './services/accountActivation.js';
@@ -913,6 +914,7 @@ app.use('/api/releases', databaseMiddleware, releaseRoutes);
 // XENO Customers — Corpo › Customers (customers.js): the workspace CRM; agents read and draft, people keep and delete.
 app.use('/api/customers', databaseMiddleware, customersRoutes);
 app.use('/api/compute', databaseMiddleware, computeRoutes);
+app.use('/api/live', databaseMiddleware, liveRoutes);
 // Corpo › Scheduling (services/scheduling.js): workspace booking pages + public guest booking/manage pages + ICS feed.
 app.use('/api/scheduling', databaseMiddleware, schedulingRoutes);
 // Agent identity — a PLATFORM primitive shared with Marketplace, Company and

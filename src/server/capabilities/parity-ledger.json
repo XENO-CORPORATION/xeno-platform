@@ -31,6 +31,7 @@
     "computeRoutes.js": "compute",
     "connectAuthorityRoutes.js": "storage",
     "containerRoutes.js": "platform",
+    "liveRoutes.js": "platform",
     "conversionRoutes.js": "studio",
     "corpusRoutes.js": "workspace",
     "customersRoutes.js": "customers",
@@ -1577,6 +1578,13 @@
       "capability": "compute.machine.idle_set",
       "class": "reversible",
       "scope": "compute:write"
+    },
+    "route:liveRoutes.js:POST /tickets": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "none",
+      "because": "a 60 s XENO Multiplayer join ticket after the platform checks access (services/liveTickets.js); an agent calls the same route with its own credential, so the ticket is transport, not an action"
     },
     "route:computeRoutes.js:POST /machines/:id/port-tickets": {
       "status": "excluded",
