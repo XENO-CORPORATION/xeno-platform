@@ -4,7 +4,8 @@
  * (/tool-host.html, src/toolHost) inside a frame, where it gets the web ToolHost. A tool that needs something only
  * Hub has (local models, native conversion) is still listed and opens; the page says what it needs Hub for.
  * Product packages (XENO Image, the Agent) are products with their own pages, so they are not listed here.
- * It registers XENO_ZONE_LIVE['tools.<area>'] for every Tools area.
+ * It registers XENO_ZONE_LIVE['tools.<area>'] for every Tools area, and puts the same real tools in the Marketplace's
+ * Tools listings (Official, Free; opening one goes to the tool), in place of any sample tool listing.
  */
 (() => {
   const P = window.XENO_PLATFORM;
@@ -27,8 +28,20 @@
     const r = await P.api('GET', '/api/tools').catch(() => null);
     if (!r || !r.ok) { S.status = 'error'; S.error = (r && r.d && r.d.error) || 'XENO tools could not be reached.'; return paint(); }
     S.tools = (r.d.tools || []).filter((t) => t.contract === 'tool@1');
-    S.status = 'ready'; paint();
+    S.status = 'ready'; syncMarket(); paint();
   }
+  // The Marketplace's Tools are the real tools: one Official, Free listing each, the registry's own name and words.
+  // Any XENO-sold tool listing that is not a real tool (the sample) goes; a re-load replaces them all.
+  function syncMarket() {
+    const L = window.XENO_PG_MARKET;
+    if (!Array.isArray(L)) return;
+    const real = S.tools.map((t) => ({ id: 'tool:' + t.id, toolId: t.id, name: t.name, mode: 'apps', kind: 'tool', seller: 'XENO', trust: 'official', price: 'Free',
+      blurb: t.description + (t.web.needsHub.length ? ` (Needs XENO Hub for ${t.web.needsHub.join(', ')})` : ''), owned: false, opens: true }));
+    const keep = L.filter((x) => !(x.kind === 'tool' && x.seller === 'XENO'));
+    L.splice(0, L.length, ...real, ...keep);
+    try { const st = X()?.S; if (st && st.view === 'global' && st.global === 'market') X().render(); } catch { /* not drawn yet */ }
+  }
+  const openTool = (id) => { const t = S.tools.find((x) => x.id === id); if (t) X()?.go?.('zone', { mode: 'tools', zoneOf: 'mode', zone: areaOf(t), item: t.id }); };
   const here = (area) => { const s = X()?.S; return s && s.view === 'zone' && s.mode === 'tools' && (!area || s.zone === area); };
   const paint = () => { try { X()?.renderRail?.(); X()?.refreshPanel?.(); if (here()) X().render(); } catch {} };
   const inArea = (area) => S.tools.filter((t) => areaOf(t) === area);
@@ -71,6 +84,15 @@
     if ('tlReload' in t.dataset) return load();
     X()?.go?.('zone', { zone: X().S.zone, item: t.dataset.tlOpen });
   });
+  // in the Marketplace, a real tool's listing (its name or its Open button) opens the tool itself
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-arg^="tool:"]');
+    if (!t || !t.closest('.pg-card--lst, [data-pg-results], .mk, [data-mk]')) return;
+    e.preventDefault(); e.stopPropagation();
+    openTool(t.dataset.arg.slice(5));
+  }, true);
+  // the Marketplace needs the real tools even before Tools was visited (once the workspace has drawn itself)
+  setTimeout(() => { if (S.status === 'idle') load(); }, 0);
   // a tool's own Close button returns to its area
   window.addEventListener('message', (e) => {
     if (e.origin !== location.origin || !e.data || e.data.type !== 'xeno-tool:close') return;
