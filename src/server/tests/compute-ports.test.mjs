@@ -106,7 +106,7 @@ async function main() {
   await compute.startMachine(pool, E, m.id);
   check(await code(() => createTicket(pool, V, m.id, 'spawn', w)) === 'editor_required', 'a viewer gets no ticket');
   check(await code(() => createTicket(pool, S, m.id, 'spawn', w)) === 'not_a_member', 'a stranger gets no ticket');
-  check(await code(() => createTicket(pool, E, m.id, 'shell', w)) === 'unknown_port', 'an undeclared port gets no ticket');
+  check(await code(() => createTicket(pool, E, m.id, 'notebook', w)) === 'unknown_port', 'an undeclared port gets no ticket');
 
   // an editor connects with a ticket
   await pool.query("UPDATE compute_machines SET last_active_at = now() - interval '2 hours' WHERE id = $1", [m.id]);

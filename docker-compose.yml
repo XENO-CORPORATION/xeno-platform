@@ -262,6 +262,8 @@ services:
       # Staged OIDC issuer move (docs/decisions/2026-10-28-oidc-issuer-staged-move.md): 'on' makes each host in
       # XENO_ALIAS_SITE_ORIGINS its own provider. Unset = today's single issuer.
       - XENO_ISSUER_PER_HOST=${XENO_ISSUER_PER_HOST:-}
+      # Cloud Shell (services/cloudShell.js): comma list of emails and @domains, or "all". Unset = closed (fail closed).
+      - SHELL_ENABLED=${SHELL_ENABLED:-}
       - SALES_OPEN=${SALES_OPEN:-}
       # XENO Compute machines run on Cloudflare Containers (owner, 2026-10-27). Unset URL = every machine call
       # refuses compute_unavailable, so nothing is started or billed (services/computeBackend.js).

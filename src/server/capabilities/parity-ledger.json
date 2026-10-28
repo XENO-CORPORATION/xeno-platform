@@ -160,6 +160,7 @@
     "xenoTasksRoutes.js": "tasks",
     "youtubeRoutes.js": "studio",
     "platform-compute.js": "compute",
+    "platform-shell.js": "compute",
     "spawnSkillRoutes.js": "agents",
     "toolsRoutes.js": "platform",
     "platform-tools.js": "workspace-ui"
@@ -1586,6 +1587,20 @@
       "class": "safe",
       "scope": "none",
       "because": "a 60 s XENO Multiplayer join ticket after the platform checks access (services/liveTickets.js); an agent calls the same route with its own credential, so the ticket is transport, not an action"
+    },
+    "route:computeRoutes.js:GET /cloud-shell": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "whether the workspace shows the Cloud Shell button for this person; reading it changes nothing"
+    },
+    "route:computeRoutes.js:POST /cloud-shell": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "opening Cloud Shell mints a credential for the person's own Cloud Shell agent; only the person opens it (services/cloudShell.js), never an agent"
     },
     "route:computeRoutes.js:POST /machines/:id/port-tickets": {
       "status": "excluded",
@@ -9549,6 +9564,62 @@
       "status": "planned",
       "class": "reversible",
       "scope": "storage:write"
+    },
+    "ui:platform-shell.js:data-csh=body": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "the terminal area itself; what is typed there runs on the person’s own machine, through the Cloud Shell port"
+    },
+    "ui:platform-shell.js:data-csh=grip": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "resizes the Cloud Shell dock on this screen"
+    },
+    "ui:platform-shell.js:data-csh=hide": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "hides the Cloud Shell dock; the session keeps running"
+    },
+    "ui:platform-shell.js:data-csh=max": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "makes the Cloud Shell dock full height on this screen"
+    },
+    "ui:platform-shell.js:data-csh=page": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "opens the same shell on its own page (/workspace/shell/<machine id>)"
+    },
+    "ui:platform-shell.js:data-csh=restart": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "starts a new Cloud Shell session, which mints a credential for the person’s own Cloud Shell agent; only the person does (POST /cloud-shell)"
+    },
+    "ui:platform-shell.js:data-csh=retry": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "opens Cloud Shell again after it ended; same as the POST /cloud-shell decision"
+    },
+    "ui:platform-shell.js:data-csh=state": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "shows whether the terminal is connected; not an action"
     },
     "ui:platform-support.js:data-sp-create=access": {
       "status": "excluded",
