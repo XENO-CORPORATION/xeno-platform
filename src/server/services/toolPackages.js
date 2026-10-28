@@ -18,7 +18,10 @@ const REGISTRY_URL = `${REGISTRY_BASE}/apps/tools/registry.json`;
 const REGISTRY_TTL_MS = 5 * 60 * 1000;
 
 /** Trusted signing keys, base64 SPKI DER — the same list Hub trusts. */
-export const TRUSTED_PUBLIC_KEYS = ['MCowBQYDK2VwAyEA79hsL6UIIV2hsss89aeQ3f8vIwFPUbP8fUWIiCCIdMY='];
+export const TRUSTED_PUBLIC_KEYS = [
+  'MCowBQYDK2VwAyEA79hsL6UIIV2hsss89aeQ3f8vIwFPUbP8fUWIiCCIdMY=', // original; private half lost 2026-10-28 — still verifies every package already published
+  'MCowBQYDK2VwAyEAL56NnhlTq6tTfbfz+ngB+wqVWAMBezIvHLSHm9eSNlE=', // rotated 2026-10-28
+];
 
 /**
  * What the web tool host can do (src/toolHost/webHost.ts must agree; a test pins it). A tool needing anything else

@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { generateKeyPairSync, sign, createHash } from 'node:crypto';
 import * as T from '../src/server/services/toolPackages.js';
 import { SPECIFIERS, shimSource, importMap, OUT } from './gen-tool-host-shims.mjs';
@@ -25,9 +27,13 @@ test('a changed byte, an extra file, no signature or another key is refused', ()
   assert.match(T.verifyToolPackage({ ...pkg(), trustedKeys: T.TRUSTED_PUBLIC_KEYS }).reason, /does not verify/);
 });
 test('the trusted keys are Hub’s', () => {
-  const hub = '../xeno-hub/src/main/services/tools/toolPackageVerifier.ts';
-  if (!fs.existsSync(new URL('../' + hub, import.meta.url))) return; // Hub is not checked out next to this repo
-  const src = fs.readFileSync(new URL('../' + hub, import.meta.url), 'utf8');
+  // Compare with what Hub SHIPS (its origin/main), not whatever a sibling working tree happens to hold: a checkout
+  // that is behind or carries someone's uncommitted work would make this guard lie in either direction.
+  const dir = new URL('../../xeno-hub/', import.meta.url), rel = 'src/main/services/tools/toolPackageVerifier.ts';
+  if (!fs.existsSync(new URL(rel, dir))) return; // Hub is not checked out next to this repo
+  let src;
+  try { src = execFileSync('git', ['-C', fileURLToPath(dir), 'show', `origin/main:${rel}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
+  catch { src = fs.readFileSync(new URL(rel, dir), 'utf8'); }
   for (const k of T.TRUSTED_PUBLIC_KEYS) assert.ok(src.includes(k), 'Hub does not trust ' + k);
 });
 test('the shims on disk match the live modules, and tool-host.html carries the same import map', () => {
