@@ -14,11 +14,13 @@
  *   GET  /usage/split                            what the caller used: AI requests vs machine time (the quota view)
  *   GET  /caps · PUT /caps {scope, scopeId?, maxMachines?, maxSize?, monthlyCredits?}   budget.set (a person, admin)
  *   PUT  /rates/:size {creditsPerHour}           XENO staff only — the owner's prices, entered as data
+ *   POST /machines/:id/port-tickets {port}       a one-use ticket to open wss …/machines/:id/ports/:port/ (services/computePorts.js)
  */
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import * as compute from '../services/compute.js';
+import { createTicket } from '../services/computePorts.js';
 
 const router = express.Router();
 async function loadActor(req, res, next) {
@@ -54,6 +56,7 @@ router.post('/machines/:id/agent-tasks', ...A, run(async (req) => ({ result: awa
 router.put('/machines/:id/idle-stop', ...A, run(async (req) => ({ machine: await compute.setIdleStop(req.db, req.actor, req.params.id, { idleStopMinutes: b(req).idleStopMinutes, workspace: ws(req) }) })));
 router.post('/machines/:id/stop', ...A, run(async (req) => ({ machine: await compute.stopMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
 router.delete('/machines/:id', ...A, run(async (req) => ({ machine: await compute.deleteMachine(req.db, req.actor, req.params.id, { workspace: ws(req) }) })));
+router.post('/machines/:id/port-tickets', ...A, run(async (req) => ({ connect: await createTicket(req.db, req.actor, req.params.id, String(b(req).port || ''), { workspace: ws(req) }) })));
 router.post('/machines/:id/exec', ...A, run(async (req) => ({ result: await compute.execMachine(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }) })));
 // Streaming: the machine's NDJSON lines ({stream, data(base64)} … {done, exitCode}) passed through as they arrive.
 router.post('/machines/:id/exec/stream', ...A, async (req, res) => {

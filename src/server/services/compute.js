@@ -571,6 +571,24 @@ async function runningMachineFor(db, actor, machineId, workspace) {
   return { ctx, m };
 }
 
+/**
+ * Who may reach a server on a RUNNING machine through a named port (services/computePorts.js), and as what. Same
+ * gate as a command (an editor, or the agent the machine works for); the role is what the server behind the port is
+ * told: a workspace admin is the canvas owner, everyone else who passes is an editor (owner, 2026-10-28). Reaching it
+ * counts as use for idle stop, so a machine someone is connected to is never stopped for idleness.
+ */
+export async function portAccess(db, actor, machineId, { workspace } = {}) {
+  const { ctx, m } = await runningMachineFor(db, actor, machineId, workspace);
+  const admin = !ctx.agentId && (await check(db, { object: `workspace:${ctx.workspaceId}`, relation: 'admin', subject: `user:${ctx.userId}` })).allowed;
+  await touch(db, m.id);
+  return { ctx, m, role: admin ? 'owner' : 'editor' };
+}
+
+/** Record on the machine's timeline that someone connected to one of its named ports. */
+export async function recordPortOpened(db, machineId, ctx, port) {
+  await event(db, machineId, 'port_opened', ctx.userId, { port, agent: ctx.agentId || null });
+}
+
 export function execRequest({ argv, cwd, stdin, env, timeoutMs } = {}) {
   if (!Array.isArray(argv) || !argv.length || argv.some((a) => typeof a !== 'string')) throw new ComputeError('argv must be a non-empty list of strings (a program and its arguments, not a shell line)', 'invalid_argv');
   const t = Number(timeoutMs ?? 60_000);

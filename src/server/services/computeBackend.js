@@ -22,6 +22,7 @@ const unavailable = {
   async exec() { throw new ComputeUnavailable(); },
   async readFile() { throw new ComputeUnavailable(); },
   async writeFile() { throw new ComputeUnavailable(); },
+  portSocket() { throw new ComputeUnavailable(); },
 };
 
 function httpBackend(baseUrl, token) {
@@ -60,6 +61,8 @@ function httpBackend(baseUrl, token) {
     remove: (m) => call(`/v1/machines/${m.id}/delete`, {}),
     /** Save a running machine's home folder now (it keeps running). */
     save: (m) => call(`/v1/machines/${m.id}/save`, {}, 15 * 60_000),
+    /** Where to open a WebSocket to a named port on the machine (path = '/<rest>?<query>' for the server behind it). */
+    portSocket: (m, name, path = '/') => ({ url: new URL(`/v1/machines/${m.id}/ports/${name}${path}`, baseUrl).toString().replace(/^http/, 'ws'), headers: { ...auth } }),
   };
 }
 
