@@ -146,7 +146,7 @@ import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
 import browserRelayRoutes, { accountBrowserRouter } from './routes/browserRelayRoutes.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
-import { handlePortConnection, isPortRequest, selectProtocol } from './services/computePorts.js';
+import { handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade as authenticatePortUpgrade } from './services/computePorts.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
@@ -169,7 +169,7 @@ import agentRoutes from './routes/agentRoutes.js';
 import artifactRoutes from './routes/artifactRoutes.js';
 import { createArtifactViewerRouter } from './routes/artifactViewerRoutes.js';
 import { createStorageSharedRouter } from './routes/storageSharedRoutes.js';
-import { authMiddleware, optionalAuthMiddleware, resolveAuthedUser } from './middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { startDownloadCleanup } from './services/downloadService.js';
@@ -3268,9 +3268,7 @@ wss.on('connection', (ws, req) => {
   // never sees them, and neither branch can shadow the other.
   // XENO Compute named ports (services/computePorts.js): a socket to a server on the caller's machine.
   if (isPortRequest(req)) {
-    handlePortConnection(ws, req, pool, {
-      authenticate: async (r) => { const a = await resolveAuthedUser({ headers: r.headers, db: pool }); return a.user ? String(a.user.id) : null; },
-    }).catch((e) => { console.error('[compute-ports] connection failed', e && e.message); try { ws.close(1011, 'port error'); } catch {} });
+    handlePortConnection(ws, req, pool, { authenticate: (r) => authenticatePortUpgrade(pool, r) }).catch((e) => { console.error('[compute-ports] connection failed', e && e.message); try { ws.close(1011, 'port error'); } catch {} });
     return;
   }
   if (isRelayRequest(req)) {

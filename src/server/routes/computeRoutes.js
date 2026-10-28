@@ -18,6 +18,7 @@
  */
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
+import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import * as compute from '../services/compute.js';
 import { createTicket } from '../services/computePorts.js';
@@ -43,7 +44,8 @@ const run = (fn) => async (req, res) => {
     return res.status(500).json({ success: false, error: 'XENO Compute is unavailable right now' });
   }
 };
-const A = [authMiddleware, loadActor];
+// A token bound to a key (DPoP) must bring its proof, as on every other bound-token route.
+const A = [authMiddleware, requireDpopIfBound, loadActor];
 const b = (req) => req.body || {};
 const ws = (req) => b(req).workspace || req.query.workspace;
 
