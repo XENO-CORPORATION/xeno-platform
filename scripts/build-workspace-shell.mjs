@@ -14,5 +14,5 @@ copyFileSync(nm('@xterm/xterm/lib/xterm.js'), join(out, 'xterm.js'));
 copyFileSync(nm('@xterm/xterm/css/xterm.css'), join(out, 'xterm.css'));
 copyFileSync(nm('@xterm/addon-fit/lib/addon-fit.js'), join(out, 'addon-fit.js'));
 const v = (p) => JSON.parse(readFileSync(nm(`${p}/package.json`), 'utf8')).version;
-writeFileSync(join(out, 'LICENSE.md'), `@xterm/xterm ${v('@xterm/xterm')} and @xterm/addon-fit ${v('@xterm/addon-fit')} — MIT\n\n${readFileSync(nm('@xterm/xterm/LICENSE'), 'utf8')}`);
+writeFileSync(join(out, 'LICENSE.txt') /* .txt: .dockerignore drops every *.md, and this notice must ship */, `@xterm/xterm ${v('@xterm/xterm')} and @xterm/addon-fit ${v('@xterm/addon-fit')} — MIT\n\n${readFileSync(nm('@xterm/xterm/LICENSE'), 'utf8')}`);
 console.log(`vendor/xterm: @xterm/xterm ${v('@xterm/xterm')}, @xterm/addon-fit ${v('@xterm/addon-fit')}`);
