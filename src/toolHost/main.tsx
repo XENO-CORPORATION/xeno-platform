@@ -10,6 +10,10 @@ import * as ReactJsxRuntime from 'react/jsx-runtime';
 import { createRoot } from 'react-dom/client';
 import { createWebHost } from './webHost';
 import { Picker } from './Picker';
+import { Header, initialTheme } from './chrome';
+import './tools.css';
+
+document.documentElement.dataset.theme = initialTheme();
 import type { ToolModule, NotifyLevel } from './contract';
 
 // what the import map's shims hand a tool: this page's own React and the kit's runtime (defineTool)
@@ -38,12 +42,7 @@ function Toasts({ items }: { items: { id: number; level: NotifyLevel; message: s
 
 function Bar({ name }: { name: string }) {
   if (framed) return null;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: '#060606', fontSize: 13 }}>
-      <a href="/tools" data-tools-back style={{ color: '#948d83', textDecoration: 'none' }}>← All tools</a>
-      <span style={{ color: '#ece7df', fontWeight: 600 }}>{name}</span>
-    </div>
-  );
+  return <Header toolName={name || undefined} />;
 }
 
 function App() {
@@ -78,14 +77,14 @@ function ToolPage() {
     })();
   }, []);
 
-  if (error) return <><Bar name="" /><div data-tool-error style={{ padding: 32, color: '#948d83' }}>{error}</div></>;
-  if (!mod) return <><Bar name="" /><div data-tool-loading style={{ padding: 32, color: '#69635b' }}>Opening the tool…</div></>;
+  if (error) return <div className="xt xt-page"><Bar name="" /><div data-tool-error className="xt-msg">{error}</div></div>;
+  if (!mod) return <div className="xt xt-page"><Bar name="" /><div data-tool-loading className="xt-msg">Opening the tool…</div></div>;
   const C = mod.Component;
   const close = () => (framed ? window.parent.postMessage({ type: 'xeno-tool:close', tool: toolId }, location.origin) : (location.href = '/tools'));
   return (
-    <div data-tool-mounted={toolId} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div data-tool-mounted={toolId} className="xt" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Bar name={mod.manifest?.name || toolId} />
-      <div style={{ flex: 1, minHeight: 0 }}><C host={host} onClose={close} /></div>
+      <div className="xt-tool"><C host={host} onClose={close} /></div>
       <Toasts items={toasts} />
     </div>
   );
