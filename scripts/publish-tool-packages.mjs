@@ -66,7 +66,8 @@ function validateCliArgs(argv) {
  * package. Keep them in step, and prefer appending on rotation rather than replacing.
  */
 const TRUSTED_PUBLIC_KEYS = [
-  'MCowBQYDK2VwAyEA79hsL6UIIV2hsss89aeQ3f8vIwFPUbP8fUWIiCCIdMY=',
+  'MCowBQYDK2VwAyEA79hsL6UIIV2hsss89aeQ3f8vIwFPUbP8fUWIiCCIdMY=', // the original key; its private half was lost (2026-10-28) — drop once nothing signed with it is served
+  'MCowBQYDK2VwAyEAL56NnhlTq6tTfbfz+ngB+wqVWAMBezIvHLSHm9eSNlE=', // rotated 2026-10-28; private half in ~/.xeno-secrets XENO_TOOL_SIGNING_KEY
 ]
 
 function arg(name, fallback) {
