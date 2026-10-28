@@ -24,7 +24,12 @@ import * as compute from '../services/compute.js';
 import { setComputeBackend } from '../services/computeBackend.js';
 import { addGrant } from '../utils/creditLedgerV2.js';
 import { jwks } from '../utils/oidcProvider.js';
-import { createTicket, handlePortConnection, isPortRequest, selectProtocol } from '../services/computePorts.js';
+import { createTicket, handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade } from '../services/computePorts.js';
+import { startDeviceAuthorization, approveDevice, deviceTokenGrant } from '../utils/oidcProvider.js';
+import { jwkThumbprint, accessTokenHash } from '../utils/dpop.js';
+import { issuer } from '../config/hosts.js';
+import express from 'express';
+import computeRoutes from '../routes/computeRoutes.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -53,7 +58,7 @@ let bearerUser = null;
 const server = http.createServer((q, s) => { s.writeHead(404); s.end(); });
 const wss = new WebSocketServer({ server, handleProtocols: (p, req) => (isPortRequest(req) ? selectProtocol(p) : (p.values().next().value ?? false)) });
 wss.on('connection', (ws, req) => {
-  if (isPortRequest(req)) handlePortConnection(ws, req, pool, { recheckMs: 300, authenticate: async (r) => (r.headers.authorization === 'Bearer program-token' ? bearerUser : null) });
+  if (isPortRequest(req)) handlePortConnection(ws, req, pool, { recheckMs: 300, authenticate: async (r) => (r.headers.authorization === 'Bearer program-token' ? bearerUser : authenticateUpgrade(pool, r)) });
 });
 await new Promise((r) => server.listen(0, r));
 const site = `ws://127.0.0.1:${server.address().port}`;
@@ -152,6 +157,32 @@ async function main() {
   check(c4.ws && verify(seen.at(-1).headers['x-xeno-assertion']).claims.sub === String(editor), 'a program may sign in with Bearer instead of a ticket');
   check(seen.at(-1).headers.authorization === 'Bearer worker-token', 'the machine side gets only the Worker’s token (the Worker strips it before the machine)');
   c4.ws.close();
+
+  // a key-bound (DPoP) token, as the local Spawn server holds: its proof is required, over GET and the https URL
+  await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, allowed_scopes, surface, is_first_party)
+    VALUES ($1, 'Spawn test', ARRAY['http://127.0.0.1/callback'], ARRAY['openid','profile','email','offline_access'], $1, true) ON CONFLICT (client_id) DO NOTHING`, [`${tag}-spawn`]);
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const pub = publicKey.export({ format: 'jwk' });
+  const start = await startDeviceAuthorization(pool, { clientId: `${tag}-spawn`, scope: 'openid profile email offline_access' });
+  await approveDevice(pool, { userCode: start.user_code, userId: owner });
+  const bound = (await deviceTokenGrant(pool, { deviceCode: start.device_code, clientId: `${tag}-spawn`, dpopJkt: jwkThumbprint(pub) })).access_token;
+  const proof = (htm, htu) => jwt.sign({ jti: crypto.randomUUID(), htm, htu, iat: Math.floor(Date.now() / 1000), ath: accessTokenHash(bound) },
+    privateKey, { algorithm: 'ES256', header: { typ: 'dpop+jwt', alg: 'ES256', jwk: pub } });
+  const portPath = `/api/compute/machines/${m.id}/ports/spawn/ws`;
+  check((await open(portPath, { headers: { authorization: `Bearer ${bound}` } })).closed === 4401, 'a key-bound token sent as plain Bearer is refused on the port');
+  check((await open(portPath, { headers: { authorization: `DPoP ${bound}`, dpop: proof('GET', `${issuer()}/api/compute/machines/${m.id}/ports/spawn/other`) } })).closed === 4401, 'a proof for another URL is refused');
+  const c5 = await open(`${portPath}?hello=1`, { headers: { authorization: `DPoP ${bound}`, dpop: proof('GET', `${issuer()}${portPath}`) } });
+  await wait(100);
+  check(c5.ws && verify(seen.at(-1).headers['x-xeno-assertion']).claims.sub === String(owner), 'with its proof (GET, the https URL without the query) the bound token opens the port');
+  c5.ws.close();
+  // and on the HTTP routes: the same rule (requireDpopIfBound)
+  const app = express();
+  app.use('/api/compute', (req, _res, next) => { req.db = pool; next(); }, computeRoutes);
+  const http2 = await new Promise((r) => { const sv = app.listen(0, () => r(sv)); });
+  const list = (h) => fetch(`http://127.0.0.1:${http2.address().port}/api/compute/machines?workspace=${ws}`, { headers: h });
+  check((await list({ authorization: `DPoP ${bound}` })).status === 401, 'a key-bound token without its proof is refused on /api/compute');
+  check((await list({ authorization: `DPoP ${bound}`, dpop: proof('GET', `${issuer()}/api/compute/machines`) })).status === 200, 'with its proof it lists the workspace’s machines');
+  http2.close();
 
   // the platform closes the socket when access ends
   const closing = closeOf(c1.ws);

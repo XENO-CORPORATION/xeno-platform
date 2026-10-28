@@ -29,6 +29,8 @@ import jwt from 'jsonwebtoken';
 import { WebSocket } from 'ws';
 import { issuer } from '../config/hosts.js';
 import { getSigningKey } from '../utils/oidcProvider.js';
+import { verifyDpopProof } from '../utils/dpop.js';
+import { resolveAuthedUser } from '../middleware/auth.js';
 import { resolvePrincipal, assertPrincipalUsable } from './agentIdentity.js';
 import * as compute from './compute.js';
 import { computeBackend } from './computeBackend.js';
@@ -89,6 +91,25 @@ export async function mintPortAssertion(db, name, { ctx, m, role }, actor) {
   };
   return jwt.sign({ ...claims, iat: now, exp: now + ASSERTION_SECONDS }, key.privatePem,
     { algorithm: 'ES256', keyid: key.kid, issuer: issuer(), audience: spec.audience, header: { typ: spec.typ, kid: key.kid, alg: 'ES256' } });
+}
+
+/**
+ * A program's sign-in on the upgrade: the same token resolution as every HTTP route. A token bound to a key (DPoP)
+ * must come as `Authorization: DPoP <token>` with a proof over GET and the https form of the port URL without its
+ * query, exactly as requireDpopIfBound asks of an HTTP call, so a stolen bound token cannot be replayed as Bearer.
+ */
+export async function authenticateUpgrade(db, req) {
+  const a = await resolveAuthedUser({ headers: req.headers, db });
+  if (!a.user) return null;
+  if (a.auth?.dpopJkt) {
+    const m = /^DPoP\s+(.+)$/i.exec(String(req.headers.authorization || ''));
+    if (!m) throw Object.assign(new Error('This token is bound to a key: send it as DPoP with a proof'), { statusCode: 401 });
+    try {
+      await verifyDpopProof(db, { proof: String(req.headers.dpop || ''), method: 'GET', accessToken: m[1], requiredJkt: a.auth.dpopJkt,
+        url: `${issuer()}${new URL(req.url, 'http://x').pathname}` });
+    } catch (e) { throw Object.assign(new Error(`DPoP proof refused: ${e.message}`), { statusCode: 401 }); }
+  }
+  return String(a.user.id);
 }
 
 export function isPortRequest(req) {
