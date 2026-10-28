@@ -15,7 +15,7 @@
  */
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { issuer, mailDomain, authFrontendOrigin } from '../config/hosts.js';
+import { issuer, knownIssuers, mailDomain, authFrontendOrigin } from '../config/hosts.js';
 import { OIDC_SCOPES, scopesForClient } from '../config/oidcAuthorityPolicy.js';
 import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
 import { jwkThumbprint, publicJwk } from './dpop.js';
@@ -131,9 +131,8 @@ export async function jwks(db) {
  *  advertised in discovery — never for anything that identifies a token. */
 const siteUrl = () => String(process.env.SITE_URL || 'https://xenosystem.ai').replace(/\/+$/, '');
 
-/** OIDC discovery document. */
-export function discovery() {
-  const iss = issuer();
+/** OIDC discovery document — for the provider at `iss` (one per host during the staged move; hosts.js). */
+export function discovery(iss = issuer()) {
   // Endpoints live under /api/* because the edge routes only /api to the backend.
   return {
     issuer: iss,
@@ -295,13 +294,13 @@ function refreshSessionUsable(session, row, epoch) {
     && Number(session.auth_epoch) === Number(epoch.epoch));
 }
 
-async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date(), dpopJkt = null }) {
+async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = new Date(), dpopJkt = null, iss = issuer() }) {
   const key = await getSigningKey(db);
   const aud = await audienceForClient(db, clientId);
   const now = Math.floor(Date.now() / 1000);
   const session = await registerSession(db, { sid, userId: user.id, authTime, dpopJkt });
   const base = {
-    iss: issuer(), iat: now, sid, auth_epoch: session.epoch,
+    iss, iat: now, sid, auth_epoch: session.epoch,
     auth_time: Math.floor(session.authTime.getTime() / 1000),
   };
   const accessToken = jwt.sign(
@@ -337,7 +336,7 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = ne
   await recordSurfaceLink(db, { userId: user.id, clientId, email: user.email });
   // Opaque refresh token, hashed at rest, with a rotation family.
   const familyId = crypto.randomUUID();
-  const { token: refreshToken } = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId });
+  const { token: refreshToken } = await issueRefreshToken(db, { userId: user.id, clientId, scope, sid, familyId, iss });
   return {
     access_token: accessToken,
     token_type: dpopJkt ? 'DPoP' : 'Bearer',
@@ -372,13 +371,14 @@ async function recordSurfaceLink(db, { userId, clientId, email }) {
 
 // Returns the opaque token AND its row id: a rotation records the successor's id on the row it
 // rotated, which is what idempotent refresh recovery checks.
-async function issueRefreshToken(db, { userId, clientId, scope, sid, familyId }) {
+// `iss` records which provider issued it, so a back-channel logout names the issuer that client knows.
+async function issueRefreshToken(db, { userId, clientId, scope, sid, familyId, iss = issuer() }) {
   const token = crypto.randomBytes(32).toString('base64url');
   const r = await db.query(
-    `INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, family_id, scope, sid, expires_at)
-     VALUES ($1,$2,$3,$4,$5,$6, now() + interval '${REFRESH_TTL_SEC} seconds')
+    `INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, family_id, scope, sid, expires_at, issuer)
+     VALUES ($1,$2,$3,$4,$5,$6, now() + interval '${REFRESH_TTL_SEC} seconds', $7)
      RETURNING id`,
-    [sha256(token), clientId, userId, familyId, scope, sid],
+    [sha256(token), clientId, userId, familyId, scope, sid, iss],
   );
   return { token, id: r.rows[0].id };
 }
@@ -442,7 +442,7 @@ export async function createAuthorizationCode(db, {
   return code;
 }
 
-export async function exchangeAuthorizationCode(db, { code, clientId, redirectUri, codeVerifier, dpopJkt = null }) {
+export async function exchangeAuthorizationCode(db, { code, clientId, redirectUri, codeVerifier, dpopJkt = null, iss = issuer() }) {
   const tx = await db.connect();
   try {
     await tx.query('BEGIN');
@@ -465,7 +465,7 @@ export async function exchangeAuthorizationCode(db, { code, clientId, redirectUr
     if (!user) throw oauthError('invalid_grant', 'user not found');
     const tokens = await mintTokens(tx, {
       user, clientId, scope: row.scope, sid: crypto.randomUUID(), nonce: row.nonce, dpopJkt,
-      authTime: row.auth_time,
+      authTime: row.auth_time, iss,
     });
     await tx.query('COMMIT');
     return tokens;
@@ -495,21 +495,21 @@ function hashesEqual(aHex, bHex) {
  * refresh token in the same family, and the old row's successor_id pointed at it. Used by both the
  * normal rotation and recovery, so the two can never return differently shaped token sets.
  */
-async function rotatedTokenSet(tx, { row, session, clientId }) {
+async function rotatedTokenSet(tx, { row, session, clientId, iss = issuer() }) {
   const user = await userClaims(tx, row.user_id);
   if (!user) throw oauthError('invalid_grant', 'user not found');
   const key = await getSigningKey(tx);
   const now = Math.floor(Date.now() / 1000);
   const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
   const access = jwt.sign(
-    { iss: issuer(), iat: now, sub: user.id, aud: await audienceForClient(tx, clientId), client_id: clientId, azp: clientId,
+    { iss, iat: now, sub: user.id, aud: await audienceForClient(tx, clientId), client_id: clientId, azp: clientId,
       scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
       typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
   );
   const successor = await issueRefreshToken(tx, {
-    userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id,
+    userId: user.id, clientId, scope: row.scope, sid: row.sid, familyId: row.family_id, iss,
   });
   await tx.query('UPDATE oauth_refresh_tokens SET successor_id = $2 WHERE id = $1', [row.id, successor.id]);
   return { access_token: access, token_type: session.dpop_jkt ? 'DPoP' : 'Bearer', expires_in: ACCESS_TTL_SEC, refresh_token: successor.token, scope: row.scope };
@@ -539,7 +539,9 @@ async function recoverableRotation(tx, row, { rotationHash, dpopJkt }) {
   return { session, successor };
 }
 
-export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null, rotationId = null }) {
+// A refresh on either host is allowed and is how a product moves: the same family continues under the provider it
+// now calls, and the new tokens carry that provider's issuer.
+export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = null, rotationId = null, iss = issuer() }) {
   if (rotationId !== null && rotationId !== undefined
       && (typeof rotationId !== 'string' || !ROTATION_ID_RE.test(rotationId))) {
     throw oauthError('invalid_request', 'rotation_id must be 16-128 characters of [A-Za-z0-9_-]');
@@ -567,7 +569,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
     } else if (recovery) {
       // The first rotation's successor was never used: retire it and issue a fresh one in its place.
       await tx.query('UPDATE oauth_refresh_tokens SET revoked = true WHERE id = $1', [recovery.successor.id]);
-      refreshed = await rotatedTokenSet(tx, { row, session: recovery.session, clientId });
+      refreshed = await rotatedTokenSet(tx, { row, session: recovery.session, clientId, iss });
       refreshEvent = { userId: row.user_id, familyId: row.family_id, recovered: true };
       await tx.query('COMMIT');
     } else {
@@ -576,7 +578,7 @@ export async function refreshTokenGrant(db, { refreshToken, clientId, dpopJkt = 
         throw oauthError('invalid_dpop_proof', 'refresh token sender constraint mismatch');
       }
       await tx.query('UPDATE oauth_refresh_tokens SET rotated = true, rotation_id_hash = $2 WHERE id = $1', [row.id, rotationHash]);
-      refreshed = await rotatedTokenSet(tx, { row, session, clientId });
+      refreshed = await rotatedTokenSet(tx, { row, session, clientId, iss });
       refreshEvent = { userId: row.user_id, familyId: row.family_id, recovered: false };
       await tx.query('COMMIT');
     }
@@ -670,7 +672,7 @@ export async function denyDevice(db, { userCode }) {
   return { ok: true };
 }
 
-export async function deviceTokenGrant(db, { deviceCode, clientId, dpopJkt = null }) {
+export async function deviceTokenGrant(db, { deviceCode, clientId, dpopJkt = null, iss = issuer() }) {
   const tx = await db.connect();
   try {
     await tx.query('BEGIN');
@@ -686,7 +688,7 @@ export async function deviceTokenGrant(db, { deviceCode, clientId, dpopJkt = nul
     const user = await userClaims(tx, row.user_id);
     if (!user) throw oauthError('invalid_grant', 'user not found');
     await tx.query('DELETE FROM oauth_device_codes WHERE device_code = $1', [deviceCode]);
-    const tokens = await mintTokens(tx, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), dpopJkt });
+    const tokens = await mintTokens(tx, { user, clientId, scope: row.scope, sid: crypto.randomUUID(), dpopJkt, iss });
     await tx.query('COMMIT');
     return tokens;
   } catch (error) {
@@ -718,9 +720,10 @@ export async function emitBackchannelLogout(db, sid) {
   let rows;
   try {
     rows = await db.query(
-      `SELECT DISTINCT rt.client_id, rt.user_id, c.backchannel_logout_uri
+      `SELECT DISTINCT ON (rt.client_id) rt.client_id, rt.user_id, c.backchannel_logout_uri, rt.issuer
          FROM oauth_refresh_tokens rt JOIN oauth_clients c ON c.client_id = rt.client_id
-        WHERE rt.sid = $1 AND c.backchannel_logout_uri IS NOT NULL`,
+        WHERE rt.sid = $1 AND c.backchannel_logout_uri IS NOT NULL
+        ORDER BY rt.client_id, rt.created_at DESC`,
       [sid],
     );
   } catch { return; } // column may not exist yet on older DBs
@@ -729,7 +732,8 @@ export async function emitBackchannelLogout(db, sid) {
   const now = Math.floor(Date.now() / 1000);
   await Promise.all(rows.rows.map(async (r) => {
     const logoutToken = jwt.sign(
-      { iss: issuer(), aud: r.client_id, sub: r.user_id, sid, iat: now, jti: crypto.randomBytes(8).toString('hex'), events: { [LOGOUT_EVENT]: {} } },
+      // The issuer this client last got tokens from (the provider it knows), else today's.
+      { iss: knownIssuers().includes(r.issuer) ? r.issuer : issuer(), aud: r.client_id, sub: r.user_id, sid, iat: now, jti: crypto.randomBytes(8).toString('hex'), events: { [LOGOUT_EVENT]: {} } },
       key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: 120, header: { typ: 'logout+jwt', kid: key.kid } },
     );
     try {
@@ -848,7 +852,7 @@ export async function verifyAccessToken(db, token) {
   let payload;
   try {
     payload = jwt.verify(token, key.publicKey, {
-      algorithms: [key.alg], audience: ACCESS_TOKEN_AUDIENCE, issuer: issuer(),
+      algorithms: [key.alg], audience: ACCESS_TOKEN_AUDIENCE, issuer: knownIssuers(),
     });
   } catch {
     throw oauthError('invalid_token', 'invalid access token');
@@ -919,7 +923,7 @@ async function verifyBrokerAssertion(db, {
     claims = jwt.verify(
       assertion,
       crypto.createPublicKey({ key: installation.public_jwk, format: 'jwk' }),
-      { algorithms: ['ES256'], audience: `${issuer()}/api/oauth2/token`, issuer: 'xeno-hub-broker', maxAge: '30s' },
+      { algorithms: ['ES256'], audience: knownIssuers().map((i) => `${i}/api/oauth2/token`), issuer: 'xeno-hub-broker', maxAge: '30s' },
     );
   } catch {
     throw oauthError('invalid_grant', 'invalid broker assertion');
@@ -1005,7 +1009,8 @@ export async function tokenExchangeGrant(db, {
   const installationHash = crypto.createHash('sha256').update(String(installation.installation_id)).digest('base64url');
   const access = jwt.sign(
     {
-      iss: issuer(), iat: now, sub: subjectPayload.sub, aud: ACCESS_TOKEN_AUDIENCE,
+      // The child token belongs to the same provider as the subject token it was exchanged from.
+      iss: knownIssuers().includes(subjectPayload.iss) ? subjectPayload.iss : issuer(), iat: now, sub: subjectPayload.sub, aud: ACCESS_TOKEN_AUDIENCE,
       client_id: childClientId, azp: childClientId,
       act: { sub: 'xeno-hub', client_id: 'xeno-hub', installation_id_hash: installationHash },
       scope: normalizedScope, sid: subjectPayload.sid, auth_epoch: subjectPayload.auth_epoch,
@@ -1166,7 +1171,7 @@ async function verifyDynamicAccessToken(db, token, audience) {
   if (!peek || !audienceIncludes(peek.aud, audience)) return null;
   const key = await getKeyByKid(db, header.kid);
   if (!key) throw oauthError('invalid_token', 'unknown signing key');
-  const payload = jwt.verify(token, key.publicKey, { algorithms: [key.alg], audience, issuer: issuer() });
+  const payload = jwt.verify(token, key.publicKey, { algorithms: [key.alg], audience, issuer: knownIssuers() });
   if (header.typ !== ACCESS_TOKEN_TYP || payload.typ !== ACCESS_TOKEN_TYP) throw oauthError('invalid_token', 'not an access token');
   if (payload.sid && !(await isOidcSessionActive(db, { sid: payload.sid, userId: payload.sub, authEpoch: payload.auth_epoch }))) throw oauthError('invalid_token', 'session ended');
   return payload;

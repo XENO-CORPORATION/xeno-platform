@@ -12,7 +12,7 @@
 import { CONNECT_AUDIENCE, connectExchangeGrant } from '../services/connectAuthority.js';
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { issuer } from '../config/hosts.js';
+import { issuer, issuerForHost } from '../config/hosts.js';
 import { verifyDpopProof } from '../utils/dpop.js';
 import { requireSupportedTokenClient } from '../middleware/requireSupportedClient.js';
 import { bindClientAgent } from '../services/xenoTasks.js';
@@ -83,7 +83,8 @@ router.get('/jwks', async (req, res) => {
 
 // Discovery — served at both /api/oauth2/openid-configuration and the standard
 // /api/oauth2/.well-known/openid-configuration.
-const publicMeta = (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.json(discovery()); };
+// Each host is its own provider during the staged issuer move (config/hosts.js issuerForHost): its discovery names it.
+const publicMeta = (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.json(discovery(issuerForHost(req.headers.host))); };
 router.get('/openid-configuration', publicMeta);
 router.get('/.well-known/openid-configuration', publicMeta);
 // RFC 8414 authorization-server metadata — what MCP clients read (also served at the site root by nginx)
@@ -416,6 +417,8 @@ router.post('/authorize', authMiddleware, async (req, res) => {
 // identity of their own.
 router.post('/token', requireSupportedTokenClient, async (req, res) => {
   const b = req.body || {};
+  // The provider this token endpoint belongs to: the tokens it mints carry its issuer (config/hosts.js).
+  const iss = issuerForHost(req.headers.host);
   try {
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {
       const auth = /^DPoP\s+(.+)$/i.exec(String(req.headers.authorization || ''));
@@ -424,7 +427,7 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
       }
       const subjectPayload = await verifyAccessToken(req.db, b.subject_token);
       const hubProof = await verifyDpopProof(req.db, {
-        proof: String(req.headers.dpop || ''), method: 'POST', url: `${issuer()}/api/oauth2/token`,
+        proof: String(req.headers.dpop || ''), method: 'POST', url: `${iss}/api/oauth2/token`,
         accessToken: b.subject_token, requiredJkt: subjectPayload.cnf?.jkt,
       });
       // XENO Connect: the client's own key, not the Hub broker — see services/connectAuthority.js.
@@ -445,24 +448,24 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
     }
     const dpop = req.headers.dpop
       ? await verifyDpopProof(req.db, {
-        proof: String(req.headers.dpop), method: 'POST', url: `${issuer()}/api/oauth2/token`,
+        proof: String(req.headers.dpop), method: 'POST', url: `${iss}/api/oauth2/token`,
       })
       : null;
     if (b.grant_type === 'authorization_code') {
       return res.json(await exchangeAuthorizationCode(req.db, {
         code: b.code, clientId: b.client_id, redirectUri: b.redirect_uri, codeVerifier: b.code_verifier,
-        dpopJkt: dpop?.jkt || null,
+        dpopJkt: dpop?.jkt || null, iss,
       }));
     }
     if (b.grant_type === 'refresh_token') {
       return res.json(await refreshTokenGrant(req.db, {
         refreshToken: b.refresh_token, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
-        rotationId: b.rotation_id,
+        rotationId: b.rotation_id, iss,
       }));
     }
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') {
       return res.json(await deviceTokenGrant(req.db, {
-        deviceCode: b.device_code, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
+        deviceCode: b.device_code, clientId: b.client_id, dpopJkt: dpop?.jkt || null, iss,
       }));
     }
     return res.status(400).json({ error: 'unsupported_grant_type' });

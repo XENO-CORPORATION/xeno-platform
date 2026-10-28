@@ -24,7 +24,7 @@ import * as compute from '../services/compute.js';
 import { setComputeBackend } from '../services/computeBackend.js';
 import { addGrant } from '../utils/creditLedgerV2.js';
 import { jwks } from '../utils/oidcProvider.js';
-import { createTicket, handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade } from '../services/computePorts.js';
+import { createTicket, handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade, mintPortAssertion } from '../services/computePorts.js';
 import { startDeviceAuthorization, approveDevice, deviceTokenGrant } from '../utils/oidcProvider.js';
 import { jwkThumbprint, accessTokenHash } from '../utils/dpop.js';
 import { issuer } from '../config/hosts.js';
@@ -125,6 +125,13 @@ async function main() {
   check(header.typ === 'xeno-spawn-assertion+jwt' && header.alg === 'ES256', 'the assertion is typed xeno-spawn-assertion+jwt and signed ES256');
   check(claims.sub === String(editor) && claims.xeno_canvas === m.id && claims.xeno_role === 'editor' && claims.kind === 'human' && claims.name === 'editor'
     && claims.xeno_workspace === String(ws) && claims.jti && !claims.act && claims.exp - claims.iat === 60, 'it verifies against the published JWKS and names the person, the canvas (the machine), role editor, kind human, 60 s');
+  // the staged issuer move: Spawn reads discovery on xenosystem.ai, so its assertion follows that provider
+  process.env.XENO_ALIAS_SITE_ORIGINS = 'https://xenosystem.ai'; process.env.XENO_ISSUER_PER_HOST = 'on';
+  const actorE = { id: editor, kind: 'human', display_name: 'editor' };
+  const onIss = jwt.decode(await mintPortAssertion(pool, 'spawn', await compute.portAccess(pool, actorE, m.id, w), actorE)).iss;
+  delete process.env.XENO_ISSUER_PER_HOST;
+  const offIss = jwt.decode(await mintPortAssertion(pool, 'spawn', await compute.portAccess(pool, actorE, m.id, w), actorE)).iss;
+  check(onIss === 'https://xenosystem.ai' && offIss === issuer(), 'the Spawn assertion carries the issuer of the provider Spawn discovers: new with the staged move on, today’s with it off');
   check(new Date((await pool.query('SELECT last_active_at FROM compute_machines WHERE id = $1', [m.id])).rows[0].last_active_at) > new Date(Date.now() - 60_000), 'connecting counts as use for idle stop');
   check((await compute.getMachine(pool, E, m.id)).events.some((e) => e.kind === 'port_opened' && e.detail.port === 'spawn'), 'the timeline records that the port was opened (not what was said)');
 
