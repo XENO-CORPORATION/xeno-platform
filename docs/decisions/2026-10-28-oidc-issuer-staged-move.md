@@ -1,6 +1,6 @@
 # Decision: move the OIDC issuer to `https://xenosystem.ai` in stages
 
-**Status:** PROPOSED 2026-10-28, awaiting the owner's confirmation of the shape below. Nothing is built.
+**Status:** APPROVED by the owner 2026-10-28 ("Yes, build it"). Expand step built behind `XENO_ISSUER_PER_HOST`, deployed OFF.
 **Owner's decision (relayed by the Spawn session, 2026-10-28):** *"fix thr plstfomr sonitnuses xenosystem ai"*, then
 **"Staged move"**, described to the owner as: *"The platform session makes the platform accept tokens under both
 names and publish xenosystem.ai as its name, so nothing breaks. Each product is then moved when it's next worked on,
@@ -36,14 +36,18 @@ temporary, because the old provider is retired at the exit below.
 1. **Issuer chosen per request, from a closed list.** `issuer(req)` = the canonical origin of the host the OIDC request
    arrived on, if that origin is in `{issuer(), …XENO_ALIAS_SITE_ORIGINS}`; otherwise the old issuer. Never a header
    the client can choose freely (Host is checked against the list; X-Forwarded-* is ignored, as `dpopResource.js` does).
-2. **The issuer is bound at the first step and carried through.** An authorization request records the issuer it
-   started under; the code it yields, the tokens minted from that code, and the refresh family all carry it. Redeeming
-   a code or refreshing a token on the OTHER host is refused (`invalid_grant`). This closes §4's "Escape A" hazard: a
-   client that discovered on one host and is redirected through the other still gets one consistent `iss`.
+2. **The token endpoint decides.** A token carries the issuer of the token endpoint that minted it — the endpoint the
+   client calls DIRECTLY, from the discovery it read. So a client always gets the issuer it discovered, whichever host
+   the browser's login pages went through; this is what closes §4's "Escape A" hazard. (Changed from the first draft,
+   which bound the issuer at the authorize step: the login round trip can cross hosts, the token call cannot.)
+   **A refresh may cross hosts, and that is how a product moves**: it switches its configured host, its existing
+   sign-in keeps refreshing, and the new tokens carry the new issuer. Each refresh token records the issuer it was
+   issued under (`oauth_refresh_tokens.issuer`), so a back-channel logout names the issuer that client knows.
 3. **The platform accepts both issuers wherever it verifies its own tokens** (resource middleware already ignores
    `iss`; `verifyAccessToken`, the broker exchange and the back-channel paths that pin `issuer()` accept either).
 4. **Server-to-server assertions** (Mail, Comms, Post, Workflow, Compute ports, Connect) are signed with the issuer
-   **that consumer is configured to trust**, old by default; each one moves when its consumer accepts the new name.
+   **of the provider that consumer reads**, old by default; each one moves when its consumer does. Built for Compute
+   ports: Spawn reads discovery on xenosystem.ai, so its assertion follows `issuerForHost('xenosystem.ai')`.
 5. **DPoP** `htu` already accepts the alias origin (#945); unchanged.
 6. **Behind one flag**, `XENO_ISSUER_PER_HOST`, fail-closed to today's single old issuer when unset.
 
@@ -60,6 +64,12 @@ temporary, because the old provider is retired at the exit below.
   cloud runs, browser relay, compute ports, Connect authority, collaboration, marketplace broker, shell sessions, web
   connect, Comms, Mail, Post, Workflow).
 - **Already on the new name:** Spawn (reads the issuer from discovery since rc.90).
+
+## Before the switch is turned on
+
+Measure which clients call the token endpoint on `xenosystem.ai` today and whether any of them pins the old `iss`
+(they would start receiving the new one), and which server-to-server consumers read discovery on `xenosystem.ai`.
+Each one either accepts both names or is pointed back at the old host first.
 
 ## Rollback
 

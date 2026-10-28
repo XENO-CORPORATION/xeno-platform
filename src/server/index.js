@@ -44,7 +44,7 @@ if (!isLocalPreview()) dotenv.config({ path: path.resolve(__dirname, '../../.env
 
 import express from 'express';
 import cors from 'cors';
-import { apiOrigin, acceptedSiteOrigins, extensionOrigins, pathScopedOriginAllowed } from './config/hosts.js';
+import { apiOrigin, acceptedSiteOrigins, extensionOrigins, pathScopedOriginAllowed, issuerForHost } from './config/hosts.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
@@ -696,7 +696,7 @@ app.use('/api/site-gate', databaseMiddleware, siteGateRoutes);
 // agents reach Tasks with their own credential (Bearer xtk_...), checked before the person sign-in middleware
 // MCP discovery (RFC 9728 protected-resource metadata; RFC 8414 authorization-server metadata) at the site root
 app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api/tasks/mcp'], protectedResourceMetadata);
-app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery()));
+app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery(issuerForHost(req.headers.host))));
 // The Tasks REST contract is public: a document with no data in it, so native clients can check their schemas
 // against it in CI without a credential.
 app.get('/api/tasks/openapi.json', (req, res) => { res.set('cache-control', 'public, max-age=300'); res.json(TASKS_OPENAPI); });
@@ -789,7 +789,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
   // XENO Shell shared sessions: discovery + signalling only; content is peer-to-peer, E2E encrypted.
   app.use('/api/v2/shell/sessions', databaseMiddleware, oidcAuth, shellSessionRoutes);
-  app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
+  app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery(issuerForHost(req.headers.host))));
   console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me + /api/v2/authz (OIDC_ENABLED)');
 }
 console.log('🛒 Marketplace routes integrated: /api/marketplace/*');

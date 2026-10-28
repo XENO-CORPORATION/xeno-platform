@@ -96,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_oauth_rt_family ON oauth_refresh_tokens (family_i
 -- tripping reuse detection. Also added by migration 20261031120000.
 ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS successor_id uuid;
 ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS rotation_id_hash text;
+ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS issuer text; -- which provider issued it (staged issuer move)
 
 -- OIDC access-token revocation without changing the live users/refresh tables.
 -- Every minted SID is registered here with the user's revocation epoch. Access

@@ -27,7 +27,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { WebSocket } from 'ws';
-import { issuer } from '../config/hosts.js';
+import { issuerForHost } from '../config/hosts.js';
 import { getSigningKey } from '../utils/oidcProvider.js';
 import { verifyDpopProof } from '../utils/dpop.js';
 import { resolveAuthedUser } from '../middleware/auth.js';
@@ -36,7 +36,10 @@ import * as compute from './compute.js';
 import { computeBackend } from './computeBackend.js';
 
 /** The named ports the platform forwards, and the audience each one's assertion is for. */
-export const PORTS = Object.freeze({ spawn: { audience: 'xeno-spawn', typ: 'xeno-spawn-assertion+jwt' } });
+// `discoveryHost` is where the server behind the port reads the platform's discovery; its assertions carry THAT
+// provider's issuer, so they match while the issuer moves host by host (docs/decisions/2026-10-28-oidc-issuer-staged-move.md).
+// Spawn reads https://xenosystem.ai (xeno-spawn forwardAssertion.js, rc.90).
+export const PORTS = Object.freeze({ spawn: { audience: 'xeno-spawn', typ: 'xeno-spawn-assertion+jwt', discoveryHost: 'xenosystem.ai' } });
 export const PORT_PATH = /^\/api\/compute\/machines\/(mch_[0-9a-f]{32})\/ports\/([a-z][a-z0-9-]{0,31})(\/[^?#]*)?$/;
 export const TICKET_SECONDS = 60;
 export const ASSERTION_SECONDS = 60;
@@ -90,7 +93,7 @@ export async function mintPortAssertion(db, name, { ctx, m, role }, actor) {
     ...(ctx.agentId ? { act: { sub: String(ctx.agentId) } } : {}),
   };
   return jwt.sign({ ...claims, iat: now, exp: now + ASSERTION_SECONDS }, key.privatePem,
-    { algorithm: 'ES256', keyid: key.kid, issuer: issuer(), audience: spec.audience, header: { typ: spec.typ, kid: key.kid, alg: 'ES256' } });
+    { algorithm: 'ES256', keyid: key.kid, issuer: issuerForHost(spec.discoveryHost), audience: spec.audience, header: { typ: spec.typ, kid: key.kid, alg: 'ES256' } });
 }
 
 /**
@@ -106,7 +109,7 @@ export async function authenticateUpgrade(db, req) {
     if (!m) throw Object.assign(new Error('This token is bound to a key: send it as DPoP with a proof'), { statusCode: 401 });
     try {
       await verifyDpopProof(db, { proof: String(req.headers.dpop || ''), method: 'GET', accessToken: m[1], requiredJkt: a.auth.dpopJkt,
-        url: `${issuer()}${new URL(req.url, 'http://x').pathname}` });
+        url: `${issuerForHost(req.headers.host)}${new URL(req.url, 'http://x').pathname}` });
     } catch (e) { throw Object.assign(new Error(`DPoP proof refused: ${e.message}`), { statusCode: 401 }); }
   }
   return String(a.user.id);
