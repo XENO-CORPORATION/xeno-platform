@@ -584,6 +584,19 @@ export async function portAccess(db, actor, machineId, { workspace } = {}) {
   return { ctx, m, role: admin ? 'owner' : 'editor' };
 }
 
+/**
+ * A person's (or agent's) role on a machine, for things shared through it that are not a live connection to it, e.g.
+ * a XENO Multiplayer ticket for its Spawn canvas (services/liveTickets.js). Any workspace member may hold one; the
+ * machine need not be running. Workspace admin = owner, editor = editor, viewer = viewer; an agent never above editor.
+ */
+export async function machineRole(db, actor, machineId, { workspace } = {}) {
+  const { ctx, m } = await ctxForMachine(db, actor, machineId, 'viewer', workspace);
+  if (ctx.agentId && m.agent_user_id && String(m.agent_user_id) !== ctx.agentId) throw new ComputeError('That machine works for another agent', 'not_your_machine', 403);
+  const has = async (relation) => (await check(db, { object: `workspace:${ctx.workspaceId}`, relation, subject: `user:${ctx.userId}` })).allowed;
+  const role = !ctx.agentId && await has('admin') ? 'owner' : await has('editor') ? 'editor' : 'viewer';
+  return { ctx, m, role };
+}
+
 /** Record on the machine's timeline that someone connected to one of its named ports. */
 export async function recordPortOpened(db, machineId, ctx, port) {
   await event(db, machineId, 'port_opened', ctx.userId, { port, agent: ctx.agentId || null });
