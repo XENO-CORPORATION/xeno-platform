@@ -7,6 +7,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Header, Plus, Arrow } from './chrome';
+import { toolPath } from './where';
 
 export interface ToolRow { id: string; name: string; description: string; category: string; version: string; contract: string; web: { runs: boolean; needsHub: string[] }; score?: number }
 
@@ -37,7 +38,7 @@ function localScore(t: ToolRow, ws: string[]) {
 
 function Card({ t, best, onOpen }: { t: ToolRow; best: boolean; onOpen: (id: string) => void }) {
   return (
-    <a className="xt-card" data-tools-card={t.id} href={'/tools/' + encodeURIComponent(t.id)} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); onOpen(t.id); }}>
+    <a className="xt-card" data-tools-card={t.id} href={toolPath(t.id)} onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); onOpen(t.id); }}>
       <div className="xt-card-top">
         <CatIcon cat={t.category} />
         <b className="xt-card-name">{t.name}</b>

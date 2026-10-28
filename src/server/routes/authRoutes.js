@@ -11,7 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
-import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
+import { siteOrigin, siteUrl, mailDomain, publicSiteOrigin } from '../config/hosts.js';
+import { exchangeAuthorizationCode, revokeToken } from '../utils/oidcProvider.js';
 import { MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
@@ -3076,6 +3077,73 @@ router.post('/onboarding', async (req, res) => {
   } catch (err) {
     console.error('[onboarding] write failed:', err.message);
     res.status(500).json({ success: false, error: 'Could not save' });
+  }
+});
+
+// ── Sign-in for a XENO product on its OWN host (tools.xenosystem.ai, owner 2026-10-28) ──────────────────────────────
+// A __Host- session cookie belongs to the exact host that set it, so a product served on its own host needs its own
+// browser session. This is a backend-for-frontend on the REAL XENO sign-in: authorization code + PKCE-S256 against
+// /api/oauth2/authorize as the product's own first-party client, the code exchanged in-process, then an ordinary
+// browser session (issueBrowserSession) on that host. The tokens the exchange mints are not kept: the refresh token is
+// revoked at once; only the identity is used. A host gets a client here, and its callback in migrate-oidc-clients.js.
+// The PKCE verifier, state and return path ride in one short-lived HttpOnly cookie on that host (the NextAuth shape):
+// no server-side state, and tampering with it can only break the person's own sign-in (state and PKCE both bind).
+export const HOST_SIGNIN_CLIENTS = Object.freeze({ 'tools.xenosystem.ai': 'xeno-tools-web' });
+const HOST_STATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-xeno_host_signin' : 'xeno_host_signin';
+const hostOf = (req) => String(req.headers.host || '').toLowerCase().split(':')[0];
+const hostClient = (req) => HOST_SIGNIN_CLIENTS[hostOf(req)] || null;
+// a path on this host only: one leading slash, never `//host` or `/\host`, no spaces or backslashes
+const hostReturnPath = (p) => (typeof p === 'string' && /^\/(?![/\\])[^\s\\]{0,511}$/.test(p) ? p : '/');
+const readCookie = (req, name) => {
+  for (const part of String(req.headers.cookie || '').split(';')) { const i = part.indexOf('='); if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim()); }
+  return null;
+};
+const htmlEsc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// a fresh same-site navigation, so the Strict session cookie set by this response is sent with the next page
+const continuePage = (res, path, note = 'Signing you in…') => res.status(200).type('html').set('Cache-Control', 'no-store')
+  .send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=${htmlEsc(path)}"><title>XENO</title><body style="background:#0a0a0a;color:#a3a3a3;font:14px system-ui;padding:32px">${htmlEsc(note)} <a style="color:#fafafa" href="${htmlEsc(path)}">Continue</a></body>`);
+
+router.get('/host/start', async (req, res) => {
+  const clientId = hostClient(req);
+  if (!clientId) return res.status(404).json({ success: false, error: 'Not a XENO product host' });
+  try {
+    const host = hostOf(req);
+    const state = crypto.randomBytes(24).toString('base64url');
+    const verifier = crypto.randomBytes(48).toString('base64url');
+    const carry = Buffer.from(JSON.stringify({ s: state, v: verifier, c: clientId, h: host, r: hostReturnPath(req.query.return) })).toString('base64url');
+    res.cookie(HOST_STATE_COOKIE, carry, { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+    const q = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: `https://${host}/api/auth/host/callback`, scope: 'openid profile email', state, code_challenge: generateCodeChallenge(verifier), code_challenge_method: 'S256' });
+    return res.redirect(302, `${publicSiteOrigin()}/api/oauth2/authorize?${q}`);
+  } catch (error) {
+    console.error('[auth] host sign-in start', error.message);
+    return res.status(500).json({ success: false, error: 'Sign-in could not start' });
+  }
+});
+
+router.get('/host/callback', async (req, res) => {
+  const clientId = hostClient(req);
+  if (!clientId) return res.status(404).json({ success: false, error: 'Not a XENO product host' });
+  const host = hostOf(req);
+  let carry = null;
+  try { carry = JSON.parse(Buffer.from(readCookie(req, HOST_STATE_COOKIE) || '', 'base64url').toString('utf8')); } catch { carry = null; }
+  res.clearCookie(HOST_STATE_COOKIE, { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', path: '/' });
+  const { code, state, error } = req.query;
+  if (error) return continuePage(res, '/', 'Sign-in was cancelled.');
+  if (typeof state !== 'string' || typeof code !== 'string' || !carry || typeof carry.s !== 'string' || carry.s !== state
+      || carry.c !== clientId || carry.h !== host || typeof carry.v !== 'string') return res.status(400).type('text').send('This sign-in link is not valid any more. Start again.');
+  try {
+    const tokens = await exchangeAuthorizationCode(req.db, { code, clientId, redirectUri: `https://${host}/api/auth/host/callback`, codeVerifier: carry.v });
+    if (tokens.refresh_token) await revokeToken(req.db, { token: tokens.refresh_token }).catch(() => {});
+    const sub = jwt.decode(tokens.access_token || tokens.id_token)?.sub;
+    const u = sub ? (await req.db.query('SELECT * FROM users WHERE id::text = $1', [String(sub)])).rows[0] : null;
+    if (!u) return res.status(400).type('text').send('That account could not be found.');
+    assertAccountUsable(u);
+    await issueBrowserSession(req.db, u, req, res);
+    return continuePage(res, hostReturnPath(carry.r));
+  } catch (e) {
+    if (e instanceof AccountSuspendedError) return res.status(403).type('text').send('This account is suspended.');
+    console.error('[auth] host sign-in callback', e.message);
+    return res.status(400).type('text').send('Sign-in did not complete. Start again.');
   }
 });
 

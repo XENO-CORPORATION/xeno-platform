@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client';
 import { createWebHost } from './webHost';
 import { Picker } from './Picker';
 import { Header, initialTheme } from './chrome';
+import { onSitePath, toolIdFromPath, toolPath, toolsHome } from './where';
 import './tools.css';
 
 document.documentElement.dataset.theme = initialTheme();
@@ -24,8 +25,8 @@ import type { ToolModule, NotifyLevel } from './contract';
 };
 
 const params = new URLSearchParams(location.search);
-const onSite = /^\/tools(\/|$)/.test(location.pathname);
-const toolId = onSite ? decodeURIComponent(location.pathname.split('/')[2] || '') : params.get('tool') || '';
+const onSite = onSitePath(location.pathname);
+const toolId = onSite ? toolIdFromPath(location.pathname) : params.get('tool') || '';
 const pinned = onSite ? '' : params.get('v') || '';
 const framed = window.parent !== window;
 const SAFE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -46,7 +47,7 @@ function Bar({ name }: { name: string }) {
 }
 
 function App() {
-  if (onSite && !toolId) return <Picker onOpen={(id) => { location.href = '/tools/' + encodeURIComponent(id); }} />;
+  if (onSite && !toolId) return <Picker onOpen={(id) => { location.href = toolPath(id); }} />;
   return <ToolPage />;
 }
 
@@ -80,7 +81,7 @@ function ToolPage() {
   if (error) return <div className="xt xt-page"><Bar name="" /><div data-tool-error className="xt-msg">{error}</div></div>;
   if (!mod) return <div className="xt xt-page"><Bar name="" /><div data-tool-loading className="xt-msg">Opening the tool…</div></div>;
   const C = mod.Component;
-  const close = () => (framed ? window.parent.postMessage({ type: 'xeno-tool:close', tool: toolId }, location.origin) : (location.href = '/tools'));
+  const close = () => (framed ? window.parent.postMessage({ type: 'xeno-tool:close', tool: toolId }, location.origin) : (location.href = toolsHome));
   return (
     <div data-tool-mounted={toolId} className="xt" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Bar name={mod.manifest?.name || toolId} />
