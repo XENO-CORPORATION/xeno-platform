@@ -1578,6 +1578,13 @@
       "class": "reversible",
       "scope": "compute:write"
     },
+    "route:computeRoutes.js:POST /machines/:id/port-tickets": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "compute:write",
+      "because": "a one-use sign-in for a browser’s WebSocket to a named port (services/computePorts.js); an agent opens the same socket with its own Bearer credential, so the ticket is transport, not an action"
+    },
     "route:computeRoutes.js:POST /machines/:id/stop": {
       "status": "capability",
       "capability": "compute.machine.stop",

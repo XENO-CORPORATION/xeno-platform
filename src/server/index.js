@@ -146,6 +146,7 @@ import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
 import browserRelayRoutes, { accountBrowserRouter } from './routes/browserRelayRoutes.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
+import { handlePortConnection, isPortRequest, selectProtocol } from './services/computePorts.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
@@ -168,7 +169,7 @@ import agentRoutes from './routes/agentRoutes.js';
 import artifactRoutes from './routes/artifactRoutes.js';
 import { createArtifactViewerRouter } from './routes/artifactViewerRoutes.js';
 import { createStorageSharedRouter } from './routes/storageSharedRoutes.js';
-import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware, resolveAuthedUser } from './middleware/auth.js';
 import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { startDownloadCleanup } from './services/downloadService.js';
@@ -3055,7 +3056,9 @@ app.use((req, res) => {
 const server = http.createServer(app);
 
 // Create WebSocket server
-const wss = new WebSocket({ server });
+// A Compute named port answers with its own subprotocol, never the one-use ticket offered beside it; every other
+// socket keeps ws's default (the first one offered).
+const wss = new WebSocket({ server, handleProtocols: (protocols, req) => (isPortRequest(req) ? selectProtocol(protocols) : (protocols.values().next().value ?? false)) });
 
 // Store connected clients with their session info
 const wsClients = new Map();
@@ -3263,6 +3266,13 @@ wss.on('connection', (ws, req) => {
   // the two owners are told apart once, at the top, rather than by whichever `message` handler runs first.
   // The relay's own frames are decoded by services/browserRelaySocket.js; the collaboration socket below
   // never sees them, and neither branch can shadow the other.
+  // XENO Compute named ports (services/computePorts.js): a socket to a server on the caller's machine.
+  if (isPortRequest(req)) {
+    handlePortConnection(ws, req, pool, {
+      authenticate: async (r) => { const a = await resolveAuthedUser({ headers: r.headers, db: pool }); return a.user ? String(a.user.id) : null; },
+    }).catch((e) => { console.error('[compute-ports] connection failed', e && e.message); try { ws.close(1011, 'port error'); } catch {} });
+    return;
+  }
   if (isRelayRequest(req)) {
     handleRelayConnection(ws, req).catch((e) => {
       console.error('[browser-relay] connection failed', e && e.message);
