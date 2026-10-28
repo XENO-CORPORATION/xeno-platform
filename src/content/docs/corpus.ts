@@ -1,7 +1,7 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Corpus documentation — reconciled against xeno-corpus desktop 0.2.0 (Windows), 2026-10-28, tag
- * corpus-desktop-v0.2.0. Notes: corpus-notes.mjs and app/src/views/Notes.tsx. Every claim traces to that release: desktop/main.cjs (sign-in door, project opening,
+/* XENO Corpus documentation — reconciled against xeno-corpus desktop 0.2.1 (Windows), 2026-10-28, tag
+ * corpus-desktop-v0.2.1. Notes: corpus-notes.mjs and app/src/views/Notes.tsx. Every claim traces to that release: desktop/main.cjs (sign-in door, project opening,
  * .xcorpus, menus, Install 'corpus' Command), desktop/lib/* (engine child, updater, auth.log, errors.log,
  * cliPath), the engine's CLI help (every command answers --help; test/cli-help.test.mjs), pulse-runner.mjs
  * (exit codes, baseline, freshness), corpus-adopt.mjs / corpus-agents.mjs / corpus-runtime.mjs (agents),
@@ -11,7 +11,7 @@ const corpus: ProductDocs = {
   slug: 'corpus',
   productName: 'XENO Corpus',
   tagline: 'Your project’s claims, each bound to the check that can prove it false.',
-  version: '0.2.0',
+  version: '0.2.1',
   updated: '2026-10-28',
   seo: {
     title: 'XENO Corpus documentation',
@@ -30,8 +30,8 @@ const corpus: ProductDocs = {
         {
           slug: "installation",
           title: "Installation",
-          description: "Download and install XENO Corpus 0.2.0 on Windows, update it, and uninstall it.",
-          body: "## Installation\n\nXENO Corpus 0.2.0 runs on **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/corpus), choose **Download for Windows**.\n2. Run `XENO-Corpus-Setup-0.2.0.exe`. It installs for your user; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so as well: an **UNSIGNED BUILD** badge sits in its window header.\n\nYou do not need Node.js or anything else installed. The app carries its own runtime, and so does its [`corpus` command](/docs/corpus/command-line).\n\n## Updates\n\nXENO Corpus checks for a new version when it starts and every few hours. It downloads in the background, then asks: **Restart now** installs it immediately; **Later** installs it the next time you quit. You stay signed in, and your projects are not touched.\n\n## Uninstalling\n\n**Settings → Apps → XENO Corpus → Uninstall.** Your projects and their `.xeno/corpus/` folders are not touched. If you installed the `corpus` command, uninstalling removes it from your PATH too.",
+          description: "Download and install XENO Corpus 0.2.1 on Windows, update it, and uninstall it.",
+          body: "## Installation\n\nXENO Corpus 0.2.1 runs on **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/corpus), choose **Download for Windows**.\n2. Run `XENO-Corpus-Setup-0.2.1.exe`. It installs for your user; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so as well: an **UNSIGNED BUILD** badge sits in its window header.\n\nYou do not need Node.js or anything else installed. The app carries its own runtime, and so does its [`corpus` command](/docs/corpus/command-line).\n\n## Updates\n\nXENO Corpus checks for a new version when it starts and every few hours. It downloads in the background, then asks: **Restart now** installs it immediately; **Later** installs it the next time you quit. You stay signed in, and your projects are not touched.\n\n## Uninstalling\n\n**Settings → Apps → XENO Corpus → Uninstall.** Your projects and their `.xeno/corpus/` folders are not touched. If you installed the `corpus` command, uninstalling removes it from your PATH too.",
         },
         {
           slug: "signing-in",
@@ -77,7 +77,7 @@ const corpus: ProductDocs = {
           slug: "opening-a-project",
           title: "Opening projects",
           description: "Open a folder or a .xcorpus file, create a corpus, and reopen projects.",
-          body: "## Opening projects\n\n**File → Open Project…** (`Ctrl+Shift+O`) and choose a project folder or a `.xcorpus` file. XENO Corpus reopens the last project the next time it starts.\n\n## A folder with no corpus\n\nXENO Corpus asks before doing anything: **Create corpus**, **Choose another folder** or **Cancel**. **Create corpus** writes `.xeno/corpus/` inside the folder, derives its first checks and runs them. See [Your first corpus](/docs/corpus/quickstart).\n\n## The .xcorpus file\n\n**File → Save Project File (.xcorpus)** writes a small file in the project folder. Double-click it to open that project in XENO Corpus. It holds no corpus data, only where the project is, so it is safe to commit:\n\n```json\n{ \"format\": \"xeno-corpus/project\", \"version\": 1, \"project\": \".\" }\n```\n\n## More than one corpus\n\nA project can sit inside a larger one: an organisation corpus at the top of a workspace, a product corpus in each repository. Corpus walks up from your project to find them, and the canvas shows each as a lane. Rules from the organisation apply to every product beneath it. **Settings → Repositories** lists the connected corpora and offers **Connect** for another repository folder.",
+          body: "## Opening projects\n\n**File → Open Project…** (`Ctrl+Shift+O`) and choose a project folder or a `.xcorpus` file. XENO Corpus reopens the last project the next time it starts.\n\n## A folder with no corpus\n\nXENO Corpus asks before doing anything: **Create corpus**, **Choose another folder** or **Cancel**. **Create corpus** writes `.xeno/corpus/` inside the folder. Any folder works, including a folder of notes or an empty one, as in Obsidian: your notes are indexed and open in [Notes](/docs/corpus/notes). If the folder is a git repository or has a `package.json`, Corpus also derives its first checks from them and runs them; otherwise nothing is checked yet, and it says so. See [Your first corpus](/docs/corpus/quickstart).\n\n## The .xcorpus file\n\n**File → Save Project File (.xcorpus)** writes a small file in the project folder. Double-click it to open that project in XENO Corpus. It holds no corpus data, only where the project is, so it is safe to commit:\n\n```json\n{ \"format\": \"xeno-corpus/project\", \"version\": 1, \"project\": \".\" }\n```\n\n## More than one corpus\n\nA project can sit inside a larger one: an organisation corpus at the top of a workspace, a product corpus in each repository. Corpus walks up from your project to find them, and the canvas shows each as a lane. Rules from the organisation apply to every product beneath it. **Settings → Repositories** lists the connected corpora and offers **Connect** for another repository folder.",
         },
         {
           slug: "notes",
