@@ -243,6 +243,15 @@ Rules that are easy to break:
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
 
+## 🧰 XENO Tools (tools.xenosystem.ai) is its OWN product, served from HERE (owner, 2026-10-28)
+
+`src/toolHost/` (`Picker.tsx`, `chrome.tsx`, `main.tsx`, `tools.css`, served by `tool-host.html`) over
+`routes/toolsRoutes.js` → `services/toolPackages.js`. It is not a workspace page: XENO Workshop's 44px header, no side
+panel, results update as you type, **Create my own only after something is typed** (→ `workshop.xenosystem.ai/?start=`,
+xeno-workshop #26). The tools themselves, their signing (key #2 since 2026-10-28; Hub ≥ 0.11.22) and the rule that a
+person's own tool is never signed by XENO and only runs sealed are in `../xeno-tools/CLAUDE.md` §🌐. Design:
+https://claude.ai/artifact/EYy1EHJsDN8nFDecuBvi21 · test: `prototypes/xeno-workspace/tests/tools-test.mjs`.
+
 ## 🛟 XENO support lives HERE — Help ▸ Contact support (2026-10-20)
 
 Private requests to XENO: `services/supportTickets.js` (the one service), `routes/supportRoutes.js` (`/api/support`),
