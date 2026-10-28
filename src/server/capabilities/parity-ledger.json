@@ -115,6 +115,7 @@
     "shellSessionRoutes.js": "browser-shell",
     "siteGateRoutes.js": "platform",
     "skillsRoutes.js": "agents",
+    "spawnCanvasRoutes.js": "agents",
     "spawnDeviceRoutes.js": "agents",
     "spawnProfileRoutes.js": "agents",
     "storageSharedRoutes.js": "storage",
@@ -4485,6 +4486,35 @@
       "status": "planned",
       "class": "safe",
       "scope": "agents:read"
+    },
+    "route:spawnCanvasRoutes.js:POST /": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "agents:write"
+    },
+    "route:spawnCanvasRoutes.js:GET /:id": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "agents:read"
+    },
+    "route:spawnCanvasRoutes.js:GET /:id/invites": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "agents:read"
+    },
+    "route:spawnCanvasRoutes.js:PUT /:id/invites/:userId": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "sharing a canvas with a person widens who can reach it; only the canvas owner, in person, does that (services/spawnCanvases.js)"
+    },
+    "route:spawnCanvasRoutes.js:DELETE /:id/invites/:userId": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "removing a person from a canvas is the owner's own act, in person, like inviting them"
     },
     "route:spawnDeviceRoutes.js:DELETE /:deviceId": {
       "status": "planned",
