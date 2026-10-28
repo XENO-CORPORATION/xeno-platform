@@ -362,8 +362,35 @@ done
 # --- 6. Healthcheck gate ---------------------------------------------------
 # backend waits through migrations, so give it longer.
 if [ "$SERVICE" = "backend" ]; then TRIES=90; else TRIES=30; fi
+# --- 6b. Retention: superseded builds go once a newer one is live (owner, 2026-10-24) -----------
+# Every deploy left a ~1.2 GB SHA-tagged image and an extracted candidate tree behind, and nothing removed them: on
+# 2026-10-28 the box reached 100% disk and a frontend build died with ENOSPC. Keeps :latest, :rollback and the newest
+# KEEP_IMAGES SHA tags of this service, and the newest KEEP_CANDIDATES candidate trees (older than an hour, so a
+# concurrent deploy's tree is never touched). Best effort: a failure here never fails a deploy that already passed.
+prune_superseded() {
+  _keep="${KEEP_IMAGES:-3}"; _n=0
+  for _t in $(docker images "$IMAGE" --format '{{.Tag}}' 2>/dev/null); do
+    case "$_t" in latest|rollback|'<none>') continue ;; esac
+    _n=$((_n + 1))
+    [ "$_n" -le "$_keep" ] && continue
+    docker image rm "$IMAGE:$_t" >/dev/null 2>&1 && log "retention: removed superseded image $IMAGE:$_t"
+  done
+  docker image prune -f >/dev/null 2>&1 || true
+  if [ -d "$ROOT/.deploy/candidates" ]; then
+    _i=0
+    for _d in $(ls -1t "$ROOT/.deploy/candidates" 2>/dev/null); do
+      _i=$((_i + 1))
+      [ "$_i" -le "${KEEP_CANDIDATES:-4}" ] && continue
+      [ "$ROOT/.deploy/candidates/$_d" = "$CANDIDATE_ROOT" ] && continue
+      find "$ROOT/.deploy/candidates/$_d" -maxdepth 0 -mmin +60 -exec rm -rf {} + 2>/dev/null && log "retention: removed old candidate $_d"
+    done
+  fi
+  log "retention: $(df -h "$ROOT" 2>/dev/null | awk 'NR==2 {print $4 " free"}')"
+}
+
 if poll_health "$TRIES" release; then
   log "healthcheck PASSED ($(health_url))"
+  prune_superseded || true
   log "=== deploy end service=$SERVICE sha=$SHA OK ==="
   exit 0
 fi
