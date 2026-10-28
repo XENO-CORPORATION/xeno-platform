@@ -16,6 +16,8 @@ export async function oidcAuth(req, res, next) {
       return res.status(resolved.status).json({ success: false, error: resolved.error });
     }
     req.user = resolved.user;
+    // The auth context (incl. a DPoP binding), so requireDpopIfBound can hold a bound token to its proof downstream.
+    req.auth = resolved.auth || null;
     next();
   } catch (err) {
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {

@@ -152,6 +152,7 @@ import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
+import { requireDpopIfBound } from './middleware/dpopResource.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware, pool as researchPool } from './middleware/database.js';
 import { browserSessionMiddleware } from './middleware/browserSession.js';
@@ -770,11 +771,13 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.post('/api/oauth2/token', rateLimit(oauthTokenLimiterOptions(rateLimitKey)));
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
-  app.use('/api/v2/spawn/profiles', databaseMiddleware, oidcAuth, spawnProfileRoutes);
-  app.use('/api/v2/spawn/skills', databaseMiddleware, oidcAuth, spawnSkillRoutes);
+  // Spawn's account calls: a key-bound token must bring its proof (Spawn sends DPoP on every call; htu on the host it
+  // calls is accepted through XENO_ALIAS_SITE_ORIGINS, utils/dpop.js htuMatches).
+  app.use('/api/v2/spawn/profiles', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnProfileRoutes);
+  app.use('/api/v2/spawn/skills', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnSkillRoutes);
   app.use('/api/tools', toolsRoutes);
-  app.use('/api/v2/spawn/devices', databaseMiddleware, oidcAuth, spawnDeviceRoutes);
-  // Signs in inside the router (authMiddleware + requireDpopIfBound), not oidcAuth: oidcAuth sets no req.auth.
+  app.use('/api/v2/spawn/devices', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnDeviceRoutes);
+  // Signs in inside the router (authMiddleware + requireDpopIfBound), as the Compute routes do.
   app.use('/api/v2/spawn/canvases', databaseMiddleware, spawnCanvasRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
   // Per-product inference routing + the provider-key vault.
