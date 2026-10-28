@@ -63,6 +63,7 @@
     "test:oidc-issuer-per-host": "node src/server/tests/oidc-issuer-per-host.test.mjs",
     "test:live-tickets": "node src/server/tests/live-tickets.test.mjs",
     "test:spawn-canvases": "node src/server/tests/spawn-canvases.test.mjs",
+    "test:spawn-routes-dpop": "node src/server/tests/spawn-routes-dpop.test.mjs",
     "test:compute-ui": "node prototypes/xeno-workspace/tests/compute-test.mjs",
     "test:xeno-workflow": "node src/server/tests/xeno-workflow.test.mjs",
     "test:xeno-workflow-e2e": "node src/server/tests/xeno-workflow-e2e.test.mjs",
