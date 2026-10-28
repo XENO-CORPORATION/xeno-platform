@@ -6,8 +6,8 @@
  *   - The machine: one small "Cloud Shell" machine per person (purpose cloud-shell), in their Personal workspace,
  *     created on first open and started when needed; its home folder survives stops like every machine's.
  *   - The credential: per connection, a short-lived xwk_ key (createRunKey, 60 min) for the person's Cloud Shell agent
- *     (bound to the app `xeno-cloud-shell`), in the forwarded connection's X-Xeno-Shell-Key header, revoked when the
- *     socket closes. What it may do is what that agent has been GRANTED: on first use, the read-only (`safe`)
+ *     (bound to the app `xeno-cloud-shell`), in the forwarded connection's X-Xeno-Shell-Key header, kept 60 minutes
+ *     ahead while the connection is open (renewConnection) and revoked when the socket closes. What it may do is what that agent has been GRANTED: on first use, the read-only (`safe`)
  *     capabilities in the machine's workspace; anything that changes data needs the person's grant (Connected apps).
  *   - Behind SHELL_ENABLED (fail closed; owner first, spec §5 Q3): a comma list of emails and @domains, or "all".
  */
@@ -91,6 +91,13 @@ export async function connectionKey(db, ctx) {
   await ensureReadGrants(db, agentId, ctx.workspaceId);
   const k = await creds.createRunKey(db, { ownerId: ctx.userId, agentId, workspaceId: ctx.workspaceId, scopes: [...WORKSPACE_SCOPES], label: 'Cloud Shell', minutes: KEY_MINUTES });
   return { key: k.key, keyId: k.id };
+}
+
+/** While the connection is open (computePorts' recheck): Cloud Shell must still be open to the person, and the key is
+ *  kept 60 minutes ahead, so it lives exactly as long as the connection. A key revoked elsewhere ends the shell. */
+export async function renewConnection(db, keyId, userId) {
+  if (!(await shellEnabledFor(db, userId))) throw new CloudShellError('Cloud Shell is not open to your account any more', 'shell_not_enabled', 403);
+  if (!(await creds.renewRunKey(db, keyId, KEY_MINUTES))) throw new CloudShellError('This shell’s key was revoked', 'shell_key_revoked', 401);
 }
 
 export async function endConnection(db, keyId) {

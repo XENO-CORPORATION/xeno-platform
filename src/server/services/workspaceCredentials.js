@@ -180,6 +180,15 @@ export async function createRunKey(db, { ownerId, agentId, workspaceId, scopes, 
   return { key, id: String(row.id) };
 }
 
+/** Keep a live run key alive: its expiry moves to `minutes` from now (1..60). Never revives a revoked or lapsed key.
+ *  Returns false when the key is gone, so its holder can stop. (Cloud Shell renews while its connection is open.) */
+export async function renewRunKey(db, id, minutes = 60) {
+  const m = Number(minutes);
+  if (!Number.isInteger(m) || m < 1 || m > 60) throw new WorkspaceCredentialError('A run key lives 1 to 60 minutes', 'invalid_expiry');
+  return (await db.query(`UPDATE workspace_agent_keys SET expires_at = now() + make_interval(mins => $2)
+    WHERE id = $1 AND revoked_at IS NULL AND expires_at > now() RETURNING id`, [id, m])).rows.length > 0;
+}
+
 /** End a run key: refused on its next call. Grants stay with the workflow's agent. */
 export async function revokeRunKey(db, id) {
   await db.query('UPDATE workspace_agent_keys SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [id]);

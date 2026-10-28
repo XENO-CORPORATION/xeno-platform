@@ -36,7 +36,7 @@ import * as compute from './compute.js';
 import { computeBackend } from './computeBackend.js';
 import { canvasesOnMachine } from './spawnCanvases.js';
 import { createServiceTicket } from './liveTickets.js';
-import { shellEnabledFor, connectionKey, endConnection } from './cloudShell.js';
+import { shellEnabledFor, connectionKey, renewConnection, endConnection } from './cloudShell.js';
 
 /** The named ports the platform forwards, and the audience each one's assertion is for. */
 // `discoveryHost` is where the server behind the port reads the platform's discovery; its assertions carry THAT
@@ -169,7 +169,11 @@ export async function handlePortConnection(client, req, db, { authenticate, rech
     } else if (authenticate) userId = await authenticate(req);
     if (!userId) throw Object.assign(new Error('Sign in first'), { statusCode: 401 });
 
-    const check = async () => compute.portAccess(db, await actorFor(db, userId), machineId, { workspace });
+    const check = async () => {
+      const a = await compute.portAccess(db, await actorFor(db, userId), machineId, { workspace });
+      if (shellKeyId) await renewConnection(db, shellKeyId, userId); // Cloud Shell: still allowed, key kept alive
+      return a;
+    };
     const actor = await actorFor(db, userId);
     const access = await compute.portAccess(db, actor, machineId, { workspace });
     if (closed) return;
