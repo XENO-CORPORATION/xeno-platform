@@ -29,6 +29,7 @@ import { startDeviceAuthorization, approveDevice, deviceTokenGrant } from '../ut
 import { jwkThumbprint, accessTokenHash } from '../utils/dpop.js';
 import { issuer } from '../config/hosts.js';
 import express from 'express';
+import { createCanvas } from '../services/spawnCanvases.js';
 import computeRoutes from '../routes/computeRoutes.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -164,6 +165,17 @@ async function main() {
   check(c4.ws && verify(seen.at(-1).headers['x-xeno-assertion']).claims.sub === String(editor), 'a program may sign in with Bearer instead of a ticket');
   check(seen.at(-1).headers.authorization === 'Bearer worker-token', 'the machine side gets only the Worker’s token (the Worker strips it before the machine)');
   c4.ws.close();
+
+  // the machine's Spawn server gets service tickets for the canvases bound to this machine, on the forwarded connection
+  const canvasId = crypto.randomUUID();
+  await createCanvas(pool, E, { id: canvasId, name: 'Shared', machineId: m.id, workspace: ws });
+  const tc = await createTicket(pool, E, m.id, 'spawn', w);
+  const c6 = await open(tc.path, { protocols: tc.protocols });
+  await wait(100);
+  const lt = JSON.parse(Buffer.from(String(seen.at(-1).headers['x-xeno-live-tickets'] || ''), 'base64url').toString() || '[]');
+  check(c6.ws && lt.length === 1 && lt[0].resource === `spawn.canvas/${canvasId}` && jwt.decode(lt[0].ticket).kind === 'service' && jwt.decode(lt[0].ticket).sub === m.id,
+    'the Spawn server receives a service ticket for each canvas on its machine — the machine holds no credential');
+  c6.ws.close();
 
   // a key-bound (DPoP) token, as the local Spawn server holds: its proof is required, over GET and the https URL
   await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, allowed_scopes, surface, is_first_party)

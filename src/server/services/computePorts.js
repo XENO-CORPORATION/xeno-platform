@@ -34,6 +34,8 @@ import { resolveAuthedUser } from '../middleware/auth.js';
 import { resolvePrincipal, assertPrincipalUsable } from './agentIdentity.js';
 import * as compute from './compute.js';
 import { computeBackend } from './computeBackend.js';
+import { canvasesOnMachine } from './spawnCanvases.js';
+import { createServiceTicket } from './liveTickets.js';
 
 /** The named ports the platform forwards, and the audience each one's assertion is for. */
 // `discoveryHost` is where the server behind the port reads the platform's discovery; its assertions carry THAT
@@ -163,8 +165,13 @@ export async function handlePortConnection(client, req, db, { authenticate, rech
     if (closed) return;
     const assertion = await mintPortAssertion(db, name, access, actor);
     const target = computeBackend().portSocket(access.m, name, (rest || '/') + url.search);
+    // The Spawn server joins this machine's canvases on XENO Multiplayer as a service participant: its tickets ride
+    // the forwarded connection, so the machine holds no credential (base64url JSON [{resource, ticket}], ≤ 20).
+    const live = name === 'spawn' ? await Promise.all((await canvasesOnMachine(db, machineId)).map(async (id) =>
+      ({ resource: `spawn.canvas/${id}`, ticket: await createServiceTicket(db, machineId, `spawn.canvas/${id}`) }))) : [];
     upstream = new WebSocket(target.url, { headers: { ...target.headers, 'x-xeno-assertion': assertion,
-      'x-xeno-forwarded-prefix': `/api/compute/machines/${machineId}/ports/${name}` } });
+      'x-xeno-forwarded-prefix': `/api/compute/machines/${machineId}/ports/${name}`,
+      ...(live.length ? { 'x-xeno-live-tickets': Buffer.from(JSON.stringify(live)).toString('base64url') } : {}) } });
     upstream.on('open', () => {
       for (const [d, b] of buffered.splice(0)) upstream.send(d, { binary: b });
       compute.recordPortOpened(db, machineId, access.ctx, name).catch(() => {});

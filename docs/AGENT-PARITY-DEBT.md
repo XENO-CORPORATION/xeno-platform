@@ -4,12 +4,12 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1855 actions · 214 agent capability · 1321 planned (debt) · 320 excluded · **coverage 13.9%** of the 1535 owed.
+**Total:** 1860 actions · 214 agent capability · 1324 planned (debt) · 322 excluded · **coverage 13.9%** of the 1538 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 302 | 53 | 244 | 5 | 17.8% |
-| agents | 199 | 0 | 139 | 60 | 0% |
+| agents | 204 | 0 | 142 | 62 | 0% |
 | studio | 121 | 4 | 117 | 0 | 3.3% |
 | workspace-ui | 172 | 4 | 101 | 67 | 3.8% |
 | chat | 101 | 0 | 100 | 1 | 0% |
@@ -99,7 +99,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:settings.js:data-set=route`
 - `ui:settings.js:data-set=shortcuts`
 
-## agents — 139 planned
+## agents — 142 planned
 
 - `route:agentRoutes.js:DELETE /:handle`
 - `route:agentRoutes.js:GET /`
@@ -157,6 +157,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:skillsRoutes.js:POST /import/corpus`
 - `route:skillsRoutes.js:POST /import/github`
 - `route:skillsRoutes.js:POST /match`
+- `route:spawnCanvasRoutes.js:GET /:id`
+- `route:spawnCanvasRoutes.js:GET /:id/invites`
+- `route:spawnCanvasRoutes.js:POST /`
 - `route:spawnDeviceRoutes.js:DELETE /:deviceId`
 - `route:spawnDeviceRoutes.js:GET /`
 - `route:spawnDeviceRoutes.js:PUT /:deviceId`

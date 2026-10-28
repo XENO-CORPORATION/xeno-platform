@@ -17,6 +17,7 @@ import jwt from 'jsonwebtoken';
 import { issuerForHost } from '../config/hosts.js';
 import { getSigningKey } from '../utils/oidcProvider.js';
 import * as compute from './compute.js';
+import { canvasRole } from './spawnCanvases.js';
 
 export const AUDIENCE = 'xeno-multiplayer';
 export const TICKET_TYP = 'xeno-live-ticket+jwt';
@@ -36,11 +37,16 @@ export class LiveTicketError extends Error {
  * when the caller has no access.
  */
 export const RESOURCE_TYPES = Object.freeze({
-  // A Spawn cloud canvas. Until the canvas → project → machine record exists (Spawn multiplayer, step 5), a canvas is
-  // its machine's: <id> is the machine id and the role comes from the machine's workspace (compute.machineRole).
+  // A Spawn cloud canvas: <id> is the canvas (Spawn's project UUID), its role from the canvas record
+  // (services/spawnCanvases.js). A machine id (mch_…) is still accepted, role from the machine's workspace, until
+  // Spawn rc.91 ships; then that branch goes.
   'spawn.canvas': async (db, actor, id) => {
-    const { ctx, role } = await compute.machineRole(db, actor, id);
-    return { role, userId: ctx.userId, agentId: ctx.agentId };
+    if (/^mch_[0-9a-f]{32}$/.test(id)) {
+      const { ctx, role } = await compute.machineRole(db, actor, id);
+      return { role, userId: ctx.userId, agentId: ctx.agentId };
+    }
+    const { role, userId, agentId } = await canvasRole(db, actor, id);
+    return { role, userId, agentId };
   },
 });
 
@@ -68,6 +74,20 @@ export async function createTicket(db, actor, resource) {
     { algorithm: 'ES256', keyid: key.kid, issuer: issuerForHost(DISCOVERY_HOST), audience: AUDIENCE, header: { typ: TICKET_TYP, kid: key.kid, alg: 'ES256' } });
   return { ticket, resource: r.resource, role: access.role, url: `${liveOrigin().replace(/^http/, 'ws')}/v1/${r.resource}`,
     protocols: ['xeno-live.v1', `ticket.${ticket}`], expiresAt: new Date((now + TTL_SECONDS) * 1000).toISOString() };
+}
+
+/**
+ * A ticket for a SERVICE participant: the Spawn server on a machine joins the canvases bound to that machine as
+ * kind "service" (it must obey the live input lease). Issued only by the platform, into the forwarded connection's
+ * headers (services/computePorts.js) — the machine holds no credential of its own. sub = the machine id; role editor.
+ */
+export async function createServiceTicket(db, machineId, resource) {
+  const r = parseResource(resource);
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  return jwt.sign({ sub: String(machineId), jti: crypto.randomUUID(), name: 'Spawn server', kind: 'service', xeno_resource: r.resource,
+    xeno_role: 'editor', iat: now, exp: now + TTL_SECONDS }, key.privatePem,
+  { algorithm: 'ES256', keyid: key.kid, issuer: issuerForHost(DISCOVERY_HOST), audience: AUDIENCE, header: { typ: TICKET_TYP, kid: key.kid, alg: 'ES256' } });
 }
 
 export function liveOrigin() {
