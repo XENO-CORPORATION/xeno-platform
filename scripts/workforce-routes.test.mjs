@@ -154,7 +154,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         steps: { privilegedCalls: 1, providerDispatches: 2 }, handoffs: null,
         decisions: { byRelation: { about: { 'division.assign': 1 } }, withEvidence: 0 },
         records: { admissions: [operationId], handoffs: [], decisions: [], truncated: false },
-        notRecorded: ['contributions', 'reviewerDecisions', 'settlements'], score: 97 }; },
+        notRecorded: ['contributions', 'settlements', 'tasks'], score: 97 }; },
     readRunnablePin: async (pool, context, value) => { calls.push({ method: 'pin', context, body: value }); if (admitFailure) throw admitFailure;
       return pinResult ?? { schemaVersion: 1, agent: { resourceId: value.agent.resourceId, version: 3, contentHash: 'b'.repeat(64) },
         target: value.target, team: null, terms: { definition: ['files.read'], target: ['files.read'] }, internalRow: 'hidden' }; },
@@ -654,6 +654,25 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         evaluationResult = { ...base(), ...bad };
         assert.equal((await request({ path: '/evaluation', body: ask })).status, 500, 'an evaluation of another window is never reported');
       }
+      // A person's evaluation carries XENO Tasks; its shape is checked like the rest, and nothing extra crosses.
+      const person = { ...ask, subject: { kind: 'principal', userId: human } };
+      const tasks = () => ({ mine: { created: 2, delegatedToAgents: 1, assignedToOthers: 0, started: 1, submittedForReview: 1, closedWithoutReview: 0, comments: 3 },
+        reviews: { accepted: 1, changesRequested: 0, decidedWithinAMinute: 1, medianSeconds: 12 },
+        outcomes: { done: 1, viaAgent: 1, acceptedByHuman: 1, closedByAgent: 0, neverReviewed: 0 } });
+      const personal = (over = {}) => ({ ...base(), subject: person.subject, handoffs: { sent: { offered: 0, accepted: 0, declined: 0, expired: 0 }, received: { offered: 0, accepted: 0, declined: 0, expired: 0 } },
+        records: { admissions: [], handoffs: [], decisions: [], tasks: [operationId], truncated: false }, tasks: tasks(), ...over });
+      evaluationResult = personal();
+      const mine = await request({ path: '/evaluation', body: person });
+      assert.equal(mine.status, 200);
+      assert.deepEqual(mine.body.tasks, tasks(), 'a person\'s task figures are reported as derived');
+      assert.deepEqual(mine.body.records.tasks, [operationId], 'with the tasks behind them');
+      for (const bad of [{ tasks: null }, { tasks: { ...tasks(), reviews: { ...tasks().reviews, score: 9 } } },
+        { tasks: { ...tasks(), outcomes: { ...tasks().outcomes, done: -1 } } }]) {
+        evaluationResult = personal(bad);
+        assert.equal((await request({ path: '/evaluation', body: person })).status, 500, 'a malformed or scored task section is never reported');
+      }
+      evaluationResult = { ...base(), tasks: tasks() };
+      assert.equal((await request({ path: '/evaluation', body: ask })).status, 500, 'an agent definition never carries tasks');
       evaluationResult = undefined;
       assert.equal((await request({ path: '/evaluation', body: ask, token: mint({ scope: 'workforce:manage' }) })).status, 403,
         'an evaluation needs workforce:read');

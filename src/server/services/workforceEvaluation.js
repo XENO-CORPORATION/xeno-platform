@@ -17,7 +17,19 @@
  *              or -- for an agent -- decided about it; by kind, and how many carried evidence
  *   records    the ids of every admission, handoff and decision counted, so each figure can be checked
  *
- * THERE IS NO SCORE, and nothing here is written. No single number summarises a subject, because any such
+ *   tasks      (a principal only) XENO Tasks in the scope: what the subject directed (created, delegated to
+ *              an agent, assigned), did (started, submitted for review, closed without review, commented)
+ *              and REVIEWED (accepted, changes requested, how long each decision took after the task entered
+ *              review, how many inside a minute), and the outcomes it answers for (finished, via an agent,
+ *              accepted by a human, closed by an agent, never reviewed). Owner, 2026-10-29: tell a person who
+ *              directs and checks agents' work from one who only sets agents running. "Answers for" uses the
+ *              task's CURRENT assignee/delegate; every other figure is the event as it happened.
+ *
+ * THERE IS NO SCORE, and nothing here is written. It reports ACTIONS ON WORK, never activity on a machine (no
+ * keystrokes, screenshots, presence or time-at-desk), and no model judges anyone: in the EU an AI system that
+ * evaluates workers' performance is high-risk (AI Act Annex III 4(b)), and monitoring needs a works-council
+ * agreement in Germany (BetrVG §87(1) 6). A person can always read their own; a decision about a person is a
+ * person's, made on these records. No single number summarises a subject, because any such
  * number is a weighting somebody chose, and a weighting presented as a measurement is exactly the claim
  * without its procedure LIFE-04 forbids. A reader gets counts and the records behind them.
  *
@@ -38,7 +50,7 @@
  * `closed` says whether the whole window lies before it. A window that is not closed may still move.
  *
  * ── WHAT IT CANNOT SEE, SAID IN THE ANSWER ──────────────────────────────────────────────────────────────
- * This evaluation does not yet project contributions, reviewer decisions or linked settlements,
+ * This evaluation does not yet project contributions or linked settlements (review decisions come from XENO Tasks),
  * so `notRecorded` names those omissions. Financial contributions now exist in workforceFunding;
  * integrating their appropriate sanitized projection remains work, not evidence of absence.
  * An evaluation that silently omitted these categories would read as complete.
@@ -57,7 +69,8 @@ import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 
 export const EVALUATION_RECORD_LIMIT = 500;
 export const EVALUATION_MAX_WINDOW_DAYS = 366;
-export const EVALUATION_NOT_RECORDED = Object.freeze(['contributions', 'reviewerDecisions', 'settlements']);
+// Review decisions are read from XENO Tasks (a task leaving review), so they are no longer unrecorded.
+export const EVALUATION_NOT_RECORDED = Object.freeze(['contributions', 'settlements']);
 
 export class WorkforceEvaluationError extends Error {
   constructor(code = 'not_found', reason = 'evaluation_unavailable') {
@@ -170,7 +183,34 @@ dec AS (
    WHERE o.committed_at >= p.since AND o.committed_at < p.until
      AND ((p.ws IS NOT NULL AND o.workspace_id = p.ws) OR (p.ws IS NULL AND o.workspace_id IS NULL))
      AND CASE WHEN p.kind = 'agent' THEN o.subject_type = 'resource' AND o.subject_id = p.subject
-              ELSE o.deciding_principal_id = p.subject OR o.responsible_account_id = p.subject END)
+              ELSE o.deciding_principal_id = p.subject OR o.responsible_account_id = p.subject END),
+-- XENO Tasks (owner, 2026-10-29: see whether a person directs and checks the work, or only sets agents
+-- running). Only for a principal: a task names users, and an agent DEFINITION has no task identity.
+scope_tasks AS (
+  SELECT t.id, t.assignee_id, t.delegate_id FROM tasks t LEFT JOIN chat_projects cp ON cp.id = t.project_id, params p
+   WHERE p.kind = 'principal'
+     AND ((p.ws IS NOT NULL AND cp.workspace_id = p.ws)
+       OR (p.ws IS NULL AND ((t.project_id IS NULL AND t.owner_user_id = p.owner_user)
+                          OR (t.project_id IS NOT NULL AND cp.workspace_id IS NULL AND cp.owner_user_id = p.owner_user))))),
+tev AS (
+  SELECT e.*, st.assignee_id AS t_assignee, st.delegate_id AS t_delegate
+    FROM task_events e JOIN scope_tasks st ON st.id = e.task_id, params p
+   WHERE e.created_at >= p.since AND e.created_at < p.until),
+mine AS (SELECT e.* FROM tev e, params p WHERE e.actor_id = p.subject),
+-- A review decision is the subject moving a task OUT of review; its time is measured from the task's last
+-- entry INTO review (which may lie before the window).
+rev AS (
+  SELECT e.task_id, e.to_value,
+         EXTRACT(EPOCH FROM e.created_at - (SELECT max(x.created_at) FROM task_events x
+           WHERE x.task_id = e.task_id AND x.kind = 'status' AND x.to_value = 'in_review' AND x.created_at <= e.created_at)) AS secs
+    FROM mine e WHERE e.kind = 'status' AND e.from_value = 'in_review' AND e.to_value IN ('done', 'in_progress')),
+-- Outcomes: tasks the subject answers for (assignee or agent delegate, as they stand now) finished in the window.
+done_ev AS (
+  SELECT e.task_id, e.actor_kind, e.from_value,
+         EXISTS (SELECT 1 FROM task_events d WHERE d.task_id = e.task_id AND d.kind = 'delegated' AND d.to_value IS NOT NULL
+                  AND d.created_at <= e.created_at) AS via_agent
+    FROM tev e, params p
+   WHERE e.kind = 'status' AND e.to_value = 'done' AND (e.t_assignee = p.subject OR e.t_delegate = p.subject))
 SELECT
   clock_timestamp() AS derived_at,
   clock_timestamp() - interval '5 minutes' AS settled_before,
@@ -189,11 +229,34 @@ SELECT
   (SELECT coalesce(array_agg(id ORDER BY created_at, id), '{}') FROM (SELECT id, created_at FROM hand ORDER BY created_at, id LIMIT (SELECT lim FROM params)) x) AS handoff_ids,
   (SELECT count(*)::int FROM hand) > (SELECT lim FROM params) AS handoffs_truncated,
   (SELECT coalesce(array_agg(operation_id ORDER BY committed_at, operation_id), '{}') FROM (SELECT operation_id, committed_at FROM dec ORDER BY committed_at, operation_id LIMIT (SELECT lim FROM params)) x) AS decision_ids,
-  (SELECT count(*)::int FROM dec) > (SELECT lim FROM params) AS decisions_truncated`;
+  (SELECT count(*)::int FROM dec) > (SELECT lim FROM params) AS decisions_truncated,
+  (SELECT jsonb_build_object(
+     'created',            count(*) FILTER (WHERE kind = 'created'),
+     'delegatedToAgents',  count(*) FILTER (WHERE kind = 'delegated' AND to_value IS NOT NULL),
+     'assignedToOthers',   count(*) FILTER (WHERE kind = 'assigned' AND to_value IS NOT NULL AND to_value <> (SELECT subject::text FROM params)),
+     'started',            count(*) FILTER (WHERE kind = 'status' AND to_value = 'in_progress' AND from_value IS DISTINCT FROM 'in_review'),
+     'submittedForReview', count(*) FILTER (WHERE kind = 'status' AND to_value = 'in_review'),
+     'closedWithoutReview',count(*) FILTER (WHERE kind = 'status' AND to_value = 'done' AND from_value IS DISTINCT FROM 'in_review'),
+     'comments',           count(*) FILTER (WHERE kind = 'comment')) FROM mine) AS task_mine,
+  (SELECT jsonb_build_object(
+     'accepted',             count(*) FILTER (WHERE to_value = 'done'),
+     'changesRequested',     count(*) FILTER (WHERE to_value = 'in_progress'),
+     'decidedWithinAMinute', count(*) FILTER (WHERE secs IS NOT NULL AND secs < 60),
+     'medianSeconds',        percentile_cont(0.5) WITHIN GROUP (ORDER BY secs)) FROM rev) AS task_reviews,
+  (SELECT jsonb_build_object(
+     'done',              count(*),
+     'viaAgent',          count(*) FILTER (WHERE via_agent),
+     'acceptedByHuman',   count(*) FILTER (WHERE from_value = 'in_review' AND actor_kind = 'human'),
+     'closedByAgent',     count(*) FILTER (WHERE actor_kind = 'agent'),
+     'neverReviewed',     count(*) FILTER (WHERE from_value IS DISTINCT FROM 'in_review')) FROM done_ev) AS task_outcomes,
+  (SELECT coalesce(array_agg(DISTINCT task_id), '{}') FROM (SELECT task_id FROM done_ev LIMIT (SELECT lim FROM params)) x) AS task_ids,
+  (SELECT count(*)::int FROM done_ev) > (SELECT lim FROM params) AS tasks_truncated`;
 
 const RUN_STOPS = ['stopped_by_actor', 'stopped_by_target', 'authority_lost'];
 const STEP_KINDS = ['privileged_call', 'provider_dispatch'];
 const HANDOFF_STATES = ['offered', 'accepted', 'declined', 'expired'];
+const TASK_MINE = ['created', 'delegatedToAgents', 'assignedToOthers', 'started', 'submittedForReview', 'closedWithoutReview', 'comments'];
+const TASK_OUTCOMES = ['done', 'viaAgent', 'acceptedByHuman', 'closedByAgent', 'neverReviewed'];
 
 export async function readWorkforceEvaluation(pool, authenticatedContext, value) {
   const { actor, owner, subject, window } = input(authenticatedContext, value);
@@ -224,9 +287,16 @@ export async function readWorkforceEvaluation(pool, authenticatedContext, value)
       decisions: { byRelation, withEvidence: r.evidenced_decisions },
       records: {
         admissions: r.admission_ids, handoffs: r.handoff_ids, decisions: r.decision_ids,
-        truncated: Boolean(r.admissions_truncated || r.handoffs_truncated || r.decisions_truncated),
+        ...(subject.kind === 'principal' ? { tasks: r.task_ids } : {}),
+        truncated: Boolean(r.admissions_truncated || r.handoffs_truncated || r.decisions_truncated || (subject.kind === 'principal' && r.tasks_truncated)),
       },
-      notRecorded: [...EVALUATION_NOT_RECORDED],
+      tasks: subject.kind === 'principal' ? {
+        mine: pick(r.task_mine, TASK_MINE),
+        reviews: { ...pick(r.task_reviews, ['accepted', 'changesRequested', 'decidedWithinAMinute']),
+          medianSeconds: r.task_reviews.medianSeconds == null ? null : Math.round(Number(r.task_reviews.medianSeconds)) },
+        outcomes: pick(r.task_outcomes, TASK_OUTCOMES),
+      } : null,
+      notRecorded: [...EVALUATION_NOT_RECORDED, ...(subject.kind === 'agent' ? ['tasks'] : [])],
     };
   });
 }
