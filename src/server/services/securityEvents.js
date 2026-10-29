@@ -77,6 +77,7 @@ export const EVENTS = Object.freeze({
   // claude_artifact_* (code.claude.com/docs/en/artifacts, "Review the audit log").
   ARTIFACT_PUBLISHED: 'artifact_published',
   ARTIFACT_SHARED: 'artifact_shared',
+  ARTIFACT_KEPT_AS_TOOL: 'artifact_kept_as_tool',
   ARTIFACT_DELETED: 'artifact_deleted',
   // XENO Extension browser relay — a browser connected to the account, or was disconnected. Metadata:
   // the installation id and the browser/os the extension reported. NEVER the DPoP thumbprint or a token:

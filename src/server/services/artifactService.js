@@ -133,7 +133,20 @@ export function publicUrlFor(artifactId, origin) {
 
 // ───────────────────────────── writes ─────────────────────────────
 
+// A tool a person makes is an artifact of kind 'tool' (docs/decisions/2026-10-29-personal-tools-are-artifacts.md):
+// same store, same sealed viewer, never XENO-signed. Its category is one of XENO Tools'.
+export const ARTIFACT_KINDS = Object.freeze(['page', 'tool']);
+export const TOOL_CATEGORIES = Object.freeze(['generator', 'extractor', 'converter', 'ai', 'capture', 'utility']);
+function kindOf(body) {
+  const kind = body?.kind == null ? 'page' : String(body.kind);
+  if (!ARTIFACT_KINDS.includes(kind)) throw new ArtifactError(400, `kind must be one of ${ARTIFACT_KINDS.join(', ')}.`, 'invalid_kind');
+  const category = kind === 'tool' && body?.category != null ? String(body.category) : null;
+  if (category && !TOOL_CATEGORIES.includes(category)) throw new ArtifactError(400, `category must be one of ${TOOL_CATEGORIES.join(', ')}.`, 'invalid_category');
+  return { kind, category };
+}
+
 export async function createArtifact(db, { ownerUserId, body, sourceArtifactId }) {
+  const { kind, category } = kindOf(body);
   const prepared = prepareRevision(body);
   const storage = artifactStorage();
   const id = mintId('a_');
@@ -142,9 +155,9 @@ export async function createArtifact(db, { ownerUserId, body, sourceArtifactId }
   try {
     await client.query('BEGIN');
     await client.query(
-      `INSERT INTO artifacts (id, owner_user_id, title, description, icon, current_revision, source_artifact_id)
-       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
-      [id, ownerUserId, prepared.title ?? 'Untitled page', prepared.description ?? null, prepared.icon ?? null, sourceArtifactId ?? null],
+      `INSERT INTO artifacts (id, owner_user_id, title, description, icon, current_revision, source_artifact_id, kind, category)
+       VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)`,
+      [id, ownerUserId, prepared.title ?? (kind === 'tool' ? 'Untitled tool' : 'Untitled page'), prepared.description ?? null, prepared.icon ?? null, sourceArtifactId ?? null, kind, category],
     );
     await client.query(
       `INSERT INTO artifact_revisions (artifact_id, revision, content_hash, size_bytes, storage_prefix, files) VALUES ($1, 1, $2, $3, $4, $5)`,
@@ -337,6 +350,7 @@ function artifactView(row) {
     id: row.id,
     ownerUserId: row.owner_user_id,
     kind: row.kind,
+    category: row.category ?? undefined,
     title: row.title,
     description: row.description ?? undefined,
     icon: row.icon ?? undefined,
@@ -364,9 +378,20 @@ export async function getArtifactForOwner(db, artifactId, ownerUserId) {
   return row ? artifactView(row) : null;
 }
 
-export async function listArtifactsForOwner(db, ownerUserId, { limit = 50 } = {}) {
-  const rows = (await db.query(`SELECT * FROM artifacts WHERE owner_user_id=$1 AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT $2`, [ownerUserId, Math.min(200, Math.max(1, limit))])).rows;
+export async function listArtifactsForOwner(db, ownerUserId, { limit = 50, kind = null } = {}) {
+  if (kind != null && !ARTIFACT_KINDS.includes(kind)) throw new ArtifactError(400, `kind must be one of ${ARTIFACT_KINDS.join(', ')}.`, 'invalid_kind');
+  const rows = (await db.query(`SELECT * FROM artifacts WHERE owner_user_id=$1 AND deleted_at IS NULL AND ($3::text IS NULL OR kind = $3) ORDER BY updated_at DESC LIMIT $2`,
+    [ownerUserId, Math.min(200, Math.max(1, limit)), kind])).rows;
   return rows.map(artifactView);
+}
+
+/** Keep a page the person owns as a tool in My tools (Workshop's "Keep it"). Idempotent; never touches the files. */
+export async function keepAsTool(db, { artifactId, ownerUserId, category = null }) {
+  if (category != null && !TOOL_CATEGORIES.includes(String(category))) throw new ArtifactError(400, `category must be one of ${TOOL_CATEGORIES.join(', ')}.`, 'invalid_category');
+  const r = await db.query(`UPDATE artifacts SET kind = 'tool', category = COALESCE($3, category), updated_at = NOW()
+     WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NULL RETURNING id`, [artifactId, ownerUserId, category]);
+  if (!r.rows.length) throw new ArtifactError(404, 'Artifact not found.', 'not_found');
+  return getArtifactForOwner(db, artifactId, ownerUserId);
 }
 
 /**

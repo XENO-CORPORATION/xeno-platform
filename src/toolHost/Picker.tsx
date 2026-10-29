@@ -8,6 +8,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Header, Plus, Arrow } from './chrome';
 import { toolPath } from './where';
+import { MineList } from './Mine';
 
 export interface ToolRow { id: string; name: string; description: string; category: string; version: string; contract: string; web: { runs: boolean; needsHub: string[] }; score?: number }
 
@@ -142,11 +143,7 @@ export function Picker({ onOpen }: { onOpen: (id: string) => void }) {
       <Header tab={tab} onTab={setTab} onSearch={focusSearch} />
       {tab === 'mine' ? (
         <main className="xt-main">
-          <div className="xt-empty" data-tools-mine>
-            <b>No tools of your own yet.</b>
-            <span>Tools you make with the XENO Agent will be kept here, with their versions. Saving a tool from Workshop is the part we are building next.</span>
-            <button type="button" className="xt-ghost" onClick={focusSearch}>Find a tool</button>
-          </div>
+          <MineList onFind={focusSearch} />
         </main>
       ) : (
         <main className="xt-main">

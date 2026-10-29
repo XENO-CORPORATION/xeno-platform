@@ -426,6 +426,11 @@
       "class": "reversible",
       "scope": "library:write"
     },
+    "route:artifactRoutes.js:POST /:id/keep-as-tool": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "library:write"
+    },
     "route:artifactRoutes.js:POST /:id/share": {
       "status": "planned",
       "class": "reversible",

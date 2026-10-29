@@ -38,6 +38,9 @@ async function open(url) {
     }
     const json = (body, status = 200) => q.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
+    if (u.pathname === '/api/artifacts' && u.searchParams.get('kind') === 'tool') return json({ artifacts: [{ id: 'a_mytool1', kind: 'tool', title: 'Logo export kit', description: 'Transparent PNG + SVG in three sizes', category: 'generator', currentRevision: 3, updatedAt: new Date().toISOString() }] });
+    if (u.pathname === '/api/artifacts/a_mytool1') return json({ artifact: { id: 'a_mytool1', kind: 'tool', title: 'Logo export kit', currentRevision: 3 } });
+    if (u.pathname === '/api/artifacts/a_mytool1/view-token' && q.method() === 'POST') return json({ viewToken: 't', revision: 3, frameUrl: '/a/a_mytool1/v/t/r/3/index.html' });
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     return json({ success: false, error: 'not found' }, 404);
   });
@@ -93,8 +96,9 @@ try {
   await shot(t4.p, 'tools-create');
   await t4.p.keyboard.press('Escape'); await wait(150);
   ok(await t4.p.$('[data-tools-create-dialog]') === null, 'Escape closes it');
-  await t4.p.click('[data-tools-tab="mine"]'); await wait(150);
-  ok(await t4.p.$('[data-tools-mine]') !== null, 'My tools says honestly that it is empty');
+  await t4.p.click('[data-tools-tab="mine"]'); await wait(800);
+  ok(await t4.p.$('[data-tools-mine-card="a_mytool1"]') !== null, 'My tools lists the tools the person made');
+  await shot(t4.p, 'tools-mine');
   await t4.p.click('[data-tools-tab="all"]'); await wait(150);
   await t4.p.click('[data-tools-theme]'); await wait(100);
   ok(await t4.p.evaluate(() => document.documentElement.dataset.theme) === 'light', 'the theme toggle switches to light');
@@ -105,6 +109,14 @@ try {
   ok(site.path === '/tools/background-removal' && site.m === 'background-removal' && site.back, `a tool opens full page at /tools/<id> (${JSON.stringify(site)})`);
   ok(!t4.errs.length, `no page errors on the tools site (${t4.errs.join(' | ')})`);
   await t4.p.close();
+
+  // a tool the person made runs SEALED: a sandboxed frame on the view token's address, never on the page itself
+  const t6 = await open('/tools/mine/a_mytool1');
+  await wait(1200);
+  const fr = await t6.p.evaluate(() => { const f = document.querySelector('[data-tools-mine-tool] iframe'); return f && { src: f.getAttribute('src'), sandbox: f.getAttribute('sandbox'), title: document.title }; });
+  ok(fr && fr.src === '/a/a_mytool1/v/t/r/3/index.html' && fr.sandbox === 'allow-scripts allow-forms allow-modals allow-popups allow-downloads' && !/allow-same-origin/.test(fr.sandbox), `a tool you made runs sealed in its view-token frame (${JSON.stringify(fr)})`);
+  ok(!t6.errs.length, `no page errors on your tool (${t6.errs.join(' | ')})`);
+  await t6.p.close();
 
   // a changed byte: the server refuses the package, so the page has nothing to run
   const real = globalThis.fetch;
