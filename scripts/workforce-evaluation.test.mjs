@@ -133,6 +133,32 @@ test('an evaluation is a projection over evidence for a stated window, never a s
   const madeByWorker = (await decide(worker, worker, 'member.admit', 'membership', randomUUID(), [{ kind: 'review', ref: 'x' }])).rows[0].operation_id;
   const madeByAgent = (await decide(agentUser, worker, 'member.promote', 'membership', randomUUID())).rows[0].operation_id;
   const aboutScout = (await decide(owner, owner, 'division.assign', 'resource', scout)).rows[0].operation_id;
+  // XENO Tasks in the scope, in the shapes xenoTasks.js writes (status from/to, 'delegated' to an agent's user id).
+  const project = async (w) => (await pool.query(`INSERT INTO chat_projects(user_id,owner_user_id,workspace_id,created_by_user_id,updated_by_user_id,name)
+    VALUES(NULL,NULL,$1,$2,$2,'Eval') RETURNING id`, [w, owner])).rows[0].id;
+  const proj = await project(ws), projElsewhere = await project(elsewhere);
+  const task = async (p, reporter, assignee = null, delegate = null) => (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,delegate_id)
+    VALUES('t',$1,$2,$3,$4) RETURNING id`, [p, reporter, assignee, delegate])).rows[0].id;
+  const ev = (id, actor, kind, from = null, to = null, at = null) => pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind,from_value,to_value,created_at)
+    VALUES($1,$2,$3,$4,$5,$6,COALESCE($7::timestamptz, clock_timestamp()))`, [id, actor, actor === agentUser ? 'agent' : 'human', kind, from, to, at]);
+  const delegated = async (reporter) => { const id = await task(proj, reporter, worker, agentUser);
+    await ev(id, reporter, 'created'); await ev(id, reporter, 'delegated', null, agentUser); await ev(id, agentUser, 'status', 'todo', 'in_progress'); return id; };
+  // A: an agent does it, the worker reviews and accepts it (inside a minute)
+  const taskA = await delegated(worker);
+  await ev(taskA, agentUser, 'status', 'in_progress', 'in_review'); await ev(taskA, worker, 'comment'); await ev(taskA, worker, 'status', 'in_review', 'done');
+  // B: an agent closes it itself -- never reviewed
+  const taskB = await delegated(worker);
+  await ev(taskB, agentUser, 'status', 'in_progress', 'done');
+  // E: the task entered review before the window; the worker asks for changes inside it (well over a minute later)
+  const taskE = await delegated(worker);
+  await ev(taskE, agentUser, 'status', 'in_progress', 'in_review', new Date(Date.parse(since) - 120_000).toISOString());
+  await ev(taskE, worker, 'status', 'in_review', 'in_progress');
+  // C: the owner gives the worker a task; the worker does it and submits it for review
+  const taskC = await task(proj, owner, worker);
+  await ev(taskC, owner, 'created'); await ev(taskC, owner, 'assigned', null, worker);
+  await ev(taskC, worker, 'status', 'todo', 'in_progress'); await ev(taskC, worker, 'status', 'in_progress', 'in_review');
+  // Another workspace's task is not this scope's evidence
+  const away = await task(projElsewhere, worker, worker); await ev(away, worker, 'created'); await ev(away, worker, 'status', 'todo', 'done');
   const until = await boundary();
   const window = { since, until };
 
@@ -157,6 +183,24 @@ test('an evaluation is a projection over evidence for a stated window, never a s
     assert.equal(person.decisions.withEvidence, 1, 'a decision that carried evidence is counted as such');
     assert.deepEqual([...person.records.decisions].sort(), [madeByWorker, madeByAgent].sort());
     assert.equal(person.runs.admitted, 3, 'the worker admitted the three runs in this scope');
+    assert.equal(first.tasks, null, 'an agent definition has no task identity');
+  });
+
+  await t.test('LIFE-04: what a person directed, did and reviewed in XENO Tasks, apart from what agents did', async () => {
+    const person = await read(owner, asWorker, window);
+    assert.deepEqual(person.tasks.mine, { created: 3, delegatedToAgents: 3, assignedToOthers: 0, started: 1, submittedForReview: 1, closedWithoutReview: 0, comments: 1 },
+      'another workspace\'s tasks are not this scope\'s evidence');
+    assert.deepEqual({ ...person.tasks.reviews, medianSeconds: typeof person.tasks.reviews.medianSeconds },
+      { accepted: 1, changesRequested: 1, decidedWithinAMinute: 1, medianSeconds: 'number' },
+      'a review is timed from the task\'s entry into review, even when that was before the window');
+    assert.ok(person.tasks.reviews.medianSeconds >= 55, 'the median sits between a seconds-long and a two-minute review');
+    assert.deepEqual(person.tasks.outcomes, { done: 2, viaAgent: 2, acceptedByHuman: 1, closedByAgent: 1, neverReviewed: 1 },
+      'work an agent closed itself is told apart from work a person accepted');
+    assert.deepEqual([...person.records.tasks].sort(), [taskA, taskB].sort(), 'every outcome counted is named');
+    const agent = await read(owner, { kind: 'principal', userId: agentUser }, window);
+    assert.deepEqual(agent.tasks.mine, { created: 0, delegatedToAgents: 0, assignedToOthers: 0, started: 3, submittedForReview: 1, closedWithoutReview: 1, comments: 0 },
+      'the agent\'s own actions are its own');
+    assert.equal(agent.tasks.outcomes.done, 2, 'and it answers for the tasks delegated to it');
   });
 
   await t.test('LIFE-04: the same window reads the same after new evidence arrives', async () => {
@@ -199,10 +243,11 @@ test('an evaluation is a projection over evidence for a stated window, never a s
 
   await t.test('LIFE-04: what cannot be seen is said, not silently omitted or estimated', async () => {
     const r = await read(owner, asAgent, window);
-    assert.deepEqual(r.notRecorded, ['contributions', 'reviewerDecisions', 'settlements'], 'what cannot be seen is said, not silently omitted');
-    assert.deepEqual([...EVALUATION_NOT_RECORDED], r.notRecorded);
+    assert.deepEqual(r.notRecorded, ['contributions', 'settlements', 'tasks'], 'what cannot be seen is said, not silently omitted');
+    assert.deepEqual([...EVALUATION_NOT_RECORDED, 'tasks'], r.notRecorded);
+    assert.deepEqual((await read(owner, asWorker, window)).notRecorded, ['contributions', 'settlements'], 'a person\'s tasks are read');
     // Each source named there is genuinely absent: when one is built, this fails and the projection must read it.
-    for (const table of ['workforce_contributions', 'workforce_reviewer_decisions', 'workforce_run_settlements']) {
+    for (const table of ['workforce_contributions', 'workforce_run_settlements']) {
       assert.equal((await pool.query('SELECT to_regclass($1) AS t', [table])).rows[0].t, null,
         `${table} now exists -- the evaluation must read it and stop declaring it unrecorded`);
     }

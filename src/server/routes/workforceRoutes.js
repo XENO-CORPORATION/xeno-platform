@@ -362,6 +362,11 @@ function capacityObservation(value, request) {
 /** LIFE-04: an evaluation is reported for the scope, subject and window ASKED about, as counts and the ids of
  * the records behind them. A reply about another subject or window, or carrying a field outside this shape --
  * a score above all -- is not reported. */
+const TASK_KEYS = {
+  mine: ['created', 'delegatedToAgents', 'assignedToOthers', 'started', 'submittedForReview', 'closedWithoutReview', 'comments'],
+  reviews: ['accepted', 'changesRequested', 'decidedWithinAMinute'],
+  outcomes: ['done', 'viaAgent', 'acceptedByHuman', 'closedByAgent', 'neverReviewed'],
+};
 const COUNT_KEYS = { stopped: ['stopped_by_actor', 'stopped_by_target', 'authority_lost'], handoff: ['offered', 'accepted', 'declined', 'expired'] };
 const counts = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
   && Object.keys(value).length === keys.length && keys.every(k => count(value[k]));
@@ -463,13 +468,26 @@ function evaluationObservation(value, request) {
     }
     if (!rec || !ids(rec.admissions) || !ids(rec.handoffs) || !ids(rec.decisions) || typeof rec.truncated !== 'boolean') return null;
     if (!Array.isArray(value.notRecorded) || !value.notRecorded.every(s => typeof s === 'string' && /^[a-zA-Z]{1,40}$/.test(s))) return null;
+    // XENO Tasks: a principal's reply carries them (counts, a median that may be null, and the task ids);
+    // an agent definition's never does.
+    let tasks = null;
+    const tk = value.tasks;
+    if (value.subject?.kind === 'principal') {
+      if (!tk || !counts(tk.mine, TASK_KEYS.mine) || !counts(tk.outcomes, TASK_KEYS.outcomes) || !tk.reviews
+        || !counts({ accepted: tk.reviews.accepted, changesRequested: tk.reviews.changesRequested, decidedWithinAMinute: tk.reviews.decidedWithinAMinute }, TASK_KEYS.reviews)
+        || !(tk.reviews.medianSeconds === null || count(tk.reviews.medianSeconds)) || Object.keys(tk.reviews).length !== 4 || !ids(rec.tasks)) return null;
+      tasks = { mine: fields(tk.mine, TASK_KEYS.mine), outcomes: fields(tk.outcomes, TASK_KEYS.outcomes),
+        reviews: { ...fields(tk.reviews, TASK_KEYS.reviews), medianSeconds: tk.reviews.medianSeconds } };
+    } else if (tk !== null && tk !== undefined) return null;
     return { schemaVersion: 1, owner, subject: value.subject, window: { since: value.window.since, until: value.window.until },
       derivedAt: value.derivedAt, settledBefore: value.settledBefore, closed: value.closed,
       runs: { admitted: r.admitted, children: r.children, activeAtEnd: r.activeAtEnd, stopped: fields(r.stopped, COUNT_KEYS.stopped) },
       steps: { privilegedCalls: st.privilegedCalls, providerDispatches: st.providerDispatches },
       handoffs: value.handoffs === null ? null : { sent: fields(value.handoffs.sent, COUNT_KEYS.handoff), received: fields(value.handoffs.received, COUNT_KEYS.handoff) },
       decisions: { byRelation, withEvidence: d.withEvidence },
-      records: { admissions: rec.admissions, handoffs: rec.handoffs, decisions: rec.decisions, truncated: rec.truncated },
+      records: { admissions: rec.admissions, handoffs: rec.handoffs, decisions: rec.decisions,
+        ...(tasks ? { tasks: rec.tasks } : {}), truncated: rec.truncated },
+      tasks,
       notRecorded: value.notRecorded };
   } catch { return null; }
 }
