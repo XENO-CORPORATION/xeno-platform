@@ -5893,6 +5893,11 @@
       "class": "reversible",
       "scope": "agents:write"
     },
+    "route:workforceRoutes.js:POST /evaluation/roster": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "agents:write"
+    },
     "route:workforceRoutes.js:POST /member-removals": {
       "status": "planned",
       "class": "reversible",
