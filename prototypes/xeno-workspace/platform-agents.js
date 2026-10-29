@@ -570,7 +570,9 @@
       <section class="pg-sec"><div class="pg-sec-h"><h3>Credentials</h3><small>${a.credentials.length} live</small>${R.runner || R.manage ? '<button class="pg-link" data-xag-tab="Connect">New credential</button>' : ''}</div><div class="xag-rows">${creds}</div></section>`;
 
     const t = S.atab;
-    const acts = (R.editor ? h.btn('Edit', 'data-xag="edit"', true, 'edit') : '') + h.btn('Hand it a task', 'data-xag="hand" aria-keyshortcuts="T"', false, 'send');
+    const acts = (R.editor ? h.btn('Edit', 'data-xag="edit"', true, 'edit') : '') + h.btn('Hand it a task', 'data-xag="hand" aria-keyshortcuts="T"', false, 'send')
+      // its work report (People, platform-directory.js): what it did, what of it was reviewed, what it spent
+      + (a.userId && window.XENO_DIRECTORY?.served ? h.btn('Work report', `data-xdir="tab" data-to="Directory/${esc(a.userId)}/work/30"`, true, 'chart') : '');
     const body = t === 'Identity' ? identityTab(a, R)
       : t === 'Work' ? workTab(a, projects)
       : t === 'Activity' ? activityTab(a)
