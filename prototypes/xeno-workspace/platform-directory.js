@@ -4,6 +4,8 @@
  *   Org chart         /workspace/workspace/Directory/org-chart       reporting lines, from the roster + the manager edge
  *   My work           /workspace/workspace/Directory/my-work         your tasks, reviews, runs and reports
  *   a person          /workspace/workspace/Directory/<uuid>          their profile, by id; private fields only when the server sends them
+ *   work report       /workspace/workspace/Directory/<uuid>/work/<7|30|90>   what they directed, did, checked and answer for,
+ *                     and the agent runs they started (POST /api/workforce/evaluation): counts, never a score
  *
  *   GET /api/people · GET /api/people/org-chart · GET /api/people/me/work · GET|PATCH /api/people/:id
  *   POST /api/people/time-off · POST /api/people/:id/onboard · GET /api/people/:id/offboard-plan · POST /api/people/:id/offboard
@@ -27,6 +29,17 @@
     const at = S.key, w = ws();
     if (!w) { if (window.XENO_SCOPE && window.XENO_SCOPE.status?.() !== 'ready') { setTimeout(() => { if (S.key === at) load(); }, 250); return; } S.status = 'nows'; return paint(); }
     const [kind, id] = at.split(':');
+    if (kind === 'eval') {
+      // the person's page first (their name), then the evaluation for the period, both as the reader
+      const [, pid, days] = at.split(':');
+      const until = new Date(), since = new Date(until.getTime() - Number(days) * 86_400_000);
+      const [one, ev] = await Promise.all([api('GET', `/api/people/${pid}?workspace=${w}`),
+        api('POST', '/api/workforce/evaluation', { owner: { type: 'workspace', id: w }, subject: { kind: 'principal', userId: pid },
+          window: { since: since.toISOString(), until: until.toISOString() }, expectedActorAccountId: P.user ? String(P.user.id) : '' })]);
+      if (S.key !== at) return;
+      if (!one.ok || !ev.ok) { S.status = (one.status === 404 || ev.status === 404) ? 'noreport' : 'error'; return paint(); }
+      S.one = one.d; S.eval = ev.d; S.status = 'ready'; return paint();
+    }
     const r = kind === 'list' ? await api('GET', `/api/people?workspace=${w}${S.q ? `&q=${encodeURIComponent(S.q)}` : ''}`)
       : kind === 'chart' ? await api('GET', `/api/people/org-chart?workspace=${w}`)
         : kind === 'work' ? await api('GET', `/api/people/me/work?workspace=${w}`)
@@ -64,17 +77,52 @@
   function workPage() {
     const h = H(), w = S.work;
     const sec = (title, items, fmt) => `<section><h3>${title}</h3>${items.length ? `<ul>${items.map(fmt).join('')}</ul>` : '<p class="pg-dim">Nothing here.</p>'}</section>`;
-    return h.page(h.head({ title: 'My work', sub: 'What is yours in this workspace' }) + tabs('Directory/my-work')
+    const mine = P.user ? h.btn('My work report', `data-xdir="tab" data-to="Directory/${esc(String(P.user.id))}/work/30"`, false, 'chart') : '';
+    return h.page(h.head({ title: 'My work', sub: 'What is yours in this workspace', acts: mine }) + tabs('Directory/my-work')
       + sec('Open tasks', w.tasks || [], (t) => `<li><a href="/workspace/tasks/${esc(t.key)}">${esc(t.key)}</a> ${esc(t.title)} <span class="pg-dim">${esc(t.status)}</span></li>`)
       + sec('Waiting for your review', w.approvals || [], (t) => `<li><a href="/workspace/tasks/${esc(t.key)}">${esc(t.key)}</a> ${esc(t.title)}</li>`)
       + sec('Recent runs', w.runs || [], (r) => `<li>${esc(r.task_key || '')} <span class="pg-dim">${esc(r.state)}</span></li>`)
       + sec('Your reports', w.reports || [], (p) => `<li><button data-xdir="open" data-id="${esc(p.id)}">${esc(p.name)}</button> ${away(p)}</li>`), 'xdir');
   }
+  // A person's (or an agent's) work for a period: counts over the records behind them, never a score
+  // (services/workforceEvaluation.js, LIFE-04). Who may read it is the server's answer: an admin of the
+  // workspace, or the person themselves.
+  const PERIODS = [7, 30, 90];
+  function evalPage(pid, days) {
+    const h = H(), e = S.eval, p = S.one.person, t = e.tasks;
+    const n = (v) => Number(v || 0).toLocaleString();
+    const tile = (label, value, hint = '') => `<div class="xdir-tile"><b>${value}</b><span>${label}</span>${hint ? `<small>${hint}</small>` : ''}</div>`;
+    const group = (title, sub, tiles) => `<section class="pg-sec"><h3>${title}</h3><p class="pg-dim xdir-sec-sub">${sub}</p><div class="xdir-tiles">${tiles.join('')}</div></section>`;
+    const secs = (s) => (s == null ? '—' : s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
+    const stopped = Object.values(e.runs.stopped || {}).reduce((a, b) => a + Number(b), 0);
+    // plain facts drawn from the counts, never a verdict about the person
+    const facts = [];
+    if (t) {
+      if (t.outcomes.done && t.outcomes.neverReviewed === t.outcomes.done) facts.push(`None of the ${n(t.outcomes.done)} finished tasks went through a review.`);
+      else if (t.outcomes.neverReviewed) facts.push(`${n(t.outcomes.neverReviewed)} of ${n(t.outcomes.done)} finished tasks were never reviewed.`);
+      if (t.outcomes.closedByAgent) facts.push(`An agent closed ${n(t.outcomes.closedByAgent)} task${t.outcomes.closedByAgent === 1 ? '' : 's'} itself.`);
+      const decided = t.reviews.accepted + t.reviews.changesRequested;
+      if (decided && t.reviews.decidedWithinAMinute) facts.push(`${n(t.reviews.decidedWithinAMinute)} of ${n(decided)} review decisions were made within a minute of the work arriving.`);
+      if (t.mine.delegatedToAgents && !decided) facts.push(`${n(t.mine.delegatedToAgents)} tasks were handed to agents, and no review decision was made.`);
+    }
+    const tabs = h.tabs(PERIODS.map((d) => [`Directory/${pid}/work/${d}`, `${d} days`]), `Directory/${pid}/work/${days}`, 'data-xdir="tab" data-to');
+    const back = h.btn(p.name, `data-xdir="open" data-id="${esc(pid)}"`, false, 'user');
+    return h.page(h.head({ title: `Work · ${p.name}`, sub: `The last ${days} days in this workspace`, acts: back }) + tabs
+      + (facts.length ? `<ul class="xdir-facts">${facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '')
+      + (t ? group('Directed', 'Work they set up and handed out.', [tile('Tasks created', n(t.mine.created)), tile('Handed to agents', n(t.mine.delegatedToAgents)), tile('Assigned to people', n(t.mine.assignedToOthers))])
+        + group('Did themselves', 'Their own moves on tasks.', [tile('Started', n(t.mine.started)), tile('Sent for review', n(t.mine.submittedForReview)), tile('Closed without review', n(t.mine.closedWithoutReview)), tile('Comments', n(t.mine.comments))])
+        + group('Checked', 'Review decisions on work that came to them.', [tile('Accepted', n(t.reviews.accepted)), tile('Changes asked', n(t.reviews.changesRequested)), tile('Decided within a minute', n(t.reviews.decidedWithinAMinute)), tile('Typical review time', secs(t.reviews.medianSeconds), 'median, from arrival in review')])
+        + group('Finished work they answer for', 'Tasks assigned or delegated to them that reached done.', [tile('Finished', n(t.outcomes.done)), tile('Done by an agent', n(t.outcomes.viaAgent)), tile('Accepted by a person', n(t.outcomes.acceptedByHuman)), tile('Closed by an agent', n(t.outcomes.closedByAgent)), tile('Never reviewed', n(t.outcomes.neverReviewed))])
+        : '')
+      + group('Agent runs', 'Runs they started for agents, and their limits.', [tile('Runs started', n(e.runs.admitted)), tile('Sub-runs', n(e.runs.children)), tile('Still running at the end', n(e.runs.activeAtEnd)), tile('Stopped', n(stopped))])
+      + (e.handoffs ? group('Handoffs', 'Work passed between people and agents.', [tile('Sent', n(Object.values(e.handoffs.sent).reduce((a, b) => a + b, 0))), tile('Received', n(Object.values(e.handoffs.received).reduce((a, b) => a + b, 0))), tile('Accepted from others', n(e.handoffs.received.accepted))]) : '')
+      + `<p class="pg-dim xdir-note">Counts of what happened on the work, each backed by its records — no score, no activity tracking (no keystrokes, screens or time at the desk).${e.closed ? '' : ' This period is still open, so the last few minutes can still change.'}${e.notRecorded?.length ? ` Not counted yet: ${e.notRecorded.map((k) => ({ contributions: 'contributions', settlements: 'credits spent' }[k] || k)).join(', ')}.` : ''}</p>`, 'xdir');
+  }
   function personPage() {
     const h = H(), o = S.one, p = o.person;
     const f = (l, v) => (v ? `<dt>${l}</dt><dd>${esc(v)}</dd>` : '');
     const hours = p.workingHours ? `${p.workingHours.start}–${p.workingHours.end}, days ${p.workingHours.days.join(',')}` : '';
-    const acts = [o.canEditHr || o.canEditOwn ? h.btn('Edit', 'data-xdir="edit"', false, 'edit') : '', o.canEditOwn || o.canEditHr ? h.btn('Time off', 'data-xdir="time-off"', false, 'calendar') : '',
+    const acts = [h.btn('Work report', `data-xdir="tab" data-to="Directory/${esc(p.id)}/work/30"`, false, 'chart'), o.canEditHr || o.canEditOwn ? h.btn('Edit', 'data-xdir="edit"', false, 'edit') : '', o.canEditOwn || o.canEditHr ? h.btn('Time off', 'data-xdir="time-off"', false, 'calendar') : '',
       o.canEditHr ? h.btn('Start onboarding', 'data-xdir="onboard"', false, 'check') : '', o.canEditHr ? h.btn('Offboard', 'data-xdir="offboard"', false, 'logout') : ''].join('');
     return h.page(h.head({ title: p.name, sub: [p.title, p.division?.name, p.team?.name].filter(Boolean).join(' · ') || (p.kind === 'agent' ? 'Agent' : 'Member'), acts }) + tabs('')
       + `<dl class="xdir-dl">${f('Kind', p.kind)}${f('Role', p.role)}${f('Started', p.startDate)}${f('Location', p.location)}${f('Time zone', p.timezone)}${f('Working hours', hours)}${f('Available now', p.availability.available ? 'Yes' : p.availability.reason === 'time_off' ? 'Away' : 'Outside hours')}</dl>`
@@ -122,13 +170,17 @@
   function route(it) {
     if (it !== 'Directory' && !(it || '').startsWith('Directory/')) return null;
     const h = H(), sub = it.slice(10);
-    const key = !sub ? 'list:' + S.q : sub === 'org-chart' ? 'chart:' : sub === 'my-work' ? 'work:' : UUID.test(sub) ? 'one:' + sub.toLowerCase() : 'bad:';
+    const wm = sub.match(/^([0-9a-f-]{36})\/work(?:\/(7|30|90))?$/i);
+    const key = !sub ? 'list:' + S.q : sub === 'org-chart' ? 'chart:' : sub === 'my-work' ? 'work:' : UUID.test(sub) ? 'one:' + sub.toLowerCase()
+      : wm && UUID.test(wm[1]) ? `eval:${wm[1].toLowerCase()}:${wm[2] || 30}` : 'bad:';
     if (key === 'bad:') return h.page(h.head({ title: 'Person not found' }) + h.box('user', 'This link is not valid', 'People are addressed by their id.'), 'xdir');
     if (S.key !== key) { S.key = key; S.status = 'loading'; setTimeout(load, 0); }
     if (S.status === 'loading') return h.page('<div class="xdv-skel" aria-busy="true"><i></i><i></i><i></i></div>', 'xdir');
     if (S.status === 'nows') return h.page(h.box('user', 'Open a workspace first', 'People belong to a workspace.'), 'xdir');
     if (S.status === 'missing') return h.page(h.head({ title: 'Not found' }) + h.box('user', 'Not in this workspace', 'Or you cannot see it.'), 'xdir');
+    if (S.status === 'noreport') return h.page(h.head({ title: 'Work report' }) + h.box('lock', 'You cannot see this report', 'A work report is shown to an admin of this workspace, or to the person it is about.'), 'xdir');
     if (S.status === 'error') return h.page(h.box('alert', 'People could not be loaded just now', 'Nothing changed. Try again.'), 'xdir');
+    if (key.startsWith('eval:')) { const [, pid, days] = key.split(':'); return evalPage(pid, Number(days)); }
     return key.startsWith('list') ? listPage() : key === 'chart:' ? chartPage() : key === 'work:' ? workPage() : personPage();
   }
   document.addEventListener('click', (e) => {
@@ -146,5 +198,7 @@
     const f = e.target.closest('[data-xdir-form="search"]'); if (!f) return;
     e.preventDefault(); S.q = String(new FormData(f).get('q') || '').trim(); S.key = null; paint();
   });
-  window.XENO_DIRECTORY = { served: true, route, isId: (s) => UUID.test(String(s || '')), nameOf: (id) => (S.one?.person?.id === id ? S.one.person.name : S.list.find((p) => p.id === id)?.name || 'Person') };
+  // breadcrumb words for Directory/<id>/work/<days>
+  const label = (x, i, parts) => (i === 2 && x === 'work' ? 'Work report' : i === 3 && parts[2] === 'work' && /^\d+$/.test(x) ? `${x} days` : x);
+  window.XENO_DIRECTORY = { served: true, route, label, isId: (s) => UUID.test(String(s || '')), nameOf: (id) => (S.one?.person?.id === id ? S.one.person.name : S.list.find((p) => p.id === id)?.name || 'Person') };
 })();
