@@ -62,6 +62,7 @@
     "test:compute-ports": "node src/server/tests/compute-ports.test.mjs",
     "test:cloud-shell": "node src/server/tests/cloud-shell.test.mjs",
     "test:host-signin": "node src/server/tests/host-signin.test.mjs",
+    "test:artifact-tools": "node src/server/tests/artifact-tools.test.mjs",
     "test:shell-ui": "node prototypes/xeno-workspace/tests/shell-test.mjs",
     "test:oidc-issuer-per-host": "node src/server/tests/oidc-issuer-per-host.test.mjs",
     "test:live-tickets": "node src/server/tests/live-tickets.test.mjs",

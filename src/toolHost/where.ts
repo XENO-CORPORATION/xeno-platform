@@ -22,3 +22,14 @@ export function toolIdFromPath(pathname: string): string {
 }
 /** Whether this page load is the tools site (picker or a full-page tool), as opposed to the workspace's frame. */
 export const onSitePath = (pathname: string) => onToolsHost || /^\/tools(\/|$)/.test(pathname);
+/** A tool the person made (an artifact of kind 'tool'), at /mine/<artifact id> on the tools host. */
+export const mineToolPath = (artifactId: string) => (onToolsHost ? '/mine/' : '/tools/mine/') + encodeURIComponent(artifactId);
+export function mineIdFromPath(pathname: string): string {
+  const m = pathname.match(onToolsHost ? /^\/mine\/([A-Za-z0-9_-]{1,64})$/ : /^\/tools\/mine\/([A-Za-z0-9_-]{1,64})$/);
+  return m ? m[1] : '';
+}
+/** The platform's CSRF value for a signed-in POST (the double-submit cookie the browser session sets). */
+export function csrfToken(): string {
+  const m = document.cookie.match(/(?:^|; )(?:__Host-)?xeno_csrf=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}

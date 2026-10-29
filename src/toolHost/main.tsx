@@ -11,7 +11,8 @@ import { createRoot } from 'react-dom/client';
 import { createWebHost } from './webHost';
 import { Picker } from './Picker';
 import { Header, initialTheme } from './chrome';
-import { onSitePath, toolIdFromPath, toolPath, toolsHome } from './where';
+import { mineIdFromPath, onSitePath, toolIdFromPath, toolPath, toolsHome } from './where';
+import { MineTool } from './Mine';
 import './tools.css';
 
 document.documentElement.dataset.theme = initialTheme();
@@ -47,6 +48,8 @@ function Bar({ name }: { name: string }) {
 }
 
 function App() {
+  const mine = onSite ? mineIdFromPath(location.pathname) : '';
+  if (mine) return <MineTool id={mine} />;
   if (onSite && !toolId) return <Picker onOpen={(id) => { location.href = toolPath(id); }} />;
   return <ToolPage />;
 }

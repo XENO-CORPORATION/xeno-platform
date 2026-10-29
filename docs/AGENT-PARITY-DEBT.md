@@ -4,13 +4,13 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1872 actions · 214 agent capability · 1324 planned (debt) · 334 excluded · **coverage 13.9%** of the 1538 owed.
+**Total:** 1873 actions · 214 agent capability · 1325 planned (debt) · 334 excluded · **coverage 13.9%** of the 1539 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 302 | 53 | 244 | 5 | 17.8% |
 | agents | 204 | 0 | 142 | 62 | 0% |
-| studio | 121 | 4 | 117 | 0 | 3.3% |
+| studio | 122 | 4 | 118 | 0 | 3.3% |
 | workspace-ui | 172 | 4 | 101 | 67 | 3.8% |
 | chat | 101 | 0 | 100 | 1 | 0% |
 | commerce | 116 | 0 | 100 | 16 | 0% |
@@ -763,7 +763,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-storage.js:data-xst-item`
 - `ui:platform-storage.js:data-xst-open`
 
-## studio — 117 planned
+## studio — 118 planned
 
 - `route:artifactRoutes.js:DELETE /:id`
 - `route:artifactRoutes.js:GET /`
@@ -773,6 +773,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:artifactRoutes.js:POST /:id/comments`
 - `route:artifactRoutes.js:POST /:id/comments/:commentId/reply`
 - `route:artifactRoutes.js:POST /:id/comments/delivered`
+- `route:artifactRoutes.js:POST /:id/keep-as-tool`
 - `route:artifactRoutes.js:POST /:id/revisions`
 - `route:artifactRoutes.js:POST /:id/share`
 - `route:artifactRoutes.js:POST /:id/view-token`

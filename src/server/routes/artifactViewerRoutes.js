@@ -57,10 +57,13 @@ export function contentOrigin(env = process.env) {
   return raw && /^https?:\/\/[^/]+$/.test(raw) ? raw : undefined;
 }
 
-/** The origin allowed to frame a raw page: PUBLIC_ORIGIN (the shell's home), else this request's own origin. */
+/** XENO products on their own host that show a person's artifacts (XENO Tools' My tools runs them there). */
+export const PRODUCT_FRAME_ORIGINS = Object.freeze(['https://tools.xenosystem.ai']);
+
+/** The origins allowed to frame a raw page: PUBLIC_ORIGIN (the shell's home) and the product hosts, else this request's own origin. */
 export function frameAncestor(req, env = process.env) {
   const configured = env.PUBLIC_ORIGIN?.trim().replace(/\/+$/, '');
-  if (configured && /^https?:\/\/[^/]+$/.test(configured)) return configured;
+  if (configured && /^https?:\/\/[^/]+$/.test(configured)) return [configured, ...PRODUCT_FRAME_ORIGINS].join(' ');
   return "'self'";
 }
 
