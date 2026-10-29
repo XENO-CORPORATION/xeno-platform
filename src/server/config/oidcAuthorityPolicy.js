@@ -77,6 +77,9 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // (/api/storage/projects/xeno-workshop/*, which checks both and reaches only the Workshop's own projects).
   'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
   'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  // XENO Tools on its own host: identity only. The platform's host sign-in (authRoutes /api/auth/host/*) uses the code
+  // to learn WHO signed in and opens an ordinary browser session on tools.xenosystem.ai; it keeps no token.
+  'xeno-tools-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],

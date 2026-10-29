@@ -66,6 +66,18 @@ try {
   ok(await t2.p.$('[data-tl-tool="asset-extractor"]') !== null, 'a fresh tab on the address lands on the tool');
   await t2.p.close();
 
+  // the Marketplace's Tools are the real tools, and opening one goes to the tool
+  const t5 = await open('/workspace/tools/market');
+  for (let i = 0; i < 20 && !(await t5.p.$('[data-arg="tool:whisper"]')); i++) await wait(300);
+  const mk = await t5.p.evaluate(() => ({ real: [...document.querySelectorAll('[data-arg^="tool:"]')].map((b) => b.dataset.arg).filter((v, i, a) => a.indexOf(v) === i).length, sample: (window.XENO_PG_MARKET || []).some((x) => x.name === 'Background remover'), bought: (window.XENO_PG_MARKET || []).filter((x) => x.toolId && x.owned).length }));
+  ok(mk.real >= 17 && !mk.sample && mk.bought === 0, `the Marketplace lists every real tool, no sample one, and none counted as a purchase (${JSON.stringify(mk)})`);
+  await shot(t5.p, 'tools-market');
+  await t5.p.click('[data-mk="open"][data-arg="tool:whisper"]'); await wait(1500);
+  const went = await t5.p.evaluate(() => ({ path: location.pathname, tool: document.querySelector('[data-tl-tool]')?.dataset.tlTool }));
+  ok(went.tool === 'whisper' && /\/tools\/spaces\/audio\/whisper$/.test(went.path), `opening a tool in the Marketplace goes to the tool (${JSON.stringify(went)})`);
+  ok(!t5.errs.length, `no page errors in the Marketplace (${t5.errs.join(' | ')})`);
+  await t5.p.close();
+
   // xenosystem.ai/tools: say what you want, get the tools for it; Create my own says coming soon; a card opens /tools/<id>
   const t4 = await open('/tools');
   for (let i = 0; i < 20 && !(await t4.p.$('[data-tools-card]')); i++) await wait(300);

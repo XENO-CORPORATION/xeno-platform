@@ -4,6 +4,7 @@
  * and the account. Shared by the picker and every opened tool. Styles: tools.css.
  */
 import React, { useEffect, useState } from 'react';
+import { signInUrl, siteUrl, toolsHome } from './where';
 
 const THEME_KEY = 'xeno-tools-theme';
 export function initialTheme(): 'dark' | 'light' {
@@ -55,14 +56,14 @@ export interface HeaderProps {
 export function Header({ tab, onTab, toolName, onSearch }: HeaderProps) {
   const [, flip] = useTheme();
   const me = useMe();
-  const search = onSearch || (() => { location.href = '/tools'; });
+  const search = onSearch || (() => { location.href = toolsHome; });
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); search(); } };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, [search]);
   return (
     <header className="xt-head" data-tools-header>
-      <a className="xt-hb xt-home" href="/tools" title="XENO Tools home" data-tools-back><XenoMark /><b>Tools</b></a>
+      <a className="xt-hb xt-home" href={toolsHome} title="XENO Tools home" data-tools-back><XenoMark /><b>Tools</b></a>
       {toolName && <><span className="xt-crumb">/</span><span className="xt-crumb-name">{toolName}</span></>}
       <div style={{ flex: 1 }} />
       {onTab && (
@@ -73,7 +74,7 @@ export function Header({ tab, onTab, toolName, onSearch }: HeaderProps) {
       )}
       <div style={{ flex: 1 }} />
       {me && (
-        <a className="xt-hb xt-hi" href="/workspace/inbox" aria-label="Inbox">
+        <a className="xt-hb xt-hi" href={siteUrl('/workspace/inbox')} aria-label="Inbox">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z M10 21h4" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" /></svg>
         </a>
       )}
@@ -84,8 +85,8 @@ export function Header({ tab, onTab, toolName, onSearch }: HeaderProps) {
       <button type="button" className="xt-hb xt-hi" aria-label="Toggle theme" onClick={flip} data-tools-theme>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2h10v10H2z" stroke="currentColor" strokeWidth="1.4" /><path d="M7 2h5v10H7z" fill="currentColor" /></svg>
       </button>
-      {me === null && <a className="xt-signin" href={'/login?returnUrl=' + encodeURIComponent(location.pathname + location.search)}>Sign in</a>}
-      {me && <a className="xt-avatar" href="/workspace/settings" aria-label={`Account: ${me.name}`} title={me.name}>{me.name.trim().charAt(0).toUpperCase() || '?'}</a>}
+      {me === null && <a className="xt-signin" href={signInUrl(location.pathname + location.search)} data-tools-signin>Sign in</a>}
+      {me && <a className="xt-avatar" href={siteUrl('/workspace/settings')} aria-label={`Account: ${me.name}`} title={me.name}>{me.name.trim().charAt(0).toUpperCase() || '?'}</a>}
     </header>
   );
 }
