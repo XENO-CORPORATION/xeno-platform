@@ -25,7 +25,7 @@ const W = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_ty
 await writeTuples(pool, { writes: [{ object: `workspace:${W}`, subject: `user:${owner}`, relation: 'owner' }, { object: `workspace:${W}`, subject: `user:${emp}`, relation: 'editor' }, { object: `workspace:${W}`, subject: `user:${peer}`, relation: 'editor' }] });
 await people.updateProfile(pool, { id: owner }, { workspaceId: W, principalId: emp, title: 'Sound engineer', managerId: owner, privatePhone: '+49 555 0101', privateNotes: 'SECRET-NOTE-42' });
 // Work report evidence: the employee made two tasks in a project of this workspace and closed one without a review.
-const { readWorkforceEvaluation } = await import('../../../src/server/services/workforceEvaluation.js');
+const { readWorkforceEvaluation, readWorkforceRoster } = await import('../../../src/server/services/workforceEvaluation.js');
 const proj = (await pool.query(`INSERT INTO chat_projects(user_id,owner_user_id,workspace_id,created_by_user_id,updated_by_user_id,name) VALUES(NULL,NULL,$1,$2,$2,'Mix') RETURNING id`, [W, owner])).rows[0].id;
 for (const done of [true, false]) {
   const tid = (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,status) VALUES('Master the track',$1,$2,$2,$3) RETURNING id`, [proj, emp, done ? 'done' : 'todo'])).rows[0].id;
@@ -56,6 +56,10 @@ const page = async () => {
     const user = (await pool.query('SELECT id, username, email, display_name FROM users WHERE id = $1', [who])).rows[0];
     if (u.pathname === '/api/auth/me') return json(200, { success: true, user: { ...user, avatar_url: null, email_verified: true } });
     if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: W, workspace_type: 'company', name: 'Dir Co', member_role: 'editor' }] });
+    if (u.pathname === '/api/workforce/evaluation/roster') {
+      try { const d = await readWorkforceRoster(pool, { actorUserId: who, clientId: 'legacy-workforce-session' }, JSON.parse(q.postData())); seen.push(JSON.stringify(d)); return json(200, d); }
+      catch (e) { return json(e.status || 500, { success: false, code: e.code }); }
+    }
     if (u.pathname === '/api/workforce/evaluation') {
       // the REAL service, as the signed-in user (its route's own shape checks are proven in scripts/workforce-routes.test.mjs)
       try { const d = await readWorkforceEvaluation(pool, { actorUserId: who, clientId: 'legacy-workforce-session' }, JSON.parse(q.postData())); seen.push(JSON.stringify(d)); return json(200, d); }
@@ -122,7 +126,22 @@ try {
   const p5 = await page(); await p5.goto(wat, { waitUntil: 'domcontentloaded' });
   ok(await until(p5, () => /You cannot see this report/.test(document.querySelector('#main')?.innerText || '')), 'a peer is told they cannot see it');
   ok(!seen.some((b) => /closedWithoutReview|"tasks"/.test(b)), 'and no figure of it was sent to the peer');
-  ok(![p, p2, p3, p4, p5].some((x) => x.errs.length), `no page errors (${[p, p2, p3, p4, p5].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
+  ok(/Credits/.test(await text(p4)) && /Runs charged/.test(await text(p4)) && /billed to the person/.test(await text(p4)), 'credits in a workspace are the run charges, and the page says why');
+  // ── group work: one row per member; the owner manages the employee
+  who = owner;
+  const p6 = await page(); await p6.goto(`${base}/workspace/workspace/Directory/reports/${owner}/30?ws=${W}`, { waitUntil: 'domcontentloaded' });
+  ok(await until(p6, () => /Emil Employee/.test(document.querySelector('#main')?.innerText || '') && /Never reviewed/.test(document.querySelector('#main')?.innerText || '')), 'a manager sees their reports’ work, one row each');
+  // Name | Created 2 | To agents 0 | Reviews 0 | Within a minute 0 | Finished 1 | Never reviewed 1 | Closed by agent 0 | Runs 0 | Credits 0
+  const row = await p6.evaluate((id) => [...document.querySelector(`[data-to="Directory/${id}/work/30"]`).children].map((c) => c.textContent.trim()), emp);
+  ok(row.slice(1).join(',') === '2,0,0,0,1,1,0,0,0', `the row carries the member's counts (${row.join(' | ')})`);
+  ok(await p6.evaluate(() => /Reports work\s*\/\s*Olga Owner\s*\/\s*30 days/.test(document.querySelector('#main')?.innerText || '')), 'the breadcrumb names the group and period');
+  await p6.evaluate((id) => document.querySelector(`[data-to="Directory/${id}/work/30"]`).click(), emp);
+  ok(await until(p6, (id) => /\/work\/30$/.test(location.pathname) && /Tasks created/.test(document.querySelector('#main')?.innerText || '')), 'a row opens that member’s own report');
+  who = peer; seen.length = 0;
+  const p7 = await page(); await p7.goto(`${base}/workspace/workspace/Directory/reports/${owner}/30?ws=${W}`, { waitUntil: 'domcontentloaded' });
+  ok(await until(p7, () => /You cannot see this report/.test(document.querySelector('#main')?.innerText || '')), 'a peer cannot read someone else’s reports');
+  ok(!seen.some((b) => /tasksCreated/.test(b)), 'and no row was sent to them');
+  ok(![p, p2, p3, p4, p5, p6, p7].some((x) => x.errs.length), `no page errors (${[p, p2, p3, p4, p5, p6, p7].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
 } finally { await br.close(); await server.close(); real.close(); await pool.end(); }
 console.log(failed ? `${failed} failed` : 'directory-test: all passed');
 process.exit(failed ? 1 : 0);
