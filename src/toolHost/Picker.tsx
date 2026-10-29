@@ -2,8 +2,8 @@
  * xenosystem.ai/tools (tools.xenosystem.ai redirects here) — XENO Tools, its own product. Type what you want and the
  * tools that fit come first, updated as you type: an instant local match, then GET /api/tools/suggest re-ranks.
  * Choosing one opens /tools/<id> (main.tsx). "Create my own" appears once something is typed; it opens Workshop with
- * those words ready to send. Workshop does not yet make the project itself, and saving to My tools is not built: the
- * dialog says so. Design: https://claude.ai/artifact/EYy1EHJsDN8nFDecuBvi21 · styles: tools.css.
+ * a project made for those words (…&make=tool, xeno-workshop #27) and the Agent briefed to build a sealed tool and keep
+ * it as a tool, which then shows under My tools (Mine.tsx). Design: https://claude.ai/artifact/EYy1EHJsDN8nFDecuBvi21 · styles: tools.css.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Header, Plus, Arrow } from './chrome';
@@ -64,7 +64,7 @@ function CreateDialog({ start, onClose }: { start: string; onClose: () => void }
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, [onClose]);
-  const go = () => { const v = what.trim(); if (v) location.href = WORKSHOP + '?start=' + encodeURIComponent(v); };
+  const go = () => { const v = what.trim(); if (v) location.href = WORKSHOP + '?start=' + encodeURIComponent(v) + '&make=tool'; };
   return (
     <div className="xt-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="xt-dlg" role="dialog" aria-modal="true" aria-labelledby="xt-ct" data-tools-create-dialog>
@@ -82,9 +82,9 @@ function CreateDialog({ start, onClose }: { start: string; onClose: () => void }
             <span style={{ fontSize: 12, color: 'var(--dim)' }}>Carried over from your search. The Agent starts from these words.</span>
           </div>
           <ol className="xt-steps">
-            <li><span className="xt-step-n xt-mono">1</span><span><b>Workshop opens with your words</b><span className="t">Sign in there if you are not already. Your description is ready to send to the Agent.</span></span></li>
-            <li><span className="xt-step-n xt-mono">2</span><span><b>The Agent builds it with you</b><span className="t">You watch it run beside the conversation and ask for changes until it is right.</span></span></li>
-            <li><span className="xt-step-n xt-mono">3</span><span><b>Keep it</b><span className="t">Saving what you made to My tools is the next part we are building.</span></span></li>
+            <li><span className="xt-step-n xt-mono">1</span><span><b>A Workshop project is made for you</b><span className="t">Named from your words, in your own XENO Storage. Sign in there if you are not already.</span></span></li>
+            <li><span className="xt-step-n xt-mono">2</span><span><b>The Agent builds it with you</b><span className="t">Your description is ready in the Agent; press send. Watch it run and ask for changes until it is right.</span></span></li>
+            <li><span className="xt-step-n xt-mono">3</span><span><b>Keep it</b><span className="t">The Agent keeps it as a tool after asking you. It appears here under My tools, with its versions.</span></span></li>
           </ol>
         </div>
         <div className="xt-plate xt-plate-bot">
