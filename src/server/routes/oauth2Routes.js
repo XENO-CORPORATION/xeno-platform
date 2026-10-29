@@ -469,7 +469,13 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
       }));
     }
     return res.status(400).json({ error: 'unsupported_grant_type' });
-  } catch (e) { sendOauthError(res, e); }
+  } catch (e) {
+    // WHY a token request was refused, in the log (a Spawn sign-in failed with invalid_grant and the log said only 400).
+    // The reasons are fixed strings; the code appears as its first 8 characters only, the prefix an operator queries by.
+    const b = req.body || {};
+    console.warn(`[oauth2] token refused grant=${String(b.grant_type || '').slice(0, 60)} client=${String(b.client_id || '').slice(0, 64)} error=${e.oauthError || 'invalid_request'} reason=${JSON.stringify(String(e.message || '').slice(0, 120))}${typeof b.code === 'string' ? ` code=${b.code.slice(0, 8)}…` : ''}`);
+    sendOauthError(res, e);
+  }
 });
 
 // POST /oauth2/device_authorization — public; start the device grant.
