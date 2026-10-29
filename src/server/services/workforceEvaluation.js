@@ -70,7 +70,7 @@ import { lockApiKeyWorkforceAuthority } from './apiKeyWorkforceAuthority.js';
 export const EVALUATION_RECORD_LIMIT = 500;
 export const EVALUATION_MAX_WINDOW_DAYS = 366;
 // Review decisions are read from XENO Tasks (a task leaving review), so they are no longer unrecorded.
-export const EVALUATION_NOT_RECORDED = Object.freeze(['contributions', 'settlements']);
+export const EVALUATION_NOT_RECORDED = Object.freeze(['contributions']);
 
 export class WorkforceEvaluationError extends Error {
   constructor(code = 'not_found', reason = 'evaluation_unavailable') {
@@ -120,15 +120,44 @@ function input(context, value) {
     owner, subject, window: { since, until } };
 }
 
-/** An administrator of the scope, or the principal reading itself; anyone else sees nothing. */
-async function mayRead(db, actorUserId, owner, subject) {
+/** The principal who ACTS for a subject: the person themselves, or the agent account linked to an agent
+ * definition (agent_identities.workforce_resource_id, OWN-02's edge). Null when a definition has none. */
+async function actingPrincipal(db, subject) {
+  if (subject.kind === 'principal') return subject.userId;
+  return (await db.query('SELECT user_id FROM agent_identities WHERE workforce_resource_id = $1', [subject.resourceId])).rows[0]?.user_id || null;
+}
+
+/** Someone above the acting principal in the workspace's reporting line (workforce_employee_profiles), at any
+ * level -- the same readers People already allows for private fields. Bounded, and a loop ends it. */
+async function managesInWorkspace(db, workspaceId, readerId, principalId) {
+  if (!principalId) return false;
+  const r = await db.query(`WITH RECURSIVE up AS (
+      SELECT manager_principal_id AS m, 1 AS d FROM workforce_employee_profiles WHERE workspace_id = $1 AND principal_id = $2
+      UNION
+      SELECT e.manager_principal_id, up.d + 1 FROM up JOIN workforce_employee_profiles e ON e.workspace_id = $1 AND e.principal_id = up.m WHERE up.d < 12)
+    SELECT EXISTS (SELECT 1 FROM up WHERE m = $3) AND EXISTS (SELECT 1 FROM workspaces WHERE id = $1 AND status = 'active') AS yes`, [workspaceId, principalId, readerId]);
+  return r.rows[0].yes === true;
+}
+
+/** An administrator of the scope, a manager above the subject in it, or the principal reading itself; anyone else sees nothing. */
+async function mayRead(db, actorUserId, owner, subject, acting = null) {
+  const reader = await usableReader(db, actorUserId);
+  if (!reader) return false;
+  if (subject.kind === 'principal' && subject.userId === reader.id) return true;
+  if (await isScopeAdmin(db, reader, owner)) return true;
+  return owner.type === 'workspace' && reader.kind === 'human' && await managesInWorkspace(db, owner.id, reader.id, acting);
+}
+async function usableReader(db, actorUserId) {
   const reader = await resolvePrincipal(db, actorUserId);
-  if (!reader?.usable || !['human', 'agent'].includes(reader.kind)) return false;
+  if (!reader?.usable || !['human', 'agent'].includes(reader.kind)) return null;
   if (reader.kind === 'agent') {
     const human = await resolvePrincipal(db, reader.owner.id);
-    if (!human?.usable || human.kind !== 'human') return false;
+    if (!human?.usable || human.kind !== 'human') return null;
   }
-  if (subject.kind === 'principal' && subject.userId === reader.id) return true;
+  return reader;
+}
+/** The personal owner, or an administrator of the workspace (directly, or by role hierarchy for a human). */
+async function isScopeAdmin(db, reader, owner) {
   if (owner.type === 'user') return reader.kind === 'human' && reader.id === owner.id;
   const status = (await db.query('SELECT status FROM workspaces WHERE id=$1 FOR SHARE', [owner.id])).rows[0]?.status;
   if (status !== 'active') return false;
@@ -141,7 +170,7 @@ async function mayRead(db, actorUserId, owner, subject) {
 const PROJECTION = `
 WITH RECURSIVE
 params AS (SELECT $1::uuid AS ws, $2::uuid AS owner_user, $3::text AS kind, $4::uuid AS subject,
-                  $5::timestamptz AS since, $6::timestamptz AS until, $7::int AS lim),
+                  $5::timestamptz AS since, $6::timestamptz AS until, $7::int AS lim, $8::uuid AS tsub),
 scope_adm AS (
   SELECT a.* FROM workforce_run_admissions a, params p
    WHERE a.admitted_at < p.until
@@ -188,7 +217,7 @@ dec AS (
 -- running). Only for a principal: a task names users, and an agent DEFINITION has no task identity.
 scope_tasks AS (
   SELECT t.id, t.assignee_id, t.delegate_id FROM tasks t LEFT JOIN chat_projects cp ON cp.id = t.project_id, params p
-   WHERE p.kind = 'principal'
+   WHERE p.tsub IS NOT NULL
      AND ((p.ws IS NOT NULL AND cp.workspace_id = p.ws)
        OR (p.ws IS NULL AND ((t.project_id IS NULL AND t.owner_user_id = p.owner_user)
                           OR (t.project_id IS NOT NULL AND cp.workspace_id IS NULL AND cp.owner_user_id = p.owner_user))))),
@@ -196,7 +225,7 @@ tev AS (
   SELECT e.*, st.assignee_id AS t_assignee, st.delegate_id AS t_delegate
     FROM task_events e JOIN scope_tasks st ON st.id = e.task_id, params p
    WHERE e.created_at >= p.since AND e.created_at < p.until),
-mine AS (SELECT e.* FROM tev e, params p WHERE e.actor_id = p.subject),
+mine AS (SELECT e.* FROM tev e, params p WHERE e.actor_id = p.tsub),
 -- A review decision is the subject moving a task OUT of review; its time is measured from the task's last
 -- entry INTO review (which may lie before the window).
 rev AS (
@@ -210,7 +239,35 @@ done_ev AS (
          EXISTS (SELECT 1 FROM task_events d WHERE d.task_id = e.task_id AND d.kind = 'delegated' AND d.to_value IS NOT NULL
                   AND d.created_at <= e.created_at) AS via_agent
     FROM tev e, params p
-   WHERE e.kind = 'status' AND e.to_value = 'done' AND (e.t_assignee = p.subject OR e.t_delegate = p.subject))
+   WHERE e.kind = 'status' AND e.to_value = 'done' AND (e.t_assignee = p.tsub OR e.t_delegate = p.tsub)),
+-- Spend (owner, 2026-10-29: cost against finished, reviewed work), counted only where a record ties it to
+-- the scope. The usage ledger names who PAID, never which workspace (api_usage_logs.workspace_id is a BILLING
+-- workspace, a different id space), so it counts in a PERSONAL scope only: what the owner paid, directly and
+-- through each agent, and what an agent spent acting for them. In a WORKSPACE, what is tied to it is the
+-- charge on the runs admitted there (their ledger holds: settled, and still reserved), in either scope.
+paid AS (
+  SELECT coalesce(u.actual_cost_micro, 0) AS c, u.dimensions->>'agent_user_id' AS ag
+    FROM api_usage_logs u, params p
+   WHERE p.tsub IS NOT NULL AND p.ws IS NULL AND u.user_id = p.tsub AND u.user_id = p.owner_user
+     AND u.created_at >= p.since AND u.created_at < p.until),
+acted AS (
+  SELECT coalesce(u.actual_cost_micro, 0) AS c
+    FROM api_usage_logs u, params p
+   WHERE p.tsub IS NOT NULL AND p.ws IS NULL AND u.dimensions ? 'agent_user_id' AND u.dimensions->>'agent_user_id' = p.tsub::text
+     AND u.user_id = p.owner_user AND u.created_at >= p.since AND u.created_at < p.until),
+run_holds AS (
+  SELECT h.state, h.amount_micro, h.settled_micro FROM in_window a
+    LEFT JOIN workforce_run_holds wh ON wh.admission_id = a.id
+    LEFT JOIN workforce_run_funding wf ON wf.admission_id = a.id
+    JOIN credit_holds h ON h.id = coalesce(wh.hold_row_id, wf.hold_row_id)
+   WHERE a.parent_admission_id IS NULL),
+-- Media an agent committed (images, video) is a separate log; reported apart, never added to the above. In a
+-- workspace it is the media charged to that workspace's divisions; in a personal scope, the owner's own.
+media AS (
+  SELECT m.amount_micro AS c FROM agent_spend_log m, params p
+   WHERE p.tsub IS NOT NULL AND m.agent_user_id = p.tsub AND m.state = 'reserved' AND m.created_at >= p.since AND m.created_at < p.until
+     AND ((p.ws IS NULL AND m.payer_user_id = p.owner_user AND m.division_id IS NULL)
+       OR (p.ws IS NOT NULL AND m.division_id IN (SELECT id FROM workforce_divisions WHERE workspace_id = p.ws))))
 SELECT
   clock_timestamp() AS derived_at,
   clock_timestamp() - interval '5 minutes' AS settled_before,
@@ -233,7 +290,7 @@ SELECT
   (SELECT jsonb_build_object(
      'created',            count(*) FILTER (WHERE kind = 'created'),
      'delegatedToAgents',  count(*) FILTER (WHERE kind = 'delegated' AND to_value IS NOT NULL),
-     'assignedToOthers',   count(*) FILTER (WHERE kind = 'assigned' AND to_value IS NOT NULL AND to_value <> (SELECT subject::text FROM params)),
+     'assignedToOthers',   count(*) FILTER (WHERE kind = 'assigned' AND to_value IS NOT NULL AND to_value <> (SELECT tsub::text FROM params)),
      'started',            count(*) FILTER (WHERE kind = 'status' AND to_value = 'in_progress' AND from_value IS DISTINCT FROM 'in_review'),
      'submittedForReview', count(*) FILTER (WHERE kind = 'status' AND to_value = 'in_review'),
      'closedWithoutReview',count(*) FILTER (WHERE kind = 'status' AND to_value = 'done' AND from_value IS DISTINCT FROM 'in_review'),
@@ -250,7 +307,14 @@ SELECT
      'closedByAgent',     count(*) FILTER (WHERE actor_kind = 'agent'),
      'neverReviewed',     count(*) FILTER (WHERE from_value IS DISTINCT FROM 'in_review')) FROM done_ev) AS task_outcomes,
   (SELECT coalesce(array_agg(DISTINCT task_id), '{}') FROM (SELECT task_id FROM done_ev LIMIT (SELECT lim FROM params)) x) AS task_ids,
-  (SELECT count(*)::int FROM done_ev) > (SELECT lim FROM params) AS tasks_truncated`;
+  (SELECT count(*)::int FROM done_ev) > (SELECT lim FROM params) AS tasks_truncated,
+  (SELECT jsonb_build_object('micro', coalesce(sum(c), 0)::text, 'requests', count(*), 'viaAgentsMicro', coalesce(sum(c) FILTER (WHERE ag IS NOT NULL), 0)::text) FROM paid) AS spend_paid,
+  (SELECT coalesce(jsonb_agg(x ORDER BY (x->>'micro')::bigint DESC), '[]'::jsonb) FROM
+     (SELECT jsonb_build_object('agentUserId', ag, 'micro', sum(c)::text, 'requests', count(*)) AS x FROM paid WHERE ag IS NOT NULL GROUP BY ag ORDER BY sum(c) DESC LIMIT 10) y) AS spend_by_agent,
+  (SELECT jsonb_build_object('micro', coalesce(sum(c), 0)::text, 'requests', count(*)) FROM acted) AS spend_acted,
+  (SELECT coalesce(sum(c), 0)::text FROM media) AS spend_media,
+  (SELECT jsonb_build_object('settledMicro', coalesce(sum(settled_micro) FILTER (WHERE state = 'settled'), 0)::text,
+                             'reservedMicro', coalesce(sum(amount_micro) FILTER (WHERE state = 'held'), 0)::text) FROM run_holds) AS spend_runs`;
 
 const RUN_STOPS = ['stopped_by_actor', 'stopped_by_target', 'authority_lost'];
 const STEP_KINDS = ['privileged_call', 'provider_dispatch'];
@@ -261,10 +325,17 @@ const TASK_OUTCOMES = ['done', 'viaAgent', 'acceptedByHuman', 'closedByAgent', '
 export async function readWorkforceEvaluation(pool, authenticatedContext, value) {
   const { actor, owner, subject, window } = input(authenticatedContext, value);
   return authorityTransaction(pool, async (db) => {
-    if (!(await mayRead(db, actor.actorUserId, owner, subject))) fail('not_found', 'evaluation_unavailable');
+    const acting = await actingPrincipal(db, subject);
+    if (!(await mayRead(db, actor.actorUserId, owner, subject, acting))) fail('not_found', 'evaluation_unavailable');
     await lockApiKeyWorkforceAuthority(db, actor, 'workforce:read');
+    return project(db, owner, subject, window, acting);
+  });
+}
+
+async function project(db, owner, subject, window, acting) {
+  {
     const r = (await db.query(PROJECTION, [owner.type === 'workspace' ? owner.id : null, owner.type === 'user' ? owner.id : null,
-      subject.kind, subject.kind === 'agent' ? subject.resourceId : subject.userId, window.since, window.until, EVALUATION_RECORD_LIMIT])).rows[0];
+      subject.kind, subject.kind === 'agent' ? subject.resourceId : subject.userId, window.since, window.until, EVALUATION_RECORD_LIMIT, acting])).rows[0];
     const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, Number(obj[k] ?? 0)]));
     const handoffs = subject.kind === 'principal'
       ? { sent: pick(Object.fromEntries(Object.entries(r.handoffs).filter(([k]) => k.startsWith('sent:')).map(([k, n]) => [k.slice(5), n])), HANDOFF_STATES),
@@ -287,17 +358,113 @@ export async function readWorkforceEvaluation(pool, authenticatedContext, value)
       decisions: { byRelation, withEvidence: r.evidenced_decisions },
       records: {
         admissions: r.admission_ids, handoffs: r.handoff_ids, decisions: r.decision_ids,
-        ...(subject.kind === 'principal' ? { tasks: r.task_ids } : {}),
-        truncated: Boolean(r.admissions_truncated || r.handoffs_truncated || r.decisions_truncated || (subject.kind === 'principal' && r.tasks_truncated)),
+        ...(acting ? { tasks: r.task_ids } : {}),
+        truncated: Boolean(r.admissions_truncated || r.handoffs_truncated || r.decisions_truncated || (acting && r.tasks_truncated)),
       },
-      tasks: subject.kind === 'principal' ? {
+      // an agent definition is read through its agent account, and says which one
+      ...(subject.kind === 'agent' ? { actingPrincipal: acting } : {}),
+      tasks: acting ? {
         mine: pick(r.task_mine, TASK_MINE),
         reviews: { ...pick(r.task_reviews, ['accepted', 'changesRequested', 'decidedWithinAMinute']),
           medianSeconds: r.task_reviews.medianSeconds == null ? null : Math.round(Number(r.task_reviews.medianSeconds)) },
         outcomes: pick(r.task_outcomes, TASK_OUTCOMES),
       } : null,
-      notRecorded: [...EVALUATION_NOT_RECORDED, ...(subject.kind === 'agent' ? ['tasks'] : [])],
+      // credits as charged (micro, as strings: they are bigints). `paid` = what this principal paid, part of it
+      // through agents (byAgent, top 10); `asAgent` = what it spent acting as an agent; `agentMedia` = images
+      // and video an agent committed, a separate log, never added to the others.
+      spend: acting ? {
+        paid: { micro: r.spend_paid.micro, requests: Number(r.spend_paid.requests), viaAgentsMicro: r.spend_paid.viaAgentsMicro },
+        byAgent: r.spend_by_agent.map((x) => ({ agentUserId: x.agentUserId, micro: x.micro, requests: Number(x.requests) })),
+        asAgent: { micro: r.spend_acted.micro, requests: Number(r.spend_acted.requests) },
+        agentMediaMicro: r.spend_media,
+        runs: { settledMicro: r.spend_runs.settledMicro, reservedMicro: r.spend_runs.reservedMicro },
+        usage: owner.type === 'user' ? 'counted' : 'not-tied-to-workspace',
+      } : null,
+      notRecorded: [...EVALUATION_NOT_RECORDED, ...(acting ? [] : ['tasks', 'spend'])],
+    };
+  }
+}
+export { RUN_STOPS, STEP_KINDS, HANDOFF_STATES };
+
+// ── ROSTER: the same evaluation for every member of a group, one row each ───────────────────────────────
+// Owner, 2026-10-29: team and division views, and a manager across their reports. A group is read from the
+// records that already say who is in it, never a list the caller supplies:
+//   team      active team memberships (people, and agent definitions through their agent account) plus
+//             People profiles that name the team
+//   division  People profiles in the division or any division below it
+//   reports   People profiles whose reporting line reaches the given person, at any level
+// Who may read one: an administrator of the workspace, or a person reading their own reports. Each member's
+// row is that member's evaluation, so it says nothing a member's own report would not.
+export const ROSTER_MEMBER_LIMIT = 100;
+const GROUP_KINDS = ['team', 'division', 'reports'];
+
+function rosterInput(context, value) {
+  const body = record(value, ['owner', 'group', 'window', 'expectedActorAccountId']);
+  const g = record(body.group, ['kind', 'id']);
+  if (!GROUP_KINDS.includes(g.kind)) fail('bad_input', 'invalid_roster_group');
+  let groupId; try { groupId = uuid(g.id); } catch { fail('bad_input', 'invalid_roster_group'); }
+  // validate the rest exactly as a single evaluation does, with a placeholder subject
+  const base = input(context, { owner: body.owner, subject: { kind: 'principal', userId: groupId }, window: body.window, expectedActorAccountId: body.expectedActorAccountId });
+  if (base.owner.type !== 'workspace') fail('bad_input', 'roster_needs_workspace');
+  return { ...base, group: { kind: g.kind, id: groupId } };
+}
+
+async function groupMembers(db, ws, group) {
+  const q = group.kind === 'team' ? `
+      SELECT m.member_principal_id AS id FROM workforce_team_memberships m JOIN workforce_resources t ON t.id = m.team_id
+       WHERE m.team_id = $2 AND m.state = 'active' AND m.member_principal_id IS NOT NULL AND t.owner_workspace_id = $1
+      UNION SELECT ai.user_id FROM workforce_team_memberships m JOIN workforce_resources t ON t.id = m.team_id
+        JOIN agent_identities ai ON ai.workforce_resource_id = m.member_resource_id
+       WHERE m.team_id = $2 AND m.state = 'active' AND t.owner_workspace_id = $1
+      UNION SELECT principal_id FROM workforce_employee_profiles WHERE workspace_id = $1 AND team_resource_id = $2`
+    : group.kind === 'division' ? `
+      WITH RECURSIVE d AS (SELECT id, 0 AS depth FROM workforce_divisions WHERE id = $2 AND workspace_id = $1
+        UNION SELECT c.id, d.depth + 1 FROM workforce_divisions c JOIN d ON c.parent_division_id = d.id WHERE d.depth < 12)
+      SELECT principal_id AS id FROM workforce_employee_profiles WHERE workspace_id = $1 AND division_id IN (SELECT id FROM d)`
+      : `
+      WITH RECURSIVE down AS (SELECT principal_id AS id, 1 AS depth FROM workforce_employee_profiles WHERE workspace_id = $1 AND manager_principal_id = $2
+        UNION SELECT e.principal_id, down.depth + 1 FROM workforce_employee_profiles e JOIN down ON e.manager_principal_id = down.id
+         WHERE e.workspace_id = $1 AND down.depth < 12)
+      SELECT id FROM down`;
+  const ids = (await db.query(q, [ws, group.id])).rows.map((r) => r.id).filter(Boolean);
+  return [...new Set(ids)];
+}
+
+export async function readWorkforceRoster(pool, authenticatedContext, value) {
+  const { actor, owner, group, window } = rosterInput(authenticatedContext, value);
+  return authorityTransaction(pool, async (db) => {
+    const reader = await usableReader(db, actor.actorUserId);
+    const own = group.kind === 'reports' && reader?.kind === 'human' && reader.id === group.id
+      && (await db.query("SELECT 1 FROM workspaces WHERE id = $1 AND status = 'active'", [owner.id])).rowCount === 1;
+    if (!reader || (!own && !(await isScopeAdmin(db, reader, owner)))) fail('not_found', 'roster_unavailable');
+    await lockApiKeyWorkforceAuthority(db, actor, 'workforce:read');
+    const ids = await groupMembers(db, owner.id, group);
+    const shown = ids.slice(0, ROSTER_MEMBER_LIMIT);
+    const people = new Map((await db.query(`SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username) AS name,
+        (ai.user_id IS NOT NULL) AS agent FROM users u LEFT JOIN agent_identities ai ON ai.user_id = u.id WHERE u.id = ANY($1::uuid[])`, [shown])).rows.map((r) => [r.id, r]));
+    const members = [];
+    const big = (v) => BigInt(String(v || '0'));
+    const total = { tasksCreated: 0, delegatedToAgents: 0, reviewDecisions: 0, decidedWithinAMinute: 0, done: 0, neverReviewed: 0, closedByAgent: 0, runs: 0, spentMicro: 0n, asAgentMicro: 0n };
+    for (const id of shown) {
+      const e = await project(db, owner, { kind: 'principal', userId: id }, window, id);
+      const row = {
+        principalId: id, name: people.get(id)?.name || 'Unknown', kind: people.get(id)?.agent ? 'agent' : 'human',
+        tasksCreated: e.tasks.mine.created, delegatedToAgents: e.tasks.mine.delegatedToAgents,
+        reviewDecisions: e.tasks.reviews.accepted + e.tasks.reviews.changesRequested, decidedWithinAMinute: e.tasks.reviews.decidedWithinAMinute,
+        done: e.tasks.outcomes.done, neverReviewed: e.tasks.outcomes.neverReviewed, closedByAgent: e.tasks.outcomes.closedByAgent,
+        runs: e.runs.admitted,
+        // one figure, never a sum of both sources (a run's charge is also usage): runs in a workspace, usage in a personal scope
+        spentMicro: owner.type === 'user' ? e.spend.paid.micro : e.spend.runs.settledMicro, asAgentMicro: e.spend.asAgent.micro,
+      };
+      members.push(row);
+      for (const k of Object.keys(total)) total[k] = typeof total[k] === 'bigint' ? total[k] + big(row[k]) : total[k] + row[k];
+    }
+    return {
+      schemaVersion: 1, owner, group,
+      window: { since: window.since.toISOString(), until: window.until.toISOString() },
+      derivedAt: new Date().toISOString(),
+      members, total: { ...total, spentMicro: String(total.spentMicro), asAgentMicro: String(total.asAgentMicro) },
+      truncated: ids.length > shown.length,
     };
   });
 }
-export { RUN_STOPS, STEP_KINDS, HANDOFF_STATES };

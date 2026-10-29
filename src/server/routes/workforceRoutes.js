@@ -170,6 +170,7 @@ const defaultReadAdmissionOperation = async (...args) => (await import('../servi
 const defaultReadPin = async (...args) => (await import('../services/workforceRunAdmission.js')).readRunnablePin(...args);
 const defaultReadCapacity = async (...args) => (await import('../services/workforceCapacity.js')).readWorkforceCapacity(...args);
 const defaultReadEvaluation = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceEvaluation(...args);
+const defaultReadRoster = async (...args) => (await import('../services/workforceEvaluation.js')).readWorkforceRoster(...args);
 const runResults = (name) => async (...args) => (await import('../services/workforceRunResults.js'))[name](...args);
 const memberRemoval = (name) => async (...args) => (await import('../services/workforceMemberRemoval.js'))[name](...args);
 const agentRevision = (name) => async (...args) => (await import('../services/workforceAgentRevision.js'))[name](...args);
@@ -448,6 +449,42 @@ function removalObservation(value, request) {
 function removalReadObservation(value, request) {
   try { return removalShape(value, request); } catch { return null; }
 }
+const micro = (v) => typeof v === 'string' && /^\d{1,19}$/.test(v);
+/** credits as charged: bigint strings, counts, and at most ten agents -- or undefined (refuse the reply). */
+function spendShape(sp) {
+  if (!sp || !sp.paid || !micro(sp.paid.micro) || !count(sp.paid.requests) || !micro(sp.paid.viaAgentsMicro)
+    || !sp.asAgent || !micro(sp.asAgent.micro) || !count(sp.asAgent.requests) || !micro(sp.agentMediaMicro)
+    || !Array.isArray(sp.byAgent) || sp.byAgent.length > 10 || !sp.runs || !micro(sp.runs.settledMicro) || !micro(sp.runs.reservedMicro)
+    || !['counted', 'not-tied-to-workspace'].includes(sp.usage) || Object.keys(sp).length !== 6) return undefined;
+  const byAgent = [];
+  for (const a of sp.byAgent) { if (!a || uuid(a.agentUserId) !== a.agentUserId || !micro(a.micro) || !count(a.requests)) return undefined; byAgent.push({ agentUserId: a.agentUserId, micro: a.micro, requests: a.requests }); }
+  return { paid: { micro: sp.paid.micro, requests: sp.paid.requests, viaAgentsMicro: sp.paid.viaAgentsMicro }, byAgent,
+    asAgent: { micro: sp.asAgent.micro, requests: sp.asAgent.requests }, agentMediaMicro: sp.agentMediaMicro,
+    runs: { settledMicro: sp.runs.settledMicro, reservedMicro: sp.runs.reservedMicro }, usage: sp.usage };
+}
+const ROSTER_COUNTS = ['tasksCreated', 'delegatedToAgents', 'reviewDecisions', 'decidedWithinAMinute', 'done', 'neverReviewed', 'closedByAgent', 'runs'];
+/** A roster for the group and window ASKED about: rows of counts and credits, nothing else. */
+function rosterObservation(value, request) {
+  try {
+    const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
+    if (value.schemaVersion !== 1 || owner.type !== asked.type || owner.id !== asked.id) return null;
+    if (JSON.stringify(value.group) !== JSON.stringify(request.group)) return null;
+    if (Date.parse(value.window?.since) !== Date.parse(request.window?.since) || Date.parse(value.window?.until) !== Date.parse(request.window?.until)) return null;
+    if (!Array.isArray(value.members) || value.members.length > 100 || typeof value.truncated !== 'boolean' || !Number.isFinite(Date.parse(value.derivedAt))) return null;
+    const row = (m, withId) => {
+      if (!m || !ROSTER_COUNTS.every((k) => count(m[k])) || !micro(m.spentMicro) || !micro(m.asAgentMicro)) throw new Error('row');
+      const out = Object.fromEntries(ROSTER_COUNTS.map((k) => [k, m[k]]));
+      out.spentMicro = m.spentMicro; out.asAgentMicro = m.asAgentMicro;
+      if (withId) {
+        if (uuid(m.principalId) !== m.principalId || typeof m.name !== 'string' || m.name.length > 200 || !['human', 'agent'].includes(m.kind)) throw new Error('row');
+        return { principalId: m.principalId, name: m.name, kind: m.kind, ...out };
+      }
+      return out;
+    };
+    return { schemaVersion: 1, owner, group: value.group, window: { since: value.window.since, until: value.window.until }, derivedAt: value.derivedAt,
+      members: value.members.map((m) => row(m, true)), total: row(value.total, false), truncated: value.truncated };
+  } catch { return null; }
+}
 function evaluationObservation(value, request) {
   try {
     const owner = normalizeOwnerScope(value?.owner), asked = normalizeOwnerScope(request.owner);
@@ -472,13 +509,17 @@ function evaluationObservation(value, request) {
     // an agent definition's never does.
     let tasks = null;
     const tk = value.tasks;
-    if (value.subject?.kind === 'principal') {
+    const acts = value.subject?.kind === 'principal' || (value.subject?.kind === 'agent' && value.actingPrincipal !== null);
+    if (value.subject?.kind === 'agent' && !(value.actingPrincipal === null || uuid(value.actingPrincipal) === value.actingPrincipal)) return null;
+    if (acts) {
       if (!tk || !counts(tk.mine, TASK_KEYS.mine) || !counts(tk.outcomes, TASK_KEYS.outcomes) || !tk.reviews
         || !counts({ accepted: tk.reviews.accepted, changesRequested: tk.reviews.changesRequested, decidedWithinAMinute: tk.reviews.decidedWithinAMinute }, TASK_KEYS.reviews)
         || !(tk.reviews.medianSeconds === null || count(tk.reviews.medianSeconds)) || Object.keys(tk.reviews).length !== 4 || !ids(rec.tasks)) return null;
       tasks = { mine: fields(tk.mine, TASK_KEYS.mine), outcomes: fields(tk.outcomes, TASK_KEYS.outcomes),
         reviews: { ...fields(tk.reviews, TASK_KEYS.reviews), medianSeconds: tk.reviews.medianSeconds } };
     } else if (tk !== null && tk !== undefined) return null;
+    const spend = acts ? spendShape(value.spend) : (value.spend === null || value.spend === undefined ? null : undefined);
+    if (spend === undefined) return null;
     return { schemaVersion: 1, owner, subject: value.subject, window: { since: value.window.since, until: value.window.until },
       derivedAt: value.derivedAt, settledBefore: value.settledBefore, closed: value.closed,
       runs: { admitted: r.admitted, children: r.children, activeAtEnd: r.activeAtEnd, stopped: fields(r.stopped, COUNT_KEYS.stopped) },
@@ -487,7 +528,8 @@ function evaluationObservation(value, request) {
       decisions: { byRelation, withEvidence: d.withEvidence },
       records: { admissions: rec.admissions, handoffs: rec.handoffs, decisions: rec.decisions,
         ...(tasks ? { tasks: rec.tasks } : {}), truncated: rec.truncated },
-      tasks,
+      ...(value.subject?.kind === 'agent' ? { actingPrincipal: value.actingPrincipal } : {}),
+      tasks, spend,
       notRecorded: value.notRecorded };
   } catch { return null; }
 }
@@ -628,6 +670,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   createAndAssignWorkforceResource = defaultCreateAndAssign,
   admitRun = defaultAdmit, readRunAdmission = defaultReadAdmission, listRunAdmissions = defaultListAdmissions, readRunAdmissionOperation = defaultReadAdmissionOperation, readRunnablePin = defaultReadPin, readWorkforceCapacity = defaultReadCapacity,
   readWorkforceEvaluation = defaultReadEvaluation,
+  readWorkforceRoster = defaultReadRoster,
   reportRunResult = runResults('reportRunResult'), deliverRunResult = runResults('deliverRunResult'), readRunOutcome = runResults('readRunOutcome'),
   removeTeamMember = memberRemoval('removeTeamMember'), readMemberRemoval = memberRemoval('readMemberRemoval'), archiveMemberRemoval = memberRemoval('archiveMemberRemoval'),
   reviseAgentDefinition = agentRevision('reviseAgentDefinition'), readAgentRevision = agentRevision('readAgentRevision'),
@@ -750,6 +793,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   // LIFE-04: an evaluation of one subject for a stated window, derived at the read. A read, like capacity.
   router.post('/evaluation', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readWorkforceEvaluation, true, evaluationObservation));
+  // The same evaluation for every member of a team, a division, or a manager's reports (one row each).
+  router.post('/evaluation/roster', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readWorkforceRoster, true, rosterObservation));
   // RUN-01's precondition: the current pin of an agent as runnable at one target, by this actor -- what an
   // admission must name. A read, resolved under admission's own rule; it commits nothing.
   router.post('/run-admissions/pin', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
