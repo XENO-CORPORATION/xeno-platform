@@ -24,6 +24,14 @@ const owner = await mk('owner', 'Olga Owner'), emp = await mk('emp', 'Emil Emplo
 const W = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'company','Dir Co',$2) RETURNING id`, [owner, `${tag}-co`])).rows[0].id;
 await writeTuples(pool, { writes: [{ object: `workspace:${W}`, subject: `user:${owner}`, relation: 'owner' }, { object: `workspace:${W}`, subject: `user:${emp}`, relation: 'editor' }, { object: `workspace:${W}`, subject: `user:${peer}`, relation: 'editor' }] });
 await people.updateProfile(pool, { id: owner }, { workspaceId: W, principalId: emp, title: 'Sound engineer', managerId: owner, privatePhone: '+49 555 0101', privateNotes: 'SECRET-NOTE-42' });
+// Work report evidence: the employee made two tasks in a project of this workspace and closed one without a review.
+const { readWorkforceEvaluation } = await import('../../../src/server/services/workforceEvaluation.js');
+const proj = (await pool.query(`INSERT INTO chat_projects(user_id,owner_user_id,workspace_id,created_by_user_id,updated_by_user_id,name) VALUES(NULL,NULL,$1,$2,$2,'Mix') RETURNING id`, [W, owner])).rows[0].id;
+for (const done of [true, false]) {
+  const tid = (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,status) VALUES('Master the track',$1,$2,$2,$3) RETURNING id`, [proj, emp, done ? 'done' : 'todo'])).rows[0].id;
+  await pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind) VALUES($1,$2,'human','created')`, [tid, emp]);
+  if (done) await pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind,from_value,to_value) VALUES($1,$2,'human','status','in_progress','done')`, [tid, emp]);
+}
 
 const app = express(); app.use(express.json());
 app.use('/api/people', (req, _res, next) => { req.db = pool; req.owner = req.get('x-test-user'); next(); }, peopleRoutes);
@@ -48,6 +56,11 @@ const page = async () => {
     const user = (await pool.query('SELECT id, username, email, display_name FROM users WHERE id = $1', [who])).rows[0];
     if (u.pathname === '/api/auth/me') return json(200, { success: true, user: { ...user, avatar_url: null, email_verified: true } });
     if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: W, workspace_type: 'company', name: 'Dir Co', member_role: 'editor' }] });
+    if (u.pathname === '/api/workforce/evaluation') {
+      // the REAL service, as the signed-in user (its route's own shape checks are proven in scripts/workforce-routes.test.mjs)
+      try { const d = await readWorkforceEvaluation(pool, { actorUserId: who, clientId: 'legacy-workforce-session' }, JSON.parse(q.postData())); seen.push(JSON.stringify(d)); return json(200, d); }
+      catch (e) { return json(e.status || 500, { success: false, code: e.code }); }
+    }
     if (u.pathname.startsWith('/api/people')) {
       const r = await fetch(REAL + u.pathname + u.search, { method: q.method(), headers: { 'content-type': 'application/json', 'x-test-user': who }, body: ['GET', 'HEAD'].includes(q.method()) ? undefined : q.postData() });
       const body = await r.text(); seen.push(body);
@@ -86,7 +99,30 @@ try {
   const p3 = await page();
   await p3.goto(at, { waitUntil: 'domcontentloaded' });
   ok(await until(p3, () => /SECRET-NOTE-42/.test(document.querySelector('#main')?.innerText || '') && !!document.querySelector('[data-private]')), 'the person sees their own private fields');
-  ok(![p, p2, p3].some((x) => x.errs.length), `no page errors (${[p, p2, p3].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
+  // ── work report: what a person directed, did, checked and answers for; counts, never a score
+  await p3.evaluate(() => [...document.querySelectorAll('[data-xdir="tab"]')].find((b) => /Work report/.test(b.textContent))?.click());
+  await until(p3, () => /\/work\/30$/.test(location.pathname));
+  ok(new URL(p3.url()).pathname.endsWith(`/Directory/${emp}/work/30`), 'Work report opens at /Directory/<id>/work/30');
+  ok(await until(p3, () => /Work report/.test(document.querySelector('#main')?.innerText || '') && /Emil Employee/.test(document.querySelector('#main')?.innerText || '') && /Tasks created/.test(document.querySelector('#main')?.innerText || '')), 'the person sees their own work report');
+  const rep = await p3.evaluate(() => Object.fromEntries([...document.querySelectorAll('.xdir-tile')].map((t) => [t.querySelector('span').textContent, t.querySelector('b').textContent])));
+  ok(rep['Tasks created'] === '2' && rep['Closed without review'] === '1' && rep.Finished === '1' && rep['Never reviewed'] === '1', `the counts are the records' (${JSON.stringify(rep)})`);
+  ok(/None of the 1 finished tasks went through a review/.test(await text(p3)), 'a fact is stated plainly, not as a verdict');
+  ok(!/(score|rating)\s*[:=]?\s*\d/i.test(await text(p3)) && /no score/.test(await text(p3)), 'no score, and the page says so');
+  ok(await p3.evaluate(() => !!document.querySelector('#main .topbar .pg-top-tabs [data-to$="/work/7"]')), 'the periods are tabs in the header bar');
+  await p3.evaluate(() => document.querySelector('[data-to$="/work/7"]').click());
+  // the breadcrumb names the period: … / Work report / 7 days
+  ok(await until(p3, () => /\/work\/7$/.test(location.pathname) && /Work report\s*\/\s*7 days/.test(document.querySelector('#main')?.innerText || '')), 'a period has its own address, named in the breadcrumb');
+  const wat = p3.url();
+  await p3.reload({ waitUntil: 'domcontentloaded' });
+  ok(await until(p3, () => /Work report\s*\/\s*7 days/.test(document.querySelector('#main')?.innerText || '') && /Tasks created/.test(document.querySelector('#main')?.innerText || '')) && p3.url() === wat, 'refresh lands on the same report and period');
+  who = owner;
+  const p4 = await page(); await p4.goto(wat, { waitUntil: 'domcontentloaded' });
+  ok(await until(p4, () => /Work report/.test(document.querySelector('#main')?.innerText || '') && /Emil Employee/.test(document.querySelector('#main')?.innerText || '')), 'an admin of the workspace sees it (fresh tab)');
+  who = peer; seen.length = 0;
+  const p5 = await page(); await p5.goto(wat, { waitUntil: 'domcontentloaded' });
+  ok(await until(p5, () => /You cannot see this report/.test(document.querySelector('#main')?.innerText || '')), 'a peer is told they cannot see it');
+  ok(!seen.some((b) => /closedWithoutReview|"tasks"/.test(b)), 'and no figure of it was sent to the peer');
+  ok(![p, p2, p3, p4, p5].some((x) => x.errs.length), `no page errors (${[p, p2, p3, p4, p5].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
 } finally { await br.close(); await server.close(); real.close(); await pool.end(); }
 console.log(failed ? `${failed} failed` : 'directory-test: all passed');
 process.exit(failed ? 1 : 0);
