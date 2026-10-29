@@ -492,6 +492,20 @@
       "scope": "none",
       "because": "signing in or signing up happens before there is a person to act for"
     },
+    "route:authRoutes.js:GET /host/callback": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "signing in to a XENO product on its own host (tools.xenosystem.ai) happens before there is a person to act for"
+    },
+    "route:authRoutes.js:GET /host/start": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "signing in to a XENO product on its own host (tools.xenosystem.ai) happens before there is a person to act for"
+    },
     "route:authRoutes.js:GET /google/callback": {
       "status": "excluded",
       "category": "unauthenticated",
