@@ -17,6 +17,9 @@ import pg from 'pg';
 const { Pool } = pg;
 
 const SQL = `
+-- One migrator at a time: two backends start together, and this whole string runs as ONE implicit transaction
+-- (a multi-statement simple query), so the lock holds to the end.
+SELECT pg_advisory_xact_lock(hashtext('xeno-ledger-chain-v2-migration'));
 -- Two-phase credit holds (reserve -> settle/void) for hard per-use gating.
 CREATE TABLE IF NOT EXISTS credit_holds (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,6 +301,153 @@ DO $$ BEGIN
     DROP TRIGGER IF EXISTS trg_credit_txn_immutable ON credit_transactions;
     CREATE TRIGGER trg_credit_txn_immutable BEFORE UPDATE OR DELETE ON credit_transactions
       FOR EACH ROW EXECUTE FUNCTION credit_txn_immutable();
+  END IF;
+END $$;
+
+-- ── Ledger chain v2 (2026-10-30): the DATABASE is the sequencer ─────────────────────────────────────────────
+-- v1 chained in the application: each writer read "the newest row by created_at" and hashed onto it. That
+-- forked whenever two writers read the same newest row (290 forks on one account in 2026-09), inverted when
+-- created_at disagreed with commit order (~240 swaps), and covered only writers that went through
+-- insertLedgerEntry (147,768 gateway rows were never hashed). v2 moves the chain into a BEFORE INSERT trigger:
+-- every row, from any writer, gets the next sequence number under a per-account head lock, so a gap, a fork or an
+-- unchained row is impossible without disabling the trigger -- and the verifier counts what the trigger missed.
+--
+-- History is SEALED, never rewritten: the first v2 entry on an account opens epoch 1, whose hash binds the last
+-- v1 hash and the number of rows that came before. Material fields only (no description/metadata), so the chain
+-- carries no free text and erasure never has to touch it. Fields are length-prefixed: no separator ambiguity.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS ledger_chain_epochs (
+  account_id    uuid NOT NULL,
+  epoch         integer NOT NULL CHECK (epoch > 0),
+  opened_at     timestamp NOT NULL,
+  prior_head    text,             -- the last v1 entry_hash on the account (NULL: none)
+  prior_entries bigint NOT NULL CHECK (prior_entries >= 0),  -- every row before the epoch, hashed or not
+  epoch_hash    text NOT NULL,
+  PRIMARY KEY (account_id, epoch)
+);
+CREATE TABLE IF NOT EXISTS ledger_chain_heads (
+  account_id uuid PRIMARY KEY,
+  epoch      integer NOT NULL,
+  seq        bigint NOT NULL CHECK (seq >= 0),
+  head_hash  text NOT NULL,
+  last_at    timestamp NOT NULL
+);
+-- What a verification found, appended by the checker (scripts / the hourly job). Never edited.
+CREATE TABLE IF NOT EXISTS ledger_chain_attestations (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id uuid NOT NULL,
+  epoch      integer,
+  seq        bigint,
+  head_hash  text,
+  kind       text NOT NULL CHECK (kind IN ('verified', 'broken', 'history-sealed')),
+  report     jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(report) = 'object'),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_chain_attestations_account ON ledger_chain_attestations (account_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION ledger_lp(t text) RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT CASE WHEN t IS NULL THEN '-1:;' ELSE octet_length(t)::text || ':' || t || ';' END
+$fn$;
+CREATE OR REPLACE FUNCTION ledger_ts(t timestamp) RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT to_char(t, 'YYYY-MM-DD"T"HH24:MI:SS.US')
+$fn$;
+CREATE OR REPLACE FUNCTION ledger_epoch_hash_v2(p_account uuid, p_epoch integer, p_prior text, p_prior_entries bigint, p_opened timestamp)
+RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT encode(digest(convert_to(
+    ledger_lp('xeno-ledger-epoch/2') || ledger_lp(p_account::text) || ledger_lp(p_epoch::text) || ledger_lp(p_prior)
+    || ledger_lp(p_prior_entries::text) || ledger_lp(ledger_ts(p_opened)), 'UTF8'), 'sha256'), 'hex')
+$fn$;
+CREATE OR REPLACE FUNCTION ledger_entry_hash_v2(p_account uuid, p_epoch integer, p_seq bigint, p_prev text, p_user uuid,
+  p_type text, p_amount bigint, p_balance bigint, p_ref_type text, p_ref_id text, p_at timestamp)
+RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT encode(digest(convert_to(
+    ledger_lp('xeno-ledger-entry/2') || ledger_lp(p_account::text) || ledger_lp(p_epoch::text) || ledger_lp(p_seq::text)
+    || ledger_lp(p_prev) || ledger_lp(p_user::text) || ledger_lp(p_type) || ledger_lp(p_amount::text)
+    || ledger_lp(p_balance::text) || ledger_lp(p_ref_type) || ledger_lp(p_ref_id) || ledger_lp(ledger_ts(p_at)), 'UTF8'),
+    'sha256'), 'hex')
+$fn$;
+
+CREATE OR REPLACE FUNCTION ledger_chain_append() RETURNS trigger LANGUAGE plpgsql AS $fn$
+DECLARE
+  h ledger_chain_heads%ROWTYPE;
+  v_prior text; v_count bigint; v_opened timestamp; v_last timestamp; v_hash text;
+BEGIN
+  IF NEW.account_id IS NULL THEN
+    RAISE EXCEPTION 'a ledger entry names its account' USING ERRCODE = '23502';
+  END IF;
+  SELECT * INTO h FROM ledger_chain_heads WHERE account_id = NEW.account_id FOR UPDATE;
+  IF NOT FOUND THEN
+    -- First v2 entry on this account: two first writers must not both open an epoch.
+    PERFORM pg_advisory_xact_lock(hashtext('xeno-ledger-epoch:' || NEW.account_id::text));
+    SELECT * INTO h FROM ledger_chain_heads WHERE account_id = NEW.account_id FOR UPDATE;
+    IF NOT FOUND THEN
+      SELECT entry_hash INTO v_prior FROM credit_transactions
+        WHERE account_id = NEW.account_id AND entry_hash IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1;
+      SELECT count(*), max(created_at)::timestamp INTO v_count, v_last FROM credit_transactions WHERE account_id = NEW.account_id;
+      v_opened := clock_timestamp() AT TIME ZONE 'UTC';
+      v_hash := ledger_epoch_hash_v2(NEW.account_id, 1, v_prior, v_count, v_opened);
+      INSERT INTO ledger_chain_epochs (account_id, epoch, opened_at, prior_head, prior_entries, epoch_hash)
+        VALUES (NEW.account_id, 1, v_opened, v_prior, v_count, v_hash);
+      PERFORM set_config('xeno.ledger_append', 'on', true);
+      INSERT INTO ledger_chain_heads (account_id, epoch, seq, head_hash, last_at)
+        VALUES (NEW.account_id, 1, 0, v_hash, GREATEST(v_opened, COALESCE(v_last, v_opened)))
+        RETURNING * INTO h;
+    END IF;
+  END IF;
+  -- The database owns the journal's order and time: the next number under the head lock, and a time that
+  -- never goes backwards (a transaction's now() is its START, not its commit order).
+  NEW.created_at   := GREATEST(clock_timestamp() AT TIME ZONE 'UTC', h.last_at + interval '1 microsecond');
+  NEW.chain_epoch  := h.epoch;
+  NEW.chain_seq    := h.seq + 1;
+  NEW.prev_hash    := h.head_hash;
+  NEW.hash_version := 2;
+  NEW.entry_hash   := ledger_entry_hash_v2(NEW.account_id, NEW.chain_epoch, NEW.chain_seq, NEW.prev_hash, NEW.user_id,
+    NEW.type::text, NEW.amount::bigint, NEW.balance_after::bigint, NEW.reference_type::text, NEW.reference_id::text,
+    NEW.created_at::timestamp);
+  PERFORM set_config('xeno.ledger_append', 'on', true);
+  UPDATE ledger_chain_heads SET seq = NEW.chain_seq, head_hash = NEW.entry_hash, last_at = NEW.created_at::timestamp
+    WHERE account_id = NEW.account_id;
+  PERFORM set_config('xeno.ledger_append', 'off', true);
+  RETURN NEW;
+END
+$fn$;
+
+-- A head moves only inside ledger_chain_append; epochs and attestations are never edited or removed.
+CREATE OR REPLACE FUNCTION ledger_chain_heads_guard() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF TG_OP = 'DELETE' OR COALESCE(current_setting('xeno.ledger_append', true), 'off') <> 'on' THEN
+    RAISE EXCEPTION 'a ledger chain head moves only by appending a ledger entry' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+CREATE OR REPLACE FUNCTION ledger_chain_record_immutable() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME USING ERRCODE = '23514'; END
+$fn$;
+DROP TRIGGER IF EXISTS trg_ledger_chain_heads_guard ON ledger_chain_heads;
+CREATE TRIGGER trg_ledger_chain_heads_guard BEFORE INSERT OR UPDATE OR DELETE ON ledger_chain_heads
+  FOR EACH ROW EXECUTE FUNCTION ledger_chain_heads_guard();
+DROP TRIGGER IF EXISTS trg_ledger_chain_epochs_immutable ON ledger_chain_epochs;
+CREATE TRIGGER trg_ledger_chain_epochs_immutable BEFORE UPDATE OR DELETE ON ledger_chain_epochs
+  FOR EACH ROW EXECUTE FUNCTION ledger_chain_record_immutable();
+DROP TRIGGER IF EXISTS trg_ledger_chain_attestations_immutable ON ledger_chain_attestations;
+CREATE TRIGGER trg_ledger_chain_attestations_immutable BEFORE UPDATE OR DELETE ON ledger_chain_attestations
+  FOR EACH ROW EXECUTE FUNCTION ledger_chain_record_immutable();
+
+DO $$ BEGIN
+  -- Only on a journal that names its account (every real one does; a few test fixtures carry a bare table).
+  IF to_regclass('public.credit_transactions') IS NOT NULL AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'credit_transactions' AND column_name = 'account_id') THEN
+    ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS chain_epoch  integer;
+    ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS chain_seq    bigint;
+    ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS hash_version smallint;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_credit_txn_chain_seq
+      ON credit_transactions (account_id, chain_epoch, chain_seq) WHERE chain_seq IS NOT NULL;
+    DROP TRIGGER IF EXISTS trg_credit_txn_chain_append ON credit_transactions;
+    CREATE TRIGGER trg_credit_txn_chain_append BEFORE INSERT ON credit_transactions
+      FOR EACH ROW EXECUTE FUNCTION ledger_chain_append();
   END IF;
 END $$;
 `;

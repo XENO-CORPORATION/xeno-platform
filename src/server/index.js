@@ -23,6 +23,7 @@ import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
 import { startAutomateWorker } from './workers/automateWorker.js';
+import { startLedgerChainAudit } from './services/ledgerChainAudit.js';
 import { startComputeMeter } from './workers/computeMeter.js';
 import messageRoutes from './routes/messageRoutes.js';
 import commsIdentityRoutes from './routes/commsIdentityRoutes.js';
@@ -4262,6 +4263,8 @@ backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, del
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
 // Dev › Automate: the ONE delivery loop for workspace workflows (schedules due → runs queued → the XENO Workflow runner)
 backgroundLeader.whenLeader(() => startAutomateWorker(pool));
+// The money journal's hash chain, verified every hour for every account (services/ledgerChainAudit.js)
+backgroundLeader.whenLeader(() => startLedgerChainAudit(pool));
 // XENO Compute: settle running machines' hours and reserve the next, on the leader only (workers/computeMeter.js)
 backgroundLeader.whenLeader(() => startComputeMeter(pool));
 // Invitation mail is CLAIMED durably before it is dispatched, so a crash between the
