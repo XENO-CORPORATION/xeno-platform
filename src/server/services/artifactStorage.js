@@ -32,8 +32,8 @@ const SANDBOX_KEY_PATTERN = /^chat-sandboxes\/[0-9a-fA-F-]{36}\/[A-Za-z0-9._\- /
 
 // XENO Storage: an account file's bytes, content-addressed (services/storageObjects.js).
 const FILE_KEY_PATTERN = /^files\/[0-9a-f]{2}\/[0-9a-f]{64}$/;
-// The ledger's outside anchor (services/ledgerChainAnchor.js), in its own bucket.
-const ANCHOR_KEY_PATTERN = /^(checkpoints\/\d{12}\.json|keys\/[0-9a-f]{16}\.json)$/;
+// The ledger's outside anchor (services/ledgerChainAnchor.js), under a retention-locked prefix.
+const ANCHOR_KEY_PATTERN = /^ledger-anchors\/(checkpoints\/\d{12}\.json|keys\/[0-9a-f]{16}\.json)$/;
 
 function assertKey(key) {
   const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key) || FILE_KEY_PATTERN.test(key) || ANCHOR_KEY_PATTERN.test(key));

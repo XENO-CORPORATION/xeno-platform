@@ -3,9 +3,9 @@
  *
  * A chain inside the database proves nothing to someone who can rewrite the database: they recompute every hash and it
  * verifies. So every hour the head of every account's chain goes into a checkpoint that binds the previous checkpoint,
- * is signed (Ed25519), and is written once to a separate R2 bucket under a retention lock, where neither this process
- * nor anyone holding its credentials can replace it. CloudTrail's digest files and Certificate Transparency's signed
- * tree heads are the same shape.
+ * is signed (Ed25519), and is written once to R2 under a retention lock on `ledger-anchors/`, where neither this process
+ * nor anyone holding its credentials can replace it: an R2 lock is changed only through the Cloudflare API, never with an
+ * S3 key. CloudTrail's digest files and Certificate Transparency's signed tree heads are the same shape.
  *
  * Verification reads the object from R2, never the database's copy: every anchored head must still be in the chain.
  * Rewriting any entry at or before an anchored head changes that head, so checking the latest checkpoint is enough.
@@ -19,8 +19,8 @@ import { _internal as storageInternal } from './artifactStorage.js';
 
 const CHECKPOINT_VERSION = 1;
 const pad = (no) => String(no).padStart(12, '0');
-export const checkpointKey = (no) => `checkpoints/${pad(no)}.json`;
-export const keyObjectKey = (keyId) => `keys/${keyId}.json`;
+export const checkpointKey = (no) => `ledger-anchors/checkpoints/${pad(no)}.json`;
+export const keyObjectKey = (keyId) => `ledger-anchors/keys/${keyId}.json`;
 const sha256 = (text) => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 
 export function keyIdOf(publicKeyB64) {
