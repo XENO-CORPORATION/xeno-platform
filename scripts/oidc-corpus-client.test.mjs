@@ -24,7 +24,7 @@ test('the seed upserts xeno-corpus with its checked-in authority', async () => {
   assert.equal(row.params[5], true);
 });
 
-test('corpus authority: identity plus the agent panel's inference and credits; no projects, team or billing', () => {
+test('corpus authority: identity plus inference and credits for the agent panel; no projects, team or billing', () => {
   assert.deepEqual([...scopesForClient('xeno-corpus')].sort(), ['email', 'inference:run', 'ledger:read', 'ledger:spend', 'openid', 'profile']);
 });
 
