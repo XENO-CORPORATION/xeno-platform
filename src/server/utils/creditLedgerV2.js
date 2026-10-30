@@ -595,17 +595,15 @@ async function mirrorLegacy(client, userId, balanceMicro) {
  * (trigger ledger_chain_append, migrate-account-v2.js): the next sequence number
  * under a per-account head lock, prev_hash = the head, entry_hash over the material
  * fields, created_at from the commit order. So no writer -- this one or any other --
- * can fork, reorder or skip the chain. Returns the entry hash the database assigned.
+ * can fork, reorder or skip the chain.
  */
 async function insertLedgerEntry(client, e) {
-  const r = await client.query(
+  await client.query(
     `INSERT INTO credit_transactions
        (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
-     RETURNING entry_hash`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
     [e.userId, e.accountId, e.type, e.amount, e.balanceAfter, e.refType, e.refId, e.description, e.metadata],
   );
-  return r.rows[0].entry_hash;
 }
 
 // ── Verification (independent of the database's own hash functions) ───────────────────────────────────────────
