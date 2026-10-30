@@ -1,7 +1,7 @@
 import type { ProductDocs } from './_types';
 
-/* XENO Corpus documentation — reconciled against xeno-corpus desktop 0.2.2 (Windows), 2026-10-28, tag
- * corpus-desktop-v0.2.2. Notes: corpus-notes.mjs and app/src/views/Notes.tsx. Every claim traces to that release: desktop/main.cjs (sign-in door, project opening,
+/* XENO Corpus documentation — reconciled against xeno-corpus desktop 0.3.0 (Windows), 2026-10-28, tag
+ * corpus-desktop-v0.3.0. Notes: corpus-notes.mjs and app/src/views/Notes.tsx. Every claim traces to that release: desktop/main.cjs (sign-in door, project opening,
  * .xcorpus, menus, Install 'corpus' Command), desktop/lib/* (engine child, updater, auth.log, errors.log,
  * cliPath), the engine's CLI help (every command answers --help; test/cli-help.test.mjs), pulse-runner.mjs
  * (exit codes, baseline, freshness), corpus-adopt.mjs / corpus-agents.mjs / corpus-runtime.mjs (agents),
@@ -11,8 +11,8 @@ const corpus: ProductDocs = {
   slug: 'corpus',
   productName: 'XENO Corpus',
   tagline: 'Your project’s claims, each bound to the check that can prove it false.',
-  version: '0.2.2',
-  updated: '2026-10-28',
+  version: '0.3.0',
+  updated: '2026-10-30',
   seo: {
     title: 'XENO Corpus documentation',
     description: 'Install XENO Corpus on Windows, create a corpus, run pulses, read the Shape canvas, connect AI agents, and use the corpus command line.',
@@ -30,8 +30,8 @@ const corpus: ProductDocs = {
         {
           slug: "installation",
           title: "Installation",
-          description: "Download and install XENO Corpus 0.2.2 on Windows, update it, and uninstall it.",
-          body: "## Installation\n\nXENO Corpus 0.2.2 runs on **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/corpus), choose **Download for Windows**.\n2. Run `XENO-Corpus-Setup-0.2.2.exe`. It installs for your user; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so as well: an **UNSIGNED BUILD** badge sits in its window header.\n\nYou do not need Node.js or anything else installed. The app carries its own runtime, and so does its [`corpus` command](/docs/corpus/command-line).\n\n## Updates\n\nXENO Corpus checks for a new version when it starts and every few hours. It downloads in the background, then asks: **Restart now** installs it immediately; **Later** installs it the next time you quit. You stay signed in, and your projects are not touched.\n\n## Uninstalling\n\n**Settings → Apps → XENO Corpus → Uninstall.** Your projects and their `.xeno/corpus/` folders are not touched. If you installed the `corpus` command, uninstalling removes it from your PATH too.",
+          description: "Download and install XENO Corpus 0.3.0 on Windows, update it, and uninstall it.",
+          body: "## Installation\n\nXENO Corpus 0.3.0 runs on **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/corpus), choose **Download for Windows**.\n2. Run `XENO-Corpus-Setup-0.3.0.exe`. It installs for your user; no administrator rights are needed.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so as well: an **UNSIGNED BUILD** badge sits in its window header.\n\nYou do not need Node.js or anything else installed. The app carries its own runtime, and so does its [`corpus` command](/docs/corpus/command-line).\n\n## Updates\n\nXENO Corpus checks for a new version when it starts and every few hours. It downloads in the background, then asks: **Restart now** installs it immediately; **Later** installs it the next time you quit. You stay signed in, and your projects are not touched.\n\n## Uninstalling\n\n**Settings → Apps → XENO Corpus → Uninstall.** Your projects and their `.xeno/corpus/` folders are not touched. If you installed the `corpus` command, uninstalling removes it from your PATH too.",
         },
         {
           slug: "signing-in",
@@ -110,6 +110,12 @@ const corpus: ProductDocs = {
           body: "## The inspector\n\nThe right-hand panel shows whatever is selected. With nothing selected it summarises the corpus, **My queue** and **Needs a human**.\n\n## A claim\n\n- **Expect / Observed**, why it holds or lapsed, and the last error output when a check could not finish.\n- **Assignee**, with a suggested owner from the history of the files the check reads.\n- **Next action**: what to do about it.\n- **Run assay now** runs this one check. For a human tenet, **Re-attest now**.\n- **Propose a fix** (when one exists) shows the suggested edit, not applied; **Copy patch** copies it.\n- **This lapse is wrong** records a false alarm with a reason: the check is wrong, the expectation is outdated, or the source was flaky. The verdict stays on record.\n- **Apply safe fixes automatically** (version claims only): after the new value has held for consecutive pulses, Corpus saves a new version with the new expectation. **Revert automatic fix** undoes it.\n- **Version history**, **Timeline** (when it was true), **Verdict history** and **Evidence** (which files the check reads).\n- **Discussion**: comments sit beside the claim and never change a verdict.\n\n## A rule, a lane, a document, a proposal\n\nA **rule** shows its exact text and its worked examples, checked against sample commands without running anything. A **lane** shows a whole corpus and **Everything about…** it. A **proposal** shows the claim read from a document, its proposed check (read from a document, never run) and **Accept as tenet** or **Dismiss** with a reason.",
         },
         {
+          slug: "agent-panel",
+          title: "The XENO Agent",
+          description: "Open the XENO Agent inside Corpus, what it can read, and what it cannot change yet.",
+          body: "## The XENO Agent in Corpus\n\nClick **Agent** in the header, or press `Ctrl+J`. The same XENO Agent as the Agent app and XENO Canvas opens beside your work. It uses the account you signed in to Corpus with, and each project keeps its own conversations.\n\n## What it can do\n\nThe agent reads your project through Corpus itself:\n\n| It can | For example |\n|---|---|\n| List, read and search your notes | *Which notes mention the launch date?* |\n| See how notes connect | *What links to this note, and what does it link to?* |\n| Read your tags | *Which notes are tagged #draft?* |\n| Read your checks | *What is false in this project right now, and why?* |\n| Search claims and documents | *Which Node version do we support?* |\n\n**It cannot change anything yet.** It has no tool to edit notes, documents or checks. Editing, as suggested changes you accept, comes next.\n\nText from your notes and documents reaches the agent marked as untrusted, because a document can contain words written to steer an agent.\n\n## What runs on your PC\n\nThe first time you open the panel, Corpus starts the shared XENO Agent host if none is running. If you never open the panel, nothing extra runs. The host keeps running after you close Corpus, so a turn in progress is not lost, and other XENO apps use the same host.\n\nIf the agent is unavailable, the panel says so and the rest of Corpus works as usual.",
+        },
+        {
           slug: "new-tenet",
           title: "Writing a tenet",
           description: "The tenet form: draft from plain words, choose a check, test it, save it.",
@@ -131,7 +137,7 @@ const corpus: ProductDocs = {
           slug: "keyboard-shortcuts",
           title: "Keyboard shortcuts",
           description: "Every shortcut in the app.",
-          body: "## Keyboard shortcuts\n\nPress `?` in the app to show this list.\n\n| Key | Does |\n|---|---|\n| `Ctrl+K` | Search, run a command or ask a question |\n| `1` – `7` | Shape, Document, Tenets, Verdicts, Insights, Integrations, Notes |\n| `Ctrl+O` | Find or create a note |\n| `Ctrl+N` | New note (in Notes) |\n| `Ctrl+E` | Switch the note between Edit and Read |\n| `Ctrl+S` | Save the note now |\n| `Ctrl+click` | Open a `[[link]]` in a note |\n| `F2` | Rename the selected note or folder |\n| `N` | New tenet |\n| `F` | Fit the canvas |\n| Arrow keys | Move between canvas cards (click the canvas first) |\n| `Enter` | Open the selected card |\n| `Esc` | Close one overlay, then the digest, then the selection |\n| `Ctrl+Shift+O` | Open project |\n| `?` | This list |\n| `Delete` | Explains that Corpus never deletes: a tenet is superseded, its verdicts stay |",
+          body: "## Keyboard shortcuts\n\nPress `?` in the app to show this list.\n\n| Key | Does |\n|---|---|\n| `Ctrl+K` | Search, run a command or ask a question |\n| `1` – `7` | Shape, Document, Tenets, Verdicts, Insights, Integrations, Notes |\n| `Ctrl+J` | Open or close the XENO Agent |\n| `Ctrl+O` | Find or create a note |\n| `Ctrl+N` | New note (in Notes) |\n| `Ctrl+E` | Switch the note between Edit and Read |\n| `Ctrl+S` | Save the note now |\n| `Ctrl+click` | Open a `[[link]]` in a note |\n| `F2` | Rename the selected note or folder |\n| `N` | New tenet |\n| `F` | Fit the canvas |\n| Arrow keys | Move between canvas cards (click the canvas first) |\n| `Enter` | Open the selected card |\n| `Esc` | Close one overlay, then the digest, then the selection |\n| `Ctrl+Shift+O` | Open project |\n| `?` | This list |\n| `Delete` | Explains that Corpus never deletes: a tenet is superseded, its verdicts stay |",
         },
       ],
     },
