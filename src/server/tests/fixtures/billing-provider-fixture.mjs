@@ -47,6 +47,7 @@ export function installBillingProviderFixture() {
 /** Existing binding fixture; rejects any unanticipated SQL rather than faking it. */
 export function boundBillingPool(query = async () => { throw new Error('Unexpected billing mutation'); }) {
   return { query, connect: async () => ({ release() {}, query: async sql => {
+    if (sql.startsWith('SELECT bool_and(to_regclass')) return { rows: [{ ok: true }] }; // the table exists: no DDL
     if (sql.startsWith('SELECT account_id')) return { rows: [{ account_id: 'acct_fixture', mode: 'test' }] };
     if (['BEGIN', 'COMMIT', 'ROLLBACK', "SET LOCAL lock_timeout = '10s'", "SET LOCAL statement_timeout = '10s'"].includes(sql) || sql.startsWith('SELECT pg_advisory_xact_lock') || sql.startsWith('CREATE TABLE IF NOT EXISTS billing_account_binding')) return { rows: [] };
     throw new Error('Unexpected binding SQL');

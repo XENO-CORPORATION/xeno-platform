@@ -177,7 +177,8 @@ test('Studio owner entitlement actually raises the workspace seat limit', async 
       if (/SELECT owner_user_id, metadata FROM workspaces/.test(sql)) {
         return { rows: [{ owner_user_id: 'owner-1', metadata: {} }] };
       }
-      if (/CREATE TABLE IF NOT EXISTS billing_customers/.test(sql)) return { rows: [] };
+      // The billing schema exists, so this path must not attempt DDL: xeno_app could not run it (runtime-role.js).
+      if (/to_regclass/.test(sql)) return { rows: [{ ok: true }] };
       if (/SELECT plan, status, current_period_end FROM xeno_account_plans/.test(sql)) {
         return { rows: [{ plan: 'studio', status: 'active', current_period_end: null }] };
       }

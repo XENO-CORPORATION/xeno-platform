@@ -354,6 +354,11 @@ services:
       # Per-account cap on download-grant minting (default 60/hour).
       - GRANT_HOURLY_CAP=${GRANT_HOURLY_CAP:-}
       # ── XENO Artifacts (routes/artifactRoutes.js, /a/<id>) ───────────
+      # The ledger chain's outside anchor (docs/LEDGER-OPERATIONS.md). Unset: nothing is anchored, and the audit says so.
+      - LEDGER_ANCHOR_R2_BUCKET=${LEDGER_ANCHOR_R2_BUCKET:-}
+      - LEDGER_ANCHOR_PRIVATE_KEY=${LEDGER_ANCHOR_PRIVATE_KEY:-}
+      - LEDGER_ANCHOR_R2_ACCESS_KEY_ID=${LEDGER_ANCHOR_R2_ACCESS_KEY_ID:-}
+      - LEDGER_ANCHOR_R2_SECRET_ACCESS_KEY=${LEDGER_ANCHOR_R2_SECRET_ACCESS_KEY:-}
       # Storage: ARTIFACTS_R2_BUCKET + the three R2 creds selects R2 (private
       # bucket `xeno-artifacts`, created 2026-09-18); unset, pages land in
       # ARTIFACTS_DIR — a bind mount below, so they survive a redeploy. The
@@ -437,6 +442,19 @@ services:
       options:
         max-size: "100m"
         max-file: "10"
+
+  # Schema changes, and nothing else. A job, not a server: scripts/remote-deploy.sh runs it before swapping the
+  # backend (`run --rm`), and the `jobs` profile keeps `up` from starting it. This is the ONE holder of the database
+  # superuser credential (src/server/database/run-startup-migrations.mjs, docs/DATABASE-ROLES.md).
+  migrate:
+    profiles: ["jobs"]
+    image: xeno-platform-backend:latest
+    command: ["node", "database/run-startup-migrations.mjs"]
+    environment:
+      - NODE_ENV=production
+      - MIGRATION_DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+    networks:
+      - xenostudio-network
 
   # Untrusted document extraction has no network namespace. Requests and
   # bounded results cross a filesystem queue; source bytes are mounted read-only.

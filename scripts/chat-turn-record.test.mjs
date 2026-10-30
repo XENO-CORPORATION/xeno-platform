@@ -51,7 +51,6 @@ test('both insert routes validate the record before the row, and store it in the
   assert.equal((routes.match(/normalizeTurnRecord\(/g) || []).length, 2, 'single message + batch');
   assert.match(routes, /code: 'invalid_turn'/);
   assert.equal((routes.match(/message_index, turn\b/g) || []).length, 2, 'both INSERTs name the column');
-  assert.match(routes, /ADD COLUMN IF NOT EXISTS turn JSONB/, 'a fresh database has the column too');
   const migration = readFileSync(new URL('../src/server/database/migrations/20260917120000-chat-message-turn.sql', import.meta.url), 'utf8');
   assert.match(migration, /ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS turn JSONB/);
 });

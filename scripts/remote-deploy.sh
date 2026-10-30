@@ -343,6 +343,24 @@ fi
 # carrying the network alias `backend` so nginx still resolves the pair — then
 # `up -d --no-deps backend-a` touches exactly one. That is a compose refactor,
 # not a deploy-script change, and it is what closes the last of P0.2/P0.4.
+
+# The schema moves BEFORE the swap, as its own job: the app connects as xeno_app, which cannot change it, and refuses to
+# start on a schema the job has not applied. Migrations are additive, so the replicas still serving are unharmed. A
+# failed job stops the deploy here with the old containers untouched.
+if [ "$SERVICE" = "backend" ]; then
+  log "running the migrate job with $IMAGE:latest ..."
+  if ! dc --profile jobs run --rm --no-deps -T migrate; then
+    log "migrate job FAILED — refusing swap"
+    if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
+      docker tag "$IMAGE:rollback" "$IMAGE:latest"
+      log "restored $IMAGE:latest to :rollback"
+    fi
+    log "=== deploy end service=$SERVICE sha=$SHA FAILED (migrate) ==="
+    exit 1
+  fi
+  log "migrate job PASSED"
+fi
+
 log "swapping in new $SERVICE container(s) ..."
 dc up -d --no-deps --force-recreate "$SERVICE"
 

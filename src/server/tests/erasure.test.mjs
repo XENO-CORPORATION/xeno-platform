@@ -33,7 +33,7 @@ async function main() {
   // Order matters: forum_threads has an FK to forum_spaces, and forum_posts to
   // forum_threads. Naming them in dependency order is the price of not running
   // all 42 tables — and it is visible, which is the point.
-  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts', 'api_keys', 'email_logs', 'email_verifications', 'security_events', 'agent_identities'));
+  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts', 'forum_tickets', 'forum_ticket_posts', 'forum_report_submissions', 'forum_report_evidence', 'api_keys', 'email_logs', 'email_verifications', 'security_events', 'agent_identities'));
   await migrateAccountV2(pool);
   // This suite builds its own schema rather than running the full migration set,
   // so the usage-credit consent tables are not here. Spending now consults them,

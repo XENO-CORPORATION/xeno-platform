@@ -32,9 +32,11 @@ const SANDBOX_KEY_PATTERN = /^chat-sandboxes\/[0-9a-fA-F-]{36}\/[A-Za-z0-9._\- /
 
 // XENO Storage: an account file's bytes, content-addressed (services/storageObjects.js).
 const FILE_KEY_PATTERN = /^files\/[0-9a-f]{2}\/[0-9a-f]{64}$/;
+// The ledger's outside anchor (services/ledgerChainAnchor.js), in its own bucket.
+const ANCHOR_KEY_PATTERN = /^(checkpoints\/\d{12}\.json|keys\/[0-9a-f]{16}\.json)$/;
 
 function assertKey(key) {
-  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key) || FILE_KEY_PATTERN.test(key));
+  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key) || FILE_KEY_PATTERN.test(key) || ANCHOR_KEY_PATTERN.test(key));
   if (!inNamespace || key.includes('..') || key.includes('//')) {
     throw new Error(`Refusing storage key outside the allowed namespaces: ${key}`);
   }
@@ -126,12 +128,12 @@ export function signV4({ method, host, canonicalUri, headers, payloadHash, acces
 
 function r2Backend({ accountId, accessKeyId, secretAccessKey, bucket, fetchImpl = globalThis.fetch }) {
   const host = `${accountId}.r2.cloudflarestorage.com`;
-  const request = async (method, key, body) => {
+  const request = async (method, key, body, extraHeaders = {}) => {
     assertKey(key);
     const canonicalUri = `/${encodeSegment(bucket)}/${key.split('/').map(encodeSegment).join('/')}`;
     const payloadHash = sha256Hex(body ?? '');
     const now = new Date();
-    const headers = { host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDateOf(now) };
+    const headers = { host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDateOf(now), ...extraHeaders };
     const { authorization } = signV4({ method, host, canonicalUri, headers, payloadHash, accessKeyId, secretAccessKey, now });
     return fetchImpl(`https://${host}${canonicalUri}`, {
       method,
@@ -145,6 +147,13 @@ function r2Backend({ accountId, accessKeyId, secretAccessKey, bucket, fetchImpl 
     async put(key, bytes) {
       const response = await request('PUT', key, bytes);
       if (!response.ok) throw new Error(`R2 PUT ${key} failed: ${response.status} ${await response.text().catch(() => '')}`);
+    },
+    /** Write only if the key is empty. Returns false when something is already there; never replaces it. */
+    async putNew(key, bytes) {
+      const response = await request('PUT', key, bytes, { 'if-none-match': '*' });
+      if (response.status === 412) return false;
+      if (!response.ok) throw new Error(`R2 PUT ${key} failed: ${response.status} ${await response.text().catch(() => '')}`);
+      return true;
     },
     async get(key) {
       const response = await request('GET', key);

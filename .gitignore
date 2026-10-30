@@ -79,3 +79,6 @@ deploy*.tar
 # Local QA browser download and consent-design screenshots (scripts/auth-consent-design.test.mjs)
 .qa-browsers/
 .xeno/auth-design-evidence/
+
+# Scratch files for this repo (owner, 2026-10-28)
+scratchpad/

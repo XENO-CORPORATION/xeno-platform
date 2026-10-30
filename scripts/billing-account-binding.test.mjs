@@ -160,7 +160,8 @@ function database({ binding = null, legacy = null, malformed = false, timeout = 
       if ((timeout === 'lock' && sql.startsWith('SELECT pg_advisory')) || (timeout === 'query' && sql.startsWith('SELECT account_id'))) {
         throw Object.assign(new Error('SECRET_SENTINEL'), { code: timeout === 'lock' ? '55P03' : '57014' });
       }
-      if (sql === 'BEGIN' || sql.startsWith('CREATE TABLE')) return { rows: [] };
+      if (sql.startsWith('SELECT bool_and(to_regclass')) return { rows: [{ ok: true }] }; // the table exists: no DDL
+      if (sql === 'BEGIN') return { rows: [] };
       if (sql.startsWith('SELECT pg_advisory')) { const prior = lock; lock = new Promise(resolve => { unlock = resolve; }); await prior; return { rows: [] }; }
       if (sql.startsWith('SELECT account_id')) return { rows: state.binding ? [state.binding] : [] };
       if (sql.startsWith('SELECT to_regclass')) { state.inventory.push(args[0]); return { rows: [{ relation: args[0] }] }; }

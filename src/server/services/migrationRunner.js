@@ -250,8 +250,8 @@ export async function rollbackMigrations(pool, count = 1) {
 // --------------------------------------------------------------------------
 // Show migration status
 // --------------------------------------------------------------------------
-export async function migrationStatus(pool) {
-  await ensureMigrationsTable(pool);
+export async function migrationStatus(pool, { readOnly = false } = {}) {
+  if (!readOnly) await ensureMigrationsTable(pool);
   const applied = await getApplied(pool);
   const migrations = discoverMigrations();
 

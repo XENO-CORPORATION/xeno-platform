@@ -1,3 +1,4 @@
+import { tablesPresent } from './schemaPresence.js';
 /** Account identity is an authority boundary, not a deployment-preflight hint. */
 export const BILLING_PROVIDER_TIMEOUT_MS = 10_000;
 export function billingBindingError() {
@@ -102,12 +103,14 @@ export async function requireBillingDatabaseBinding(pool, config) {
     await client.query("SET LOCAL lock_timeout = '10s'");
     await client.query("SET LOCAL statement_timeout = '10s'");
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('xeno:billing-account-binding', 0))");
-    await client.query(`CREATE TABLE IF NOT EXISTS billing_account_binding (
+    if (!(await tablesPresent(client, ['billing_account_binding']))) {
+      await client.query(`CREATE TABLE IF NOT EXISTS billing_account_binding (
       singleton boolean PRIMARY KEY DEFAULT TRUE CHECK (singleton = TRUE),
       account_id text NOT NULL CHECK (account_id ~ '^acct_[A-Za-z0-9]+$'),
       mode text NOT NULL CHECK (mode IN ('test', 'live')),
       created_at timestamptz NOT NULL DEFAULT now()
     )`);
+    }
     const binding = (await client.query('SELECT account_id, mode FROM billing_account_binding WHERE singleton = TRUE')).rows[0];
     if (binding) {
       if (binding.account_id !== config.accountId || binding.mode !== config.mode) throw billingBindingError();

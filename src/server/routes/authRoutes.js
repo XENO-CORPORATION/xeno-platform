@@ -587,37 +587,7 @@ router.post('/init', async (req, res) => {
     const adminEmail = 'admin@xenostudio.local';
     const legacyAdminEmail = 'admin@xenostudio.ai';
 
-    // Create users table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        username VARCHAR(50) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        display_name VARCHAR(255) NOT NULL,
-        avatar_url VARCHAR(500),
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        last_login TIMESTAMP,
-        email_verified BOOLEAN DEFAULT FALSE,
-        is_active BOOLEAN DEFAULT TRUE,
-        reset_token VARCHAR(255),
-        reset_token_expires TIMESTAMP
-      )
-    `);
-
-    // Add missing columns to existing users table if they don't exist
-    try {
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
-    } catch (error) {
-      console.log('Note: Some columns may already exist in users table');
-    }
-
+    // The users table is owned by database/migrations/, applied by the migrate job.
     // user_sessions schema is owned by database/migrations/ (baseline +
     // 20260719010000-unify-user-sessions.sql) — runAllMigrations applies it at boot,
     // fail-closed, before this route is reachable. No inline DDL here (the previous
@@ -1295,15 +1265,6 @@ router.post('/migrate', async (req, res) => {
     // destroyed every live session on a world-reachable(-behind-setup-token) endpoint.
     // The route is now strictly ADDITIVE: no DROPs, ever.
 
-    // Step 2: Add missing columns to existing users table (additive-only)
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
-    console.log('✅ User table columns added/verified');
-
     // Step 3: Check if admin user exists and update/create it
     const adminCheck = await req.db.query(
       'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
@@ -1838,18 +1799,8 @@ router.post('/use-credits', async (req, res) => {
     }
     const updateResult = { rows: [{ credits: debit.newBalance }] };
 
-    // Log usage (create table if needed)
+    // Log usage
     try {
-      await req.db.query(`
-        CREATE TABLE IF NOT EXISTS credit_usage (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL,
-          feature VARCHAR(100) NOT NULL,
-          credits_used INTEGER NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW()
-        )
-      `);
-
       await req.db.query(
         'INSERT INTO credit_usage (user_id, feature, credits_used) VALUES ($1, $2, $3)',
         [decoded.userId, feature, amount]
