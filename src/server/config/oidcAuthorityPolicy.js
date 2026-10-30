@@ -68,9 +68,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // gateway on the user's behalf (which spends credits). Nothing more: no projects/sync,
   // no workforce, no billing, team or broker authority. Widen by a reviewed change only.
   'xeno-spawn': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
-  // XENO Corpus desktop: identity only. Its door reads /api/billing/entitlements (any authenticated
-  // caller) and the corpus is the person's own local files. No inference, ledger, projects or team.
-  'xeno-corpus': IDENTITY,
+  // XENO Corpus desktop: identity, plus gateway inference and the credits balance since 0.3.0 mounted the XENO Agent
+  // panel: an agent turn a person starts in Corpus runs on, and bills, that person's own account (surface-account seam,
+  // the same set as xeno-workshop's without its storage). The corpus itself stays the person's local files: no projects or team.
+  'xeno-corpus': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
   // XENO Workshop: identity, the credits balance, and gateway inference — an agent turn a person
   // starts in the workshop runs on, and bills, that person's own account (surface-account seam).
   // storage:read/write (owner, 2026-10-23): a project's files live in the person's XENO Storage
