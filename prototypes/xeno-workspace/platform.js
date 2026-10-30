@@ -122,9 +122,22 @@
     // the adapters start their first loads when `ready` resolves, a moment after this returns; wait for them
     const lift = () => { if (!root.classList.contains('xp-wait')) return; reuseUntil = Date.now(); const s = document.getElementById('xp-state'); try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); if (s && !s.isConnected) document.body.appendChild(s); /* the first render rewrites the page; the mark stays on top and fades away over it */ if (s) { s.dataset.leaving = ''; setTimeout(() => { stopMark?.(); stopMark = null; s.remove(); }, 440); } };
     setTimeout(() => { Promise.race([Promise.all(firsts), new Promise((r) => setTimeout(r, FIRST_PAINT_MS))]).then(lift); }, 0);
-    const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = 'Preview. Your account, chats, projects, tasks, library, people, community and each area’s home are real. Marketplace, Company, Anima and Places still show sample data.'; document.body.appendChild(n);
+    const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = previewNote(); document.body.appendChild(n);
+    if (document.readyState !== 'complete') window.addEventListener('load', () => { n.textContent = previewNote(); }, { once: true });   // the areas register as their scripts load
     try { window.XW?.render?.(); } catch {}
     return u;
+  }
+
+  // Which areas still show sample data comes from the code (an area is real once a module registered it in
+  // XENO_ZONE_LIVE), so this line cannot fall behind as areas get connected. An area's sidebar rows are already removed on
+  // the platform (platform-home.js); what can still show sample rows is its table in XENO_PG_AREAS, plus the whole pages.
+  function previewNote() {
+    const live = window.XENO_ZONE_LIVE || {}, tables = window.XENO_PG_AREAS || {}, names = [];
+    for (const [mode, zones] of Object.entries(window.XENO_MODE_ZONES || {})) {
+      for (const z of zones) if (tables[`${mode}.${z.id}`] && !live[`${mode}.${z.id}`]) names.push(z.label);
+    }
+    const rest = [...new Set(names), 'Marketplace', 'Company', 'Anima', 'Places'];
+    return `Preview. Your account, chats, projects, tasks, library, people, community and each area’s home are real. Still sample data: ${rest.join(', ')}.`;
   }
 
   async function notActivated() {

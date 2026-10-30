@@ -324,6 +324,7 @@
   }
   // Product = the product's OWN sidebar (its views + its objects). Desktop apps keep their nav in
   // the app, so their panel is Open in Hub + recent files + projects. Planned products say so.
+  const LIVE_PRODUCT_SECTIONS = new Set(['mail', 'post']);   // these fill XENO_PRODUCT_NAV's sections from the server
   function panelProduct(id) {
     const p = PR[id];
     if (p.kind === 'chat') return panelChat();
@@ -343,7 +344,7 @@
         <button class="act primary" data-xl-new="${id}" data-xl-noun="${esc(nav.primary)}">${ic('plus')}${esc(nav.primary)}</button>
         ${(nav.views || []).length ? `<div class="views">${nav.views.map(viewRow).join('')}</div>` : ''}
         ${(nav.views || []).includes('Recent') ? '' : recentSec}
-        ${(nav.sections || []).map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
+        ${(window.XENO_PLATFORM?.served && !LIVE_PRODUCT_SECTIONS.has(id) ? [] : nav.sections || []).map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
       </div>`;
     return `${backHeader(id, p.name)}
       <div class="pbody">
@@ -429,8 +430,8 @@
     const prods = z.products || [], live = prods.filter((id) => PR[id] && PR[id].status !== 'soon');
     const { work: zw, sample } = areaWork(z);
     const rows = zw ? zw[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
-    const coming = prods.length && !live.length;
-    return [prods.length ? sec('products', 'Products', prods.map((id) => productRow(id)).join('')) : '',
+    const areaIsLive = !!zoneLive(z), shown = areaIsLive ? live : prods, coming = prods.length && !live.length && !areaIsLive;
+    return [shown.length ? sec('products', 'Products', shown.map((id) => productRow(id)).join('')) : '',
       rows.length ? sec('work', esc(zw[0]) + (sample ? ' ' + SAMPLE_MARK : ''), rows.map((r) => workRow(r, zw[0])).join('') + row(`data-item="All ${esc(zw[0].toLowerCase())}"`, `${ic('right')}<span class="t">View all</span>`, 'sub')) : '',
       coming ? `<div class="empty-note"><b>Nothing here yet.</b><span>${listJoin(prods.map((id) => esc(PR[id].name)))} ${prods.length > 1 ? 'are' : 'is'} planned, not built — your ${esc(z.label.toLowerCase())} will appear here once ${prods.length > 1 ? 'they launch' : 'it launches'}.</span></div>` : ''].join('');
   }

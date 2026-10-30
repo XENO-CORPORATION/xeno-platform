@@ -190,6 +190,7 @@ try {
   ok(/Three steps and Release Bot/.test(await main()), 'Back returns to the agent');
 
   // the status mark: a square with a small radius (never a circle), green and blinking while it works — pushed live
+  await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);   // a developer's machine may ask for reduced motion
   await settle(900);
   const mark = await p.evaluate(() => { const d = document.querySelector('.xag-mono--lg .xag-dot'); if (!d) return null; const c = getComputedStyle(d); return { cls: d.className, radius: c.borderTopLeftRadius, w: c.width, bg: c.backgroundColor, anim: c.animationName }; });
   ok(mark && /xag-dot--working/.test(mark.cls) && parseFloat(mark.radius) > 0 && parseFloat(mark.radius) < parseFloat(mark.w) / 2 && mark.bg === 'rgb(34, 197, 94)' && mark.anim === 'xag-blink' && db.streamOpen >= 1, `the status mark is a green square that blinks while the agent works, pushed live (${JSON.stringify(mark)})`);
