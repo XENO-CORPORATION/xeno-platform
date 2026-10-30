@@ -74,6 +74,11 @@ export interface DoorOptions {
   site?: string;
   /** Licence API base (default: the licence package's own). */
   apiBase?: string;
+  /**
+   * Called with every state pushed to the windows, for what main itself must do when the door moves (close a view,
+   * tell a sidecar). A throw here is logged and never stops the push. It carries no credential.
+   */
+  onStateChange?: (state: XenoAuthGateState) => void;
 }
 
 // ── Pure pieces (exported for their tests) ───────────────────────────────────────────────────────────
@@ -90,6 +95,8 @@ export interface XenoAuthGateState {
   identity?: { sub: string; email?: string; name?: string };
   message?: string;
   lastVerifiedAt?: number;
+  /** Where the system browser opens for sign-in, from the issuer sign-in really uses (`@xenosystem/blocks` >= 0.22 names it). */
+  signInHost?: string;
   capabilities: Partial<Record<XenoAuthGateIntentKind, boolean>>;
 }
 
@@ -450,8 +457,9 @@ export function createDoor(o: DoorOptions) {
   let applying: Promise<void> = Promise.resolve();
 
   function push(next: Partial<XenoAuthGateState>): void {
-    current = { ...current, ...next, capabilities: CAPABILITIES };
+    current = { ...current, ...next, signInHost: new URL(ISSUER).host, capabilities: CAPABILITIES };
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('auth-gate:state', current);
+    try { o.onStateChange?.(current); } catch (err) { authLog('door.onStateChange', errorFields(err)); }
   }
 
   /** Dev-only e2e fixture (`XENO_AUTH_GATE_E2E_OPEN=1`): a packaged build IGNORES it, by construction. */

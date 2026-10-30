@@ -162,6 +162,25 @@ test('below the floor, main refuses the sign-in intent; a packaged build ignores
   }
 });
 
+test('onStateChange sees every state the windows see, names the sign-in host, and cannot break the push', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'xeno-door-'));
+  try {
+    const base = `http://127.0.0.1:${platform.address().port}`;
+    const f = fakeElectron(dir);
+    const heard = [];
+    const door = esm.createDoor({ product: 'pixel', productName: 'XENO Pixel', clientId: 'xeno-pixel', scopes: ['openid'], electron: f.electron, account: fakeSdk(), issuer: base, apiBase: base,
+      onStateChange: (s) => { heard.push(s); throw new Error('a listener failed'); } });
+    door.start();
+    await wait(150);
+    door.stop();
+    assert.ok(heard.length > 0, 'the listener never ran');
+    assert.deepEqual(heard, f.sent.map(([, s]) => s), 'the listener and the windows disagree');
+    assert.equal(door.state().signInHost, new URL(base).host);
+    assert.equal(door.state().account, 'signedOut', 'a throwing listener stopped the door');
+    assert.match(readFileSync(door.authLogPath(), 'utf8'), /door.onStateChange/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 async function writeRefresh(dir, token) {
   const { writeFileSync } = await import('node:fs');
   writeFileSync(join(dir, 'auth-refresh.bin'), Buffer.from(`enc:${token}`).toString('base64'), 'utf-8');
