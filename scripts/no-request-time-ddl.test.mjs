@@ -54,3 +54,18 @@ test('the runtime role cannot be given the journal, the chain, or the re-seal', 
   assert.match(source, /REVOKE EXECUTE ON FUNCTION ledger_chain_reseal/);
   assert.match(source, /NOSUPERUSER/);
 });
+
+test('the migrate job is the only compose service that holds the superuser credential', () => {
+  const compose = fs.readFileSync(path.resolve(root, '..', '..', 'docker-compose.yml'), 'utf8');
+  const live = compose.split(/\r?\n/).filter((line) => !/^\s*#/.test(line)).join('\n');
+  const services = live.split(/\n(?=  [a-z][a-z0-9-]*:\n)/);
+  const holders = services
+    .filter((block) => !block.startsWith('  postgres:'))
+    .filter((block) => /POSTGRES_PASSWORD|DB_USER=postgres/.test(block))
+    .map((block) => block.trim().split(':')[0]);
+  assert.deepEqual(holders, ['migrate'], `superuser credential in: ${holders.join(', ')}`);
+  for (const service of ['backend', 'chat-workers']) {
+    const block = services.find((b) => b.startsWith(`  ${service}:`));
+    assert.match(block, /DB_USER=xeno_app/, `${service} connects as xeno_app`);
+  }
+});

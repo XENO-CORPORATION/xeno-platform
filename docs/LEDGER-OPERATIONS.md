@@ -10,16 +10,17 @@ What the ledger's tamper-evidence is, how to read it, and what to do when it spe
 | **The chain** | Every row in `credit_transactions`, from any writer, gets the next number and a fingerprint binding the one before. The database does it, so no program can skip, fork or reorder it | trigger `ledger_chain_append`, `src/server/database/migrate-account-v2.js` |
 | **Sealed history** | Rows from before the chain are bound into the account's epoch 1 and reported as found. Never rewritten | `ledger_chain_epochs`, attestation `history-sealed` |
 | **Hourly audit** | Verifies every account: fingerprints recomputed in Node, numbering, completeness (a row with no fingerprint is found too) | `src/server/services/ledgerChainAudit.js`, on the leader |
-| **Outside anchor** | Every hour, every account's newest fingerprint goes into a signed checkpoint, written once to a locked bucket. Someone able to rewrite the whole database can make the chain verify; they cannot make it match the bucket | `src/server/services/ledgerChainAnchor.js`, R2 bucket `xeno-ledger-anchors` |
+| **Outside anchor** | Every hour, every account's newest fingerprint goes into a signed checkpoint, written once to a locked R2 prefix. Someone able to rewrite the whole database can make the chain verify; they cannot make it match the bucket | `src/server/services/ledgerChainAnchor.js`, R2 `xeno-artifacts/ledger-anchors/` |
 | **Restricted role** | The app connects as `xeno_app`, which can append but cannot edit the journal or switch the trigger off | `src/server/database/runtime-role.js` |
 
 ## The anchor, in detail
 
-- **Bucket:** `xeno-ledger-anchors`, retention lock `ledger-anchors-10y` (Age, 315,360,000 s). While a rule applies, R2
-  refuses to overwrite or delete an object, whatever key is used. The rule itself is changed only through the Cloudflare
-  API, never with the S3 key the app holds.
-- **Objects:** `checkpoints/<12-digit number>.json` (body, its SHA-256, key id, Ed25519 signature) and
-  `keys/<key id>.json` (the public key). A checkpoint holds account ids and fingerprints, no personal data.
+- **Where:** the `ledger-anchors/` prefix of the `xeno-artifacts` bucket, under retention lock `ledger-anchors-10y` (Age,
+  315,360,000 s: ten years, the German retention period for accounting records). While the rule applies, R2 refuses to
+  overwrite or delete an object, whatever key is used. The rule itself is changed only through the Cloudflare API, never
+  with the S3 key the app holds. That lock is the wall; a dedicated key on the same server would add nothing to it.
+- **Objects:** `ledger-anchors/checkpoints/<12-digit number>.json` (body, its SHA-256, key id, Ed25519 signature) and
+  `ledger-anchors/keys/<key id>.json` (the public key). A checkpoint holds account ids and fingerprints, no personal data.
 - **Key:** `LEDGER_ANCHOR_PRIVATE_KEY` in the box's `.env` (base64 PKCS#8 DER). The public half is in
   `src/server/data/ledger-anchor-keys.json`, which is the trust list.
 - **Unset settings:** nothing is anchored and the log says `anchor not configured`.

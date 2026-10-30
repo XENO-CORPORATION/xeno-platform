@@ -152,10 +152,10 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=xenostudio
-      - DB_USER=postgres
-      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      - DB_USER=xeno_app
+      - DB_PASSWORD=${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+      - DATABASE_URL=postgresql://xeno_app:${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}@postgres:5432/xenostudio
       # Docker socket mounted below for container provisioning
       - STORAGE_LIMIT_GB=5
       - CONVERSION_RETENTION_DAYS=7
@@ -545,9 +545,9 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=xenostudio
-      - DB_USER=postgres
-      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+      - DB_USER=xeno_app
+      - DB_PASSWORD=${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}
+      - DATABASE_URL=postgresql://xeno_app:${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}@postgres:5432/xenostudio
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379
       # XENO Storage: the object store is the home of a file's bytes. A worker reads a file whose cached
       # copy is gone from it (services/storageObjects.js localLibraryPath).
