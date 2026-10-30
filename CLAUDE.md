@@ -463,6 +463,22 @@ What it means for work started from this side:
   rendered identically — with 864 tests green.
 - **When the base moves, merge it in — never rebase.** Someone else's history is not ours to rewrite.
 
+## 🔗 The credit ledger proves itself, and the app does not run as the database admin (owner, 2026-10-30)
+
+Read `docs/LEDGER-OPERATIONS.md` before touching `credit_transactions` or reacting to a `[LedgerChain]` log line, and
+`docs/DATABASE-ROLES.md` before changing a migration or a database credential. Record:
+`docs/decisions/2026-10-30-ledger-chain-v2.md`.
+
+- **The DATABASE numbers and fingerprints every journal row** (trigger `ledger_chain_append`), from any writer. Never compute
+  a chain hash in application code, and never recompute an existing one: history is sealed, not rewritten.
+- **Every hour the heads are signed and written to `xeno-artifacts/ledger-anchors/`** under a ten-year retention lock. A
+  disagreement with the bucket blocks new checkpoints on purpose. Do not "clear" it; read the operations doc.
+- **The app connects as `xeno_app`: data only.** Never run DDL during a request: it fails in production on whichever request
+  reaches it, and tests run as a superuser so they will not notice. `scripts/no-request-time-ddl.test.mjs` refuses it.
+- **Schema changes go in a migration, applied by the `migrate` job before the swap.** That job is the only service holding
+  `POSTGRES_PASSWORD`, and a gate refuses it anywhere else.
+- A scripted fake DB in a test must answer `to_regclass` presence checks; billing helpers ask before any fallback DDL.
+
 ## 💳 Billing is LIVE-provisioned and SALES ARE CLOSED BY A SWITCH (2026-09-11)
 
 **Read `docs/BILLING-GO-LIVE.md` before touching anything that takes money.**

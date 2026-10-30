@@ -59,7 +59,8 @@ the material fields, (4) append-only, (5) checked continuously, (6) checkpoints 
   **completeness**: every row on the account is either sealed history or a chained entry, so a row inserted with
   the trigger disabled is found even though it carries no hash.
 - An hourly leader job (`services/ledgerChainAudit.js`) verifies every account and appends `verified` / `broken` /
-  `history-sealed` attestations (append-only).
+  `history-sealed` / `resealed` attestations (append-only).
+- Checkpoints anchored outside the database, and the app running without the superuser: see the addendum below.
 
 ## Blast radius
 
@@ -74,9 +75,10 @@ are additive.
 computes v1 hashes, so rows written meanwhile carry none). The new columns and tables can stay; nothing reads them
 but the verifier. Executed on a copy of production's journal, 2026-10-30: the drop takes 5 ms and money keeps flowing.
 
-⚠️ A row written during a rollback stays reported as `unchained-entries` after the trigger returns: the verifier is
-right, the row is outside the chain. Re-sealing means opening epoch 2 over those rows, which is not built; build it
-before it is ever needed in anger.
+A row written during a rollback stays reported as `unchained-entries` after the trigger returns: the verifier is right,
+the row is outside the chain. A person accepts such rows with a re-seal (`docs/LEDGER-OPERATIONS.md`).
+
+Going back on the database role changes no data: restore the previous compose file (`docs/DATABASE-ROLES.md`).
 
 ## Proof
 
@@ -96,9 +98,68 @@ fails `ledger-chain.test.mjs`.
 
 ## Not done yet (and what would make us revisit)
 
-- **External anchor.** Attestations live in the same database; anyone able to disable a trigger could rewrite a whole
-  chain consistently. Next: sign each hourly checkpoint and copy it to R2 (a separate trust domain).
-- **Least privilege.** The backend connects as `postgres` (superuser). A runtime role without `ALTER` would make the
-  trigger a hard wall instead of a tripwire.
+All three gaps recorded here on the first day were closed the same day (below). What remains:
+
+- **The window between checkpoints.** A rewrite made and undone within the hour leaves no trace in the bucket; a rewrite
+  that stays is found on the next pass. Revisit if the hour proves too long.
+- **Who can still reach everything.** Root on the box holds the superuser password and the signing key; a Cloudflare
+  administrator can remove the lock. Neither can do it unseen: the bucket's objects and Cloudflare's audit log are outside
+  that box. Revisit before anyone beyond the owner holds either.
+- **The signing key is on the box.** It proves a checkpoint came from us; the lock is what makes it permanent. A KMS would
+  stop a stolen key signing forged checkpoints, and the full walk already catches those.
 - Revisit if write volume on one account makes the head row a hot spot (it is one row lock per append, the same lock
   the account balance already takes).
+
+## Addendum, same day: the remaining gaps closed
+
+Owner, 2026-10-30: "lets address the remaining ones right and then document everything".
+
+**The outside anchor.** Every hour, every head goes into a checkpoint bound to the previous one, signed with Ed25519, and
+written once to `xeno-artifacts/ledger-anchors/` under a ten-year R2 retention lock. A dedicated bucket and key were the
+first design; the prefix replaced them because a second key on the same server adds nothing, while the lock is what no R2
+key can get past. Three decisions came out of testing it against attacks:
+
+- A disagreement **blocks new checkpoints**. The first version wrote a new checkpoint carrying the rewritten head on the
+  next pass, which would have laundered the rewrite. A test built to catch that found it.
+- The outside check compares **every** checkpoint, not the newest, so someone holding the signing key cannot hide a
+  rewrite behind a forged newer one. The audit does this at start and daily.
+- A restore from backup is a real reason for heads to vanish, so a person can **acknowledge** it. It stays in the bucket
+  and is printed by every later check.
+
+**The restricted role.** The app connected as `postgres`, so the same credential that served a request could disable the
+trigger. Backend and chat-workers now connect as `xeno_app`: data only, append-only on the journal, no DDL. That forced two
+changes worth stating:
+
+- 49 statements in 7 runtime files changed the schema during requests, including `ALTER TABLE users` on the login
+  path. They moved to migration `20261102200000-request-time-schema.sql`, and `scripts/no-request-time-ddl.test.mjs` refuses
+  new ones.
+- Migrations became a separate job run before the swap (the pattern of every leader with a production database). The role
+  decides what startup does, not a setting, and the app refuses to serve an unmigrated schema or a disabled chain.
+
+It shipped in two deploys so that an automatic rollback lands on an image that already understands the new startup.
+
+**The re-seal.** A person can accept rows written with the trigger off, naming who and why. Earlier epochs are still
+verified, so it cannot cover an altered entry.
+
+**Defects found on the way, all fixed:**
+
+| Found | How | Effect if shipped |
+|---|---|---|
+| The trigger needed privileges the gateway and portal roles lack | Reading the role list | Their inserts into the journal would fail. Live briefly, between the first deploy and the fix; nothing had tried |
+| New checkpoints laundered a rewrite | A test written for that attack | The rewrite would stop being detected after one pass |
+| R2 answers 409, not 412, on a locked key | Trying to overwrite checkpoint 1 on production | Every checkpoint after the first would have failed |
+| The old verifier hashed every row with the owner's id | Reading callers | False breaks on accounts with pool transfers |
+
+**Proof, on production unless stated:**
+
+| Claim | Evidence |
+|---|---|
+| The app runs as the restricted role | `printenv DB_USER` = `xeno_app` in backend and workers; `POSTGRES_PASSWORD` absent; healthchecks passed; no permission errors in the database log |
+| It cannot undo the chain | With the real credential: refused to disable the trigger, update the journal, set `session_replication_role` |
+| It works as that role, before the switch | On a copy of production's schema: ready, signup, login, 15 reads, a conversation written, no database errors |
+| A checkpoint cannot be replaced | Overwriting checkpoint 1 with the app's key: `409 ObjectLockedByBucketPolicy` |
+| A consistent rewrite is caught | `ledger-chain.test.mjs`: the rewritten chain verifies on its own, and the anchor reports `anchor-mismatch` |
+| Tests | ledger-chain 60/60, money 21/21, core 50/50 (`erasure` green again), gates 210/210 |
+| The tests can fail | 8 further mutations (anchoring over a mismatch, newest-only walk, no signature check, audit ignoring the anchor, no definer rights, writable journal, open re-seal, re-seal without a reason), each caught |
+
+Operations: `docs/LEDGER-OPERATIONS.md`, `docs/DATABASE-ROLES.md`.
