@@ -90,6 +90,7 @@
     "platform-publish.js": "publish",
     "platform-releases.js": "releases",
     "platform-research.js": "workspace",
+    "platform-pay.js": "commerce",
     "platform-scheduling.js": "scheduling",
     "platform-services.js": "workspace",
     "platform-skills.js": "agents",
@@ -108,6 +109,7 @@
     "releaseRoutes.js": "releases",
     "researchRoutes.js": "workspace",
     "resources.js": "workspace-ui",
+    "compensationRoutes.js": "commerce",
     "schedulingRoutes.js": "scheduling",
     "serviceLedgerRoutes.js": "commerce",
     "settings.js": "account",
@@ -4249,6 +4251,49 @@
       "class": "reversible",
       "scope": "none",
       "because": "a guest with no account books, reschedules or cancels by token (or a calendar app reads the feed): there is no person to act for"
+    },
+    "route:compensationRoutes.js:GET /agreements": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "wallet:read"
+    },
+    "route:compensationRoutes.js:GET /payouts": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "wallet:read"
+    },
+    "route:compensationRoutes.js:GET /export.csv": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "wallet:read"
+    },
+    "route:compensationRoutes.js:POST /agreements": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "a person decides pay (owner 2026-10-29, spec D13): only a human workspace admin sets agreements or decides payouts; the service and a DB trigger hold it"
+    },
+    "route:compensationRoutes.js:POST /agreements/:id/end": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "a person decides pay (owner 2026-10-29, spec D13): only a human workspace admin sets agreements or decides payouts; the service and a DB trigger hold it"
+    },
+    "route:compensationRoutes.js:POST /payouts/prepare": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "a person decides pay (owner 2026-10-29, spec D13): only a human workspace admin sets agreements or decides payouts; the service and a DB trigger hold it"
+    },
+    "route:compensationRoutes.js:POST /payouts/:id/decide": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "a person decides pay (owner 2026-10-29, spec D13): only a human workspace admin sets agreements or decides payouts; the service and a DB trigger hold it"
     },
     "route:schedulingRoutes.js:POST /pages": {
       "status": "planned",
@@ -9291,6 +9336,55 @@
       "capability": "research.run.verify",
       "class": "irreversible",
       "scope": "agents:write"
+    },
+    "ui:platform-pay.js:data-xpay=prepare": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
+    },
+    "ui:platform-pay.js:data-xpay=set": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
+    },
+    "ui:platform-pay.js:data-xpay=approve": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
+    },
+    "ui:platform-pay.js:data-xpay=edit": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
+    },
+    "ui:platform-pay.js:data-xpay=skip": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
+    },
+    "ui:platform-pay.js:data-xpay=retry": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
+    },
+    "ui:platform-pay.js:data-xpay=end": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "People › Pay's actions are the /api/compensation routes, decided there: a person sets pay and decides payouts (owner 2026-10-29, spec D13); no agent tool exists"
     },
     "ui:platform-scheduling.js:data-sc-page": {
       "status": "planned",

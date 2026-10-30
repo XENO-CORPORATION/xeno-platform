@@ -11,11 +11,11 @@ Per division: how many actions a person can take, how many an agent can take tod
 | tasks | 107 | 13 | 86 | 8 | 16 | 81 | 10 | 0 | `tasks:write` 79, `tasks:read` 7 |
 | chat | 101 | 0 | 100 | 1 | 32 | 52 | 17 | 0 | `chat:write` 69, `chat:read` 31 |
 | agents | 204 | 0 | 142 | 62 | 61 | 133 | 10 | 0 | `agents:write` 109, `agents:read` 33 |
-| commerce | 116 | 0 | 100 | 16 | 39 | 64 | 3 | 10 | `wallet:spend` 63, `wallet:read` 37 |
+| commerce | 130 | 0 | 103 | 27 | 42 | 71 | 7 | 10 | `wallet:spend` 63, `wallet:read` 40 |
 | workspace | 155 | 23 | 97 | 35 | 57 | 78 | 20 | 0 | `workspace:admin` 72, `workspace:read` 24, `agents:write` 1 |
 | places | 9 | 3 | 4 | 2 | 8 | 1 | 0 | 0 | `places:read` 4 |
 | forum | 54 | 8 | 44 | 2 | 22 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 17 |
-| workforce | 302 | 53 | 244 | 5 | 35 | 253 | 14 | 0 | `agents:write` 235, `workspace:admin` 6, `agents:read` 3 |
+| workforce | 303 | 53 | 245 | 5 | 35 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
 | workspace-ui | 172 | 4 | 101 | 67 | 68 | 103 | 1 | 0 | `workspace:admin` 101 |
 | account | 88 | 0 | 60 | 28 | 32 | 50 | 6 | 0 | `workspace:admin` 41, `workspace:read` 19 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |

@@ -385,6 +385,8 @@ async function project(db, owner, subject, window, acting) {
   }
 }
 export { RUN_STOPS, STEP_KINDS, HANDOFF_STATES };
+// For workforceCompensation.js: the same evidence and the same administrator rule, never a second copy.
+export { project as projectEvaluation, usableReader, isScopeAdmin };
 
 // ── ROSTER: the same evaluation for every member of a group, one row each ───────────────────────────────
 // Owner, 2026-10-29: team and division views, and a manager across their reports. A group is read from the
