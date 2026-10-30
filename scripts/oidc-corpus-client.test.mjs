@@ -24,8 +24,8 @@ test('the seed upserts xeno-corpus with its checked-in authority', async () => {
   assert.equal(row.params[5], true);
 });
 
-test('corpus authority is identity only: no inference, ledger, projects, team or billing', () => {
-  assert.deepEqual([...scopesForClient('xeno-corpus')].sort(), ['email', 'openid', 'profile']);
+test('corpus authority: identity plus the agent panel's inference and credits; no projects, team or billing', () => {
+  assert.deepEqual([...scopesForClient('xeno-corpus')].sort(), ['email', 'inference:run', 'ledger:read', 'ledger:spend', 'openid', 'profile']);
 });
 
 test('the version floor and the door reach xeno-corpus builds', () => {
