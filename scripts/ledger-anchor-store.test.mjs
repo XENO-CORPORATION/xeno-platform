@@ -31,7 +31,7 @@ test('anything else is an error, not "already there"', async () => {
 });
 
 test('the anchor stays inside its locked prefix', () => {
-  assert.throws(() => store(200).putNew('checkpoints/000000000001.json', Buffer.from('x')).then(() => {}) && _internal.assertKey('checkpoints/000000000001.json'));
+  assert.throws(() => _internal.assertKey('checkpoints/000000000001.json'), /outside the allowed namespaces/);
   assert.doesNotThrow(() => _internal.assertKey(checkpointKey(1)));
   assert.doesNotThrow(() => _internal.assertKey(keyObjectKey('61c2d99badc8f5c4')));
 });
