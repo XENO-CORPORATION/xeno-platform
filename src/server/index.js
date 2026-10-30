@@ -166,6 +166,7 @@ import customersRoutes from './routes/customersRoutes.js';
 import computeRoutes from './routes/computeRoutes.js';
 import liveRoutes from './routes/liveRoutes.js';
 import schedulingRoutes from './routes/schedulingRoutes.js';
+import compensationRoutes from './routes/compensationRoutes.js';
 import { sendDueReminders as sendSchedulingReminders } from './services/scheduling.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
@@ -923,6 +924,7 @@ app.use('/api/compute', databaseMiddleware, computeRoutes);
 app.use('/api/live', databaseMiddleware, liveRoutes);
 // Corpo › Scheduling (services/scheduling.js): workspace booking pages + public guest booking/manage pages + ICS feed.
 app.use('/api/scheduling', databaseMiddleware, schedulingRoutes);
+app.use('/api/compensation', databaseMiddleware, compensationRoutes);
 // Agent identity — a PLATFORM primitive shared with Marketplace, Company and
 // Comms (XENO FORUM - SPEC.md D8). Under /api/v2/* per the identity plan's
 // rule that new surfaces sit beside the frozen legacy /api/auth/*.

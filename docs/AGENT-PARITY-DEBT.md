@@ -4,16 +4,16 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1873 actions · 214 agent capability · 1325 planned (debt) · 334 excluded · **coverage 13.9%** of the 1539 owed.
+**Total:** 1888 actions · 214 agent capability · 1329 planned (debt) · 345 excluded · **coverage 13.9%** of the 1543 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
-| workforce | 302 | 53 | 244 | 5 | 17.8% |
+| workforce | 303 | 53 | 245 | 5 | 17.8% |
 | agents | 204 | 0 | 142 | 62 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
+| commerce | 130 | 0 | 103 | 27 | 0% |
 | workspace-ui | 172 | 4 | 101 | 67 | 3.8% |
 | chat | 101 | 0 | 100 | 1 | 0% |
-| commerce | 116 | 0 | 100 | 16 | 0% |
 | workspace | 155 | 23 | 97 | 35 | 19.2% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 91 | 5 | 83 | 3 | 5.7% |
@@ -409,7 +409,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-chat.js:data-side=swap`
 - `ui:platform-chat.js:data-side=tab`
 
-## commerce — 100 planned
+## commerce — 103 planned
 
 - `route:accountGiftRoutes.js:POST /`
 - `route:accountGiftRoutes.js:POST /account-history`
@@ -430,6 +430,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:billingRoutes.js:POST /checkout`
 - `route:billingRoutes.js:POST /consent`
 - `route:billingRoutes.js:POST /portal`
+- `route:compensationRoutes.js:GET /agreements`
+- `route:compensationRoutes.js:GET /export.csv`
+- `route:compensationRoutes.js:GET /payouts`
 - `route:downloadFunnelRoutes.js:GET /intent/:token`
 - `route:downloadFunnelRoutes.js:POST /intent`
 - `route:downloadFunnelRoutes.js:POST /intent/:token/claim`
@@ -988,7 +991,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-tasks.js:data-tk=view`
 - `ui:platform-tasks.js:data-tk=watch`
 
-## workforce — 244 planned
+## workforce — 245 planned
 
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /operations`
 - `route:apiKeyWorkforceCapabilityRoutes.js:POST /read`
@@ -1142,6 +1145,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:workforceResourceRoutes.js:POST /workers/schedule`
 - `route:workforceRoutes.js:POST /capacity`
 - `route:workforceRoutes.js:POST /evaluation`
+- `route:workforceRoutes.js:POST /evaluation/roster`
 - `route:workforceRoutes.js:POST /member-removals`
 - `route:workforceRoutes.js:POST /member-removals/archive`
 - `route:workforceRoutes.js:POST /member-removals/read`

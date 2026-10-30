@@ -56,6 +56,21 @@ const page = async () => {
     const user = (await pool.query('SELECT id, username, email, display_name FROM users WHERE id = $1', [who])).rows[0];
     if (u.pathname === '/api/auth/me') return json(200, { success: true, user: { ...user, avatar_url: null, email_verified: true } });
     if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: W, workspace_type: 'company', name: 'Dir Co', member_role: 'editor' }] });
+    if (u.pathname.startsWith('/api/compensation/')) {
+      // the REAL compensation service, as the signed-in user (the route is a thin shell over it)
+      const C = await import('../../../src/server/services/workforceCompensation.js');
+      const c = { actorUserId: who }, qs = Object.fromEntries(u.searchParams), body = q.postData() ? JSON.parse(q.postData()) : {};
+      const p = u.pathname.replace('/api/compensation', '');
+      try {
+        const d = p === '/agreements' && q.method() === 'GET' ? await C.listAgreements(pool, c, { workspaceId: qs.workspace })
+          : p === '/agreements' ? await C.setAgreement(pool, c, body)
+            : p === '/payouts' ? await C.listPayouts(pool, c, { workspaceId: qs.workspace })
+              : p === '/payouts/prepare' ? await C.preparePayouts(pool, c, body)
+                : /^\/payouts\/[^/]+\/decide$/.test(p) ? await C.decidePayout(pool, c, { ...body, payoutId: p.split('/')[2] }) : null;
+        if (!d) return json(404, { success: false });
+        seen.push(JSON.stringify(d)); return json(200, { success: true, ...d });
+      } catch (e) { return json(e.status || 500, { success: false, code: e.code, error: e.details?.reason }); }
+    }
     if (u.pathname === '/api/workforce/evaluation/roster') {
       try { const d = await readWorkforceRoster(pool, { actorUserId: who, clientId: 'legacy-workforce-session' }, JSON.parse(q.postData())); seen.push(JSON.stringify(d)); return json(200, d); }
       catch (e) { return json(e.status || 500, { success: false, code: e.code }); }
@@ -141,7 +156,37 @@ try {
   const p7 = await page(); await p7.goto(`${base}/workspace/workspace/Directory/reports/${owner}/30?ws=${W}`, { waitUntil: 'domcontentloaded' });
   ok(await until(p7, () => /You cannot see this report/.test(document.querySelector('#main')?.innerText || '')), 'a peer cannot read someone else’s reports');
   ok(!seen.some((b) => /tasksCreated/.test(b)), 'and no row was sent to them');
-  ok(![p, p2, p3, p4, p5, p6, p7].some((x) => x.errs.length), `no page errors (${[p, p2, p3, p4, p5, p6, p7].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
+  // ── Pay: a finished week in which the owner accepted one of Emil's tasks from review; the owner sets his pay
+  // (20 credits per accepted task), prepares the week, approves it in the confirmation dialog -- and it is paid
+  // from the workspace wallet. Emil sees his own pay and cannot decide it.
+  const { ensureWorkspaceWallet } = await import('../../../src/server/services/walletService.js');
+  const { addGrant } = await import('../../../src/server/utils/creditLedgerV2.js');
+  const C = await import('../../../src/server/services/workforceCompensation.js');
+  await ensureWorkspaceWallet(pool, W); await addGrant(pool, W, { amountMicro: 100_000_000, kind: 'paid', sourceRef: `${tag}-fund` });
+  const d0 = new Date(); d0.setUTCHours(0, 0, 0, 0); d0.setUTCDate(d0.getUTCDate() - 9);
+  const weekStart = d0.toISOString().slice(0, 10), inWeek = new Date(d0.getTime() + 86_400_000).toISOString();
+  const accTask = (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,status) VALUES('Mix the stems',$1,$2,$3,'done') RETURNING id`, [proj, owner, emp])).rows[0].id;
+  await pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind,from_value,to_value,created_at) VALUES($1,$2,'human','status','in_progress','in_review',$4),($1,$3,'human','status','in_review','done',$4)`, [accTask, emp, owner, inWeek]);
+  await C.setAgreement(pool, { actorUserId: owner }, { workspaceId: W, principalId: emp, basis: 'per_accepted_task', amountMicro: '20000000', period: 'week', startsOn: '2026-01-01' });
+  who = owner;
+  const p8 = await page(); const payUrl = `${base}/workspace/workspace/Directory/pay/${weekStart}/week?ws=${W}`;
+  await p8.goto(payUrl, { waitUntil: 'domcontentloaded' });
+  ok(await until(p8, () => /Agreements/.test(document.querySelector('#main')?.innerText || '') && /Per task a person accepted/.test(document.querySelector('#main')?.innerText || '')), 'Pay lists the agreement');
+  ok(await p8.evaluate(() => !!document.querySelector('#main .topbar .pg-top-tabs [data-to="Directory/pay"]')), 'Pay is a tab in the header bar');
+  await p8.evaluate(() => document.querySelector('[data-xpay="prepare"]').click());
+  ok(await until(p8, () => /Waiting for a decision/.test(document.querySelector('#main')?.innerText || '') && /1 task a person accepted/.test(document.querySelector('#main')?.innerText || '')), 'preparing reads the work report: one accepted task');
+  const before = BigInt((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1', [emp])).rows[0]?.balance ?? 0);
+  await p8.evaluate(() => document.querySelector('[data-xpay="approve"]').click());
+  ok(await until(p8, () => /Pay 20 credits to Emil Employee\?/.test(document.querySelector('.xd')?.innerText || '')), 'approving asks first, naming the amount and the payee');
+  await p8.evaluate(() => document.querySelector('.xd [data-xd-ok]').click());
+  ok(await until(p8, () => /\bPaid\b/.test(document.querySelector('#main')?.innerText || '') && !document.querySelector('[data-xpay="approve"]')), 'it is paid, and nothing is left to decide');
+  const after = BigInt((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1', [emp])).rows[0]?.balance ?? 0);
+  ok(after - before === 20_000_000n, `20 credits reached Emil (${after - before} micro)`);
+  who = emp;
+  const p9 = await page(); await p9.goto(payUrl, { waitUntil: 'domcontentloaded' });
+  ok(await until(p9, () => /Week of/.test(document.querySelector('#main')?.innerText || '') && /Emil Employee[^]*\bPaid\b/.test(document.querySelector('#main')?.innerText || '')), 'the member sees their own pay');
+  ok(await p9.evaluate(() => !document.querySelector('[data-xpay="prepare"], [data-xpay="approve"], [data-xpay="set"]')), 'and cannot prepare, approve or set it');
+  ok(![p, p2, p3, p4, p5, p6, p7, p8, p9].some((x) => x.errs.length), `no page errors (${[p, p2, p3, p4, p5, p6, p7, p8, p9].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
 } finally { await br.close(); await server.close(); real.close(); await pool.end(); }
 console.log(failed ? `${failed} failed` : 'directory-test: all passed');
 process.exit(failed ? 1 : 0);

@@ -82,7 +82,8 @@
   }
   const away = (p) => (p.availability && !p.availability.available ? `<span class="pg-dim" data-away="${esc(p.availability.reason)}">${p.availability.reason === 'time_off' ? 'Away' : 'Outside hours'}</span>` : '');
   // the views are tabs in the header bar (the shared XENO_PAGES.h.tabs, lifted by framed()), not a row in the body
-  const tabs = (cur) => H().tabs([['Directory', 'Directory'], ['Directory/org-chart', 'Org chart'], ['Directory/my-work', 'My work']], cur, 'data-xdir="tab" data-to');
+  const tabs = (cur) => H().tabs([['Directory', 'Directory'], ['Directory/org-chart', 'Org chart'], ['Directory/my-work', 'My work'],
+    ...(window.XENO_PAY?.served ? [['Directory/pay', 'Pay']] : [])], cur, 'data-xdir="tab" data-to');
 
   function listPage() {
     const h = H();
@@ -235,6 +236,7 @@
 
   function route(it) {
     if (it !== 'Directory' && !(it || '').startsWith('Directory/')) return null;
+    if (/^Directory\/pay(\/|$)/.test(it)) return window.XENO_PAY?.route?.(it) ?? null;   // People › Pay (platform-pay.js)
     const h = H(), sub = it.slice(10);
     const wm = sub.match(/^([0-9a-f-]{36})\/work(?:\/(7|30|90))?$/i);
     const gm = sub.match(/^(reports|division|team)\/([0-9a-f-]{36})(?:\/(7|30|90))?$/i);
@@ -269,6 +271,7 @@
   });
   // breadcrumb words for Directory/<id>/work/<days>
   const label = (x, i, parts) => (i === 2 && x === 'work' ? 'Work report' : i === 3 && parts[2] === 'work' && /^\d+$/.test(x) ? `${x} days`
+    : i === 1 && x === 'pay' ? 'Pay' : i === 2 && parts[1] === 'pay' ? (window.XENO_PAY?.label?.(x, parts[3]) || x) : i === 3 && parts[1] === 'pay' ? (x === 'week' ? 'Weekly' : 'Monthly')
     : i === 1 && GROUPS[x] ? `${GROUPS[x]} work` : i === 2 && GROUPS[parts[1]] ? (S.rosterName || GROUPS[parts[1]]) : i === 3 && GROUPS[parts[1]] && /^\d+$/.test(x) ? `${x} days` : x);
   window.XENO_DIRECTORY = { served: true, route, label, isId: (s) => UUID.test(String(s || '')), nameOf: (id) => (S.one?.person?.id === id ? S.one.person.name : S.list.find((p) => p.id === id)?.name || 'Person') };
 })();
