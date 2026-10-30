@@ -255,6 +255,12 @@ async function main() {
   check(await code(() => compute.deleteMachine(pool, E, m1.id)) === 'still_running', 'a running machine cannot be deleted');
   await compute.stopMachine(pool, E, m1.id);
   const del = await compute.deleteMachine(pool, E, m1.id);
+  // A deleted machine stops holding its key: Cloud Shell always uses one key, and answering the deleted machine for good
+  // left it unable to start again for that person.
+  const reborn = await compute.createMachine(pool, E, { ...w, name: 'Build box 2', size: 'small', idempotencyKey: 'k1' });
+  check(reborn.id !== m1.id && reborn.state !== 'deleted', 'a key whose machine was deleted makes a new machine');
+  check((await compute.createMachine(pool, E, { ...w, name: 'again', size: 'small', idempotencyKey: 'k1' })).id === reborn.id, 'and a retry finds that new machine');
+  await compute.deleteMachine(pool, E, reborn.id);
   check(del.state === 'deleted' && calls.some((c) => c[0] === 'remove' && c[1] === m1.id), 'a stopped machine is deleted through xeno-compute');
   check(await code(() => pool.query("UPDATE compute_machines SET state = 'stopped', deleted_at = NULL WHERE id = $1", [m1.id])) !== null, 'the database refuses bringing a deleted machine back');
   check(!(await compute.listMachines(pool, V, w)).some((m) => m.id === m1.id), 'a deleted machine leaves the list');

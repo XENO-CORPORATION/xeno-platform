@@ -3,6 +3,19 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-10-31
+
+**Three more workspace areas show your real work.**
+
+- Corpo › People, Dev › Agents and Studio › Generate now list your own people, agents and generations, and open each at its
+  real page. They used to show sample rows or nothing.
+- Customers, Scheduling and Analytics no longer say they are "planned" in the sidebar: they have been real for a while.
+- A product's sidebar no longer shows sample folders and channels.
+- The preview line at the bottom says exactly which parts are still sample data, and updates itself as they get connected.
+
+Fixed: Cloud Shell could never start again for someone whose shell machine had been deleted, because a deleted machine kept
+its creation key for good.
+
 ## 2026-10-30
 
 **The credit ledger now proves itself.**

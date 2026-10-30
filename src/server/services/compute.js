@@ -243,7 +243,8 @@ export async function createMachine(db, actor, { workspace, name, size, purpose,
   const r = (await db.query('SELECT * FROM compute_rates WHERE size = $1', [String(size || '')])).rows[0];
   if (!r) throw new ComputeError(`Unknown size "${size}"`, 'invalid_size');
   if (idempotencyKey) {
-    const prior = (await db.query('SELECT * FROM compute_machines WHERE workspace_id = $1 AND idempotency_key = $2', [ctx.workspaceId, String(idempotencyKey)])).rows[0];
+    // A deleted machine no longer holds its key: the key means "this machine, while it exists".
+    const prior = (await db.query("SELECT * FROM compute_machines WHERE workspace_id = $1 AND idempotency_key = $2 AND state <> 'deleted'", [ctx.workspaceId, String(idempotencyKey)])).rows[0];
     if (prior) return shapeMachine(db, prior);
   }
   const agentUserId = await agentFor(db, ctx, agentId);
