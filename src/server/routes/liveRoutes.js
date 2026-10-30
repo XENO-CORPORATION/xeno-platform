@@ -9,6 +9,7 @@ import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../services/agentIdentity.js';
 import { createTicket, LiveTicketError } from '../services/liveTickets.js';
 import { ComputeError } from '../services/compute.js';
+import { CanvasError } from '../services/spawnCanvases.js';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.post('/tickets', authMiddleware, requireDpopIfBound, async (req, res) => 
     const actor = { id: p.id, username: p.handle, display_name: p.displayName, role: p.role, kind: p.kind, owner: p.owner };
     res.json({ success: true, ...(await createTicket(req.db, actor, (req.body || {}).resource)) });
   } catch (e) {
-    if (e instanceof LiveTicketError || e instanceof ComputeError || e instanceof AgentIdentityError) {
+    if (e instanceof LiveTicketError || e instanceof CanvasError || e instanceof ComputeError || e instanceof AgentIdentityError) {
       return res.status(e.statusCode || 400).json({ success: false, error: e.message, code: e.code });
     }
     console.error('[live] ticket', e);

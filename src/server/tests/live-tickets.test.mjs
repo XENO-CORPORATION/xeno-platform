@@ -21,6 +21,7 @@ const { runAllMigrations } = await import('../services/migrationRunner.js');
 const { migrateAccountV2 } = await import('../database/migrate-account-v2.js');
 const { writeTuples } = await import('../utils/authzReBAC.js');
 const compute = await import('../services/compute.js');
+const canvases = await import('../services/spawnCanvases.js');
 const { setComputeBackend } = await import('../services/computeBackend.js');
 const { jwks } = await import('../utils/oidcProvider.js');
 const { issuer } = await import('../config/hosts.js');
@@ -51,7 +52,10 @@ async function main() {
     const claims = jwt.verify(t, crypto.createPublicKey({ key: jwk, format: 'jwk' }), { algorithms: ['ES256'], audience: 'xeno-multiplayer', issuer: issuer() });
     return { header, claims, typOk: header.typ === typ };
   };
-  const res = `spawn.canvas/${m.id}`;
+  const canvasId = crypto.randomUUID();
+  await canvases.createCanvas(pool, { id: editor, kind: 'human' }, { id: canvasId, name: 'Canvas', machineId: m.id });
+  const res = `spawn.canvas/${canvasId}`;
+  check(await code(() => live.createTicket(pool, { id: editor, kind: 'human' }, `spawn.canvas/${m.id}`)) !== null, 'a machine id no longer gets a ticket, even for an editor of its workspace');
   const A = (id, kind = 'human', name) => ({ id, kind, display_name: name });
 
   for (const [who, id, want] of [['owner', owner, 'owner'], ['editor', editor, 'editor'], ['viewer', viewer, 'viewer']]) {

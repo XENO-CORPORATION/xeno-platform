@@ -16,7 +16,6 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { issuerForHost } from '../config/hosts.js';
 import { getSigningKey } from '../utils/oidcProvider.js';
-import * as compute from './compute.js';
 import { canvasRole } from './spawnCanvases.js';
 
 export const AUDIENCE = 'xeno-multiplayer';
@@ -38,13 +37,8 @@ export class LiveTicketError extends Error {
  */
 export const RESOURCE_TYPES = Object.freeze({
   // A Spawn cloud canvas: <id> is the canvas (Spawn's project UUID), its role from the canvas record
-  // (services/spawnCanvases.js). A machine id (mch_…) is still accepted, role from the machine's workspace, until
-  // Spawn rc.91 ships; then that branch goes.
+  // (services/spawnCanvases.js).
   'spawn.canvas': async (db, actor, id) => {
-    if (/^mch_[0-9a-f]{32}$/.test(id)) {
-      const { ctx, role } = await compute.machineRole(db, actor, id);
-      return { role, userId: ctx.userId, agentId: ctx.agentId };
-    }
     const { role, userId, agentId } = await canvasRole(db, actor, id);
     return { role, userId, agentId };
   },
