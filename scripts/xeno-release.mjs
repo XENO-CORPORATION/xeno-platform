@@ -174,7 +174,14 @@ export function findFeedFile(searchDirs, version, declaredChannel, exists = exis
   };
 }
 
+const KNOWN_FLAGS = new Set(['app', 'version', 'date', 'channel', 'type', 'severity', 'title', 'notes', 'notes-file', 'win', 'mac', 'linux',
+  'artifact-dir', 'updater-url', 'updater-layout', 'rollout-percent', 'rollback', 'dry-run',
+  'allow-unscannable-payload', 'allow-overwrite', 'allow-no-updater-feed', 'allow-no-artifacts']);
+
 async function publish(opts) {
+  // Before anything else: an ignored flag once published a version whose installer did not exist (Corpus 0.3.1).
+  for (const key of Object.keys(opts)) if (key !== '_' && !KNOWN_FLAGS.has(key)) fail(`unknown flag --${key}`);
+  if (!opts.win && !opts.mac && !opts.linux && !opts['allow-no-artifacts']) fail('no artifact named (--win, --mac or --linux): this would move version.json with no installer behind it. Pass --allow-no-artifacts only for a release with nothing to upload');
   const app = opts.app || fail('--app is required');
   const version = String(opts.version || fail('--version is required')).replace(/^v/i, '');
   const date = opts.date || fail('--date (YYYY-MM-DD) is required');

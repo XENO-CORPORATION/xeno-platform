@@ -142,7 +142,7 @@
     "test:forum-throttle": "node --test scripts/forum-throttle.test.mjs",
     "test:forum-moderation": "node --test scripts/forum-moderation.test.mjs scripts/forum-moderation-ui.test.mjs",
     "test:forum-notify": "node --test scripts/forum-notify.test.mjs scripts/forum-notify-email.test.mjs scripts/forum-notification-ui.test.mjs",
-    "test:release-guard": "node --test scripts/secret-box.test.mjs scripts/public-health.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/publish-tool-packages-cli.test.mjs scripts/amend-release-entry.test.mjs scripts/deploy-platform.test.mjs scripts/deploy-chat-database.test.mjs scripts/release-history.test.mjs",
+    "test:release-guard": "node --test scripts/xeno-release.flags.test.mjs scripts/secret-box.test.mjs scripts/public-health.test.mjs scripts/xeno-release.latest-yml.test.mjs scripts/release-guard.test.mjs scripts/publish-cli-releases.test.mjs scripts/publish-tool-packages-cli.test.mjs scripts/amend-release-entry.test.mjs scripts/deploy-platform.test.mjs scripts/deploy-chat-database.test.mjs scripts/release-history.test.mjs",
     "test:product-pages": "node --test scripts/experimental-notice.test.mjs scripts/product-privacy.test.mjs",
     "test:tiptap-compatibility": "node --test scripts/tiptap-editor-compatibility.test.mjs scripts/html-docx-export.test.mjs",
     "test:product-docs": "node --test scripts/product-docs.test.mjs scripts/docs-slug-registry.test.mjs",
