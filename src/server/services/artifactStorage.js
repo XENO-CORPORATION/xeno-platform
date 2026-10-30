@@ -151,7 +151,9 @@ function r2Backend({ accountId, accessKeyId, secretAccessKey, bucket, fetchImpl 
     /** Write only if the key is empty. Returns false when something is already there; never replaces it. */
     async putNew(key, bytes) {
       const response = await request('PUT', key, bytes, { 'if-none-match': '*' });
-      if (response.status === 412) return false;
+      // 412: the key exists. 409: it exists and is retention-locked (R2 answers ObjectLockedByBucketPolicy before it
+      // looks at the condition). Either way the object stays as it was. Measured on R2, 2026-10-30.
+      if (response.status === 412 || response.status === 409) return false;
       if (!response.ok) throw new Error(`R2 PUT ${key} failed: ${response.status} ${await response.text().catch(() => '')}`);
       return true;
     },

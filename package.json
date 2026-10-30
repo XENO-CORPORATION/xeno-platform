@@ -268,7 +268,7 @@
     "test:chat-capability": "node --test scripts/chat-capability-statement.test.mjs",
     "test:chat-tool-loop": "node --test scripts/chat-tool-loop.test.mjs",
     "test:native-dialogs": "node --test scripts/native-dialogs.test.mjs scripts/confirm-action.test.mjs",
-    "test:no-request-time-ddl": "node --test scripts/no-request-time-ddl.test.mjs",
+    "test:no-request-time-ddl": "node --test scripts/no-request-time-ddl.test.mjs scripts/ledger-anchor-store.test.mjs",
     "test:cors": "node --test scripts/cors-extension-origin.test.mjs",
     "test:ws-file-operation": "node --test scripts/ws-file-operation.test.mjs",
     "test:migration-identity": "node --test scripts/migration-identity.test.mjs",
