@@ -12,9 +12,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - Customers, Scheduling and Analytics no longer say they are "planned" in the sidebar: they have been real for a while.
 - A product's sidebar no longer shows sample folders and channels.
 - The preview line at the bottom says exactly which parts are still sample data, and updates itself as they get connected.
+- Workspace › Teams now creates, edits and archives real teams, each with its own link. Automations lists your real workflows and
+  opens them in Automate. Activity shows what was recorded in the workspace, and says how many entries you can't see.
 
 Fixed: Cloud Shell could never start again for someone whose shell machine had been deleted, because a deleted machine kept
-its creation key for good.
+its creation key for good. Someone without access to a shared Spawn canvas now gets a clear refusal, not a server error.
 
 ## 2026-10-30
 

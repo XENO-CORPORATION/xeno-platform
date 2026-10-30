@@ -36,6 +36,9 @@ export function xenoWorkspace(rootDir) {
   let outDir = path.join(rootDir, 'dist'), building = false;
   return {
     name: 'xeno-workspace',
+    // Other sessions' worktrees live under the repo. Watching them starves everything else in the process: on 2026-10-31,
+    // with 72 of them, puppeteer.launch never returned and every browser test hung with no output.
+    config: () => ({ server: { watch: { ignored: ['**/.claude/**', '**/scratchpad/**'] } } }),
     configResolved(config) { outDir = path.resolve(config.root, config.build.outDir); building = config.command === 'build'; },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
