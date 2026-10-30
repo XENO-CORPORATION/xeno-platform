@@ -179,7 +179,7 @@ import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { startDownloadCleanup } from './services/downloadService.js';
 import { startConversionWorker } from './services/conversionWorker.js';
-import { runRequiredStartupMigrations } from './services/startupSchema.js';
+import { runStartupSchema } from './services/startupSchema.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import mediaGenerationRoutes from './routes/mediaGenerationRoutes.js';
@@ -4090,7 +4090,7 @@ app.locals.migrationsReady = false;
  * best-effort (not schema-critical), so its failure does not block readiness.
  */
 async function runStartupMigrations() {
-  await runRequiredStartupMigrations(pool);
+  await runStartupSchema(pool);
   // XENO Corpus's bundle digest on skill versions made before it existed (expand step; idempotent)
   await import('./services/skills.js').then((m) => m.backfillBundleDigests(pool)).then((n) => n && console.log(`[Skills] bundle digest filled on ${n} version(s)`)).catch(err => console.error('[Skills] bundle digest backfill warning (non-fatal):', err.message));
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));

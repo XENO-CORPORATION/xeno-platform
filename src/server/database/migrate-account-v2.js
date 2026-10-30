@@ -340,11 +340,24 @@ CREATE TABLE IF NOT EXISTS ledger_chain_attestations (
   epoch      integer,
   seq        bigint,
   head_hash  text,
-  kind       text NOT NULL CHECK (kind IN ('verified', 'broken', 'history-sealed')),
+  kind       text NOT NULL,
   report     jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(report) = 'object'),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE ledger_chain_attestations DROP CONSTRAINT IF EXISTS ledger_chain_attestations_kind_check;
+ALTER TABLE ledger_chain_attestations ADD CONSTRAINT ledger_chain_attestations_kind_check
+  CHECK (kind IN ('verified', 'broken', 'history-sealed', 'resealed'));
 CREATE INDEX IF NOT EXISTS idx_ledger_chain_attestations_account ON ledger_chain_attestations (account_id, created_at DESC);
+-- Hourly checkpoints of every head, signed and copied OUTSIDE this database (services/ledgerChainAnchor.js).
+CREATE TABLE IF NOT EXISTS ledger_chain_checkpoints (
+  no         bigint PRIMARY KEY CHECK (no > 0),
+  prev_hash  text,
+  body_hash  text NOT NULL,
+  key_id     text NOT NULL,
+  object_key text NOT NULL,
+  accounts   integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE OR REPLACE FUNCTION ledger_lp(t text) RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
   SELECT CASE WHEN t IS NULL THEN '-1:;' ELSE octet_length(t)::text || ':' || t || ';' END
@@ -368,7 +381,10 @@ RETURNS text LANGUAGE sql IMMUTABLE AS $fn$
     'sha256'), 'hex')
 $fn$;
 
-CREATE OR REPLACE FUNCTION ledger_chain_append() RETURNS trigger LANGUAGE plpgsql AS $fn$
+-- SECURITY DEFINER: a writer role (the app, the gateway, the portal) may append to the journal but holds no
+-- privilege on the chain's own records; only this function moves them.
+CREATE OR REPLACE FUNCTION ledger_chain_append() RETURNS trigger LANGUAGE plpgsql
+  SECURITY DEFINER SET search_path = public, pg_temp AS $fn$
 DECLARE
   h ledger_chain_heads%ROWTYPE;
   v_prior text; v_count bigint; v_opened timestamp; v_last timestamp; v_hash text;
@@ -425,6 +441,44 @@ $fn$;
 CREATE OR REPLACE FUNCTION ledger_chain_record_immutable() RETURNS trigger LANGUAGE plpgsql AS $fn$
 BEGIN RAISE EXCEPTION '% is append-only', TG_TABLE_NAME USING ERRCODE = '23514'; END
 $fn$;
+-- Re-seal after a rollback window: rows written with the trigger off are outside the chain, and the verifier is right
+-- to say so. A PERSON may accept them, once, with a reason: a new epoch binds the old head and the new row count, and
+-- the attestation records who and why. Earlier epochs are still verified, so this can never hide an altered entry.
+-- Not executable by the runtime role (database/runtime-role.js); run through scripts/ledger-reseal.mjs.
+CREATE OR REPLACE FUNCTION ledger_chain_reseal(p_account uuid, p_reason text, p_actor text) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $fn$
+DECLARE
+  h ledger_chain_heads%ROWTYPE;
+  e ledger_chain_epochs%ROWTYPE;
+  v_total bigint; v_chained bigint; v_unchained bigint; v_opened timestamp; v_hash text;
+BEGIN
+  IF COALESCE(btrim(p_reason), '') = '' OR COALESCE(btrim(p_actor), '') = '' THEN
+    RAISE EXCEPTION 'a re-seal names who and why' USING ERRCODE = '23514';
+  END IF;
+  SELECT * INTO h FROM ledger_chain_heads WHERE account_id = p_account FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'account % has no chain to re-seal', p_account USING ERRCODE = '23514'; END IF;
+  SELECT * INTO e FROM ledger_chain_epochs WHERE account_id = p_account AND epoch = h.epoch;
+  SELECT count(*) INTO v_total FROM credit_transactions WHERE account_id = p_account;
+  SELECT count(*) INTO v_chained FROM credit_transactions WHERE account_id = p_account AND chain_epoch = h.epoch;
+  v_unchained := v_total - e.prior_entries - v_chained;
+  IF v_unchained <= 0 THEN RAISE EXCEPTION 'nothing to re-seal: every row on % is chained', p_account USING ERRCODE = '23514'; END IF;
+  v_opened := clock_timestamp() AT TIME ZONE 'UTC';
+  v_hash := ledger_epoch_hash_v2(p_account, h.epoch + 1, h.head_hash, v_total, v_opened);
+  INSERT INTO ledger_chain_epochs (account_id, epoch, opened_at, prior_head, prior_entries, epoch_hash)
+    VALUES (p_account, h.epoch + 1, v_opened, h.head_hash, v_total, v_hash);
+  PERFORM set_config('xeno.ledger_append', 'on', true);
+  UPDATE ledger_chain_heads SET epoch = h.epoch + 1, seq = 0, head_hash = v_hash WHERE account_id = p_account;
+  PERFORM set_config('xeno.ledger_append', 'off', true);
+  INSERT INTO ledger_chain_attestations (account_id, epoch, seq, head_hash, kind, report)
+    VALUES (p_account, h.epoch + 1, 0, v_hash, 'resealed',
+      jsonb_build_object('reason', p_reason, 'actor', p_actor, 'rows', v_unchained, 'priorEpoch', h.epoch));
+  RETURN h.epoch + 1;
+END
+$fn$;
+
+DROP TRIGGER IF EXISTS trg_ledger_chain_checkpoints_immutable ON ledger_chain_checkpoints;
+CREATE TRIGGER trg_ledger_chain_checkpoints_immutable BEFORE UPDATE OR DELETE ON ledger_chain_checkpoints
+  FOR EACH ROW EXECUTE FUNCTION ledger_chain_record_immutable();
 DROP TRIGGER IF EXISTS trg_ledger_chain_heads_guard ON ledger_chain_heads;
 CREATE TRIGGER trg_ledger_chain_heads_guard BEFORE INSERT OR UPDATE OR DELETE ON ledger_chain_heads
   FOR EACH ROW EXECUTE FUNCTION ledger_chain_heads_guard();

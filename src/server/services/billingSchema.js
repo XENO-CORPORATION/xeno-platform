@@ -1,8 +1,9 @@
+import { tablesPresent } from '../utils/schemaPresence.js';
 // ── Schema (idempotent, lazy) ────────────────────────────────────────────────
 let schemaPromise = null;
 export function ensureSchema(pool) {
   if (!schemaPromise) {
-    schemaPromise = pool.query(`
+    schemaPromise = tablesPresent(pool, ['billing_customers', 'billing_events', 'billing_charges', 'xeno_account_plans']).then((present) => present || pool.query(`
       CREATE TABLE IF NOT EXISTS billing_customers (
         user_id            text PRIMARY KEY,
         stripe_customer_id text UNIQUE NOT NULL,
@@ -33,7 +34,7 @@ export function ensureSchema(pool) {
         current_period_end     timestamptz,
         updated_at             timestamptz NOT NULL DEFAULT now()
       );
-    `).catch((e) => { schemaPromise = null; throw e; });
+    `)).catch((e) => { schemaPromise = null; throw e; });
   }
   return schemaPromise;
 }

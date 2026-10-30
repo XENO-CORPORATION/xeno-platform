@@ -24,60 +24,7 @@ function requireSetupToken(req, res) {
 router.post('/init', async (req, res) => {
   try {
     if (!requireSetupToken(req, res)) return;
-    // Create user_settings table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS user_settings (
-        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-        settings JSONB NOT NULL DEFAULT '{}',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create user_files table for tracking uploaded/recent files
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS user_files (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        filename VARCHAR(255) NOT NULL,
-        original_name VARCHAR(255),
-        file_type VARCHAR(100),
-        mime_type VARCHAR(100),
-        file_size INTEGER,
-        storage_path VARCHAR(500),
-        storage_type VARCHAR(50) DEFAULT 'local',
-        metadata JSONB DEFAULT '{}',
-        last_used_at TIMESTAMP DEFAULT NOW(),
-        created_at TIMESTAMP DEFAULT NOW(),
-        deleted_at TIMESTAMP
-      )
-    `);
-
-    // Create user_usage table for tracking API usage
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS user_usage (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        date DATE NOT NULL DEFAULT CURRENT_DATE,
-        model_id VARCHAR(255) NOT NULL,
-        provider VARCHAR(100),
-        prompt_tokens INTEGER DEFAULT 0,
-        completion_tokens INTEGER DEFAULT 0,
-        total_tokens INTEGER DEFAULT 0,
-        request_count INTEGER DEFAULT 0,
-        estimated_cost DECIMAL(10, 6) DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(user_id, date, model_id)
-      )
-    `);
-
-    // Create indexes
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_user_files_user ON user_files(user_id, deleted_at)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_user_files_last_used ON user_files(user_id, last_used_at DESC)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_user_usage_user_date ON user_usage(user_id, date DESC)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_user_usage_model ON user_usage(user_id, model_id)`);
-
+    // The schema is owned by database/migrations/, applied by the migrate job.
     console.log('✅ User data tables initialized successfully');
     res.json({ success: true, message: 'User data tables initialized' });
   } catch (error) {

@@ -663,8 +663,13 @@ export async function verifyAccountChain(pool, accountId, { includeLegacy = fals
   }
   const fail = (reason, extra = {}) => ({ ...out, ok: false, reason, ...extra });
   const head = (await pool.query('SELECT epoch, seq, head_hash FROM ledger_chain_heads WHERE account_id=$1', [accountId])).rows[0];
-  let chained = 0; let last = null;
+  let chained = 0; let last = null; let resealedRows = 0; let endOfPrevious = null; let lastEpochRows = 0;
   for (const e of epochs) {
+    // A later epoch (a re-seal) must bind where the previous one ended, and a row count that can only grow.
+    if (endOfPrevious && (e.prior_head !== endOfPrevious.head || Number(e.prior_entries) < endOfPrevious.rows)) {
+      return fail('epoch-link', { epoch: e.epoch });
+    }
+    if (endOfPrevious) resealedRows += Number(e.prior_entries) - endOfPrevious.rows;
     if (ledgerEpochHash({ accountId, epoch: e.epoch, priorHead: e.prior_head, priorEntries: e.prior_entries, openedAt: e.opened_at }) !== e.epoch_hash) {
       return fail('epoch-hash', { epoch: e.epoch });
     }
@@ -686,15 +691,17 @@ export async function verifyAccountChain(pool, accountId, { includeLegacy = fals
       prev = r.entry_hash; last = r;
     }
     chained += rows.length;
+    lastEpochRows = rows.length;
+    endOfPrevious = { head: prev, rows: Number(e.prior_entries) + rows.length };
     if (head && head.epoch === e.epoch && (Number(head.seq) !== rows.length || head.head_hash !== prev)) {
       return fail('head-mismatch', { epoch: e.epoch, headSeq: Number(head.seq), chainSeq: rows.length });
     }
   }
   const sealed = Number(epochs[0].prior_entries);
-  const unchained = total - sealed - chained;
+  const unchained = total - Number(epochs[epochs.length - 1].prior_entries) - lastEpochRows;
   if (unchained !== 0) return fail('unchained-entries', { entries: chained, unchained });
   return {
-    ...out, ok: true, entries: chained, epochs: epochs.length, sealedHistory: sealed,
+    ...out, ok: true, entries: chained, epochs: epochs.length, sealedHistory: sealed, resealedRows,
     head: head?.head_hash, seq: head ? Number(head.seq) : 0,
     balanceMatches: last ? String(last.balance_after) === String(acct.balance) : null,
   };

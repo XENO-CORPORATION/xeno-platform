@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { runMigrations, LEGACY_SCHEMA_FILES } from '../src/server/services/migrationService.js';
-import { runRequiredStartupMigrations } from '../src/server/services/startupSchema.js';
+import { runRequiredStartupMigrations, runStartupSchema, assertSchemaReady } from '../src/server/services/startupSchema.js';
 
 function mockSchemas(t, read) {
   t.mock.method(fs, 'readFileSync', read);
@@ -56,7 +56,7 @@ for (const file of LEGACY_SCHEMA_FILES) {
   }
 }
 
-const phases = ['runMigrations', 'runAllMigrations', 'migrateAccountV2', 'migrateOidcClients', 'migrationStatus'];
+const phases = ['runMigrations', 'runAllMigrations', 'migrateAccountV2', 'migrateOidcClients', 'migrationStatus', 'applyRuntimeGrants'];
 const resultFor = phase => phase === 'runAllMigrations' ? { total: 2, applied: 2, skipped: [] }
   : phase === 'migrationStatus' ? [{ status: 'applied' }, { status: 'applied' }] : undefined;
 
@@ -120,7 +120,7 @@ test('actual entrypoint awaits fail-closed schema startup before listeners, work
   assert.ok(gate, 'startup must be a top-level awaited boundary');
   assert.match(gate.catchClause.getText(ast), /process\.exit\(1\)/);
   const startup = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'runStartupMigrations');
-  assert.match(startup.body.statements[0].getText(ast), /^await runRequiredStartupMigrations\(pool\)/);
+  assert.match(startup.body.statements[0].getText(ast), /^await runStartupSchema\(pool\)/);
   const starters = new Set(['initCleanupService', 'startDownloadCleanup', 'initBackgroundJobs', 'startNotificationEmailSweep', 'startWebhookPushSweep',
     'startScheduledTasksWorker', 'startLibraryIngestionWorker', 'server.listen', 'setInterval']);
   const seen = new Set();
@@ -157,4 +157,35 @@ test('download service import starts no cleanup timer; explicit start/stop is id
   assert.deepEqual(cleared, [timer]);
   service.startDownloadCleanup();
   assert.equal(callbacks.length, 2);
+});
+
+// The ROLE decides whether startup migrates, never a setting: the running app (xeno_app) cannot, so it only verifies.
+const fakePool = (superuser, chain = true) => ({
+  query: async (sql) => (sql.includes('is_superuser') ? { rows: [{ superuser }] } : { rows: chain ? [{}] : [] }),
+});
+const stepsSpy = (status = [{ status: 'applied' }]) => {
+  const calls = [];
+  return { calls, steps: Object.fromEntries(phases.map((name) => [name, async (_p, opts) => {
+    calls.push(opts?.readOnly ? `${name}:readOnly` : name);
+    return name === 'migrationStatus' ? status : resultFor(name);
+  }])) };
+};
+
+test('a superuser connection migrates at startup', async () => {
+  const { calls, steps } = stepsSpy();
+  await runStartupSchema(fakePool('on'), steps);
+  assert.deepEqual(calls, phases);
+});
+
+test('the runtime role never migrates: it only reads the status, and serves when the job has run', async () => {
+  const { calls, steps } = stepsSpy();
+  const r = await runStartupSchema(fakePool('off'), steps);
+  assert.deepEqual(calls, ['migrationStatus:readOnly']);
+  assert.equal(r.verifiedOnly, true);
+});
+
+test('the runtime role refuses to serve an unmigrated schema or a disabled ledger chain', async () => {
+  await assert.rejects(runStartupSchema(fakePool('off'), stepsSpy([{ status: 'pending', version: '1' }]).steps), /migrate job has not run/);
+  await assert.rejects(runStartupSchema(fakePool('off'), stepsSpy([]).steps), /migrate job has not run/);
+  await assert.rejects(assertSchemaReady(fakePool('off', false), stepsSpy().steps), /chain trigger is missing or disabled/);
 });

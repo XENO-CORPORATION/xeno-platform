@@ -1,0 +1,6 @@
+{
+  "note": "Public keys trusted to sign ledger checkpoints. Keep old keys after a rotation so history keeps verifying. docs/LEDGER-OPERATIONS.md",
+  "keys": {
+    "61c2d99badc8f5c4": "MCowBQYDK2VwAyEAOGB9hcuWA7Ewkcw950TZ4Zg2HM4yLAQp9GW3hCFL3p4="
+  }
+}
