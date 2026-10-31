@@ -47,6 +47,7 @@ export const DOCUMENTED_SLUGS: readonly string[] = [
   'spawn',
   'storage',
   'corpus',
+  'view',
 ];
 
 /** Does this product have a docs section at /docs/<slug>? */

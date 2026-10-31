@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#6F6A05}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header style="height:60px; display:flex; align-items:center; gap:24px; padding:0 24px; background:#F6F4F0; border-bottom:1px solid #E2DDD5">
+  <a href="https://xenostudio.ai" style="display:flex; align-items:center; gap:10px; flex:none">
+    <img src="assets/xeno-mark.svg" alt="" style="width:22px; height:22px; display:block">
+    <span style="font-size:17px; letter-spacing:-.01em"><span style="font-weight:700">XENO</span>{{ productSlug }}</span>
+  </a>
+  
+  <nav style="flex:1 0 auto; display:flex; justify-content:center; gap:4px; font-size:14px; white-space:nowrap">
+    <a href="#" style="height:34px; padding:0 10px; border-radius:6px; color:#1D1B18; font-weight:500; display:flex; align-items:center">Products<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:flex; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Solutions<svg width="9" height="9" viewBox="0 0 10 10" style="margin-left:5px; opacity:.6"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Docs</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Pricing</a>
+    <a href="#" style="height:34px; padding:0 10px; display:{{ secD }}; align-items:center; color:#5F5A52; border-radius:6px" style-hover="background:#EFECE6; color:#1D1B18">Blog</a>
+  </nav>
+  <div style="display:flex; gap:18px; align-items:center; flex:none">
+    <a href="#" style="display:{{ owD }}; font-size:14px; font-weight:500; color:#3F3B35; white-space:nowrap">Open workspace</a>
+    <a href="#get" style="background:#1D1B18; color:#F6F4F0; font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px; display:flex; align-items:center; gap:8px" style-hover="background:#35322D; color:#F6F4F0">Download<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7M4 6.5L7 9.5l3-3M2.5 12h9"></path></svg></a>
+  </div>
+</header>
+
+</div>
+
+
+<section data-screen-label="Hero" style="background:#101008; color:#F2F1E2; padding:clamp(40px,7vh,80px) 24px 90px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#DFD746">The universal viewer</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">Double-click anything.<br><span style="color:#DFD746">It just opens.</span></h1>
+      </div>
+      <div style="flex:0 1 400px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#A8A68E; text-wrap:pretty">One Windows app for your images, video, audio and 3D models, instead of a different viewer for each. Arrow keys walk the folder. When you want to change the file, it goes straight to the XENO app built for it.</p>
+        <div style="display:flex; gap:10px 16px; flex-wrap:wrap; align-items:center"><a href="/product/view/download/win" style="background:#DFD746; color:#101008; font-size:15px; font-weight:600; padding:12px 18px; border-radius:8px">Download for Windows</a><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#84826A">v0.2.1 · Windows x64 · experimental · unsigned</span></div>
+      </div>
+    </div>
+    <div style="margin-top:40px; border-radius:14px; overflow:hidden; background:#191910; box-shadow:0 0 0 1px #2C2C1C, 0 40px 80px -40px rgba(0,0,0,.9)">
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #2C2C1C; flex-wrap:wrap">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#A8A68E; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ fileLabel }}</span>
+        <span style="margin-left:auto; display:flex; gap:6px; flex-wrap:wrap"><sc-for list="{{ kinds }}" as="k"><button onClick="{{ k.on }}" style="height:28px; padding:0 11px; border:none; border-radius:6px; background:{{ k.bg }}; color:{{ k.fg }}; font:inherit; font-family:'IBM Plex Mono',monospace; font-size:11.5px; cursor:pointer">{{ k.l }}</button></sc-for></span>
+      </div>
+      <div style="height:clamp(280px,44vh,460px); position:relative; display:grid; place-items:center; overflow:hidden; background:#0C0C07">
+        <sc-if value="{{ isImage }}" hint-placeholder-val="{{ true }}"><div style="width:62%; aspect-ratio:16/10; border-radius:4px; background:linear-gradient(130deg,#3B3A16 0%,#8A8420 38%,#DFD746 62%,#F3EB5D 100%); transform:scale({{ zoom }}); transition:transform .25s cubic-bezier(.2,.8,.2,1)"></div></sc-if>
+        <sc-if value="{{ isVideo }}" hint-placeholder-val="{{ false }}"><div style="width:62%; aspect-ratio:16/9; border-radius:4px; background:#22221A; display:flex; align-items:flex-end; padding:14px; box-sizing:border-box"><div style="width:100%; height:5px; border-radius:3px; background:#3A3A26; overflow:hidden"><div style="height:100%; width:{{ progress }}%; background:#DFD746; transition:width .2s linear"></div></div></div></sc-if>
+        <sc-if value="{{ isAudio }}" hint-placeholder-val="{{ false }}"><div style="display:flex; align-items:center; gap:5px; height:60%"><sc-for list="{{ bars }}" as="b"><span style="width:8px; height:{{ b }}%; border-radius:2px; background:#DFD746; transition:height .2s ease"></span></sc-for></div></sc-if>
+        <sc-if value="{{ isModel }}" hint-placeholder-val="{{ false }}"><svg viewBox="-110 -110 220 220" style="width:min(56%,320px); height:auto"><g fill="none" stroke="#DFD746" stroke-width="1.6" stroke-linejoin="round"><sc-for list="{{ cube }}" as="e"><path d="{{ e }}"></path></sc-for></g></svg></sc-if>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px; padding:10px 12px; border-top:1px solid #2C2C1C; flex-wrap:wrap; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#A8A68E">
+        <button onClick="{{ prev }}" aria-label="Previous file" style="width:28px; height:28px; border:none; border-radius:6px; background:#2C2C1C; color:#F2F1E2; cursor:pointer">←</button>
+        <button onClick="{{ next }}" aria-label="Next file" style="width:28px; height:28px; border:none; border-radius:6px; background:#2C2C1C; color:#F2F1E2; cursor:pointer">→</button>
+        <span>{{ position }}</span>
+        <span style="margin-left:auto">{{ readout }}</span>
+      </div>
+    </div>
+    <p style="margin:12px 0 0; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#84826A">A drawing of the window, not a recording. Try the arrows.</p>
+  </div>
+</section>
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px"><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Replaces</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Windows Photos, Media Player, a separate 3D viewer</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Opens</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">24 file types across four kinds</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Walks</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Every file in the folder, in natural order</div></div><div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Runs</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Windows 10 and 11, x64</div></div></div></section>
+<section id="kinds" data-screen-label="Kinds" style="padding:110px 24px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:18px 64px; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:14px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#6F6A05">One window for all of it</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:760px">Four kinds of file, the tools each one needs.</h2></div><p data-reveal="" style="flex:0 1 420px; margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">View registers with File Explorer when it installs, so these files can open in it directly. The same window, the same keys, whatever you double-clicked.</p></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:10px; margin-top:40px"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:8px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#6F6A05">Images</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8C867C">PNG JPG WEBP GIF SVG BMP ICO AVIF</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">Pan and zoom, fit or actual pixels, rotate. The Details panel shows dimensions, format, size and a live RGB histogram.</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:8px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#6F6A05">Video</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8C867C">MP4 WEBM MOV MKV AVI</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">Scrub, change speed from 0.5x to 2x, and step one frame at a time. Plays the codecs the built-in engine decodes.</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:8px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#6F6A05">Audio</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8C867C">MP3 WAV OGG FLAC M4A AAC</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">Play it with an animated frequency view, a timeline and volume.</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:8px"><span style="font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:17px; color:#6F6A05">3D models</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#8C867C">GLB GLTF OBJ STL</span><span style="font-size:14.5px; line-height:1.45; color:#5F5A52">Orbit, pan and spin it. Shaded, wireframe, normals or unlit, with a ground grid and live polygon counts.</span></div></div>
+  </div>
+</section>
+<section id="flow" data-screen-label="Flow" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1280px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:24px; display:flex; flex-direction:column; gap:10px"><span style="font-size:22px; font-weight:700; letter-spacing:-.02em">Walk the folder</span><span style="font-size:15.5px; line-height:1.5; color:#5F5A52; text-wrap:pretty">The left and right arrow keys go through every viewable file beside the one you opened, in the order you would expect: img1, img2, img10. The filmstrip shows where you are.</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:24px; display:flex; flex-direction:column; gap:10px"><span style="font-size:22px; font-weight:700; letter-spacing:-.02em">Open it where it can be changed</span><span style="font-size:15.5px; line-height:1.5; color:#5F5A52; text-wrap:pretty">One click sends the file to XENO Pixel, Motion, Sound or Form when that app is installed. Copy the image or its path, or show it in its folder.</span></div><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:24px; display:flex; flex-direction:column; gap:10px"><span style="font-size:22px; font-weight:700; letter-spacing:-.02em">AI Restyle</span><span style="font-size:15.5px; line-height:1.5; color:#5F5A52; text-wrap:pretty">Ask for a new look and get it as a new version beside the original. Your file is untouched until you save a copy or replace it. Runs on your XENO account and uses credits.</span></div></div></section>
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#6F6A05">Where it stands</div><h2 data-reveal="" style="margin:0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; margin-top:12px; max-width:780px">Out now for Windows, as an experimental app.</h2><div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px"><sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="3"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for></div></div></section>
+<section id="get" data-screen-label="Get it" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start"><div><h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700">Get XENO View.</h2><p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:460px; text-wrap:pretty">The desktop app runs on Windows 10 and 11 (x64), behind your XENO account, and updates itself. The installer is not code-signed yet: if Windows SmartScreen warns, choose More info → Run anyway.</p></div><div data-reveal="" style="display:flex; flex-direction:column; gap:12px"><div style="border:1px solid #1D1B18; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Desktop app for Windows</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">v0.2.1 · x64 · experimental · unsigned</div></div><a href="/product/view/download/win" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">Download</a></div><div style="border:1px solid #E2DDD5; border-radius:10px; padding:18px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between"><div><div style="font-weight:600; font-size:17px">Documentation and release history</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">install, keys, troubleshooting</div></div><span style="display:flex; gap:14px; font-size:14.5px; font-weight:500"><a href="/docs/view">Docs</a><a href="/product/view/releases">Releases</a></span></div></div></div></section>
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#6F6A05">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#A7F3D0">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#" style="color:#A9A398; font-size:13.5px">Features</a><a href="#" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="#" style="color:#A9A398; font-size:13.5px">Download</a><a href="#" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="#" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="#" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="#" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="#" style="color:#A9A398; font-size:13.5px">Templates</a><a href="#" style="color:#A9A398; font-size:13.5px">API</a><a href="#" style="color:#A9A398; font-size:13.5px">Blog</a><a href="#" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="#" style="color:#A9A398; font-size:13.5px">About</a><a href="#" style="color:#A9A398; font-size:13.5px">Careers</a><a href="#" style="color:#A9A398; font-size:13.5px">Press</a><a href="#" style="color:#A9A398; font-size:13.5px">Partners</a><a href="#" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="#" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="#" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="#" style="color:#A9A398; font-size:13.5px">Terms</a><a href="#" style="color:#A9A398; font-size:13.5px">Security</a><a href="#" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="#" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <a href="#" style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</a>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;View&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false, getEmail: "", getSent: false }, {});
+  STAT = [["Built","#2FA36B",["Images, video, audio and 3D models in one window","File Explorer associations for all 24 file types","Folder walking with arrow keys and a filmstrip","A Details panel with a live RGB histogram","Open in XENO Pixel, Motion, Sound or Form","AI Restyle, with versions beside your original","Sign-in and in-app updates"]],["Not yet","#C9962E",["macOS and Linux","A code-signed installer","Editing: View looks, the studio apps change things"]],["Boundaries","#8C867C",["It keeps no library and saves no format of its own","It works on your files where they are","AI Restyle sends the image to XENO when you ask it to, and only then"]]];
+  FAQ = [["Do I need a XENO account?","Yes. View opens behind your XENO account like every XENO desktop app, and the account decides whether this copy may run."],["Does View upload my files?","No. Viewing happens on this PC. The one exception is AI Restyle, which sends the image you are restyling to XENO when you press the button, because that is where the model runs."],["Why does Windows warn when I install it?","The installer is not code-signed yet, so SmartScreen may show “Windows protected your PC”. Choose More info → Run anyway. The app says the same: an UNSIGNED BUILD badge sits in its window."],["Will it take over my default apps?","The installer registers View as an option for these file types. Windows keeps your current default until you choose View in Open with or in Default apps."],["Which videos will it play?","Whatever the built-in Chromium engine decodes. MP4 and WebM with common codecs work. A MOV, MKV or AVI file using a codec the engine does not know will not play; View is not a codec pack."],["macOS or Linux?","Not yet. This release is Windows x64 only."]];
+  KINDS = [['image','Image','photo 12.png','1920 × 1200'],['video','Video','site walk.mp4','00:14 / 00:42 · 1x'],['audio','Audio','room tone.wav','00:06 / 01:18'],['model','3D','bracket.glb','9,412 tris · shaded']];
+  cubeEdges(a) { const P = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]; const E = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]; const pr = p => { const c = Math.cos(a), s = Math.sin(a), x = p[0]*c - p[2]*s, z = p[0]*s + p[2]*c, y = p[1], t = .42, y2 = y*Math.cos(t) - z*Math.sin(t), z2 = y*Math.sin(t) + z*Math.cos(t), k = 62 * (3 / (3.6 + z2)); return [(x*k).toFixed(1), (y2*k).toFixed(1)]; }; return E.map(e => { const u = pr(P[e[0]]), v = pr(P[e[1]]); return 'M ' + u[0] + ' ' + u[1] + ' L ' + v[0] + ' ' + v[1]; }); }
+  mountX() { this.setState({ kind: 0, zoom: 1, t: 0 }); if (!this.reduce) this._t = setInterval(() => this.setState({ t: (this.state.t || 0) + 1 }), 240); }
+  unmountX() { clearInterval(this._t); }
+  go = (d) => this.setState({ kind: ((this.state.kind || 0) + d + this.KINDS.length) % this.KINDS.length });
+  valsX(S) { const i = S.kind || 0, K = this.KINDS[i], kind = K[0], t = S.t || 0;
+    return { kinds: this.KINDS.map((k, j) => ({ l: k[1], on: () => this.setState({ kind: j }), bg: j === i ? '#DFD746' : '#2C2C1C', fg: j === i ? '#101008' : '#DCDBC6' })),
+      fileLabel: 'D:\\Reference\\' + K[2], isImage: kind === 'image', isVideo: kind === 'video', isAudio: kind === 'audio', isModel: kind === 'model', zoom: kind === 'image' ? 1 + (t % 12 < 6 ? 0 : .12) : 1,
+      progress: (t * 1.2) % 100, bars: Array.from({ length: 28 }, (_, n) => 14 + Math.abs(Math.sin(n * .7 + t * .55)) * 78), cube: this.cubeEdges(t * .12),
+      prev: () => this.go(-1), next: () => this.go(1), position: (i + 1) + ' of ' + this.KINDS.length, readout: K[3] };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); if (this.scrollX) this.scrollX(); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw);
+    this.ro = new ResizeObserver(() => { this.syncVw(); if (this.resizeX) this.resizeX(); }); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); if (this.mountX) this.mountX();
+  }
+  componentDidUpdate(pp, ps) { if (this.updateX) this.updateX(pp, ps); }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); if (this.unmountX) this.unmountX(); }
+  renderVals() {
+    const S = this.state, wide = S.vw >= 1000;
+    const base = { productSlug: String(this.props.product ?? 'View').trim().toLowerCase().replace(/^xeno\s*/, ''), owD: S.vw >= 1080 ? 'inline' : 'none', secD: S.vw >= 960 ? 'flex' : 'none',
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#6F6A05' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      getEmail: S.getEmail, getSent: S.getSent, getNotSent: !S.getSent, getSet: e => this.setState({ getEmail: e.target.value }), getSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.getEmail)) this.setState({ getSent: true }); },
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); } };
+    return Object.assign(base, this.valsX ? this.valsX(S, wide) : {});
+  }
+}
+</script>
+</body>
+</html>
