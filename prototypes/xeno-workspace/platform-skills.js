@@ -694,11 +694,13 @@
     document.head.appendChild(s);
   };
 
-  setTimeout(() => { loadList().then(paint); }, 1800);
-  window.XENO_SKILLS = { served: true, route, list: () => S.list, loaded: () => S.loaded, reload: () => loadList().then(paint),
+  // read when something shows them, not on every page load
+  let asked = false;
+  const ask = () => { if (!asked && !S.loaded) { asked = true; loadList().then(paint); } };
+  window.XENO_SKILLS = { served: true, route, list: () => { ask(); return S.list; }, loaded: () => S.loaded, reload: () => loadList().then(paint),
     // used by an agent's Identity tab: write a new skill in the editor (it returns to the library), or reload the list
     create: ({ forAgent = null, agentName = '' } = {}) => { S.ed = { id: null, name: '', description: '', body: '', files: [], sel: 'SKILL.md', where: teamWs() ? 'workspace' : 'personal', forAgent, from: agentName ? `for ${agentName}` : '' }; go('Skills/new'); },
     // breadcrumb words for each part of a Skills address: names, never ids
     label: (x, i, parts) => (ID.test(x) ? ((S.one && S.one.id === x) ? S.one.name : (S.list.find((s) => s.id === x) || {}).name || 'Skill') : x === 'new' ? (S.ed && S.ed.forAgent ? 'New skill for an agent' : 'New skill') : x === 'edit' ? 'Edit' : UUID.test(x) ? ((S.listing && S.listing.listing.id === x) ? S.listing.listing.title : 'Skill') : x),
-    count: () => (S.loaded ? S.list.length : null), nameOf: (id) => { const s = (S.one && S.one.id === id) ? S.one : S.list.find((x) => x.id === id); return s ? s.name : 'Skill'; }, isId: (s) => ID.test(String(s || '')) };
+    ensure: ask, count: () => (S.loaded ? S.list.length : null), nameOf: (id) => { const s = (S.one && S.one.id === id) ? S.one : S.list.find((x) => x.id === id); return s ? s.name : 'Skill'; }, isId: (s) => ID.test(String(s || '')) };
 })();

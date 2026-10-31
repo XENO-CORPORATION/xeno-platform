@@ -234,6 +234,7 @@ router.get('/me', authMiddleware, loadActor, handled('me', async (req, res) => {
       isStaff: ['admin', 'moderator'].includes(req.actor.role),
     },
     capabilities: caps,
+    followingThreads: await write.followedThreadShortIds(req.db, req.user.id),
     // Deliberately NOT a reputation number (D4). The UI shows what you can do,
     // never a score to compete over.
   });

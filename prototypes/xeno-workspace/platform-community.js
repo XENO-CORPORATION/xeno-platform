@@ -30,6 +30,8 @@
   const TSTEPS = [['open', 'Received'], ['acknowledged', 'Looked at'], ['planned', 'Planned'], ['fixed', 'Fixed']];
   const C = { status: 'loading', threads: [], detail: new Map(), me: null, tickets: null, ticket: new Map(), flags: null, log: null, version: 0 };
   window.XENO_PG_FORUM = [];
+  { const g = window.XENO_GLOBAL_NAV?.community; if (g) g[3][0][1] = g[3][0][1].map(([t]) => [t, '']); }   // the picture's counts aren't anyone's
+  window.XENO_FORUM_LIVE = { failed: () => C.status === 'error', following: () => (Array.isArray(C.me?.followingThreads) ? new Set(C.me.followingThreads) : null) };
   const repaint = () => { C.version++; try { if (X()?.S?.view === 'global' && X().S.global === 'community') X().render(); } catch {} };
   const fresh = (kind) => C[kind] === null;
 
@@ -131,7 +133,7 @@
   const ACT = {
     open: (id) => go(id), mine: () => go('My reports'), ticket: (id) => go('My reports/' + id),
     async follow(id) { const t = C.detail.get(id); if (!t) return; const on = !t.subscribed; const r = await api('PUT', `/api/forum/threads/${encodeURIComponent(id)}/subscription`, { subscribed: on }).catch(() => null);
-      if (!r || !r.ok) return toast(said(r, 'That couldn’t be changed.')); t.subscribed = on; repaint(); toast(on ? 'Following — replies come to your notifications' : 'No longer following'); },
+      if (!r || !r.ok) return toast(said(r, 'That couldn’t be changed.')); t.subscribed = on; if (Array.isArray(C.me?.followingThreads)) C.me.followingThreads = on ? [...new Set([...C.me.followingThreads, id])] : C.me.followingThreads.filter((x) => x !== id); repaint(); toast(on ? 'Following — replies come to your notifications' : 'No longer following'); },
     async vote(pid) { const t = [...C.detail.values()].find((x) => x.posts && x.posts.some((p) => p.id === pid)), p = t && t.posts.find((x) => x.id === pid), undo = !!(p && p.myVote > 0);
       const r = await api(undo ? 'DELETE' : 'POST', `/api/forum/posts/${encodeURIComponent(pid)}/vote`, undo ? undefined : { value: 1 }).catch(() => null);
       if (!r || !r.ok) return toast(said(r, undo ? 'That couldn’t be taken back.' : 'That couldn’t be counted.')); if (t) await loadThread(t.id); toast(undo ? 'Vote taken back' : 'Marked helpful'); },

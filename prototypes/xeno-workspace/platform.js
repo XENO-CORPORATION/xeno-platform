@@ -98,7 +98,7 @@
     + '#xp-state{transition:opacity .42s cubic-bezier(.2,.7,.2,1)}#xp-state[data-leaving]{opacity:0;pointer-events:none}#xp-state .xp-mark{display:grid;place-items:center;color:#e8e8e8}'
     + '#xp-state div{max-width:360px;text-align:center}#xp-state button{margin-top:14px;padding:8px 14px;border-radius:8px;border:1px solid #3a3a3a;background:#1a1a1a;color:#fff;font:inherit;cursor:pointer}'
     // the note is fixed over the page, so every page reserves room for it at its foot: nothing is ever hidden under it
-    + 'body:has(#xp-note) .pg{padding-bottom:64px}'
+    + 'body:has(#xp-note:not([hidden])) .pg{padding-bottom:64px}'
     + '#xp-note{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);padding:6px 12px;border-radius:8px;border:1px solid #2e2e2e;background:#141414;color:#b8b8b8;font:12px/1.4 Inter,system-ui,sans-serif;z-index:9000}';
   document.head.appendChild(style);
   const icon = document.createElement('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; document.head.appendChild(icon); // the platform's own icon; from disk there is none to point at

@@ -77,6 +77,7 @@
     const T = S.store; if (T.status === 'idle') loadStore();
     const v = VIEWS[view] || ['all'], rows = T.list.filter((l) => (v[0] === 'all' || GROUPS[v[0]].has(l.kind)) && (!v[1] || v[1].includes(l.kind)));
     // the real tools (platform-tools.js): each opens where it runs, nothing to buy
+    window.XENO_TOOLS_ENSURE?.();
     const toolRows = (v[0] === 'agents' || (v[1] && !v[1].includes('tool'))) ? [] : (window.XENO_PG_MARKET || []).filter((x) => x.toolId && (!T.q || (x.name + ' ' + x.blurb).toLowerCase().includes(T.q.toLowerCase())));
     const toolCard = (x) => `<div class="pg-card pg-card--lst" tabindex="0" data-xmk="tool" data-id="${esc(x.toolId)}"><div class="pg-card-top"><span class="pg-thumb pg-thumb--ic sq">${ic('grid')}</span><span class="pg-tag">Tool</span></div><b><a>${esc(x.name)}</a></b><small class="pg-clamp">${esc(x.blurb)}</small><div class="pg-card-foot"><span>XENO · Official</span><b class="pg-price">Free</b></div></div>`;
     const search = `<label class="pg-search">${ic('search')}<input data-xmk-q value="${esc(T.q)}" placeholder="Search the store" aria-label="Search the store" spellcheck="false"></label>`;

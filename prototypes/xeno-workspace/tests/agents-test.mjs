@@ -529,12 +529,12 @@ try {
     ok(vs.length === 1 && vs[0] === 'XENO Spawn 0.1.0-rc.42' && (tx.match(/XENO Spawn 0\.1\.0-rc/g) || []).length >= 2, `every Spawn version on the page is the same one (${JSON.stringify(vs)})`); }
   await p.click('[data-xag="place"][data-k="cli"]'); await settle(300);
   ok(!!(await p.$('[data-xag="mint"]')) && !!(await p.$('[data-xag-ttl]')), 'On a computer keeps its credential controls');
-  { const ov = await p.evaluate(async () => { const n = document.getElementById('xp-note'); if (!n) return { note: false };
+  { const ov = await p.evaluate(async () => { const n = document.getElementById('xp-note'); if (!n || n.hidden) return { note: false };
       for (const el of [document.scrollingElement, ...document.querySelectorAll('#main, #main *')]) if (el && el.scrollHeight > el.clientHeight + 4) el.scrollTop = el.scrollHeight;
       await new Promise((r) => setTimeout(r, 250)); const secs = [...document.querySelectorAll('#main .xag-one > *, #main .pg-sec')]; const last = secs[secs.length - 1].getBoundingClientRect(), nr = n.getBoundingClientRect();
       return { note: true, lastBottom: Math.round(last.bottom), noteTop: Math.round(nr.top) }; });
     if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `${TAG}-bottom.png`) }).catch(() => {});
-    ok(ov.note && ov.lastBottom <= ov.noteTop, `the Preview note does not cover the last section (${JSON.stringify(ov)})`); }
+    ok(!ov.note || ov.lastBottom <= ov.noteTop, `no note covers the last section (${JSON.stringify(ov)})`); }
 
   await fresh(`/workspace/workspace/Agents/${sNever.id}`); await shot('never-run');
   { const id = await avail(); ok(/Never run/.test(id) && /Last seen never/.test(id) && !/Can take work now/.test(id) && !/Runs in the cloud/.test(id), `never run: says so, not "runs in the cloud, can take work now" (${one(id)})`); }

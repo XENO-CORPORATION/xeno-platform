@@ -11,8 +11,12 @@
   if (!P || !P.served) return;
   const X = () => window.XW, H = () => window.XENO_PAGES.h, api = P.api;
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const paint = () => { try { if (window.XENO_PAGES?.repaint && document.querySelector('#main .mview')) window.XENO_PAGES.repaint(); else X()?.render?.(); } catch {} };
+  const paint = () => { try { X()?.render?.(); } catch {} };
   const INSTALL = 'npm install -g @xenosystem/anima';
+  const AGENT = /^agt_[a-z0-9]+$/i;
+  const nav = (rows) => { window.XENO_GLOBAL_NAV.anima = ['Anima', 'Your agents', null, rows.length ? [['Agents', rows.map((a) => [a.name, '', null, a.id])]] : []]; };
+  nav([]);
+  if (window.XENO_PG_ANIMA) window.XENO_PG_ANIMA.minds = [];
   const S = { status: 'idle', list: [], scope: null };
   const wsQ = () => { const u = window.XENO_SCOPE?.uuid?.(); return u ? `?workspace=${encodeURIComponent(u)}` : ''; };
   async function load() {
@@ -20,7 +24,7 @@
     const r = await api('GET', '/api/agents' + q).catch(() => null);
     if (S.scope !== q) return;
     S.status = r && r.ok ? 'ready' : 'error'; S.list = r && r.ok ? (r.d.agents || []) : [];
-    paint();
+    nav(S.list); try { X()?.render?.(); } catch { paint(); }
   }
   function page() {
     const h = H();
@@ -46,5 +50,7 @@
     if (a === 'market') return X().go('global', { global: 'market', item: null });
     if (a === 'copy') navigator.clipboard?.writeText(INSTALL).then(() => X()?.toast?.('Copied'), () => X()?.toast?.(INSTALL));
   }, true);
-  window.XENO_ANIMA = { served: true, route: () => page(), minds: () => [] };
+  // a sidebar row is an agent's id: its Mind is on its own page
+  const route = (item) => { if (item && AGENT.test(item)) setTimeout(() => X().go('global', { global: 'workspace', item: `Agents/${item}/Identity` }), 0); return page(); };
+  window.XENO_ANIMA = { served: true, route, minds: () => [] };
 })();

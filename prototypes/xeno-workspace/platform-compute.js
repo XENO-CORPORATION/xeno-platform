@@ -37,6 +37,10 @@
   const sizeOf = (id) => S.sizes.find((s) => s.size === id);
   const sizeLine = (s) => (s ? `${s.vcpus} cores · ${s.memoryGb} GB · ${s.diskGb} GB disk · ${s.priced ? cr(s.creditsPerHour) + '/h' : 'not priced yet'}` : '');
 
+  async function loadBadge() {
+    const m = await api('GET', '/api/compute/machines' + q()).catch(() => null);
+    if (m && m.ok && S.status === 'idle') { S.machines = m.d.machines || []; try { X()?.renderRail?.(); } catch {} }
+  }
   async function load() {
     S.ws = wsId(); S.status = 'loading'; S.error = null;
     const [m, z] = await Promise.all([api('GET', '/api/compute/machines' + q()).catch(() => null), api('GET', '/api/compute/sizes').catch(() => null)]);
@@ -215,5 +219,5 @@
     if (await act('PUT', `/api/compute/machines/${S.machine.id}/idle-stop` + q(), { idleStopMinutes: v }, v == null ? 'It will not stop by itself' : 'Idle stop saved')) { S.machineId = null; await load(); }
   }, true);
 
-  P.lazyZone(window.XENO_ZONE_LIVE['dev.compute'], () => load(), () => load());
+  P.lazyZone(window.XENO_ZONE_LIVE['dev.compute'], () => load(), () => loadBadge());
 })();

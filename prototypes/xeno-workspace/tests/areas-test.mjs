@@ -31,6 +31,8 @@ async function open(url) {
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     if (u.pathname === '/api/workspaces') return json({ success: true, workspaces: [] });
     if (u.pathname === '/api/library/assets') { db.libraryAsked = u.searchParams.get('area'); return json({ success: true, items: [{ id: 'file:f1', source: 'file', source_id: 'f1', name: 'Real render.mp4', mime_type: 'video/mp4', size_bytes: 2500000 }, { id: 'generation:g1', source: 'generation', source_id: 'g1', name: 'A generated picture', mime_type: 'image/png' }] }); }
+    if (u.pathname === '/api/forum/threads') return json({ success: true, total: 2, threads: [{ shortId: 'aaaa1111', title: 'A thread I follow', status: 'open', space: { name: 'Questions', slug: 'questions' }, author: { username: 'x', displayName: 'X', kind: 'human' }, postCount: 1 }, { shortId: 'bbbb2222', title: 'A thread I do not', status: 'open', space: { name: 'Questions', slug: 'questions' }, author: { username: 'x', displayName: 'X', kind: 'human' }, postCount: 1 }] });
+    if (u.pathname === '/api/forum/me') return json({ success: true, actor: {}, capabilities: {}, followingThreads: ['aaaa1111'] });
     const part = u.pathname === '/api/people' ? 'people' : u.pathname === '/api/agents' ? 'agents' : u.pathname === '/api/generations' ? 'generations' : null;
     if (part) return db.fail.has(part) ? json({ error: 'nope' }, 500) : json({ [part]: db[part] });
     return json({ success: false, error: 'not found' }, 404); });
@@ -90,6 +92,18 @@ try {
     const row = await p.$('[data-xan="open"]');
     ok(!!row, 'an agent is listed');
     if (row) { await row.click(); await wait(900); ok(/\/Agents\/.*Identity|\/identity/i.test(await p.evaluate(() => location.pathname)), 'and opens at its Identity'); }
+    ok(/Real Agent/.test(await p.evaluate(() => document.querySelector('#panel')?.innerText || '')), 'its sidebar lists the agent');
+    await p.evaluate((id) => window.XW.go('global', { global: 'anima', item: id }), AID); await wait(900);
+    ok(/\/Agents\/.*Identity|\/identity/i.test(await p.evaluate(() => location.pathname)), 'and a sidebar row opens its Identity too');
+    ok(!errs.length, `no page errors (${errs.join(' | ')})`); await p.close();
+  }
+  {
+    const { p, errs } = await open('/workspace/#/overview/g/community');
+    const side = await p.evaluate(() => document.querySelector('#panel')?.innerText || '');
+    ok(!/3 new|2 replies/.test(side), 'Community’s sidebar has no made-up counts');
+    await p.evaluate(() => window.XW.go('global', { global: 'community', item: 'Following' })); await wait(700);
+    const t = await p.evaluate(() => document.querySelector('#main')?.innerText || '');
+    ok(/A thread I follow/.test(t) && !/A thread I do not/.test(t), 'Following shows the threads I follow, and only those');
     ok(!errs.length, `no page errors (${errs.join(' | ')})`); await p.close();
   }
   {

@@ -883,6 +883,19 @@ export async function threadReplyRecipients(db, threadId, { exceptUserId, thread
  * One query rather than resolving the id first: a toggle is not worth two round
  * trips, and the join is on an indexed unique column.
  */
+export async function followedThreadShortIds(db, userId) {
+  const { rows } = await db.query(
+    `SELECT t.short_id
+       FROM forum_subscriptions s
+       JOIN forum_threads t ON t.id = s.thread_id
+      WHERE s.user_id = $1 AND NOT COALESCE(s.muted, false)
+      ORDER BY t.last_activity_at DESC NULLS LAST
+      LIMIT 500`,
+    [userId],
+  );
+  return rows.map((r) => r.short_id);
+}
+
 export async function threadSubscriptionByShortId(db, userId, shortId) {
   if (!userId || !shortId) return { subscribed: false };
   const { rows } = await db.query(

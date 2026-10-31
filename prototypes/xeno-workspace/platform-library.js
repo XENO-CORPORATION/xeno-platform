@@ -65,9 +65,11 @@
     return { items: out, total, capped: true };
   }
   let loadingArea = null;
+  let trashWanted = false;
+  const ensureTrash = () => { if (!trashWanted) { trashWanted = true; load(); } };
   async function load() {
     const here = area(); loadingArea = here;
-    const [active, trash] = await Promise.all([pages('active'), pages('trash')]);
+    const [active, trash] = await Promise.all([pages('active'), trashWanted ? pages('trash') : { items: [], capped: false }]);
     if (area() !== here) return load();   // the person moved to another area while this was on its way
     L.area = here; loadingArea = null;
     if (!active || !trash) { L.status = 'error'; window.XENO_PG_LIBRARY.items = []; pstate('error'); paint(); return false; }
@@ -276,6 +278,6 @@
     if (!r || !r.ok) return toast((r && r.d && r.d.error) || 'That couldn’t be moved. It is where it was.');
     toast(name ? 'Moved to ' + name : 'Removed from its project'); await load();
   }
-  window.XENO_LIB = { served: true, duplicate, moveToProject, textPreview, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
+  window.XENO_LIB = { served: true, ensureTrash, duplicate, moveToProject, textPreview, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

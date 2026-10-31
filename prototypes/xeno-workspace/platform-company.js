@@ -36,7 +36,8 @@
     const h = H(), ws = window.XENO_SCOPE?.uuid?.();
     if (S.for !== ws && S.status !== 'loading') load();
     const head = (acts = '', title = 'Company') => h.head({ title, sub: 'The legal entity behind this workspace: where it’s registered, its numbers, and who may act for it.', acts });
-    if (S.status === 'loading' || S.status === 'idle' || S.status === 'noscope') return h.page(head() + h.box('refresh', 'Loading the company', '', '', 'sm'));
+    if (S.status === 'noscope') return h.page(head() + h.box('building', 'No workspace to show', 'A company’s details belong to a workspace, and yours didn’t load.', h.btn('Try again', 'data-co2="retry"', true), 'sm'));
+    if (S.status === 'loading' || S.status === 'idle') return h.page(head() + h.box('refresh', 'Loading the company', '', '', 'sm'));
     if (S.status !== 'ready') return h.page(head() + h.box('x', 'The company couldn’t be loaded', 'Nothing was changed.', h.btn('Try again', 'data-co2="retry"', true), 'sm'));
     const d = S.d, c = d.canManage, btn = (label, a, arg = '', ghost = true) => (c ? h.btn(label, `data-co2="${a}" data-arg="${esc(arg)}"`, ghost) : '');
     if (d.org.kind === 'personal') return h.page(head() + h.box('building', 'This is your personal workspace', 'A company has its own people, wallet and legal entity. Create one, or switch to one you belong to.', h.btn('Create a company', 'data-xa="newCompany"', false, 'plus')));
