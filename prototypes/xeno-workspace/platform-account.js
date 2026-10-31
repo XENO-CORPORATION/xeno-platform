@@ -20,7 +20,8 @@
  *   · GET+POST /api/account/exports · GET /api/account/exports/:id/download · DELETE /api/account/exports/:id
  *   · GET+DELETE /api/account/apps · /api/v2/inference/{providers,credentials,products,routes} · GET+PUT+DELETE /api/v2/ledger/caps
  *   · /api/storage/connect/workspaces/:id/connections · /api/mcp/connections · POST /api/places/ops/funding.{get,gift}.
- * Missing on the platform (each section says so): passkeys, authenticator, recovery codes, adding a sign-in method. */
+ *   · /api/account/two-step (authenticator, passkeys, recovery codes) · POST /api/account/confirm/passkey/options
+ *   · /api/auth/<provider>?link=1 (connecting Google, GitHub or X to this account). */
 (() => {
   const P = window.XENO_PLATFORM;
   if (!P || !P.served) { window.XENO_ACCOUNT = { served: false, section: () => null }; return; }
@@ -35,7 +36,7 @@
   const S = { status: 'loading', full: false, parts: {}, usage: null, plan: null, security: null, exports: null, browsers: null };
   let poll = 0;
   const LOCAL = new Set(['general', 'appearance', 'notifications', 'modes', 'keyboard', 'region', 'workspace']);
-  const UNAVAILABLE = new Set(['addPasskey', 'removePasskey', 'totpOn', 'totpOff', 'codes', 'addMethod']);
+  const UNAVAILABLE = new Set();
   const WHY = 'Not available on XENO yet';
 
   // A page load needs only the name and the saved preferences (the home page and the account menu show them). The rest
@@ -45,9 +46,9 @@
   async function load() {
     if (S.status !== 'ready') { S.status = 'loading'; paint(); } // a refresh after a save keeps what is on screen
     const all = full, none = { ok: false, status: 0, d: {} };
-    const urls = all ? ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers'] : ['/api/account/overview', '/api/user-data/settings'];
+    const urls = all ? ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers', '/api/account/two-step'] : ['/api/account/overview', '/api/user-data/settings'];
     const got = await Promise.all(urls.map((u) => api('GET', u).catch(() => none)));
-    const [ov, ses, link, bill, dash, set, sec, exps, brs] = all ? got : [got[0], none, none, none, none, got[1], none, none, none];
+    const [ov, ses, link, bill, dash, set, sec, exps, brs, two] = all ? got : [got[0], none, none, none, none, got[1], none, none, none, none];
     S.browsers = brs.ok && Array.isArray(brs.d.browsers) ? brs.d.browsers : null;
     S.security = sec.ok && sec.d.security ? sec.d.security : null;
     S.exports = exps.ok && Array.isArray(exps.d.exports) ? exps.d.exports : null;
@@ -64,9 +65,12 @@
     S.parts.sessions = ses.ok && Array.isArray(ses.d.sessions);
     a.sessions = S.parts.sessions ? ses.d.sessions.map((s) => ({ id: s.id, device: [s.browser, s.os].filter(Boolean).join(' on ') || title(s.device_type) || 'Unknown device', where: s.ip_address ? 'IP ' + s.ip_address : 'Location unknown', last: ms(s.last_active_at || s.created_at), current: !!s.current })) : [];
     S.parts.methods = link.ok && Array.isArray(link.d.accounts);
-    a.methods = S.parts.methods ? link.d.accounts.map((m) => ({ id: m.provider, kind: title(m.provider), who: m.email || m.username || '', added: ms(m.linkedAt) })) : [];
-    // nothing below has a platform API yet: clear whatever a sample or an earlier visit left behind
-    Object.assign(a, { passkeys: [], totp: false, codes: null, codesLeft: 0, apps: [], apiKeys: [], providers: [], route: {}, gifts: [], invoices: [], cap: null, exportJob: null });
+    a.methods = S.parts.methods ? link.d.accounts.map((m) => ({ id: m.provider, kind: m.provider === 'twitter' ? 'X' : m.provider === 'github' ? 'GitHub' : title(m.provider), who: m.email || m.username || '', added: ms(m.linkedAt) })) : [];
+    // what lives in its own section is read there: clear whatever a sample or an earlier visit left behind
+    Object.assign(a, { apps: [], apiKeys: [], providers: [], route: {}, gifts: [], invoices: [], cap: null, exportJob: null });
+    const ts = two.ok && two.d.twoStep ? two.d.twoStep : { totp: false, passkeys: [], recoveryLeft: 0, recoveryTotal: 0 };
+    S.twoStepKnown = two.ok;
+    Object.assign(a, { totp: ts.totp, passkeys: ts.passkeys.map((k) => ({ id: k.id, name: k.name, added: ms(k.addedAt), used: k.lastUsedAt ? ms(k.lastUsedAt) : null })), codes: ts.recoveryTotal > 0 ? true : null, codesLeft: ts.recoveryLeft });
     const del = await api('GET', '/api/account/deletion').catch(() => null);
     a.deletion = del && del.ok && del.d.deletion ? { at: ms(del.d.deletion.requestedAt) } : null;
     const sub = bill.ok && bill.d.overview ? bill.d.overview.subscription : null;
@@ -96,6 +100,7 @@
     if (!S.full) { if (!full) { full = true; setTimeout(load, 0); } return h.card('', '<p class="pg-dim set-p" role="status">Loading your account</p>'); }
     if (id === 'browsers') return browsersSection(h);
     if (id === 'data') return dataSection(h);
+    if (id === 'security' && !S.twoStepKnown) return h.card('Sign-in & security', '<p class="set-p">XENO couldn’t load your sign-in settings. Nothing was changed.</p>', retry);
     if (id === 'sessions' && !S.parts.sessions) return h.card('Signed-in devices', '<p class="set-p">XENO couldn’t load your devices.</p>', retry);
     if (id === 'plan') {
       if (!S.parts.plan) return h.card('Plan', '<p class="set-p">XENO couldn’t load your plan.</p>', retry);
@@ -359,13 +364,24 @@
 
   // ---------- confirm it's you ----------
   const say = (r, fallback) => (r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
-  async function confirm(why) {
+  const SECOND = { authenticator: 'Authenticator app', passkey: 'Passkey', recovery_code: 'Recovery code' };
+  /** factor: this change touches two-step itself, so only the second step will do. */
+  async function confirm(why, { factor = false } = {}) {
     const st = await api('GET', '/api/account/security').catch(() => ({ ok: false, d: {} }));
     if (!st.ok || !st.d.security) { X()?.toast?.('XENO could not be reached. Nothing was changed.'); return false; }
     S.security = st.d.security;
-    if (S.security.confirmation && S.security.confirmation.confirmed) return true;
-    if (S.security.confirmation && S.security.confirmation.available === false) { X()?.toast?.('This needs a signed-in browser session.'); return false; }
-    const byCode = (S.security.methods || []).includes('email_code');
+    const methods = S.security.methods || [], seconds = methods.filter((m) => SECOND[m]), con = S.security.confirmation || {};
+    if (con.confirmed && (!factor || !seconds.length || SECOND[con.method])) return true;
+    if (con.available === false) { X()?.toast?.('This needs a signed-in browser session.'); return false; }
+    const allowed = factor && seconds.length ? seconds : methods;
+    let how = allowed[0];
+    if (allowed.length > 1) {
+      const pick = await window.XD.form({ title: 'Confirm it’s you', sub: why, submit: 'Continue', size: 'sm', fields: [{ id: 'how', label: 'With', type: 'select', value: how, options: allowed.map((m) => [m, SECOND[m] || (m === 'password' ? 'Your password' : 'A code by email')]) }] });
+      if (!pick) return false;
+      how = pick.how;
+    }
+    if (SECOND[how]) return confirmSecond(why, how);
+    const byCode = how === 'email_code';
     let sentTo = '';
     if (byCode) {
       const r = await api('POST', '/api/account/confirm/code', {});
@@ -378,6 +394,114 @@
       onSubmit: async (vals) => { const r = await api('POST', '/api/account/confirm', byCode ? { code: vals.code } : { password: vals.password }); return r.ok ? null : say(r, 'That didn’t work.') + (r.d && typeof r.d.remaining === 'number' && r.d.remaining > 0 ? ` ${r.d.remaining} tr${r.d.remaining === 1 ? 'y' : 'ies'} left.` : ''); } });
     return !!v;
   }
+
+  async function confirmSecond(why, how) {
+    if (how === 'passkey') {
+      const o = await api('POST', '/api/account/confirm/passkey/options', {}).catch(() => ({ ok: false, d: {} }));
+      if (!o.ok) { X()?.toast?.(say(o, 'Passkeys aren’t available right now.')); return false; }
+      let response; try { response = await passkeyGet(o.d.options); } catch { X()?.toast?.('The passkey wasn’t used. Nothing was changed.'); return false; }
+      const r = await api('POST', '/api/account/confirm', { passkey: { ceremonyId: o.d.ceremonyId, response } }).catch(() => ({ ok: false, d: {} }));
+      if (!r.ok) X()?.toast?.(say(r, 'That passkey didn’t work.'));
+      return r.ok;
+    }
+    const recovery = how === 'recovery_code';
+    const v = await window.XD.form({ title: 'Confirm it’s you', sub: why, submit: 'Confirm', size: 'sm', fields: [{ id: 'code', label: recovery ? 'Recovery code' : 'Code from your app', required: true, max: 24, placeholder: recovery ? 'xxxx-xxxx-xxxx-xxxx' : '6 digits' }],
+      onSubmit: async (vals) => { const r = await api('POST', '/api/account/confirm', recovery ? { recovery_code: vals.code } : { authenticator: vals.code }).catch(() => ({ ok: false, d: {} })); return r.ok ? null : say(r, 'That didn’t work.'); } });
+    return !!v;
+  }
+
+  // ---------- two-step sign-in ----------
+  const fromB64 = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=')), (c) => c.charCodeAt(0));
+  const toB64 = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  async function passkeyGet(options) {
+    const c = await navigator.credentials.get({ publicKey: { ...options, challenge: fromB64(options.challenge), allowCredentials: (options.allowCredentials || []).map((x) => ({ ...x, id: fromB64(x.id) })) } });
+    if (!c) throw new Error('cancelled');
+    return { id: c.id, rawId: toB64(c.rawId), type: c.type, clientExtensionResults: c.getClientExtensionResults(), response: { clientDataJSON: toB64(c.response.clientDataJSON), authenticatorData: toB64(c.response.authenticatorData), signature: toB64(c.response.signature), userHandle: c.response.userHandle ? toB64(c.response.userHandle) : undefined } };
+  }
+  async function passkeyCreate(options) {
+    const c = await navigator.credentials.create({ publicKey: { ...options, challenge: fromB64(options.challenge), user: { ...options.user, id: fromB64(options.user.id) }, excludeCredentials: (options.excludeCredentials || []).map((x) => ({ ...x, id: fromB64(x.id) })) } });
+    if (!c) throw new Error('cancelled');
+    return { id: c.id, rawId: toB64(c.rawId), type: c.type, clientExtensionResults: c.getClientExtensionResults(), response: { clientDataJSON: toB64(c.response.clientDataJSON), attestationObject: toB64(c.response.attestationObject), transports: c.response.getTransports ? c.response.getTransports() : [] } };
+  }
+  function showCodes(list) {
+    const handle = acctNow().profile?.handle || '';
+    return window.XD.info({ title: 'Your recovery codes', sub: 'Each works once if you lose your other ways in. Keep them somewhere safe: they’re shown only now.', html: `<ol class="set-codes">${list.map((c) => `<li><code>${esc(c)}</code></li>`).join('')}</ol>`, actions: [
+      { label: 'Copy', close: false, run: () => window.XCM.H.copy(list.join('\n'), 'Codes copied') },
+      { label: 'Download', close: false, run: () => { const a2 = document.createElement('a'); a2.href = URL.createObjectURL(new Blob([`XENO recovery codes for @${handle}\n\n${list.join('\n')}\n`], { type: 'text/plain' })); a2.download = 'xeno-recovery-codes.txt'; a2.click(); } }] });
+  }
+  // ---------- connecting a sign-in method ----------
+  const PROVIDER = { google: 'Google', github: 'GitHub', twitter: 'X' };
+  async function addMethod() {
+    const v = await window.XD.form({ title: 'Connect a sign-in method', sub: 'You’ll sign in with it once, and can use it from then on.', submit: 'Continue', size: 'sm', fields: [{ id: 'k', label: 'Sign in with', type: 'select', value: 'google', options: Object.entries(PROVIDER) }] });
+    if (!v) return;
+    if (!await confirm('Connecting a sign-in method changes how you sign in.')) return;
+    location.href = `/api/auth/${encodeURIComponent(v.k)}?link=1`;
+  }
+  // coming back from the provider
+  { const q = new URLSearchParams(location.search), linked = q.get('linked'), bad = q.get('link_error');
+    if (linked || bad) {
+      const WORD = { taken: 'That account is already connected to someone else on XENO.', has_one: 'You already have one of those connected. Remove it first.', confirm: 'Confirm it’s you first, then try again.', sign_in: 'Sign in first, then try again.' };
+      setTimeout(() => { X()?.toast?.(linked ? `${PROVIDER[linked] || 'That account'} connected` : (WORD[bad] || 'That couldn’t be connected.')); q.delete('linked'); q.delete('link_error'); history.replaceState(history.state, '', location.pathname + (q.size ? '?' + q : '')); }, 800);
+    }
+  }
+
+  const TWO = '/api/account/two-step';
+  const twoStep = {
+    async addPasskey() {
+      if (!window.PublicKeyCredential) return X()?.toast?.('This browser can’t use passkeys.');
+      if (!await confirm('Adding a passkey changes how you sign in.')) return;
+      const v = await window.XD.form({ title: 'Add a passkey', sub: 'Your device will ask for your fingerprint, face or PIN.', submit: 'Create passkey', size: 'sm', fields: [{ id: 'n', label: 'Name it', required: true, value: navigator.userAgentData?.platform ? navigator.userAgentData.platform + ' computer' : 'This device', max: 60 }] });
+      if (!v) return;
+      const o = await api('POST', TWO + '/passkeys/options', {}).catch(() => ({ ok: false, d: {} }));
+      if (!o.ok) return X()?.toast?.(say(o, 'A passkey couldn’t be added.'));
+      let response; try { response = await passkeyCreate(o.d.options); } catch { return X()?.toast?.('The passkey wasn’t created. Nothing was changed.'); }
+      const r = await api('POST', TWO + '/passkeys', { ceremonyId: o.d.ceremonyId, response, name: v.n.trim() }).catch(() => ({ ok: false, d: {} }));
+      if (!r.ok) return X()?.toast?.(say(r, 'That passkey couldn’t be added.'));
+      X()?.toast?.('Passkey added'); await load();
+      if (r.d.recoveryCodes) showCodes(r.d.recoveryCodes);
+    },
+    async renamePasskey(id) {
+      const k = (acctNow().passkeys || []).find((x) => x.id === id); if (!k) return;
+      const v = await window.XD.form({ title: 'Rename this passkey', submit: 'Save', size: 'sm', fields: [{ id: 'n', label: 'Name', required: true, value: k.name, max: 60 }],
+        onSubmit: async (vals) => { const r = await api('PATCH', `${TWO}/passkeys/${encodeURIComponent(id)}`, { name: vals.n.trim() }).catch(() => ({ ok: false, d: {} })); return r.ok ? null : say(r, 'That couldn’t be saved.'); } });
+      if (v) await load();
+    },
+    async removePasskey(id) {
+      const a = acctNow(), k = (a.passkeys || []).find((x) => x.id === id); if (!k) return;
+      const last = a.passkeys.length === 1 && !a.totp;
+      if (!await window.XD.confirm({ title: `Remove “${esc(k.name)}”?`, body: last ? 'It’s your last second step, so two-step sign-in turns off and your recovery codes stop working.' : 'You won’t be able to sign in with it any more.', action: 'Remove' })) return;
+      if (!await confirm('Removing a passkey changes how you sign in.', { factor: true })) return;
+      const r = await api('DELETE', `${TWO}/passkeys/${encodeURIComponent(id)}`).catch(() => ({ ok: false, d: {} }));
+      X()?.toast?.(r.ok ? 'Passkey removed' : say(r, 'That passkey couldn’t be removed.'));
+      await load();
+    },
+    async totpOn() {
+      if (!await confirm('Turning on an authenticator changes how you sign in.')) return;
+      const b = await api('POST', TWO + '/totp', {}).catch(() => ({ ok: false, d: {} }));
+      if (!b.ok) return X()?.toast?.(say(b, 'That couldn’t be started.'));
+      let codes = null;
+      const v = await window.XD.form({ title: 'Set up an authenticator app', sub: 'Scan this in your authenticator app, or type the key, then enter the 6-digit code it shows.', submit: 'Turn on', size: 'sm',
+        aside: `<div class="set-secret"><div class="set-qr" style="background:#fff">${b.d.qrSvg}</div><code>${esc(b.d.key.match(/.{1,4}/g).join(' '))}</code></div>`,
+        fields: [{ id: 'code', label: 'Code from the app', required: true, max: 8, placeholder: '6 digits', validate: (x) => (/^\d{6}$/.test(x.trim()) ? null : 'Enter the 6-digit code.') }],
+        onSubmit: async (vals) => { const r = await api('POST', TWO + '/totp/confirm', { code: vals.code.trim() }).catch(() => ({ ok: false, d: {} })); if (!r.ok) return say(r, 'That code isn’t right.'); codes = r.d.recoveryCodes; return null; } });
+      if (!v) return;
+      X()?.toast?.('Authenticator app on'); await load();
+      if (codes) showCodes(codes);
+    },
+    async totpOff() {
+      if (!await window.XD.confirm({ title: 'Turn off the authenticator app?', body: 'You’ll no longer be asked for its codes. If it’s your last second step, your recovery codes stop working too.', action: 'Turn off', danger: false })) return;
+      if (!await confirm('Turning off two-step sign-in makes your account easier to take over.', { factor: true })) return;
+      const r = await api('DELETE', TWO + '/totp').catch(() => ({ ok: false, d: {} }));
+      X()?.toast?.(r.ok ? 'Authenticator turned off' : say(r, 'That couldn’t be turned off.'));
+      await load();
+    },
+    async codes() {
+      if (!await confirm('New recovery codes replace the old ones.', { factor: true })) return;
+      const r = await api('POST', TWO + '/recovery-codes', {}).catch(() => ({ ok: false, d: {} }));
+      if (!r.ok) return X()?.toast?.(say(r, 'New codes couldn’t be made.'));
+      await load(); showCodes(r.d.recoveryCodes);
+    },
+  };
 
   // ---------- email ----------
   async function emailCode(address) {
@@ -483,6 +607,6 @@
     'settings.region': savePrefs,
   });
 
-  window.XENO_ACCOUNT = { served: true, section, load, confirm, changeEmail, state: () => ({ status: S.status, parts: { ...S.parts } }), unavailable: () => [...UNAVAILABLE] };
+  window.XENO_ACCOUNT = { served: true, section, load, confirm, changeEmail, twoStep, addMethod, state: () => ({ status: S.status, parts: { ...S.parts } }), unavailable: () => [...UNAVAILABLE] };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

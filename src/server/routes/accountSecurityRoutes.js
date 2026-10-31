@@ -16,6 +16,14 @@
  *   GET    /deletion                 is this account being deleted, and when
  *   POST   /deletion                 delete it after 30 days                   [confirmed]
  *   DELETE /deletion                 keep it
+ *   GET    /two-step                 authenticator, passkeys and recovery codes on this account
+ *   POST   /two-step/totp            start setting up an authenticator app       [confirmed]
+ *   POST   /two-step/totp/confirm    finish it with a code from the app          [confirmed]
+ *   DELETE /two-step/totp            turn it off                                 [second step]
+ *   POST   /two-step/recovery-codes  replace the recovery codes                  [second step]
+ *   POST   /two-step/passkeys/options, /two-step/passkeys   add a passkey        [confirmed]
+ *   PATCH  /two-step/passkeys/:id    rename it
+ *   DELETE /two-step/passkeys/:id    remove it                                   [second step]
  *   GET    /apps                     the apps signed in with this account
  *   DELETE /apps/:clientId           take an app's access away, now
  *
@@ -30,12 +38,13 @@ import { sendEmail } from '../services/emailService.js';
 import { EVENTS, recordSecurityEvent, recordSecurityEventTransactional } from '../services/securityEvents.js';
 import { hasUsablePassword, revokeOidcAndResetsTransactional, verifyPassword } from './authRoutes.js';
 import {
-  CODE_MINUTES, clearConfirmation, confirmMethods, confirmWithCode, confirmWithPassword, confirmationStatus, issueCode, requireConfirmation,
+  CODE_MINUTES, clearConfirmation, confirmMethods, confirmWithCode, confirmWithPassword, confirmWithSecondStep, confirmationStatus, issueCode, requireConfirmation,
 } from '../services/accountConfirmation.js';
 import { cancelEmailChange, completeEmailChange, pendingEmailChange, requestEmailChange } from '../services/accountEmailChange.js';
 import { deleteExport, exportFile, listExports, requestExport } from '../services/accountExport.js';
 import * as deletion from '../services/accountDeletion.js';
 import { listApps, removeApp } from '../services/authorizedApps.js';
+import * as twoStep from '../services/twoStep.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -56,7 +65,7 @@ const sendCode = (db, user, to, code, purpose) => sendEmail(db, 'account_code', 
 router.get('/security', guard('security', async (req, res) => {
   const user = await account(req.db, req.user.id);
   const [confirmation, pending] = await Promise.all([confirmationStatus(req.db, { userId: user.id, sid: sidOf(req) }), pendingEmailChange(req.db, user.id)]);
-  res.json({ success: true, security: { confirmation, methods: confirmMethods(user, hasUsablePassword), has_password: hasUsablePassword(user.password_hash), email: user.email, pending_email: pending } });
+  res.json({ success: true, security: { confirmation, methods: [...await twoStep.methodsFor(req.db, user.id), ...confirmMethods(user, hasUsablePassword)], has_password: hasUsablePassword(user.password_hash), email: user.email, pending_email: pending } });
 }));
 
 router.post('/confirm/code', guard('confirm code', async (req, res) => {
@@ -69,11 +78,24 @@ router.post('/confirm/code', guard('confirm code', async (req, res) => {
   res.json({ success: true, sent_to: maskEmail(user.email), expires_in: issued.expires_in });
 }));
 
+router.post('/confirm/passkey/options', guard('confirm passkey', async (req, res) => {
+  if (!sidOf(req)) return fail(res, 403, 'confirmation_unavailable', 'This needs a signed-in browser session');
+  try { res.json({ success: true, ...(await twoStep.passkeyConfirmOptions(req.db, req.user.id)) }); }
+  catch (e) { if (e instanceof twoStep.TwoStepError) return fail(res, e.status, e.code, e.message); throw e; }
+}));
+async function confirmBySecondStep(req, sid, userId) {
+  const b = req.body || {};
+  if (b.passkey) return (await twoStep.passkeyConfirm(req.db, userId, b.passkey)) ? confirmWithSecondStep(req.db, { userId, sid, method: 'passkey' }) : { wrong: true };
+  const out = await twoStep.confirmWithFactor(req.db, userId, { authenticator: b.authenticator, recovery: b.recovery_code });
+  return out.method ? confirmWithSecondStep(req.db, { userId, sid, method: out.method }) : out;
+}
 router.post('/confirm', guard('confirm', async (req, res) => {
   const sid = sidOf(req), userId = req.user.id;
-  const result = typeof req.body?.code === 'string'
-    ? await confirmWithCode(req.db, { userId, sid, code: req.body.code })
-    : await confirmWithPassword(req.db, { userId, sid, password: req.body?.password, verifyPassword });
+  const result = !sid ? { unavailable: true } : (req.body?.passkey || typeof req.body?.authenticator === 'string' || typeof req.body?.recovery_code === 'string')
+    ? await confirmBySecondStep(req, sid, userId)
+    : typeof req.body?.code === 'string'
+      ? await confirmWithCode(req.db, { userId, sid, code: req.body.code })
+      : await confirmWithPassword(req.db, { userId, sid, password: req.body?.password, verifyPassword });
   if (result.ok) {
     recordSecurityEvent(req.db, EVENTS.ACCOUNT_CONFIRMED, { userId, req, metadata: { method: result.method } });
     return res.json({ success: true, confirmation: { confirmed: true, available: true, expires_at: result.expires_at, method: result.method } });
@@ -152,6 +174,55 @@ router.delete('/sessions', guard('sign out everywhere', async (req, res) => {
 }));
 
 // ── deleting your account ─
+// ── two-step sign-in ─────────────────────────────
+// Adding a way in takes a confirmation. Taking one away, or making new recovery codes, takes the second step itself.
+const secondStep = requireConfirmation({ factor: true, hasSecondStep: twoStep.hasSecondStep });
+const twoStepGuard = (label, run) => guard(label, async (req, res) => {
+  try { await run(req, res); }
+  catch (e) { if (e instanceof twoStep.TwoStepError) return fail(res, e.status, e.code, e.message); throw e; }
+});
+const notify = (req, user, change) => {
+  recordSecurityEvent(req.db, EVENTS.TWO_STEP_CHANGED, { userId: user.id, req, metadata: { change } });
+  sendEmail(req.db, 'two_step_changed', user.email, { displayName: nameOf(user), change, when: new Date().toUTCString() }, user.id).catch(() => {});
+};
+router.get('/two-step', twoStepGuard('two-step', async (req, res) => { res.json({ success: true, twoStep: await twoStep.status(req.db, req.user.id) }); }));
+router.post('/two-step/totp', requireConfirmation(), twoStepGuard('totp begin', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, ...(await twoStep.beginTotp(req.db, await account(req.db, req.user.id))) });
+}));
+router.post('/two-step/totp/confirm', requireConfirmation(), twoStepGuard('totp confirm', async (req, res) => {
+  const out = await twoStep.confirmTotp(req.db, req.user.id, req.body?.code);
+  notify(req, await account(req.db, req.user.id), 'An authenticator app was turned on');
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, ...out });
+}));
+router.delete('/two-step/totp', secondStep, twoStepGuard('totp off', async (req, res) => {
+  const out = await twoStep.removeTotp(req.db, req.user.id);
+  if (out.removed) notify(req, await account(req.db, req.user.id), 'Your authenticator app was turned off');
+  res.json({ success: true, ...out });
+}));
+router.post('/two-step/recovery-codes', secondStep, twoStepGuard('recovery codes', async (req, res) => {
+  const codes = await twoStep.newRecoveryCodes(req.db, req.user.id);
+  notify(req, await account(req.db, req.user.id), 'New recovery codes were made, and the old ones stopped working');
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, recoveryCodes: codes });
+}));
+router.post('/two-step/passkeys/options', requireConfirmation(), twoStepGuard('passkey options', async (req, res) => {
+  res.json({ success: true, ...(await twoStep.passkeyRegistrationOptions(req.db, await account(req.db, req.user.id))) });
+}));
+router.post('/two-step/passkeys', requireConfirmation(), twoStepGuard('passkey add', async (req, res) => {
+  const out = await twoStep.addPasskey(req.db, req.user.id, req.body || {});
+  notify(req, await account(req.db, req.user.id), 'A passkey was added');
+  res.set('Cache-Control', 'no-store');
+  res.status(201).json({ success: true, ...out });
+}));
+router.patch('/two-step/passkeys/:id', twoStepGuard('passkey rename', async (req, res) => { res.json({ success: true, ...(await twoStep.renamePasskey(req.db, req.user.id, req.params.id, req.body?.name)) }); }));
+router.delete('/two-step/passkeys/:id', secondStep, twoStepGuard('passkey remove', async (req, res) => {
+  const out = await twoStep.removePasskey(req.db, req.user.id, req.params.id);
+  notify(req, await account(req.db, req.user.id), 'A passkey was removed');
+  res.json({ success: true, ...out });
+}));
+
 // ── apps signed in with this account ─────────────────────────────
 router.get('/apps', guard('apps', async (req, res) => { res.json({ success: true, apps: await listApps(req.db, req.user.id) }); }));
 router.delete('/apps/:clientId', guard('app removal', async (req, res) => {

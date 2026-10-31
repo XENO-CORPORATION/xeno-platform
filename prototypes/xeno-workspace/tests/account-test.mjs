@@ -52,6 +52,7 @@ function accountSecurity(m, p, body) {
   if (p === '/api/mcp/connections') return json(200, { success: true, connections: db.mcp });
   if (p === '/api/places/ops/funding.get') return json(200, { ok: true, result: { balanceMicro: 500000000, giftsOpen: db.giftsOpen, allocations: [], ledger: db.giftLedger } });
   if (p === '/api/places/ops/funding.gift') { db.giftSent = body; return json(200, { ok: true, result: { giftId: 'g1', state: 'confirmed' } }); }
+  if (p === '/api/account/two-step' && m === 'GET') return json(200, { success: true, twoStep: { on: false, totp: false, passkeys: [], recoveryLeft: 0, recoveryTotal: 0 } });
   if (p === '/api/account/deletion' && m === 'GET') return json(200, { success: true, deletion: db.deletion || null });
   if (p === '/api/account/deletion' && m === 'POST') { const no = need(); if (no) return no; if (db.refuseDeletion) return json(409, { success: false, code: 'owns_workspace', error: 'You own Real Co, with other people in it. Make someone else the owner first.' }); db.deletion = { requestedAt: new Date().toISOString(), eraseAt: new Date(Date.now() + 30 * 864e5).toISOString() }; return json(200, { success: true, deletion: db.deletion }); }
   if (p === '/api/account/deletion' && m === 'DELETE') { db.deletion = null; return json(200, { success: true, deletion: null }); }
@@ -149,7 +150,7 @@ try {
 
   await open('Sign-in & security'); t = await text();
   ok(/Google/.test(t) && /ada@example\.test/.test(t), 'Sign-in methods lists the linked Google account');
-  ok(await p.evaluate(() => ['addPasskey', 'totpOn', 'addMethod'].every((a) => { const el = document.querySelector(`.pg--set [data-set="${a}"]`); return el && el.getAttribute('aria-disabled') === 'true'; })), 'passkeys, the authenticator and adding a method are shown as not available');
+  ok(await p.evaluate(() => { const el = document.querySelector('.pg--set [data-set="addMethod"]'); return el && el.getAttribute('aria-disabled') !== 'true' && /GitHub or X/.test(el.textContent); }), 'adding a sign-in method is offered');
 
   await open('Usage & limits'); t = await text();
   ok(/1,234/.test(t) && /chat/i.test(t) && /canvas/i.test(t), 'Usage shows the real balance and usage by product (' + t.replace(/\s+/g, ' ').slice(0, 70) + ')');

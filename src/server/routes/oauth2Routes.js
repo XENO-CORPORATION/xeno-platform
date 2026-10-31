@@ -346,6 +346,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent2);outline-of
     fetch(url,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-session-mode':'browser'},body:JSON.stringify(body)})
       .then(function(r){return r.json()}).then(function(d){
         if(d&&d.success){ continueWith(); }
+        else if(d&&d.code==='two_step_required'){ location.href='/login?two_step=1&returnUrl='+encodeURIComponent(location.pathname+location.search); }
         else { fail((d&&d.error)||'Sign-in failed. Check your details and try again.'); }
       }).catch(function(e){ fail('Network error: '+(e&&e.message||e)); });
   };

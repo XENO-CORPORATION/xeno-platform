@@ -156,6 +156,7 @@ import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
+import { relatedOrigins } from './services/twoStep.js';
 import { requireDpopIfBound } from './middleware/dpopResource.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware, pool as researchPool } from './middleware/database.js';
@@ -420,7 +421,11 @@ app.use('/api/favicon', faviconRoutes);
 // used to share ONE bucket of 10 requests / 15 min per IP that counted successes,
 // which locked a whole NAT out of every auth endpoint after ten sign-ins — found
 // by dogfooding 2026-09-17. Failures count; a correct password never does.
+// The other XENO site hosts that may use this site's passkeys (WebAuthn related origins). Public by design, like the spec's.
+app.get('/.well-known/webauthn', (_req, res) => { res.set('Cache-Control', 'public, max-age=3600'); res.json(relatedOrigins()); });
 app.use('/api/auth/login', loginAddressCeiling, loginFailureLimiter);
+app.use('/api/auth/two-step', loginFailureLimiter);
+app.use('/api/auth/passkey', loginFailureLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/register-with-handle', registerLimiter);
 app.use('/api/auth/forgot-password', recoveryMailLimiter);

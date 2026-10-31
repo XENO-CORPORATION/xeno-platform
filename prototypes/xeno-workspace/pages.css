@@ -529,6 +529,7 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
 .set-big{font-size:18px;color:var(--text);font-variant-numeric:tabular-nums}
 .set-meter{width:120px;height:6px;border-radius:2px;background:var(--n35);overflow:hidden}
 .set-meter i{display:block;height:100%;width:var(--v);background:var(--n233);border-radius:2px}
+.set-qr{background:var(--n255);padding:8px;border-radius:6px;width:176px;height:176px;margin:0 0 10px}.set-qr svg{display:block;width:100%;height:100%}
 .set-sel{height:30px;min-width:200px;padding:0 10px;border-radius:6px;background:var(--n26);border:1px solid var(--n42);color:var(--text);font:13px Inter,system-ui,sans-serif}
 .set-sel:focus{outline:none;border-color:var(--n58)}
 .set-preview{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}

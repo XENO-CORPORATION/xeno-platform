@@ -25,7 +25,7 @@ const OAUTH_PROTOCOL_PATHS = new Set([
 ]);
 const isOAuthProtocolRequest = (req) => OAUTH_PROTOCOL_PATHS.has(String(req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, ''));
 
-function parseCookies(header = '') {
+export function parseCookies(header = '') {
   const values = new Map();
   for (const part of String(header).split(';')) {
     const separator = part.indexOf('=');

@@ -82,6 +82,8 @@
     "test:inbox": "node src/server/tests/inbox.test.mjs",
     "test:library-copies": "node src/server/tests/library-copies.test.mjs",
     "test:settings-account": "node src/server/tests/settings-account.test.mjs",
+    "test:two-step-sign-in": "node src/server/tests/two-step-sign-in.test.mjs",
+    "test:two-step-ui": "node prototypes/xeno-workspace/tests/two-step-test.mjs",
     "test:project-funding-view": "node src/server/tests/project-funding-view.test.mjs",
     "test:inbox-ui": "node prototypes/xeno-workspace/tests/inbox-test.mjs",
     "test:places-ui": "node prototypes/xeno-workspace/tests/places-live-test.mjs",
