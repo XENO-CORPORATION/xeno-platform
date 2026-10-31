@@ -5,6 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Create and Anima show real work, and the preview note is gone.**
+
+- Studio › Create lists your files in the Library instead of sample renders.
+- Anima lists the agents you made, opens each one’s Mind and skills, and says plainly where a Soul lives today: on the computer where Anima runs.
+- Nothing in the workspace shows sample data as yours any more, so the “Preview” note no longer appears.
+
 **Corpo › Company is real.**
 
 - A company’s legal entity: its legal name and form, registered office and where it’s actually run, its registrations and branches, its tax, customs and financial-market numbers, and who may act for it.

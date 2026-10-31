@@ -169,7 +169,8 @@
     "platform-places.js": "workspace",
     "platform-market.js": "commerce",
     "companyRoutes.js": "workspace",
-    "platform-company.js": "workspace-ui"
+    "platform-company.js": "workspace-ui",
+    "platform-anima.js": "workspace-ui"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11095,6 +11096,41 @@
       "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
     },
     "ui:platform-company.js:data-co2=retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-anima.js:data-xan=retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-anima.js:data-xan=open": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-anima.js:data-xan=agents": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-anima.js:data-xan=market": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-anima.js:data-xan=copy": {
       "status": "excluded",
       "category": "view-state",
       "class": "reversible",

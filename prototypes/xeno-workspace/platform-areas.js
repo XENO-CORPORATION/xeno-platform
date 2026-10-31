@@ -76,6 +76,16 @@
       actions: () => H().btn('All agents', 'data-xarea-to="Agents"', true),
       work: (a) => [a.name, a.status || 'Agent'],
     }),
+    // Create: the files of this mode's work, in the Library. Pixel, Motion and the rest open from the sidebar.
+    'studio.create': area({
+      key: 'studio.create', noun: 'files', title: 'Create', sub: 'The files of your creative work. Open Pixel, Motion, Sound and the others from this area’s sidebar.',
+      cols: ['File', 'Type', 'Size'], emptyIcon: 'create',
+      empty: ['No files here yet', 'Files you add to the Library from this area show here. Open an app in this area’s sidebar to start.'],
+      url: () => '/api/library/assets?area=studio&limit=100', read: (d) => (d.items || []).filter((x) => x.source === 'file'),
+      cells: (f) => [`<b class="pg-name">${esc(f.name || 'Untitled')}</b>`, esc(String(f.mime_type || '').split('/')[0] || 'File'), esc(sizeOf(f.size_bytes ?? f.file_size))],
+      attrs: (f) => `data-xarea-href="/workspace/library?sel=${esc(f.source)}:${esc(f.source_id)}"`,
+      work: (f) => [f.name || 'Untitled', sizeOf(f.size_bytes ?? f.file_size)],
+    }),
     'studio.generate': area({
       key: 'studio.generate', noun: 'generations', title: 'Generate', sub: 'What you made with images, video, audio and 3D.',
       cols: ['Prompt', 'Type', 'Status'], emptyIcon: 'spark',
@@ -86,6 +96,7 @@
       work: (g) => [promptOf(g), H().cap(g.status || '')],
     }),
   };
+  function sizeOf(n) { const b = Number(n) || 0; return b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? Math.round(b / 1e3) + ' KB' : b ? b + ' B' : ''; }
   function promptOf(g) { const t = String(g.request?.prompt || g.prompt || '').trim(); return t.length > 80 ? t.slice(0, 79) + '…' : t || 'Untitled'; }
 
   document.addEventListener('click', (e) => {
