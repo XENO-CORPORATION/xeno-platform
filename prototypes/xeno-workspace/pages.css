@@ -542,8 +542,10 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
 .pg-top .pg-top-tabs{display:flex;align-items:stretch;gap:2px;border:0;margin:0;height:46px;overflow:visible}
 .pg-top .pg-top-tabs button{height:46px;padding:0 10px;font-size:12.5px;margin-bottom:0;border-bottom:2px solid transparent;border-radius:0}
 .pg-top .pg-top-tabs button[aria-selected="true"]{border-bottom-color:var(--text)}
-.pg-top-left:has(.pg-top-tabs){margin-left:14px;padding-left:14px;border-left:1px solid var(--n31);height:22px;overflow:visible;align-self:center;mask-image:none;-webkit-mask-image:none;padding-right:0;margin-right:0}
-.pg-top-left:has(.pg-top-tabs) .pg-top-tabs{margin:-12px 0}
+/* many tabs scroll inside their own space; they never run under the page's actions */
+.pg-top-left:has(.pg-top-tabs){flex:1 1 0;min-width:0;margin-left:14px;padding-left:14px;background:linear-gradient(var(--n31),var(--n31)) left center/1px 22px no-repeat;height:46px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;align-self:center;mask-image:none;-webkit-mask-image:none;padding-right:0;margin-right:8px}
+.pg-top-left:has(.pg-top-tabs)::-webkit-scrollbar{display:none}
+.pg-top-left:has(.pg-top-tabs) .pg-top-tabs{margin:0;width:max-content}
 /* the object's facts in the status bar: progress, status, next milestone, people — one quiet line */
 .sb-facts{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;min-width:0;overflow:hidden;color:var(--muted)}
 .sb-facts>span{display:inline-flex;align-items:center;gap:5px;flex:none}

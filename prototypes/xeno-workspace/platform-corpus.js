@@ -5,6 +5,8 @@
  *   a tenet            /workspace/projects/<pid>/corpus/<tenet id>             its signed verdict history
  *   Corpus (division)  the Corpus section of /workspace/divisions/<id>
  *   a tenet            /workspace/divisions/<division id>/corpus/<tenet id>
+ *   Knowledge          /workspace/workspace/Knowledge                          the workspace's own corpus, and a search of everything it can see
+ *   a tenet            /workspace/workspace/Knowledge/<tenet id>
  *
  * Agents propose (XENO MCP corpus.propose); a PERSON who administers the scope ratifies or rejects here. Nothing a
  * proposal says is applied until then. Served from disk (no platform), none of this appears.
@@ -35,12 +37,12 @@
 
   /** The tenet's own address, with its parent in the path. */
   const tenetHref = (kind, scopeId, tid, projectName) => kind === 'project' && projectName
-    ? `data-xcp="open-project" data-to="${esc(projectName)}/Corpus/${esc(tid)}"` : `data-pg-ws="Divisions/${esc(scopeId)}/corpus/${esc(tid)}"`;
+    ? `data-xcp="open-project" data-to="${esc(projectName)}/Corpus/${esc(tid)}"` : kind === 'workspace' ? `data-pg-ws="Knowledge/${esc(tid)}"` : `data-pg-ws="Divisions/${esc(scopeId)}/corpus/${esc(tid)}"`;
 
   function section(kind, scopeId, h, { projectName = null, title = 'Corpus' } = {}) {
     const key = `corpus:${kind}:${scopeId}`;
     const e = view(key, () => P.api('GET', `/api/corpus/${kind}/${scopeId}`));
-    const head = (acts = '') => `<div class="pg-sec-h"><h3>${esc(title)}</h3>${acts}</div>`;
+    const head = (acts = '') => `<div class="pg-sec-h"><h3>${esc(title)}</h3>${acts ? `<span class="xcp-acts">${acts}</span>` : ''}</div>`;
     if (e.status === 'loading') return `<section class="pg-sec" data-sec="corpus">${head()}${h.box('refresh', 'Loading the corpus', '', '', 'sm')}</section>`;
     if (e.status !== 'ready') return `<section class="pg-sec" data-sec="corpus">${head()}${h.box('x', 'The corpus could not be read', 'Try again in a moment.', h.btn('Retry', `data-xcp="retry" data-k="${esc(key)}"`, true), 'sm')}</section>`;
     // A division home renders this section inline, so a reply missing a list must show an empty corpus, not throw the page.
@@ -120,6 +122,30 @@
     return h.page(h.head({ title: 'Tenet', sub: 'Division corpus' }) + tenetDetail(tid, h, `<a class="pg-link" data-pg-ws="Divisions/${esc(divisionId)}">← Division</a>`));
   }
 
+  // Workspace > Knowledge: what this workspace holds to be true, and what backs it. A workspace you can't see answers as not found.
+  const KQ = { text: '', hits: null, for: '' };
+  async function searchKnowledge(id, text) {
+    KQ.text = text; KQ.for = id;
+    if (!text) { KQ.hits = null; return paint(); }
+    const r = await P.api('GET', `/api/corpus/workspace/${id}/query?q=${encodeURIComponent(text)}`).catch(() => null);
+    if (KQ.text !== text) return;
+    KQ.hits = r && r.ok ? [...(r.d.tenets || []), ...(r.d.inheritedDoctrine || []), ...(r.d.aggregated || [])] : [];
+    paint();
+  }
+  function knowledge(it) {
+    if (it !== 'Knowledge' && !(it || '').startsWith('Knowledge/')) return null;
+    const h = window.XENO_PAGES.h, ws = window.XENO_SCOPE?.uuid?.();
+    const head = h.head({ title: 'Knowledge', sub: 'What this workspace holds to be true, and the check that would disprove each claim.' });
+    if (!ws) return h.page(head + h.box('refresh', 'Loading your workspace', '', '', 'sm'));
+    if (it.startsWith('Knowledge/')) return h.page(head + tenetDetail(it.slice(10), h, '<a class="pg-link" data-pg-ws="Knowledge">← Knowledge</a>'));
+    const results = KQ.for === ws && KQ.hits ? `<section class="pg-sec" data-sec="knowledge-search"><div class="pg-sec-h"><h3>Found</h3></div>${KQ.hits.length ? `<ul class="xcp-list">${KQ.hits.map((t) => `<li><b>${esc(t.key)}</b><p>${esc(t.claim)}</p></li>`).join('')}</ul>` : '<p class="pg-dim">Nothing matches that.</p>'}</section>` : '';
+    const search = `<form class="xcp-search" data-xcp-search="${esc(ws)}"><label class="pg-search">${X().ic('search')}<input aria-label="Search knowledge" placeholder="Search what this workspace knows" spellcheck="false" value="${esc(KQ.for === ws ? KQ.text : '')}"></label></form>`;
+    return h.page(head + search + results + section('workspace', ws, h, { title: 'Tenets' }));
+  }
+  document.addEventListener('submit', (e) => {
+    const f = e.target.closest('[data-xcp-search]'); if (!f) return;
+    e.preventDefault(); searchKnowledge(f.dataset.xcpSearch, f.querySelector('input').value.trim());
+  });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-xcp]'); if (!b || !b.closest('#main') || b.closest('.xd')) return;
     e.preventDefault(); e.stopPropagation();
@@ -133,12 +159,12 @@
   }, true);
   if (!document.getElementById('xcp-css')) {
     const s = document.createElement('style'); s.id = 'xcp-css';
-    s.textContent = '.xcp-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px}.xcp-list li{padding:8px 10px;border-radius:8px;background:var(--panel)}.xcp-list p{margin:4px 0 0}.xcp-acts{display:flex;gap:6px;margin-top:6px}.xcp-st{font-weight:600}.xcp-st--lapsed,.xcp-st--error{text-decoration:underline}.xcp-st--none{opacity:.6}';
+    s.textContent = '.xcp-search{margin:0 0 14px}.xcp-search .pg-search{max-width:420px}.xcp-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px}.xcp-list li{padding:8px 10px;border-radius:8px;background:var(--panel)}.xcp-list p{margin:4px 0 0}.xcp-acts{display:flex;gap:6px;margin-top:6px}.xcp-st{font-weight:600}.xcp-st--lapsed,.xcp-st--error{text-decoration:underline}.xcp-st--none{opacity:.6}';
     document.head.appendChild(s);
   }
   if (window.XENO_PROJECT_TABS && !window.XENO_PROJECT_TABS.includes('Corpus')) {
     const at = window.XENO_PROJECT_TABS.indexOf('Activity');
     window.XENO_PROJECT_TABS.splice(at < 0 ? window.XENO_PROJECT_TABS.length : at, 0, 'Corpus');
   }
-  window.XENO_CORPUS = { served: true, tabs: ['Corpus'], section, projectTab, divisionTenet, reload: () => { C.clear(); paint(); } };
+  window.XENO_CORPUS = { served: true, tabs: ['Corpus'], section, projectTab, divisionTenet, route: knowledge, reload: () => { C.clear(); paint(); } };
 })();

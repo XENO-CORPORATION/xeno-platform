@@ -106,7 +106,7 @@
     window.XENO_PROJECTS = detail; window.XENO_PG_PROJECTS.items = items;
     W.status = 'ready'; pstate('projects', 'normal'); paint(); return true;
   }
-  const NOT_YET = { Tasks: ['check', 'Tasks aren’t available yet', 'Tasks, their reviewers and their evidence aren’t connected on XENO yet.'], Funding: ['gear', 'Funding isn’t available yet', 'Budgets, milestones and contributions aren’t connected on XENO yet.'], Activity: ['clock', 'Activity isn’t available yet', 'The history of what happened in this project isn’t connected on XENO yet.'] };
+  const NOT_YET = { Tasks: ['check', 'Tasks aren’t available yet', 'Tasks, their reviewers and their evidence aren’t connected on XENO yet.'], Activity: ['clock', 'Activity isn’t available yet', 'The history of what happened in this project isn’t connected on XENO yet.'] };
   function projectTab(tab, name, h) {
     const rec = (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name);
     if (W.status === 'loading') return h.box('folder', 'Loading this project', '', '', 'sm');
@@ -115,6 +115,7 @@
     if (INSIGHT_TABS.has(tab)) { const live = insightTab(tab, rec, h); if (live !== null) return live; }
     if (tab === 'Conversations') return convTab(rec, h);
     if (tab === 'Resources') return filesTab(rec, h);
+    if (tab === 'Funding') return fundingTab(rec, h);
     if (NOT_YET[tab]) return h.box(NOT_YET[tab][0], NOT_YET[tab][1], esc(NOT_YET[tab][2]), '', 'sm');
     if (tab === 'Overview') return `<div class="pg-cols"><div>
         <section class="pg-sec"><h3>In this project</h3><div class="pg-mini-board"><button class="pg-mb" data-ptab="Conversations"><b>${rec.chatCount}</b><small>${rec.chatCount === 1 ? 'Conversation' : 'Conversations'}</small></button><button class="pg-mb" data-ptab="Resources"><b>${rec.files}</b><small>${rec.files === 1 ? 'File' : 'Files'}</small></button></div></section></div>
@@ -122,6 +123,58 @@
         <section class="pg-sec pg-card-s"><h3>Lives in</h3><p><b>${esc(rec.place)}</b><small>${rec.workspaceUuid ? 'Everyone in this workspace with access sees it' : rec.status === 'shared' ? 'Someone shared this project with you' : 'Only you, and the people you share it with'}</small></p></section></aside></div>`;
     return null;
   }
+  // ---- Funding: what the project has been funded with and may spend. Moving money happens elsewhere, on purpose. ----
+  const F = new Map();
+  const cr = (micro) => Math.floor(Number(micro) / 1e6).toLocaleString();
+  const credits = (micro) => `${cr(micro)} credit${Math.floor(Number(micro) / 1e6) === 1 ? '' : 's'}`;
+  const fundingWord = { draft: 'Draft', open: 'Open', paused: 'Paused', closed: 'Closed', cancelled: 'Cancelled', reconciling: 'Being settled', funded: 'Funded', active: 'In progress', accepted: 'Accepted', proposed: 'Waiting for a decision', approved: 'Approved', dispatched: 'In use' };
+  async function loadFunding(id) {
+    const r = await P.api('GET', `/api/chat/projects/${encodeURIComponent(id)}/funding`).catch(() => null);
+    F.set(id, r && r.ok ? { status: 'ready', d: r.d } : { status: r && r.status === 404 ? 'missing' : 'error' });
+    paintBody();
+  }
+  function fundingTab(rec, h) {
+    if (!F.has(rec.id)) { F.set(rec.id, { status: 'loading' }); setTimeout(() => loadFunding(rec.id), 0); }
+    const e = F.get(rec.id);
+    if (e.status === 'loading') return h.box('gear', 'Loading funding', '', '', 'sm');
+    if (e.status !== 'ready') return h.box('gear', 'Funding couldn’t be loaded', 'Check your connection and try again.', h.btn('Try again', `data-pf="retry" data-arg="${esc(rec.id)}"`, false, 'reset'), 'sm');
+    const d = e.d, c = d.ceiling;
+    h = { ...h, ...window.XENO_PAGES.h };
+    const ceiling = `<section class="pg-sec pg-card-s" data-pf-ceiling><h3>Monthly ceiling</h3>
+      <p><b>${c.limitMicro == null ? 'None set' : credits(c.limitMicro)}</b><small>The most this project may spend in any 30 days. A ceiling only ever narrows what can be spent.</small></p>
+      ${c.proposalId ? `<p>${credits(c.proposedMicro)} proposed<small>${c.proposedByMe ? 'Another owner of the project decides it.' : d.canDecide ? '' : 'An owner of the project decides it.'}</small></p>${d.canDecide && !c.proposedByMe ? `${h.btn('Approve', `data-pf="approve" data-arg="${esc(rec.id)}" data-id="${esc(c.proposalId)}"`, false, 'check')} ${h.btn('Reject', `data-pf="reject" data-arg="${esc(rec.id)}" data-id="${esc(c.proposalId)}"`, true, 'x')}` : ''}`
+        : d.canPropose ? h.btn(c.limitMicro == null ? 'Propose a ceiling' : 'Propose a change', `data-pf="propose" data-arg="${esc(rec.id)}"`, true, 'edit') : ''}</section>`;
+    const budgets = d.budgets.length ? `<section class="pg-sec"><div class="pg-sec-h"><h3>Budgets</h3></div>${h.table(['Purpose', 'Who spends it', 'Up to', 'Each run', ''], d.budgets.map((b) => h.tr('', [`<b class="pg-name">${esc(b.purpose)}</b>`, esc(b.spender || ''), credits(b.maximumMicro), credits(b.perRunMicro), `<small>${esc(fundingWord[b.state] || b.state)}</small>`])))}</section>` : '';
+    const grants = d.grants.length ? `<section class="pg-sec"><div class="pg-sec-h"><h3>Asked for tasks</h3></div>${h.table(['Task', 'Amount', ''], d.grants.map((g) => h.tr('', [`<b class="pg-name">${esc(g.task)}</b>`, credits(g.amountMicro), `<small>${esc(fundingWord[g.state] || g.state)}</small>`])))}</section>` : '';
+    const camps = d.campaigns.map((k) => `<section class="pg-sec" data-pf-campaign="${esc(k.id)}"><div class="pg-sec-h"><h3>${esc(k.beneficiary)}</h3><small class="pg-dim">${esc(fundingWord[k.status] || k.status)}</small></div>
+      ${k.milestones.map((m) => { const pct = m.thresholdMicro ? Math.min(100, Math.round((m.raisedMicro / m.thresholdMicro) * 100)) : 0; return `<div class="pg-card-s pg-sec"><p><b>${esc(m.title)}</b> <small>${esc(fundingWord[m.status] || m.status)}</small></p><div class="pg-big-meter"><span style="width:${pct}%"></span></div><small>${cr(m.raisedMicro)} of ${credits(m.thresholdMicro)} from ${m.contributors} ${m.contributors === 1 ? 'person' : 'people'}${m.mineMicro ? ` · ${cr(m.mineMicro)} from you` : ''}</small></div>`; }).join('') || '<p class="pg-dim">No milestones yet.</p>'}
+      <p class="pg-dim">If it doesn’t go ahead: ${esc(k.refundTerms)}</p></section>`).join('');
+    const empty = !d.campaigns.length && !d.budgets.length && !d.grants.length ? '<p class="pg-dim">Nothing has been funded here yet. Spending on this project comes from the credits of whoever runs the work.</p>' : '';
+    return `<div class="pg-cols" data-pf><div>${camps}${budgets}${grants}${empty}</div><aside>${ceiling}</aside></div>`;
+  }
+  async function proposeCeiling(id) {
+    const v = await window.XD.form({ title: 'Propose a monthly ceiling', sub: 'An owner of the project who didn’t propose it approves it before it applies.', submit: 'Propose', size: 'sm', fields: [
+      { id: 'n', label: 'Credits in any 30 days', type: 'number', required: true, value: '5000', validate: (x) => (/^\d+$/.test(x) ? null : 'Enter a whole number.') }] });
+    if (!v) return;
+    const r = await P.api('POST', `/api/chat/projects/${encodeURIComponent(id)}/funding/ceiling`, { credits: +v.n, requestId: crypto.randomUUID() }).catch(() => null);
+    X()?.toast?.(r && r.ok ? 'Proposed. An owner of the project decides it.' : (r && r.d && r.d.error) || 'That couldn’t be proposed.');
+    loadFunding(id);
+  }
+  async function decideCeiling(id, proposalId, approve) {
+    const r = await P.api('POST', `/api/chat/projects/${encodeURIComponent(id)}/funding/ceiling/${encodeURIComponent(proposalId)}/decision`, { approve, requestId: crypto.randomUUID() }).catch(() => null);
+    X()?.toast?.(r && r.ok ? (approve ? 'Ceiling approved' : 'Rejected') : (r && r.d && r.d.error) || 'That couldn’t be decided.');
+    loadFunding(id);
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pf]'); if (!b || !b.dataset.arg) return;
+    e.preventDefault();
+    const a = b.dataset.pf, id = b.dataset.arg;
+    if (a === 'retry') { F.delete(id); paintBody(); }
+    else if (a === 'propose') proposeCeiling(id);
+    else if (a === 'approve') decideCeiling(id, b.dataset.id, true);
+    else if (a === 'reject') decideCeiling(id, b.dataset.id, false);
+  });
+
   // actions the platform cannot do yet say so, and change nothing
   const BLOCKED = { budget: 'Setting a budget' };
   // actions the platform CAN do: handled here, so the prototype's sample-data versions never run

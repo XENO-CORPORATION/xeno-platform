@@ -19,6 +19,10 @@ const db = {
   settings: { workspace: { bio: 'First programmer.' } }, credits: 1234, calls: [],
   // account security: the password, whether this session confirmed, a pending email change, keys and exports
   password: 'correct horse', hasPassword: true, confirmed: false, pending: null, mailed: [], keys: [], exports: [], nextKey: 1,
+  apps: [{ clientId: 'xeno-canvas', name: 'XENO Canvas', firstParty: true, sessions: 2, lastUsedAt: new Date(Date.now() - 36e5).toISOString(), can: ['your name and photo', 'spend your credits'] }, { clientId: 'some/app', name: 'Some App', firstParty: false, sessions: 1, lastUsedAt: new Date(Date.now() - 864e5).toISOString(), can: [] }],
+  byok: true, keys2: [], keyBodies: [], routes2: [], caps: [], cloudsDown: false,
+  clouds: [{ id: 'cn1', displayName: 'ada@example.test', status: 'active' }], mcp: [{ id: '11111111-1111-1111-1111-111111111111', client: { name: 'My CLI' }, lastUsedAt: new Date(Date.now() - 6e5).toISOString() }],
+  giftsOpen: false, giftLedger: [], giftSent: null,
 };
 const need = () => (db.confirmed ? null : json(403, { success: false, error: 'Confirm it’s you first', code: 'confirmation_required' }));
 const security = () => ({ confirmation: { confirmed: db.confirmed, available: true, expires_at: db.confirmed ? new Date(Date.now() + 6e5).toISOString() : null }, methods: [db.hasPassword ? 'password' : 'email_code'], has_password: db.hasPassword, email: db.user.email, pending_email: db.pending ? { new_email: db.pending.email, expires_at: new Date(Date.now() + 6e5).toISOString() } : null });
@@ -29,6 +33,25 @@ function accountSecurity(m, p, body) {
   if (p === '/api/compute/sizes') return json(200, { success: true, sizes: [] });
   if (p === '/api/skills') return json(200, { success: true, skills: [] });
   if (p === '/api/tools') return json(200, { success: true, tools: [] });
+  if (p === '/api/account/apps' && m === 'GET') return json(200, { success: true, apps: db.apps });
+  { const app = p.match(/^\/api\/account\/apps\/(.+)$/); if (app && m === 'DELETE') { const id = decodeURIComponent(app[1]); if (!db.apps.some((x) => x.clientId === id)) return json(404, { success: false, code: 'app_not_found', error: 'That app has no access to your account' }); db.apps = db.apps.filter((x) => x.clientId !== id); return json(200, { success: true, removed: true }); } }
+  if (p === '/api/v2/inference/providers') return json(200, { enabled: db.byok, providers: ['openai', 'anthropic', 'compatible'], defaultSurface: '*' });
+  if (p === '/api/v2/inference/credentials' && m === 'GET') return json(200, { credentials: db.keys2 });
+  if (p === '/api/v2/inference/credentials' && m === 'POST') { const no = need(); if (no) return json(403, { error: { code: 'confirmation_required', message: 'Confirm it’s you first' } }); if (body.secret === 'bad-key') return json(422, { error: { code: 'credential_rejected', message: 'The provider refused that key' } }); const c = { id: 'c' + (db.keys2.length + 1), provider: body.provider, label: body.label, key_last4: body.secret.slice(-4), status: 'active', created_at: new Date().toISOString(), models: null, routed_surfaces: 0 }; db.keys2.push(c); db.keyBodies.push(body); return json(201, { credential: c }); }
+  { const cm = p.match(/^\/api\/v2\/inference\/credentials\/([^/]+)\/models$/); if (cm && m === 'GET') return json(200, { models: [{ id: 'model-a' }] }); if (cm && m === 'PUT') { const k = db.keys2.find((x) => x.id === cm[1]); k.models = body.models; return json(200, { credential: k }); } }
+  { const cd = p.match(/^\/api\/v2\/inference\/credentials\/([^/]+)$/); if (cd && m === 'DELETE') { if (db.routes2.some((r) => r.credential_id === cd[1])) return json(409, { error: { code: 'credential_in_use', message: 'in use' }, surfaces: db.routes2.filter((r) => r.credential_id === cd[1]).map((r) => r.surface) }); db.keys2 = db.keys2.filter((x) => x.id !== cd[1]); return json(200, { deleted: true }); } }
+  if (p === '/api/v2/inference/products') return json(200, { products: [{ client_id: 'xeno-canvas', name: 'XENO Canvas', path: db.routes2.find((r) => r.surface === 'xeno-canvas')?.path || null, credential_id: db.routes2.find((r) => r.surface === 'xeno-canvas')?.credential_id || null, last_signed_in: new Date().toISOString() }, { client_id: 'xeno-pixel', name: 'XENO Pixel', path: null, credential_id: null, last_signed_in: null }] });
+  if (p === '/api/v2/inference/routes') return json(200, { defaultSurface: '*', routes: db.routes2 });
+  { const rt = p.match(/^\/api\/v2\/inference\/routes\/(.+)$/); if (rt) { const s = decodeURIComponent(rt[1]); db.routes2 = db.routes2.filter((r) => r.surface !== s); if (m === 'PUT') db.routes2.push({ surface: s, path: body.path, credential_id: body.credentialId || null }); return json(200, { route: { surface: s } }); } }
+  if (p === '/api/v2/ledger/caps' && m === 'GET') return json(200, { caps: db.caps });
+  if (p === '/api/v2/ledger/caps' && m === 'PUT') { db.caps = [{ windowSec: body.windowSec, limitMicro: String(body.limitMicro), spentMicro: '1000000' }]; return json(200, { ok: true }); }
+  if (/^\/api\/v2\/ledger\/caps\/\d+$/.test(p) && m === 'DELETE') { db.caps = []; return json(200, { ok: true, removed: true }); }
+  if (p === '/api/storage/connect/workspaces/ws1/providers') return json(200, { providers: [] });
+  if (p === '/api/storage/connect/workspaces/ws1/connections') return db.cloudsDown ? json(503, { error: { code: 'UNAVAILABLE' } }) : json(200, db.clouds);
+  if (p === '/api/mcp/services') return json(200, { success: true, services: [] });
+  if (p === '/api/mcp/connections') return json(200, { success: true, connections: db.mcp });
+  if (p === '/api/places/ops/funding.get') return json(200, { ok: true, result: { balanceMicro: 500000000, giftsOpen: db.giftsOpen, allocations: [], ledger: db.giftLedger } });
+  if (p === '/api/places/ops/funding.gift') { db.giftSent = body; return json(200, { ok: true, result: { giftId: 'g1', state: 'confirmed' } }); }
   if (p === '/api/account/deletion' && m === 'GET') return json(200, { success: true, deletion: db.deletion || null });
   if (p === '/api/account/deletion' && m === 'POST') { const no = need(); if (no) return no; if (db.refuseDeletion) return json(409, { success: false, code: 'owns_workspace', error: 'You own Real Co, with other people in it. Make someone else the owner first.' }); db.deletion = { requestedAt: new Date().toISOString(), eraseAt: new Date(Date.now() + 30 * 864e5).toISOString() }; return json(200, { success: true, deletion: db.deletion }); }
   if (p === '/api/account/deletion' && m === 'DELETE') { db.deletion = null; return json(200, { success: true, deletion: null }); }
@@ -88,7 +111,7 @@ function answer(q) {
   if (p === '/api/dashboard/stats') return json(200, { success: true, stats: { credits: db.credits, plan: 'free', usage_available: true, usage_by_surface: [{ surface: 'chat', credits: 40 }, { surface: 'canvas', credits: 10 }] } });
   if (p === '/api/user-data/settings' && m === 'GET') return json(200, { success: true, settings: db.settings });
   if (p === '/api/user-data/settings' && m === 'PATCH') { for (const up of (body.updates || [{ path: body.path, value: body.value }])) { const [a, b] = String(up.path).split('.'); db.settings[a] = db.settings[a] || {}; db.settings[a][b] = up.value; } return json(200, { success: true, settings: db.settings }); }
-  if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: [] });
+  if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces || [] });
   if (p === '/api/chat/projects' && m === 'GET') return json(200, { success: true, projects: [] });
   if (p === '/api/chat/conversations' && m === 'GET') return json(200, { success: true, conversations: [] });
   if (p === '/api/library/assets' && m === 'GET') return json(200, { success: true, items: [] });
@@ -108,8 +131,10 @@ p.on('request', (q) => { const u = new URL(q.url()); if (u.pathname.startsWith('
 await p.setCookie({ name: 'xeno_csrf', value: 'csrf-test-token', url: base });
 const open = async (item) => { await p.evaluate((it) => window.XW.go('global', { global: 'settings', item: it }), item); await wait(350); };
 const text = () => p.evaluate(() => document.querySelector('.pg--set')?.innerText || '');
+const shot = async (name) => { if (process.env.SHOT_DIR) await p.screenshot({ path: path.join(process.env.SHOT_DIR, name + '.png') }); };
+const toastText = () => p.evaluate(() => document.getElementById('toast')?.innerText || '');
 const settle = async () => { await p.evaluate(() => window.XENO_NET.idle()); await wait(450); };
-const SAMPLE = /Emilian|emilian@|Bucharest|Frankfurt|CI pipeline|Visa ending|2,380|xk_…|This computer|d+ saved — sign in|XENO Agent CLI|Google Drive/;
+const SAMPLE = /Emilian|emilian@|Bucharest|Frankfurt|CI pipeline|Visa ending|2,380|xk_…|This computer|d+ saved — sign in|XENO Agent CLI|Repositories: xeno-platform/;
 
 try {
   await p.goto(base + '/workspace/', { waitUntil: 'networkidle0' }); await wait(600);
@@ -134,7 +159,78 @@ try {
   const seen = [];
   for (const item of ['Profile', 'Sign-in & security', 'Sessions & devices', 'Apps & sign-in methods', 'API keys', 'Provider keys & inference', 'Plan & billing', 'Usage & limits', 'Gifts', 'Your data', 'Delete account', 'Workspace', 'Connections']) { await open(item); const s = await text(); if (SAMPLE.test(s)) seen.push(item + ': ' + s.match(SAMPLE)[0]); }
   ok(seen.length === 0, 'no account section shows sample data as yours (' + JSON.stringify(seen.slice(0, 3)) + ')');
-  await open('Gifts'); ok(/isn’t available here yet/.test(await text()), 'a section with no platform API says so');
+  // ---- apps signed in ----
+  db.workspaces = [{ id: 'ws1', name: 'Personal', workspace_type: 'personal' }];
+  const dialogBtn = async (re) => { await wait(150); const did = await p.evaluate((src) => { const r = new RegExp(src); const d = [...document.querySelectorAll('.xd')].pop(); const b = d && ([...d.querySelectorAll('button')].find((x) => r.test(x.textContent.trim())) || d.querySelector('[data-xd-submit],[data-xd-ok]')); if (b) b.click(); return !!b; }, re.source); await wait(600); return did; };
+  const pageBtn = async (re) => { const did = await p.evaluate((src) => { const r = new RegExp(src); const b = [...document.querySelectorAll('.pg--set button, .pg--set a')].find((x) => r.test(x.textContent)); if (b) b.click(); return !!b; }, re.source); await wait(450); return did; };
+  const fill = (id, v) => p.evaluate((i, val) => { const el = document.querySelector(`.xd [data-f="${i}"] input, .xd [data-f="${i}"] textarea, .xd [data-f="${i}"] select, .xd #xd-${i}, .xd [name="${i}"]`); if (!el) return false; el.value = val; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; }, id, v);
+  await open('Apps & sign-in methods'); await wait(300); let s0 = await text();
+  ok(/XENO Canvas/.test(s0) && /spend your credits/.test(s0) && /2 sign-ins/.test(s0), 'Apps lists what is signed in, and what it can do, in words');
+  ok(/Not made by XENO/.test(s0), 'an app XENO did not make says so');
+  await shot('settings-apps');
+  await pageBtn(/Remove access/); await dialogBtn(/Remove access/); await wait(300); s0 = await text();
+  ok(!/XENO Canvas/.test(s0) && /Some App/.test(s0), 'removing an app takes it off the list');
+  await pageBtn(/Remove access/); await dialogBtn(/Remove access/); await wait(300);
+  ok(/No apps are signed in/.test(await text()), 'with none left it says so');
+
+  // ---- provider keys ----
+  await open('Provider keys & inference'); await wait(300); s0 = await text();
+  ok(/Add your own key/.test(s0) && /XENO Canvas/.test(s0) && /Never signed in/.test(s0), 'Provider keys shows no keys, and the real products');
+  await shot('settings-providers');
+  db.confirmed = false;
+  await pageBtn(/Add a key/); await wait(300);
+  ok(await p.evaluate(() => /Confirm it’s you/.test(document.querySelector('.xd')?.innerText || '')), 'adding a key asks who you are first');
+  await p.evaluate(() => { const i = [...document.querySelectorAll('.xd')].pop().querySelector('input[type=password]'); i.value = 'correct horse'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await dialogBtn(/^Confirm$/);
+  await wait(300); ok(await p.evaluate(() => /Add a provider key/.test([...document.querySelectorAll('.xd')].pop()?.innerText || '')), 'then shows the form');
+  const fillAll = (vals) => p.evaluate((v) => { const d = [...document.querySelectorAll('.xd')].pop(); const ins = [...d.querySelectorAll('input,select,textarea')]; const set = (el, x) => { el.value = x; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }; for (const [sel, x] of v) { const el = sel === 'password' ? d.querySelector('input[type=password]') : sel === 'select' ? d.querySelector('select') : ins.filter((e) => e.type !== 'password' && e.tagName !== 'SELECT')[sel]; if (el) set(el, x); } return ins.length; }, vals);
+  await fillAll([[0, 'Work key'], ['password', 'bad-key']]); await dialogBtn(/^Add key$/); await wait(250);
+  ok(await p.evaluate(() => /The provider refused that key/.test([...document.querySelectorAll('.xd')].pop()?.innerText || '')), 'a key the provider refuses is not saved, and says why');
+  await fillAll([['password', 'sk-good-key-1234']]); await dialogBtn(/^Add key$/); await wait(500); s0 = await text();
+  ok(/Work key/.test(s0) && /ending 1234/.test(s0) && !/sk-good-key/.test(s0), 'a key shows by name and last characters, never in full');
+  ok(db.keyBodies.length === 1 && db.keyBodies[0].baseUrl === undefined, 'an OpenAI key sends no endpoint');
+  await p.evaluate(() => { const s = document.querySelector('[data-acct-route="xeno-canvas"]'); s.value = s.querySelector('option[value^="byok:"]').value; s.dispatchEvent(new Event('change', { bubbles: true })); }); await wait(450);
+  ok(db.routes2.some((r) => r.surface === 'xeno-canvas' && r.path === 'byok' && r.credential_id === 'c1'), 'choosing the key for a product saves it');
+  ok(await p.evaluate(() => document.querySelector('[data-acct-route="xeno-canvas"]').value === 'byok:c1'), 'and the page shows it');
+  ok(await p.evaluate(() => [...document.querySelector('[data-acct-route="*"]').options].some((o) => o.value === 'inhouse' && o.disabled)), 'in-house is shown, and can’t be picked from here yet');
+  await pageBtn(/^Remove$/); await dialogBtn(/Remove key/); await wait(250);
+  ok(db.keys2.length === 1 && /Still used by XENO Canvas/.test(await toastText()), 'a key still in use is not removed, and says which product');
+  await p.evaluate(() => { const s = document.querySelector('[data-acct-route="xeno-canvas"]'); s.value = 'inherit'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await wait(450);
+  ok(!db.routes2.some((r) => r.surface === 'xeno-canvas'), 'a product can go back to your default');
+  await pageBtn(/^Remove$/); await dialogBtn(/Remove key/); await wait(350);
+  ok(db.keys2.length === 0, 'then the key can be removed');
+  db.byok = false; await p.evaluate(() => {}); await open('Profile'); await p.reload({ waitUntil: 'networkidle0' }); await wait(500); await open('Provider keys & inference'); await wait(300);
+  ok(/aren’t turned on/.test(await text()), 'with provider keys off it says so plainly'); db.byok = true;
+
+  // ---- the monthly limit ----
+  await open('Usage & limits'); await wait(350); s0 = await text();
+  ok(/No limit/.test(s0) && !/isn’t available here yet/.test(s0), 'Usage shows no limit, and offers one');
+  await pageBtn(/Set a limit/); await fillAll([[0, '2000']]); await dialogBtn(/Save limit/); await wait(350);
+  ok(db.caps[0]?.limitMicro === '2000000000' && db.caps[0].windowSec === 2592000, 'a limit saves as 30 days of credits');
+  s0 = await text(); ok(/1 of 2,000 credits used/.test(s0), 'and reads back what has been used');
+  await shot('settings-limit');
+  await pageBtn(/Remove limit/); await dialogBtn(/Remove limit/); await wait(350);
+  ok(db.caps.length === 0 && /No limit/.test(await text()), 'a limit can be removed');
+
+  // ---- connections ----
+  await open('Connections'); await wait(450); s0 = await text();
+  ok(/ada@example.test/.test(s0) && /My CLI/.test(s0), 'Connections shows connected clouds and agents');
+  await shot('settings-connections');
+  ok(!/Google Drive.*Read files you pick/.test(s0) && !/Emilian/.test(s0), 'and no sample services');
+  await pageBtn(/^Manage$/); await wait(450);
+  ok(/storage\/connections/.test(await p.evaluate(() => location.pathname)), 'each kind opens where it is managed');
+  await p.goBack(); await wait(350);
+
+  // ---- the workspace, and gifts ----
+  await open('Workspace'); ok(!/aren’t connected/.test(await text()), 'Workspace no longer says it is not connected');
+  await open('Gifts'); await wait(400); s0 = await text();
+  ok(/Sending credits isn’t open yet/.test(s0) && !/Send a gift/.test(s0), 'Gifts says sending is not open, and offers nothing to press');
+  ok(/No gifts yet/.test(s0), 'and shows an empty history');
+  db.giftLedger = [{ at: new Date().toISOString(), kind: 'gift', direction: 'in', amountMicro: 25000000, memo: 'Grace', status: 'settled' }];
+  db.giftsOpen = true; await p.evaluate(() => {}); await p.reload({ waitUntil: 'networkidle0' }); await wait(500); await open('Gifts'); await wait(400); s0 = await text();
+  ok(/25 credits from Grace/.test(s0), 'a gift shows in the history');
+  await pageBtn(/Send a gift/); await fillAll([[0, '@grace'], [1, '40']]); await dialogBtn(/^Send gift$/); await wait(400);
+  ok(db.giftSent && db.giftSent.recipient === '@grace' && db.giftSent.amount === 40 && db.giftSent.confirmed === true, 'once open, a gift goes through the one gift service');
+  db.giftsOpen = false; db.confirmed = false; db.apps = [];
 
   // ---- saves ----
   await open('Profile'); db.calls.length = 0;

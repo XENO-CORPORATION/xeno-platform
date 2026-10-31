@@ -514,6 +514,24 @@ export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
   return { ok: true };
 }
 
+/** A person's own limits. spentMicro is what the same sum assertWithinCaps tests has already used in that window. */
+export async function listSpendCaps(pool, userId) {
+  const { rows } = await pool.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1 ORDER BY window_sec', [userId]);
+  if (!rows.length) return [];
+  const held = await activeHoldsMicro(pool, userId);
+  const out = [];
+  for (const r of rows) {
+    const spent = await spentInWindowMicro(pool, userId, Number(r.window_sec));
+    out.push({ windowSec: Number(r.window_sec), limitMicro: String(r.limit_micro), spentMicro: String(spent + held) });
+  }
+  return out;
+}
+
+export async function clearSpendCap(pool, userId, windowSec) {
+  const r = await pool.query('DELETE FROM spend_caps WHERE user_id=$1 AND window_sec=$2', [userId, windowSec]);
+  return { ok: true, removed: r.rowCount > 0 };
+}
+
 /**
  * Throw SPEND_CAP_EXCEEDED if committing costMicro now would breach any window cap.
  *
@@ -532,18 +550,22 @@ export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
  */
 /** The most the account's spend caps still admit, as the tightest window's headroom, or null when it has no
  * cap. Headroom is limit − spent − held, the same sum assertWithinCaps has always tested. */
+async function spentInWindowMicro(client, userId, windowSec) {
+  const spent = await client.query(
+    `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
+      WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
+    [userId, windowSec],
+  );
+  return BigInt(spent.rows[0].s);
+}
+
 async function capHeadroomMicro(client, userId) {
   const caps = await client.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1', [userId]);
   if (caps.rows.length === 0) return null; // no cap configured → nothing to enforce
   const heldMicro = await activeHoldsMicro(client, userId);
   let tightest = null;
   for (const cap of caps.rows) {
-    const spent = await client.query(
-      `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
-        WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
-      [userId, cap.window_sec],
-    );
-    const headroom = BigInt(cap.limit_micro) - BigInt(spent.rows[0].s) - heldMicro;
+    const headroom = BigInt(cap.limit_micro) - await spentInWindowMicro(client, userId, cap.window_sec) - heldMicro;
     if (tightest === null || headroom < tightest.headroom) tightest = { headroom, windowSec: cap.window_sec };
   }
   return tightest;

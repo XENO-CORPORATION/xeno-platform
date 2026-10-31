@@ -36,6 +36,7 @@ import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
 import projectDirectoryBindingRoutes from './projectDirectoryBindingRoutes.js';
 import * as insights from '../services/projectInsights.js';
+import * as projectFunding from '../services/projectFundingView.js';
 import {
   assertLiveCollaborationAuthority,
   createLiveShare,
@@ -2813,6 +2814,21 @@ const insight = (fn) => async (req, res) => {
 router.get('/projects/:id/people', insight((req) => insights.people(req.db, { id: req.user.id }, req.params.id)));
 router.get('/projects/:id/summary', insight((req) => insights.summary(req.db, { id: req.user.id }, req.params.id)));
 router.get('/projects/:id/activity', insight((req) => insights.activity(req.db, { id: req.user.id }, req.params.id, { before: req.query.before, limit: req.query.limit })));
+
+// The Funding tab: what a project has been funded with and may spend. It moves no money (services/projectFundingView.js).
+const fundingCall = (fn) => async (req, res) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    res.json({ success: true, ...(await fn(req)) });
+  } catch (error) {
+    if (error instanceof projectFunding.ProjectFundingError) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    console.error('[projects] funding', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+router.get('/projects/:id/funding', fundingCall((req) => projectFunding.read(req.db, { id: req.user.id }, req.params.id)));
+router.post('/projects/:id/funding/ceiling', fundingCall((req) => projectFunding.proposeCeiling(req.db, { id: req.user.id }, req.params.id, req.body || {})));
+router.post('/projects/:id/funding/ceiling/:proposalId/decision', fundingCall((req) => projectFunding.decideCeiling(req.db, { id: req.user.id }, req.params.id, req.params.proposalId, req.body || {})));
 
 router.get('/projects/:id/access', async (req, res) => {
   try {
