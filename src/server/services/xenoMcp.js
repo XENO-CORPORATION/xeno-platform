@@ -37,6 +37,7 @@ import * as publishMcp from './publishMcp.js';
 import * as messageMcp from './messageMcp.js';
 import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
+import * as toolsMcp from './toolsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
 import * as inboxMcp from './inboxMcp.js';
@@ -194,6 +195,14 @@ export const SERVICES = Object.freeze([
     tools: () => docsMcp.TOOLS,
     call: (db, actor, name, args) => docsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof docsMcp.DocsMcpError,
+  },
+  // XENO Tools (toolsMcp.js): find a tool and the address that opens it. Tools run on the person's side.
+  {
+    category: 'tools', title: 'Tools', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Tools: find the XENO tool that fits what someone wants to do, and the address that opens it for them.',
+    tools: () => toolsMcp.TOOLS,
+    call: (db, actor, name, args) => toolsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof toolsMcp.ToolsMcpError,
   },
   // XENO Analytics (analyticsMcp.js): read-only metrics and saved dashboards of a workspace.
   {

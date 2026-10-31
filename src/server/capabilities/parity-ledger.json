@@ -11025,6 +11025,11 @@
       "class": "reversible",
       "scope": "none",
       "because": "part of signing in, before any session exists"
+    },
+    "ui:platform-market.js:data-xmk=publishTeam": {
+      "status": "planned",
+      "class": "external",
+      "scope": "marketplace:write"
     }
   }
 }

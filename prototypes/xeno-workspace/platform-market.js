@@ -57,6 +57,7 @@
     if (b && b.ok && p && p.ok) { S.rent.bindings = b.d.bindings || []; S.rent.partitions = p.d.partitions || []; S.rent.status = 'ready'; } else S.rent.status = 'error';
     paint();
   }
+  const TEAM_REFUSAL = { team_archived: 'That team is archived.', not_the_team_owner_manager: 'Only someone who manages this workspace can publish its teams.', team_not_found: 'That team is gone.' };
   async function loadSeller() {
     S.seller = { status: 'loading' };
     const me = await api('GET', `${BASE}/developer/me`).catch(() => null);
@@ -130,7 +131,7 @@
   }
   function sellerPage() {
     const C = S.seller; if (C.status === 'idle') loadSeller();
-    const head = h().head({ eyebrow: '<a data-xmk="go" data-id="">Marketplace</a>', title: 'Seller console', acts: C.status === 'ready' ? h().btn('Publish a skill', 'data-xmk="skills"', true, 'plus') : '' });
+    const head = h().head({ eyebrow: '<a data-xmk="go" data-id="">Marketplace</a>', title: 'Seller console', acts: C.status === 'ready' ? h().btn('Publish a team', 'data-xmk="publishTeam"', true, 'people') + h().btn('Publish a skill', 'data-xmk="skills"', true, 'plus') : '' });
     const body = C.status === 'error' ? retry('The seller console', 'seller') : C.status === 'none' ? h().box('market', 'You are not selling anything yet', 'Start a seller profile. It sells as your workspace, and you answer for what it lists.', h().btn('Start selling', 'data-xmk="register"', false, 'plus')) : C.status !== 'ready' ? h().box('market', 'Opening', '')
       : `<section class="pg-sec"><h3>Earnings</h3><dl class="mk-dl"><dt>Available</dt><dd>${C.earnings.availableCredits ?? 0} credits</dd><dt>Pending</dt><dd>${C.earnings.pendingCredits ?? 0} credits</dd><dt>Paid out</dt><dd>${C.earnings.paidOutCredits ?? 0} credits</dd></dl>${Number(C.earnings.availableCredits) > 0 ? h().btn('Cash out', 'data-xmk="payout"', true) : ''}</section>
         <section class="pg-sec"><h3>Your listings</h3>${C.listings.length ? `<ul class="mk-rcl">${C.listings.map((l) => `<li>${l.status === 'published' ? `<button class="pg-link" data-xmk="open" data-id="${esc(l.slug)}">${esc(l.title)}</button>` : `<b>${esc(l.title)}</b>`}<span>${esc(h().cap(l.kind))}</span><span class="pg-dim">${esc(h().cap(l.status))}${l.lastSubmission ? ' · review ' + esc(l.lastSubmission.state) : ''}</span>${l.status === 'draft' && l.versions > 0 && (!l.lastSubmission || l.lastSubmission.state === 'rejected') ? h().btn('Send to review', `data-xmk="submit" data-id="${esc(l.id)}"`, true) : ''}</li>`).join('')}</ul>` : '<p class="pg-dim">Nothing listed yet. Skills publish from your Skills library.</p>'}</section>
@@ -181,6 +182,34 @@
     async export(id) { const r = await api('GET', `${BASE}/rental-partitions/${encodeURIComponent(id)}/export`).catch(() => null); if (!r || !r.ok) return toast(said(r, 'It could not be exported.')); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(r.d.export, null, 2)], { type: 'application/json' })); a.download = `rental-memory-${id}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); toast('Exported'); },
     async forget(id) { if (!(await D().confirm({ title: 'Delete what it remembers for you?', body: 'This can’t be undone. Anything kept by law is listed afterwards.', action: 'Delete', danger: true }))) return; const r = await api('DELETE', `${BASE}/rental-partitions/${encodeURIComponent(id)}/content`).catch(() => null); if (!r || !r.ok) return toast(said(r, 'It could not be deleted.')); toast('Deleted'); loadRent(); },
     async register() { const v = await D().form({ title: 'Start selling', sub: 'People see this name on your listings.', submit: 'Start selling', fields: [{ id: 'name', label: 'Seller name', required: true, max: 120 }] }); if (!v) return; const r = await api('POST', `${BASE}/developer/register`, { displayName: v.name.trim() }).catch(() => null); if (!r || !r.ok) return toast(said(r, 'That could not be saved.')); loadSeller(); },
+    // A team is packaged by the server from a real team: its setup and its agents' definitions, never its people. Nothing
+    // goes on sale until review passes. Free now; a price needs the same review and comes with it.
+    async publishTeam() {
+      const w = wsId(); if (!w) return toast('Open a company workspace first: a team you sell comes from one.');
+      const r0 = await api('GET', `/api/workspaces/${encodeURIComponent(w)}/teams`).catch(() => null);
+      const teams = (r0 && r0.ok && (r0.d.teams || [])) || [];
+      if (!teams.length) return toast('This workspace has no team to publish yet.');
+      let done = null;
+      const v = await D().form({ title: 'Publish a team', sub: 'People buy a copy of its setup and its agents’ definitions. Your people, and agents you can’t pass on, stay behind. It goes on sale once it passes review.', submit: 'Send to review', fields: [
+        { id: 'team', label: 'Team', type: 'select', required: true, value: teams[0].id, options: teams.map((t) => [t.id, t.name]) },
+        { id: 'title', label: 'Name in the Marketplace', required: true, max: 200, value: teams[0].name },
+        { id: 'summary', label: 'What it’s for', type: 'textarea', rows: 2, required: true, max: 500 },
+        { id: 'license', label: 'Licence', type: 'select', required: true, value: 'LicenseRef-XENO-Marketplace-Redistributable', hint: 'It has to let buyers copy the setup.', options: [['LicenseRef-XENO-Marketplace-Redistributable', 'XENO Marketplace'], ['MIT', 'MIT'], ['Apache-2.0', 'Apache 2.0'], ['CC-BY-4.0', 'CC BY 4.0'], ['CC0-1.0', 'CC0']] }],
+        onSubmit: async (vals) => {
+          const made = await api('POST', `${BASE}/listings`, { kind: 'team', title: vals.title.trim(), summary: vals.summary.trim(), license: vals.license, pricing: [{ model: 'free' }] }).catch(() => null);
+          if (!made || !made.ok) return said(made, 'The listing could not be made.');
+          const id = made.d.listing?.id;
+          const ver = await api('POST', `${BASE}/listings/${encodeURIComponent(id)}/versions`, { version: '1.0.0', teamId: vals.team }).catch(() => null);
+          if (!ver || !ver.ok) return (ver && ver.d && TEAM_REFUSAL[ver.d.error]) || said(ver, 'The team could not be packaged.');
+          const sub = await api('POST', `${BASE}/listings/${encodeURIComponent(id)}/submit`, {}).catch(() => null);
+          done = { excluded: ver.d.excluded || {}, submitted: !!(sub && sub.ok), why: sub && !sub.ok ? said(sub, '') : '' };
+          return null;
+        } });
+      if (!v || !done) return;
+      const left = (done.excluded.memberships || 0) + (done.excluded.agents || []).length;
+      toast(done.submitted ? `Sent to review${left ? `. ${left} member${left === 1 ? '' : 's'} stayed behind` : ''}` : (done.why || 'Saved as a draft. Send it to review from your listings.'));
+      S.seller = null; loadSeller();
+    },
     async submit(id) { const r = await api('POST', `${BASE}/listings/${encodeURIComponent(id)}/submit`, {}).catch(() => null); if (!r || !r.ok) return toast(said(r, 'It could not be sent to review.')); toast('Sent to review'); loadSeller(); },
     async payout() {
       const C = S.seller, v = await D().form({ title: 'Cash out', sub: `${C.earnings.availableCredits} credits available.`, submit: 'Ask to cash out', fields: [{ id: 'n', label: 'Credits', required: true, value: String(C.earnings.availableCredits), validate: (x) => (/^[1-9]\d*$/.test(x.trim()) ? null : 'A whole number of credits.') }] });

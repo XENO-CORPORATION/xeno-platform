@@ -34,6 +34,7 @@ async function open(url) {
     const m = q.method(), P = u.pathname.replace('/api/marketplace', ''), body = () => JSON.parse(q.postData() || '{}');
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
     if (u.pathname === '/api/workspaces') return json({ success: true, workspaces: [{ id: WS, name: 'Real Co', slug: 'real-co', member_role: 'owner', workspace_type: 'company' }] });
+    if (u.pathname === `/api/workspaces/${WS}/teams`) return json({ success: true, teams: [{ id: 'tm1', name: 'Research crew' }] });
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     if (!u.pathname.startsWith('/api/marketplace')) return json({ success: false, error: 'not found' }, 404);
     if (P === '/catalog') { const s = u.searchParams.get('q'); if (s) db.q.push(s); return json({ success: true, listings: db.listings.filter((x) => !s || x.title.toLowerCase().includes(s.toLowerCase())) }); }
@@ -52,6 +53,9 @@ async function open(url) {
     if (P === '/developer/earnings') return json({ success: true, earnings: { availableCredits: 700, pendingCredits: 30, paidOutCredits: 0 }, recentTransactions: [{ id: 't', type: 'purchase', gross: 100, platformFee: 20, creatorNet: 80, createdAt: new Date().toISOString() }] });
     if (P === '/developer/payouts') { db.writes.push(['payout', body()]); return json({ success: false, status: 'not_implemented', message: 'Payout recorded but cash-out is not yet enabled.' }, 501); }
     if (P === '/listings/draft1/submit') { db.writes.push(['submit']); return json({ success: true }); }
+    if (P === '/listings' && m === 'POST') { db.writes.push(['newListing', body()]); return json({ success: true, listing: { id: 'team1', slug: 't', kind: 'team' } }, 201); }
+    if (P === '/listings/team1/versions') { db.writes.push(['teamVersion', body()]); return db.refuseTeam ? json({ success: false, error: 'not_the_team_owner_manager' }, 403) : json({ success: true, versionId: 'v1', excluded: { memberships: 2, agents: [] } }, 201); }
+    if (P === '/listings/team1/submit') { db.writes.push(['teamSubmit']); return json({ success: true }); }
     return json({ success: false, error: 'not found' }, 404);
   });
   await p.goto(base + url, { waitUntil: 'domcontentloaded' }); await wait(1800);
@@ -146,6 +150,14 @@ try {
     await shot(p, 'market-seller');
     await click(p, '[data-xmk="submit"]'); await wait(400);
     ok(db.writes.some((x) => x[0] === 'submit'), 'a draft with a version can go to review');
+    // publishing a team
+    await click(p, '[data-xmk="publishTeam"]'); await wait(500);
+    const fill = (id, v) => p.evaluate((i, x) => { const e = document.querySelector(`[data-f="${i}"] input, [data-f="${i}"] textarea, [data-f="${i}"] select`); e.value = x; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }, id, v);
+    ok(await p.evaluate(() => [...document.querySelectorAll('[data-f="team"] option')].some((o) => /Research crew/.test(o.textContent))), 'publishing offers this workspace’s real teams');
+    await fill('summary', 'A research crew'); await dialogOk(p); await wait(800);
+    const made = db.writes.find((x) => x[0] === 'newListing'), ver = db.writes.find((x) => x[0] === 'teamVersion');
+    ok(made && made[1].kind === 'team' && made[1].license && ver && ver[1].teamId === 'tm1' && !ver[1].package && !ver[1].manifest, 'it asks the server to package the team; the page sends no package of its own');
+    ok(db.writes.some((x) => x[0] === 'teamSubmit') && /Sent to review/.test(await all(p)) && /2 members stayed behind/.test(await all(p)), 'it goes to review, and says who stayed behind');
     await click(p, '[data-xmk="payout"]'); await wait(300); await dialogOk(p); await wait(500);
     ok(db.writes.some((x) => x[0] === 'payout' && x[1].amountCredits === 700) && /not yet enabled/.test(await all(p)), 'cash-out says plainly what the server says');
     await p.close();
