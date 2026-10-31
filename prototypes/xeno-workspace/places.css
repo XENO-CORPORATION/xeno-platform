@@ -90,3 +90,7 @@
 .pl-at{font-style:normal;font-size:10.5px;color:var(--dim);max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fd-sums + .pg-sec{margin-top:18px}
 .cm-acts .pg-link{line-height:26px}
+.pl-floor header .pg-link { color: inherit; font: inherit; }
+.pl-sum { margin: 0 0 12px; }
+a.pg-btn { text-decoration: none; }
+.mk-title { font-size: 18px; margin: 0 0 4px; }

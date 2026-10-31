@@ -441,6 +441,22 @@ router.get('/developer/skill-listings', authMiddleware, async (req, res) => {
   }
 });
 
+/** GET /developer/listings -- everything this seller lists, with whether it has a version to send and how its last review went. */
+router.get('/developer/listings', authMiddleware, async (req, res) => {
+  try {
+    const dev = await getDeveloperForUser(req.db, req.user.id);
+    if (!dev) return res.json({ success: true, listings: [] });
+    const { rows } = await req.db.query(`SELECT l.id, l.slug, l.kind, l.title, l.status, l.current_version,
+        (SELECT count(*)::int FROM marketplace_listing_versions v WHERE v.listing_id = l.id) AS versions,
+        (SELECT jsonb_build_object('state', s.state) FROM marketplace_submissions s WHERE s.listing_id = l.id ORDER BY s.created_at DESC LIMIT 1) AS last_submission
+      FROM marketplace_listings l WHERE l.developer_id = $1 ORDER BY l.created_at DESC`, [dev.id]);
+    return res.json({ success: true, listings: rows.map((r) => ({ id: r.id, slug: r.slug, kind: r.kind, title: r.title, status: r.status, currentVersion: r.current_version, versions: r.versions, lastSubmission: r.last_submission })) });
+  } catch (e) {
+    console.error('[Marketplace] developer listings error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to list your listings' });
+  }
+});
+
 /** GET /skills/:listingId/preview -- what a skill is before anyone gets it: publisher, versions, files, scripts. */
 router.get('/skills/:listingId/preview', optionalAuthMiddleware, async (req, res) => {
   try { return res.json({ success: true, ...(await skillPackages.preview(req.db, req.params.listingId)) }); }

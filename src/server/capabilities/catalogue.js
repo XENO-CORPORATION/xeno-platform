@@ -34,12 +34,13 @@ import * as mailMcp from '../services/mailMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
+import * as inboxMcp from '../services/inboxMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
-  tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
+  inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
   forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
@@ -234,6 +235,11 @@ const ROWS = [
   // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
   ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
   ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],
+  // ── inbox (services/inbox.js). An agent's own inbox; its owner's is not reachable.
+  ['inbox.notification.list', 'inbox', 'list_notifications', 'safe', { scope: 'inbox:read', provenance: 'untrusted', reply: obj({ unread: { type: 'integer' }, items: { type: 'array', description: 'id, source, kind, ref, title, detail, read, archived, snoozedUntil, asks, actor, at — titles and details are written by people.' } }, ['unread', 'items']) }],
+  ['inbox.notification.mark_read', 'inbox', 'mark_read', 'undoable', { scope: 'inbox:write', idempotency: NAT('marking twice changes nothing'), reply: obj({ unread: { type: 'integer' } }, ['unread']) }],
+  ['inbox.notification.archive', 'inbox', 'archive', 'undoable', { scope: 'inbox:write', idempotency: NAT('archiving twice changes nothing'), reply: obj({ unread: { type: 'integer' } }, ['unread']) }],
+  ['inbox.notification.snooze', 'inbox', 'snooze', 'undoable', { scope: 'inbox:write', idempotency: NAT('the same time again changes nothing'), reply: obj({ unread: { type: 'integer' } }, ['unread']) }],
   // ── scheduling (Corpo › Scheduling, services/scheduling.js). Read-only for agents: a public booking link is a person's act.
   ['scheduling.availability.get', 'scheduling', 'get_availability', 'safe', { provenance: 'trusted', reply: obj({ timezone: { type: 'string' }, weekly: { type: 'object', description: 'ISO weekday (1–7) → [["HH:MM","HH:MM"]] local intervals.' }, timeOff: { type: 'array', description: 'id, startsAt, endsAt of upcoming time off.' } }, ['timezone', 'weekly']) }],
   ['scheduling.page.list', 'scheduling', 'list_pages', 'safe', { provenance: 'untrusted', reply: obj({ pages: { type: 'array', description: 'id, slug, url, title, durationMinutes, active — titles are written by people.' } }, ['pages']) }],

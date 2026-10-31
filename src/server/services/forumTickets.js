@@ -18,6 +18,7 @@
  */
 import { ForumError } from './forumError.js';
 import { newShortId } from './forumService.js';
+import * as inbox from './inbox.js';
 import { createThread, markThreadFixed } from './forumWrite.js';
 import { authorityTransaction } from './workspaceOperationReceipts.js';
 
@@ -62,7 +63,8 @@ async function readable(db, user, shortId) {
 }
 async function notifyReporter(db, t, user, kind) {
   if (!t.reporter_id || String(t.reporter_id) === String(user.id)) return;
-  await db.query('INSERT INTO forum_notifications (user_id, kind, ticket_id, actor_id, actor_kind) VALUES ($1, $2, $3, $4, $5)', [t.reporter_id, kind, t.id, user.id, kindOf(user)]);
+  const { rows } = await db.query('INSERT INTO forum_notifications (user_id, kind, ticket_id, actor_id, actor_kind) VALUES ($1, $2, $3, $4, $5) RETURNING id', [t.reporter_id, kind, t.id, user.id, kindOf(user)]);
+  await inbox.notify(db, { userId: t.reporter_id, source: 'forum', kind: 'reply', ref: `/workspace/community/My reports/${t.short_id}`, title: t.title, detail: 'Your report has news', actorId: user.id, actorKind: kindOf(user), dedupeKey: `forum:${rows[0].id}` });
 }
 
 export async function createTicket(db, user, { product, kind = 'bug', title, body, version, os } = {}) {

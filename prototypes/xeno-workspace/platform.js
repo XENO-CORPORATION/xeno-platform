@@ -136,8 +136,8 @@
     for (const [mode, zones] of Object.entries(window.XENO_MODE_ZONES || {})) {
       for (const z of zones) if (tables[`${mode}.${z.id}`] && !live[`${mode}.${z.id}`]) names.push(z.label);
     }
-    const rest = [...new Set(names), 'Marketplace', 'Company', 'Anima', 'Places'];
-    return `Preview. Your account, chats, projects, tasks, library, people, community and each area’s home are real. Still sample data: ${rest.join(', ')}.`;
+    const rest = [...new Set(names), 'Company', 'Anima'];
+    return `Preview. Your account, chats, projects, tasks, library, people, community, places, the marketplace and each area’s home are real. Still sample data: ${rest.join(', ')}.`;
   }
 
   async function notActivated() {

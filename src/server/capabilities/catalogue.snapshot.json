@@ -2550,6 +2550,62 @@
    ]
   },
   {
+   "name": "inbox.notification.list",
+   "wire": "inbox__notification__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "inbox:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_list_notifications"
+   ]
+  },
+  {
+   "name": "inbox.notification.mark_read",
+   "wire": "inbox__notification__mark_read",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "inbox:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_mark_read"
+   ]
+  },
+  {
+   "name": "inbox.notification.archive",
+   "wire": "inbox__notification__archive",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "inbox:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_archive"
+   ]
+  },
+  {
+   "name": "inbox.notification.snooze",
+   "wire": "inbox__notification__snooze",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "inbox:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_snooze"
+   ]
+  },
+  {
    "name": "scheduling.availability.get",
    "wire": "scheduling__availability__get",
    "version": "1.0.0",

@@ -21,6 +21,7 @@
  * SCHEDULING_EMAILS is exactly "true" (fails closed).
  */
 import crypto from 'node:crypto';
+import * as inbox from './inbox.js';
 import { check } from '../utils/authzReBAC.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { sendEmail } from './emailService.js';
@@ -294,8 +295,7 @@ async function makeEvent(db, b, page) {
   [b.workspace_id, b.host_user_id, `${page.title} with ${b.guest_name}`.slice(0, 400), `${b.guest_email}${b.note ? '\n' + b.note : ''}`, b.starts_at, b.ends_at, b.id]);
 }
 async function notifyHost(db, b, page, kind, detail) {
-  await db.query(`INSERT INTO user_notifications (user_id, source, kind, ref, title, detail) VALUES ($1,'scheduling',$2,$3,$4,$5)`,
-    [b.host_user_id, kind, `scheduling/${b.id}`, `${page.title} · ${b.guest_name}`.slice(0, 400), String(detail).slice(0, 1000)]);
+  await inbox.notify(db, { userId: b.host_user_id, source: 'scheduling', kind, ref: '/workspace/corpo/spaces/scheduling', title: `${page.title} · ${b.guest_name}`, detail, area: 'corpo' });
 }
 async function mailBoth(db, b, page, update, manage) {
   if (!emailsEnabled()) return { mailed: false };

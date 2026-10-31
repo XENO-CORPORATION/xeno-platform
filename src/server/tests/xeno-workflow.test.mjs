@@ -189,6 +189,8 @@ async function main() {
   await W.emitEvent(pool, { ...ev, eventKey: 'task-event:refuse' });
   mode = 'refuse';
   check((await W.sweep(pool)).outcomes[0] === 'failed', 'a run the runner refuses (422) fails without retrying');
+  const failedRows = async () => (await pool.query(`SELECT kind, ref, title FROM user_notifications WHERE source = 'automate' AND kind = 'workflow_failed' AND ref LIKE $1`, [`%/workflows/${on.id}`])).rows;
+  check((await failedRows()).length === 1, 'whoever turned it on hears a run failed, with the workflow as the address');
 
   // failures in a row → off
   await pool.query(`UPDATE workspace_workflows SET failure_threshold = 2, consecutive_failures = 0 WHERE id = $1`, [on.id]);
@@ -196,6 +198,8 @@ async function main() {
   for (const k of ['f1', 'f2']) { await W.emitEvent(pool, { ...ev, eventKey: `task-event:${k}` }); await W.sweep(pool); }
   const offAfter = (await W.getWorkflow(pool, O, on.id)).workflow;
   check(offAfter.state === 'disabled' && /2 runs in a row/.test(offAfter.disabledReason), 'a workflow that fails its threshold in a row is turned off');
+  check((await failedRows()).length === 1, 'more failures the same day write no more rows');
+  check((await pool.query(`SELECT 1 FROM user_notifications WHERE source = 'automate' AND kind = 'workflow_off' AND ref LIKE $1`, [`%/workflows/${on.id}`])).rowCount >= 1, 'turning itself off is always said');
   check(!(await creds.hasGrant(pool, flowAgent, 'tasks.task.create', ws)), 'turning it off takes its grants back');
   mode = 'success';
 

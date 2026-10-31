@@ -36,7 +36,6 @@
     apps: ['Apps you’re signed into', 'The list of apps and devices signed in with your XENO account isn’t available here yet.'],
     providers: ['Provider keys & inference', 'Bringing your own provider key, and choosing where each product’s AI comes from, isn’t available here yet.'],
     gifts: ['Gifts', 'Sending credits to another person isn’t available here yet.'],
-    danger: ['Delete your account', 'Deleting your account from here isn’t available yet. Write to support and we will do it for you.'],
     workspace: ['Workspace', 'Workspace settings aren’t connected to your real workspaces yet.'],
     connections: ['Connections', 'Connecting outside services isn’t available here yet.'],
   };
@@ -71,7 +70,9 @@
     S.parts.methods = link.ok && Array.isArray(link.d.accounts);
     a.methods = S.parts.methods ? link.d.accounts.map((m) => ({ id: m.provider, kind: title(m.provider), who: m.email || m.username || '', added: ms(m.linkedAt) })) : [];
     // nothing below has a platform API yet: clear whatever a sample or an earlier visit left behind
-    Object.assign(a, { passkeys: [], totp: false, codes: null, codesLeft: 0, apps: [], apiKeys: [], providers: [], route: {}, gifts: [], invoices: [], cap: null, exportJob: null, deletion: null });
+    Object.assign(a, { passkeys: [], totp: false, codes: null, codesLeft: 0, apps: [], apiKeys: [], providers: [], route: {}, gifts: [], invoices: [], cap: null, exportJob: null });
+    const del = await api('GET', '/api/account/deletion').catch(() => null);
+    a.deletion = del && del.ok && del.d.deletion ? { at: ms(del.d.deletion.requestedAt) } : null;
     const sub = bill.ok && bill.d.overview ? bill.d.overview.subscription : null;
     const credits = (bill.ok && bill.d.overview && bill.d.overview.credits) || ov.d.overview.credits || {};
     S.parts.plan = bill.ok;
@@ -280,6 +281,9 @@
       for (const m of removed(before, 'methods')) { const r = await api('DELETE', '/api/auth/linked-accounts/' + encodeURIComponent(m.id)); if (!r.ok) return settle(fail(r, 'That sign-in method couldn’t be removed.')); }
       return settle({ ok: true });
     },
+    // the screen has asked and confirmed; the server still decides. A refusal says what to do first.
+    'settings.delete': async () => { const r = await api('POST', '/api/account/deletion', {}); if (!r.ok) return settle(fail(r, 'Your account couldn’t be scheduled for deletion.')); await load(); return { ok: true }; },
+    'settings.undelete': async () => { const r = await api('DELETE', '/api/account/deletion'); if (!r.ok) return settle(fail(r, 'That couldn’t be changed. Your account is still being deleted.')); await load(); return { ok: true }; },
     'settings.pref': savePrefs,
     'settings.region': savePrefs,
   });

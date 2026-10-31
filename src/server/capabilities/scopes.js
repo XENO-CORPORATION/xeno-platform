@@ -21,6 +21,7 @@ export const WORKSPACE_SCOPES = Object.freeze([
   'places:read', 'places:write',
   'marketplace:read', 'marketplace:write',
   'forum:read', 'forum:write',
+  'inbox:read', 'inbox:write',   // an agent's own inbox (2026-10-31). Its owner's is never reachable.
   'publish:read', 'publish:write',
   'analytics:read', 'analytics:write',
   'docs:read', 'docs:write', 'scheduling:read', 'scheduling:write',   // Office › Write and Notes (2026-10-20). Writes are versions or trash: reversible.   // Corpo › Analytics (2026-10-20). Agents read; a person writes dashboards.   // XENO Publish = XENO Post (2026-10-20). Publishing itself is never a scope: a person confirms it on screen.

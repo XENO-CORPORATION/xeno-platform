@@ -11,6 +11,9 @@
  *         GET /api/workspace/search?q=[&area=] · GET /api/chat/conversations · GET /api/chat/projects ·
  *         GET /api/library/assets · PUT …/area (the three ways an item is moved).
  *   4. Chats. The sheet that lists an area's chats also finds them by what was said in them.
+ *   6. The inbox. Read, archive, snooze and what reaches the person are the platform's, so they follow them across
+ *      devices (XENO_INBOX below; GET|POST /api/notifications). Only items derived from what is waiting (a failed
+ *      scheduled chat) have no row to hold that, so theirs stays in the browser.
  *   5. Sort into areas. Work made before areas existed lives on Overview only; one sheet lists it and moves the
  *      chosen items to an area. Nothing is placed by guesswork: the person says where each thing belongs.
  */
@@ -24,19 +27,29 @@
 
   // ───────────────────────────── needs you
   const N = { status: 'loading', count: 0 };
-  let needsLoading = null;
+  let needsLoading = null, known = null;   // known: the rows already seen, so only a NEW row rings; the first load rings nothing
+  /** The inbox's writes. Each resolves true or false; the screen shows the result at once and takes it back on false. */
+  const said = async (path, body) => { const r = await api('POST', '/api/notifications/' + path, body).catch(() => null); return !!(r && r.ok); };
+  window.XENO_INBOX = {
+    read: (ids, read = true) => said('read', { ids, read }), archive: (ids, archived = true) => said('archive', { ids, archived }), snooze: (ids, until) => said('snooze', { ids, until }),
+    savePrefs: async (p) => { const r = await api('PUT', '/api/notifications/prefs', p).catch(() => null); return !!(r && r.ok); },
+  };
   function loadNeeds() {
     if (needsLoading) return needsLoading;
     needsLoading = (async () => {
-      const [r, nr] = await Promise.all([api('GET', '/api/workspace/needs').catch(() => null), api('GET', '/api/notifications?limit=50').catch(() => null)]);
+      const [r, nr] = await Promise.all([api('GET', '/api/workspace/needs').catch(() => null), api('GET', '/api/notifications?view=all&limit=200').catch(() => null)]);
       if (r && r.ok && Array.isArray(r.d.items)) {
         window.XENO_NEEDS = r.d.items.map((i) => ({ id: String(i.id), kind: i.kind, t: String(i.title || 'Scheduled chat'), p: 'chat', m: i.area || 'overview', meta: i.kind === 'task_review' ? 'Review' : 'Run failed', detail: String(i.detail || ''), at: i.at, ...(i.kind === 'task_review' ? { ref: String(i.id) } : {}) }));
-        // the inbox: what was written for this person (XENO Tasks today). What asks something of them sits with
-        // Needs you until read; the rest is activity. Read state is the platform's, so it follows them across devices.
-        const ASK = { assigned: 'Assigned', review_requested: 'Review', review_assigned: 'Reviewer', changes_requested: 'Changes', mentioned: 'Mention', due_soon: 'Due soon', overdue: 'Overdue' };
-        if (nr && nr.ok && Array.isArray(nr.d.items)) for (const n of nr.d.items) window.XENO_NEEDS.push({ id: 'note-' + n.id, serverId: n.id, kind: 'task_' + n.kind, ref: n.ref, t: n.title, p: 'chat', m: n.area || 'overview', meta: ASK[n.kind] || (n.kind === 'commented' ? 'Comment' : n.kind === 'status' ? 'Update' : 'Activity'), detail: n.detail, at: n.at, seen: n.read, g: ASK[n.kind] && !n.read ? 'needs' : 'act', actor: n.actor && n.actor.name });
+        // the inbox: what was written for this person, by any product. What asks something of them sits with Needs you
+        // until read; the rest is activity. Its state is the platform's, so it follows them across devices.
+        const ICON = { agents: 'agent', automate: 'workflow', forum: 'community', scheduling: 'company', storage: 'library', workspace: 'company' };
+        const fresh = [];
+        if (nr && nr.ok && Array.isArray(nr.d.items)) for (const n of nr.d.items) { const it = { id: 'note-' + n.id, serverId: n.id, kind: n.source === 'tasks' ? 'task_' + n.kind : n.kind, ref: n.ref, t: n.title, p: ICON[n.source] || 'chat', m: n.area || 'overview', meta: n.label, detail: n.detail, at: n.at, seen: n.read, archived: n.archived, snoozedUntil: n.snoozedUntil, g: n.asks && !n.read ? 'needs' : 'act', actor: n.actor && n.actor.name }; window.XENO_NEEDS.push(it); if (known && !known.has(n.id) && !n.read && !n.archived && !n.snoozedUntil) fresh.push(it); }
+        if (nr && nr.ok && Array.isArray(nr.d.items)) known = new Set(nr.d.items.map((n) => n.id));
         window.XENO_NOTIF_UNREAD = nr && nr.ok ? nr.d.unread : 0;
+        if (nr && nr.ok && nr.d.prefs) try { window.XENO_NT?.remotePrefs?.(nr.d.prefs); } catch {}
         N.status = 'ready';
+        if (fresh.length) try { window.XENO_NT?.arrived?.(fresh); } catch {}
       } else { window.XENO_NEEDS = []; N.status = 'error'; }
       N.count = window.XENO_NEEDS.length; needsLoading = null;
       try { X()?.reloadData?.('notes'); X()?.refreshPanel?.(); } catch {}
@@ -231,5 +244,12 @@
   if (window.XA) { window.XA.scheduled = scheduled; window.XA.newScheduled = newScheduled; window.XA.allChats = allChats; window.XA.sortAreas = sortAreas; }
   addEventListener('message', (e) => { if (e.origin !== location.origin) return; const m = e.data; if (m && m.source === 'xeno-chat' && m.type === 'changed') { SR.cache.clear(); setTimeout(loadUnplaced, 800); } });
   window.XENO_AREA_LIVE = { served: true, loadNeeds, loadUnplaced, unplaced: () => ({ status: U.status, count: U.count }), scheduleOf, moveItems: (id, done) => { const t = SC.tasks.find((x) => String(x.id) === id); return t ? moveItems(t, done) : []; }, scheduled: () => ({ status: SC.status, count: SC.tasks.length, area: SC.area }), needs: () => ({ status: N.status, count: N.count }) };
-  Promise.resolve(P.ready).then((user) => { if (user) { loadNeeds(); loadUnplaced(); } });
+  Promise.resolve(P.ready).then(async (user) => {
+    if (!user) return;
+    loadNeeds(); loadUnplaced();
+    // what this browser archived before archive moved to the platform goes with it, once
+    const old = window.XENO_NT?.drainLocalArchive?.() || []; if (old.length && await window.XENO_INBOX.archive(old)) loadNeeds();
+    // a hidden tab has no reason to ask, unless the person wants desktop notifications
+    setInterval(() => { if (document.hidden && window.XENO_NT?.prefs?.().desktop) loadNeeds(); }, 60000);
+  });
 })();

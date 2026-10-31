@@ -165,7 +165,9 @@
     "platform-shell.js": "compute",
     "spawnSkillRoutes.js": "agents",
     "toolsRoutes.js": "platform",
-    "platform-tools.js": "workspace-ui"
+    "platform-tools.js": "workspace-ui",
+    "platform-places.js": "workspace",
+    "platform-market.js": "commerce"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -4799,14 +4801,16 @@
       "scope": "storage:write"
     },
     "route:userNotificationsRoutes.js:GET /": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "inbox.notification.list",
       "class": "safe",
-      "scope": "workspace:read"
+      "scope": "inbox:read"
     },
     "route:userNotificationsRoutes.js:POST /read": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "inbox.notification.mark_read",
       "class": "reversible",
-      "scope": "workspace:admin"
+      "scope": "inbox:write"
     },
     "route:v2AuthzRoutes.js:GET /objects/:type/:id": {
       "status": "planned",
@@ -10600,6 +10604,215 @@
       "class": "safe",
       "scope": "none",
       "because": "public suggestions over the public tool registry; nothing to act on"
+    },
+    "route:userNotificationsRoutes.js:POST /archive": {
+      "status": "capability",
+      "capability": "inbox.notification.archive",
+      "class": "reversible",
+      "scope": "inbox:write"
+    },
+    "route:userNotificationsRoutes.js:POST /snooze": {
+      "status": "capability",
+      "capability": "inbox.notification.snooze",
+      "class": "reversible",
+      "scope": "inbox:write"
+    },
+    "route:userNotificationsRoutes.js:GET /prefs": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what reaches a person (email digest, per-area levels): an agent gets no email and has no areas to mute"
+    },
+    "route:userNotificationsRoutes.js:PUT /prefs": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what reaches a person (email digest, per-area levels): an agent gets no email and has no areas to mute"
+    },
+    "ui:app.js:data-nt-pref=sound": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "a setting of this device"
+    },
+    "ui:settings.js:data-set=ntdevice": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "a setting of this device"
+    },
+    "ui:settings.js:data-set=ntdigest": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what reaches a person by email: an agent gets no email"
+    },
+    "route:marketplaceRoutes.js:GET /developer/listings": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "wallet:read"
+    },
+    "ui:platform-market.js:data-xmk=retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-market.js:data-xmk=open": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-market.js:data-xmk=tool": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-market.js:data-xmk=skills": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-market.js:data-xmk=go": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-market.js:data-xmk=import": {
+      "status": "planned",
+      "class": "external",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=buy": {
+      "status": "planned",
+      "class": "external",
+      "scope": "wallet:spend"
+    },
+    "ui:platform-market.js:data-xmk=review": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=report": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-market.js:data-xmk=endrent": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=export": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=forget": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=register": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=payout": {
+      "status": "planned",
+      "class": "external",
+      "scope": "wallet:spend"
+    },
+    "ui:platform-market.js:data-xmk=submit": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-places.js:data-xpl=open": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-places.js:data-xpl=floor": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-places.js:data-xpl=close": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-places.js:data-xpl=profile": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-places.js:data-xpl=retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-places.js:data-xpl=list": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-places.js:data-xpl=divs": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "route:accountSecurityRoutes.js:GET /deletion": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
+    },
+    "route:accountSecurityRoutes.js:POST /deletion": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
+    },
+    "route:accountSecurityRoutes.js:DELETE /deletion": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
     }
   }
 }

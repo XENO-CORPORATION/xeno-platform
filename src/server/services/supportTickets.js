@@ -25,6 +25,7 @@
 import { createThread } from './forumWrite.js';
 import * as xenoTasks from './xenoTasks.js';
 import { sendEmail } from './emailService.js';
+import * as inbox from './inbox.js';
 import { publicSiteOrigin } from '../config/hosts.js';
 
 export class SupportError extends Error {
@@ -137,8 +138,7 @@ function shape(t, who, extra = {}) {
 
 async function notify(db, t, actor, kind, detail) {
   if (!t.requester_id || String(t.requester_id) === String(actor && actor.id)) return;
-  await db.query(`INSERT INTO user_notifications (user_id, source, kind, ref, title, detail, actor_id, actor_kind) VALUES ($1, 'support', $2, $3, $4, $5, $6, $7)`,
-    [t.requester_id, kind, `support/${keyOf(t)}`, `${keyOf(t)} · ${t.title}`.slice(0, 400), String(detail || '').slice(0, 1000), actor && actor.id ? actor.id : null, actor && actor.id ? kindOf(actor) : null]);
+  await inbox.notify(db, { userId: t.requester_id, source: 'support', kind, ref: `support/${keyOf(t)}`, title: `${keyOf(t)} · ${t.title}`, detail, actorId: actor && actor.id ? actor.id : null, actorKind: actor && actor.id ? kindOf(actor) : null });
   await mail(db, t, kind, detail);
 }
 

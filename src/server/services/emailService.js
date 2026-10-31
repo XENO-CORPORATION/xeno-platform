@@ -827,6 +827,29 @@ const templates = {
     `, `${authorName || 'Someone'} named you in a thread.`),
   }),
   // XENO Tasks: one template for every task notification (assigned, review requested, mentioned, due, overdue …)
+  account_deletion: ({ displayName, eraseAt }) => {
+    const on = new Date(eraseAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return {
+      subject: `Your XENO account will be deleted on ${on}`,
+      html: wrapInLayout('Your account is being deleted', `
+      ${mailHeading('Your account is being deleted')}
+      ${mailText(`Hi ${escapeHtml(displayName || 'there')}, you asked to delete your XENO account. It will be deleted on ${escapeHtml(on)}.`)}
+      ${mailText('Changed your mind? Sign in before then and choose Keep my account in Settings. If this wasn’t you, sign in now and change your password.')}
+    `, `Your account will be deleted on ${on}`),
+    };
+  },
+  inbox_digest: ({ displayName, period, items = [], more, inboxUrl, unsubscribeUrl: unsubUrl }) => ({
+    subject: `Your XENO ${period === 'weekly' ? 'week' : 'day'}: ${items.length}${more ? '+' : ''} unread`,
+    html: wrapInLayout('Your inbox', `
+      ${mailHeading(period === 'weekly' ? 'Your week' : 'Your day')}
+      ${mailText(`Hi ${escapeHtml(displayName || 'there')}, this is what is unread in your inbox.`)}
+      ${items.map((t) => mailText(escapeHtml(t))).join('')}
+      ${more ? mailText('And more in your inbox.', { muted: true }) : ''}
+      ${mailButton(inboxUrl, 'Open your inbox')}
+      ${hairline(14, 12)}
+      ${mailText(`You chose this digest in your notification settings.${unsubUrl ? ` <a href="${escapeHtml(unsubUrl)}" style="color:#acacb4;">Turn off these emails</a>.` : ''}`, { muted: true })}
+    `, `${items.length}${more ? '+' : ''} unread in your inbox`),
+  }),
   task_notification: ({ displayName, heading, sentence, taskTitle, taskUrl, excerpt, unsubscribeUrl: unsubUrl }) => ({
     subject: `${heading}: ${taskTitle}`,
     html: wrapInLayout(heading, `
