@@ -139,6 +139,10 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_agent_versions',
         'workforce_assignment_member_sets',
         'workforce_assignment_members',
+        // D13 / LIFE-04, 2026-10-29 (owner: "agreements + credits, a person approves") -- how a member is paid and
+        // each period's payout, decided by a person; cited by workforce-compensation.test.mjs.
+        'workforce_comp_agreements',
+        'workforce_comp_payouts',
         'workforce_contribution_lots',
         'workforce_division_funding',
         'workforce_division_ownership',
@@ -249,6 +253,9 @@ test('every workforce migration applies in order from an empty database', { skip
       assert.deepEqual(rows.map(r => r.ref), [
         'workforce_assignment_member_sets.admitted_at',
         'workforce_assignment_member_sets.admitted_by_user_id',
+        // D13, 2026-10-29: a payout names the compensation agreement it was prepared under -- a basis for pay
+        // that a human admin records, not consent to join. Joining is still the admission above.
+        'workforce_comp_payouts.agreement_id',
         // FUND-14 requires milestone acceptance criteria before contributions. This is
         // a deliverable condition, not employment consent or a membership grant.
         // ACCT-07: a contribution an AGENT made names the owner's bounded spend approval it consumed. Not a way of

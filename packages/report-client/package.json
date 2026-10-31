@@ -1,0 +1,12 @@
+{
+  "name": "@xenosystem/report-client",
+  "version": "0.2.0",
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "The shared XENO report compose, submission and recovery contract",
+  "sideEffects": false,
+  "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
+  "files": ["dist", "README.md"],
+  "scripts": {"build": "node build.mjs", "test": "node --test test/*.test.mjs", "prepack": "npm run build"},
+  "devDependencies": {"esbuild": "0.25.1", "typescript": "5.6.3"}
+}

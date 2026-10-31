@@ -1,0 +1,28 @@
+/* automate.css — Dev › Automate = XENO Workflow (platform-automate.js). Workspace tokens only; emphasis by surface and
+   text brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens instead. */
+.au-banner{padding:10px 12px;border-radius:8px;background:var(--n26);color:var(--muted);font-size:13px;margin:10px 0}
+.au-list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.au-li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;background:var(--n20);border:0;color:var(--text);text-align:left;font:inherit;cursor:pointer}
+.au-li:hover{background:var(--n26)}
+.au-li > span:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.au-li small,.au-step-h small,.au-hint{color:var(--muted);font-size:12px}
+.au-tag{font-size:12px;color:var(--muted);white-space:nowrap}
+.au-build{display:flex;flex-direction:column;gap:12px;max-width:900px}
+.au-st{margin:0;color:var(--muted);font-size:13px}
+.au-st b{color:var(--text)}
+.au-f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.au-f small{color:var(--muted);font-size:12px}
+.au-f.au-b{flex-direction:row;align-items:center;gap:6px;font-size:13px}
+.au-steps{display:flex;flex-direction:column;gap:8px}
+.au-step{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--n20)}
+.au-step-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.au-step-h .au-label{flex:1;min-width:140px}
+.au-tools{display:flex;gap:4px;margin-left:auto}
+.au-add{display:flex;gap:8px;flex-wrap:wrap}
+.au-hook,.au-branch{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--n20)}
+.au-secret code,.au-hook code,.au-hint code,.au-st code{font-family:ui-monospace,monospace;font-size:.92em;overflow-wrap:anywhere;color:var(--text)}
+.au-build pre{margin:0;padding:10px;border-radius:6px;background:var(--n26);color:var(--text);font:12px/1.5 ui-monospace,monospace;overflow:auto;max-height:320px;white-space:pre-wrap;overflow-wrap:anywhere}
+.au-err{margin:0;color:var(--text);font-size:13px}
+[data-au-page] .in{padding:7px 10px;border-radius:6px;background:var(--n26);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none}
+[data-au-page] .in:focus{border-color:var(--n58);outline:0}
+[data-au-page] textarea.in{font-family:ui-monospace,monospace;font-size:12px}

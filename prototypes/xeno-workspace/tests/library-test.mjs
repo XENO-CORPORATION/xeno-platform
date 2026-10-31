@@ -21,11 +21,12 @@ const db = {
     file(4, 'Brand guide.pdf', 'application/pdf', 4096, { workspace_id: WS, place_kind: 'workspace', workspace_name: 'Analytical Engines Ltd' }),
     file(5, 'Not mine to trash.pdf', 'application/pdf', 512, { workspace_id: WS, place_kind: 'workspace', workspace_name: 'Analytical Engines Ltd' }),
     { ...file(9, 'Bernoulli numbers', 'text/plain', 900), id: 'artifact:' + fid(9), source: 'artifact', item_type: 'code', asset_id: null, conversation_id: 'c1', conversation_title: 'Programs for the engine' },
+    file(11, 'Session notes.md', 'application/octet-stream', 200), file(12, 'settings.json', 'application/octet-stream', 40),
     { ...file(10, 'a difference engine, brass', 'image/png', 0), id: 'generation:' + fid(10) + ':1', source: 'generation', asset_id: null, preview_url: null }],
   linked: new Set([fid(3)]), notOwner: new Set([fid(5)]), calls: [], gets: [], uploads: [], expect: [], next: 20,
 };
 const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
-const EMPTY = { '/api/workspace/needs': { success: true, items: [] }, '/api/tasks': { success: true, tasks: [] }, '/api/notifications': { success: true, unread: 0, items: [] }, '/api/tasks/views': { success: true, views: [] }, '/api/forum/threads': { success: true, threads: [], total: 0 }, '/api/forum/me': { success: true, actor: {}, capabilities: {} }, '/api/workspace/summary': { success: true, days: 7, areas: {} }, '/api/workspace/pins': { success: true, items: [] }, '/api/v2/ledger/usage': { rows: [] }, '/api/account/overview': { success: true, overview: { user: {}, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/chat/projects': { success: true, projects: [] }, '/api/chat/conversations': { success: true, conversations: [] } };
+const EMPTY = { '/api/automate/catalogue': { success: true, nodes: [] }, '/api/agents/presence': { success: true, presence: [] }, '/api/customers/summary': { success: true, summary: {} }, '/api/automate': { success: true, workflows: [] }, '/api/message/realtime': { success: true }, '/api/agents': { success: true, agents: [] }, '/api/divisions': { success: true, divisions: [] }, '/api/skills': { success: true, skills: [] }, '/api/library/storage': { success: true }, '/api/message/conversations': { success: true, conversations: [] }, '/api/mail/status': { success: true, configured: false }, '/api/publish/status': { success: true, configured: false }, '/api/auth/activation-status': { success: true, activated: true }, '/api/agents/presence/stream': { success: true }, '/api/v2/me/modes': { success: true, modes: [] }, '/api/workspace/needs': { success: true, items: [] }, '/api/tasks': { success: true, tasks: [] }, '/api/notifications': { success: true, unread: 0, items: [] }, '/api/tasks/views': { success: true, views: [] }, '/api/forum/threads': { success: true, threads: [], total: 0 }, '/api/forum/me': { success: true, actor: {}, capabilities: {} }, '/api/workspace/summary': { success: true, days: 7, areas: {} }, '/api/workspace/pins': { success: true, items: [] }, '/api/v2/ledger/usage': { rows: [] }, '/api/account/overview': { success: true, overview: { user: {}, credits: { balance: 0 }, workspace_count: 1 } }, '/api/account/sessions': { success: true, sessions: [] }, '/api/account/security': { success: true, security: { confirmation: { confirmed: false, available: true, expires_at: null }, methods: ['password'], has_password: true, email: '', pending_email: null } }, '/api/account/exports': { success: true, exports: [] }, '/api/auth/linked-accounts': { success: true, accounts: [] }, '/api/billing/overview': { success: true, overview: { credits: { balance: 0 }, subscription: null } }, '/api/dashboard/stats': { success: true, stats: { usage_available: false, usage_by_surface: [] } }, '/api/user-data/settings': { success: true, settings: {} }, '/api/workspaces': { success: true, workspaces: [] }, '/api/chat/projects': { success: true, projects: [] }, '/api/chat/conversations': { success: true, conversations: [] } };
 const refuse = (status, code) => json(status, { success: false, error: 'refused', code });
 function answer(q) {
   const u = new URL(q.url()), m = q.method(), p = u.pathname;
@@ -39,8 +40,17 @@ function answer(q) {
     const items = all.slice(offset, offset + limit);
     return json(200, { success: true, items, tab: 'all', sort: 'updated', limit, offset, view, place: '', total: all.length, has_more: offset + items.length < all.length });
   }
+  if (p === '/api/compute/cloud-shell') return json(200, { success: true, available: false });
+  if (p === '/api/compute/machines') return json(200, { success: true, machines: [] });
+  if (p === '/api/compute/sizes') return json(200, { success: true, sizes: [] });
+  if (p === '/api/tools') return json(200, { success: true, tools: [] });
+  if (p === '/api/skills') return json(200, { success: true, skills: [] });
+  const dup = p.match(/^\/api\/library\/assets\/file\/([^/]+)\/duplicate$/);
+  if (dup && m === 'POST') { db.writes = db.writes || []; db.writes.push(['duplicate', dup[1]]); if (db.fullStorage) return json(507, { success: false, code: 'storage_full', error: 'Your storage is full. Nothing was copied.' }); const src = db.items.find((x) => x.source_id === dup[1]); db.items.push({ ...src, id: 'file:' + fid(77), source_id: fid(77), name: src.name + ' copy' }); return json(200, { success: true, file: { id: fid(77), name: src.name + ' copy' } }); }
+  const toProject = p.match(/^\/api\/library\/assets\/([^/]+)\/([^/]+)\/project$/);
+  if (toProject && m === 'PUT') { const b = JSON.parse(q.postData() || '{}'); db.writes = db.writes || []; db.writes.push(['project', toProject[2], b.project]); if (b.project === 'refuse') return json(409, { success: false, code: 'folder_other_place', error: 'A personal file can’t go into a workspace’s project. Copy it into the workspace first.' }); const it = db.items.find((x) => x.source_id === toProject[2]); it.project_name = b.project ? 'Launch' : null; return json(200, { success: true, folder: 'f1' }); }
   const content = p.match(/^\/api\/library\/assets\/([^/]+)\/content$/);
-  if (content && m === 'GET') { const it = db.items.find((x) => x.asset_id === content[1] && !x.trashed_at); if (!it) return json(404, { success: false, error: 'Library asset not found' }); return /^image/.test(it.mime_type) ? { status: 200, contentType: 'image/png', body: PNG } : { status: 200, contentType: it.mime_type, body: Buffer.from('%PDF-1.4 the stored bytes of ' + it.name) }; }
+  if (content && m === 'GET') { const it = db.items.find((x) => x.asset_id === content[1] && !x.trashed_at); if (!it) return json(404, { success: false, error: 'Library asset not found' }); if (/\.md$/.test(it.name)) return { status: 200, contentType: 'application/octet-stream', body: Buffer.from('# Session history\n\n- **Started:** today\n- see [docs](https://example.test/d)\n\n<script>window.__pwned=1</script>\n\n```\ncode block\n```\n') }; if (/\.json$/.test(it.name)) return { status: 200, contentType: 'application/octet-stream', body: Buffer.from('{"a": 1, "b": "<i>x</i>"}') }; return /^image/.test(it.mime_type) ? { status: 200, contentType: 'image/png', body: PNG } : { status: 200, contentType: it.mime_type, body: Buffer.from('%PDF-1.4 the stored bytes of ' + it.name) }; }
   if (p === '/api/library/trash' && m === 'DELETE') { const mine = db.items.filter((x) => x.trashed_at && !db.notOwner.has(x.source_id)); db.items = db.items.filter((x) => !mine.includes(x)); return json(200, { success: true, purged: mine.length }); }
   const purge = p.match(/^\/api\/library\/trash\/([^/]+)\/([^/]+)$/);
   if (purge && m === 'DELETE') { const it = db.items.find((x) => x.source === purge[1] && x.source_id === purge[2]); if (!it) return refuse(404, 'not_found'); if (!it.trashed_at) return refuse(409, 'not_in_trash'); db.items = db.items.filter((x) => x !== it); return json(200, { success: true }); }
@@ -77,10 +87,13 @@ try {
   // Overview: the library of everything (an area shows only its own, checked further down)
   await p.goto(base + '/workspace/#/overview', { waitUntil: 'networkidle0' }); await wait(700);
   ok((await p.evaluate(() => window.XENO_LIB.state().status)) === 'ready', 'the Library loads from the platform');
-  ok(db.gets.some((g) => g.view === 'active') && db.gets.some((g) => g.view === 'trash'), 'it asks for the Library and for the trash');
+  ok(db.gets.some((g) => g.view === 'active') && !db.gets.some((g) => g.view === 'trash'), 'it asks for the Library, and leaves the trash until the Library is open');
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: null })); await wait(600);
+  ok(db.gets.some((g) => g.view === 'trash'), 'opening the Library asks for the trash');
+  await p.evaluate(() => window.XW.go('dashboard')); await wait(200);
   await goLib(); let t = await main();
   const list = await names();
-  ok(list.length === 7 && ['Engine diagram.png', 'Notes on the engine.pdf', 'Bernoulli numbers', 'Brand guide.pdf'].every((n) => list.includes(n) && t.includes(n)), 'the files are the real ones (' + list.length + ')');
+  ok(list.length === 9 && ['Engine diagram.png', 'Notes on the engine.pdf', 'Bernoulli numbers', 'Brand guide.pdf'].every((n) => list.includes(n) && t.includes(n)), 'the files are the real ones (' + list.length + ')');
   await p.click('#main [data-pg-view="library"][data-v="grid"]'); await wait(700);
   const pics = await p.evaluate(() => [...document.querySelectorAll('#main [data-pg-file]')].map((c) => ({ name: c.querySelector('b')?.textContent, img: c.querySelector('.pg-thumb img')?.getAttribute('src') || null, loaded: !!c.querySelector('.pg-thumb img')?.naturalWidth, icon: !!c.querySelector('.pg-thumb--ic') })));
   const png = pics.find((x) => x.name === 'Engine diagram.png'), pdf = pics.find((x) => x.name === 'Notes on the engine.pdf');
@@ -102,11 +115,26 @@ try {
   // ---- menus offer what works ----
   const menuOf = (name) => p.evaluate((n) => window.XENO_LIB.fileMenu(window.XENO_PG_LIBRARY.items.find((x) => x.name === n), { open() {}, details() {}, copy() {} }).flat().map((i) => i.label), name);
   let menu = await menuOf('Notes on the engine.pdf');
-  ok(JSON.stringify(menu) === JSON.stringify(['Open', 'Details', 'Star', 'Rename…', 'Download', 'Copy name', 'Move to area', 'Move to Trash']), 'the file menu offers what works (' + menu.join(', ') + ')');
+  ok(JSON.stringify(menu) === JSON.stringify(['Open', 'Details', 'Star', 'Rename…', 'Download', 'Copy name', 'Duplicate', 'Move to project', 'Move to area', 'Move to Trash']), 'the file menu offers what works (' + menu.join(', ') + ')');
   ok(!(await menuOf('a difference engine, brass')).includes('Rename…'), 'a generated picture, named by its prompt, is not offered Rename');
-  await p.evaluate(() => window.XENO_LIB.refuse('duplicate')); await wait(200);
-  ok(/Duplicating a file isn’t available on XENO yet/.test(await toastText()), 'an action the platform still lacks says so');
-  await goLib('Shared with me'); ok(/Shared with me isn’t available yet/.test(await main()), 'Shared with me says it is not available, and why');
+  const named = (n) => `window.XENO_PG_LIBRARY.items.find((x) => x.name === ${JSON.stringify(n)})`;
+  ok(!(await menuOf('a difference engine, brass')).includes('Duplicate'), 'a generated picture is not offered Duplicate');
+  await p.evaluate(`window.XENO_LIB.duplicate(${named('Notes on the engine.pdf')})`); await wait(500);
+  ok(db.writes?.some((w) => w[0] === 'duplicate' && w[1] === fid(2)) && /Copied as/.test(await toastText()), 'Duplicate goes to the server and says the new name');
+  ok(await p.evaluate(() => window.XENO_PG_LIBRARY.items.some((x) => x.name === 'Notes on the engine.pdf copy')), 'the copy is in the Library');
+  db.fullStorage = true; await p.evaluate(`window.XENO_LIB.duplicate(${named('Notes on the engine.pdf')})`); await wait(400); db.fullStorage = false;
+  ok(/Your storage is full/.test(await toastText()), 'full storage is said');
+  await p.evaluate(() => { window.XENO_PROJECTS = { Launch: { id: 'pj1' }, Team: { id: 'refuse' } }; });
+  await p.evaluate(`window.XENO_LIB.moveToProject(${named('Notes on the engine.pdf')}, 'Launch')`); await wait(500);
+  ok(db.writes.some((w) => w[0] === 'project' && w[1] === fid(2) && w[2] === 'pj1') && /Moved to Launch/.test(await toastText()), 'Move to project goes to the server');
+  ok(await p.evaluate(`${named('Notes on the engine.pdf')}.project === 'Launch'`), 'and the file says which project');
+  await p.evaluate(`window.XENO_LIB.moveToProject(${named('Notes on the engine.pdf')}, 'Team')`); await wait(400);
+  ok(/can’t go into a workspace’s project/.test(await toastText()), 'a refusal says why');
+  await goLib('Shared with me'); ok(!/isn’t available/.test(await main()) && !/Notes on the engine/.test(await main()), 'Shared with me leaves out your own files');
+  db.items.push(file(88, 'From a friend.pdf', 'application/pdf', 100, { mine: false, shared_by: 'Grace' }));
+  await p.evaluate(() => window.XENO_LIB.load()); await wait(500);
+  ok(/From a friend/.test(await main()), 'and lists what someone shared with you');
+  db.items = db.items.filter((x) => ![fid(77), fid(88)].includes(x.source_id)); await p.evaluate(() => window.XENO_LIB.load()); await wait(400);   // what follows counts the files
 
   // ---- star ----
   await goLib(); db.calls.length = 0;
@@ -137,7 +165,7 @@ try {
   db.expect.push('Letter to Babbage.txt'); await paste('Letter to Babbage.txt', 'text/plain'); await settle();
   c = db.calls.find((x) => x.p === '/api/upload');
   ok(!!c && c.type.startsWith('multipart/form-data') && c.csrf === 'csrf-test-token' && db.uploads.length === 1, 'adding a file uploads it to the platform, as a form upload with the CSRF token');
-  ok((await names()).includes('Letter to Babbage.txt') && (await names()).length === 8, 'the uploaded file is in the Library after the platform confirms it');
+  ok((await names()).includes('Letter to Babbage.txt') && (await names()).length === 10, 'the uploaded file is in the Library after the platform confirms it');
   db.calls.length = 0; db.expect.push('virus.exe'); await paste('virus.exe', 'application/x-msdownload'); await wait(900);
   const refusal = await dialog();
   await p.evaluate(() => document.querySelector('.xd [data-xd-ok]')?.click()); await settle();
@@ -226,7 +254,24 @@ try {
   await p.evaluate(() => { location.hash = '#/overview/g/library'; }); await wait(1500);
   ok(db.gets.at(-1).area === null, 'back on Overview it asks for everything again');
 
-  ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
+  // a Library file's address is its id, never its name (owner rule 2026-10-11; a name with a dot 404'd on refresh)
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Session notes.md' })); await wait(900);
+  let ad = await p.evaluate(() => ({ path: location.pathname, title: (document.querySelector('#main .pg-ttl h1')?.textContent || '') + ' @ ' + (document.querySelector('#main .crumbs')?.textContent || ''), text: !!document.querySelector('#main [data-lib-text]') }));
+  ok(/\/workspace\/library\/f\/file(:|%3A)/i.test(ad.path) && !/\.md/.test(ad.path) && ad.text && /Session notes\.md/.test(ad.title), 'opening a file puts its id in the address, not its name, and the page still shows the name (' + ad.path + ' · ' + ad.title + ')');
+  await p.reload({ waitUntil: 'networkidle0' }); await wait(1200);
+  ad = await p.evaluate(() => ({ path: location.pathname, text: !!document.querySelector('#main [data-lib-text]'), title: (document.querySelector('#main .pg-ttl h1')?.textContent || '') + ' @ ' + (document.querySelector('#main .crumbs')?.textContent || '') }));
+  ok(ad.text && ad.title.endsWith('Library/Session notes.md') && /\/library\/f\//.test(ad.path), 'a refresh on that address opens the same file (' + ad.path + ')');
+  // a text file opens as its text: Markdown rendered, anything else as text (owner, 2026-10-25)
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Session notes.md' })); await wait(900);
+  let tv = await p.evaluate(() => { const n = document.querySelector('#main [data-lib-text]'); return n && { h: n.querySelector('.pg-md h4')?.textContent, b: n.querySelector('.pg-md b')?.textContent, link: n.querySelector('.pg-md a')?.getAttribute('href'), pre: n.querySelector('.pg-md pre code')?.textContent, scripts: n.querySelectorAll('script').length, pwned: !!window.__pwned, raw: /&lt;script|<script>window/.test(n.textContent), busy: n.getAttribute('aria-busy') }; });
+  ok(tv && tv.h === 'Session history' && tv.b === 'Started:' && tv.link === 'https://example.test/d' && tv.pre === 'code block' && tv.busy === null, 'a .md file stored as octet-stream opens as rendered Markdown, not an empty picture box (' + JSON.stringify(tv) + ')');
+  ok(tv && tv.scripts === 0 && !tv.pwned && tv.raw, 'HTML inside the Markdown is shown as text and never runs');
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'settings.json' })); await wait(900);
+  tv = await p.evaluate(() => { const n = document.querySelector('#main [data-lib-text]'); return n && { code: n.querySelector('.pg-item-code code')?.textContent, md: !!n.querySelector('.pg-md'), i: n.querySelectorAll('i').length }; });
+  ok(tv && tv.code === '{"a": 1, "b": "<i>x</i>"}' && !tv.md && tv.i === 0, 'another text file (JSON) is shown as plain text, exactly as stored (' + JSON.stringify(tv) + ')');
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: 'Notes on the engine.pdf' })); await wait(600);
+  ok(await p.evaluate(() => !document.querySelector('#main [data-lib-text]')), 'a PDF is not treated as text');
+  ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)]) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
 await b.close(); await server.close();

@@ -128,7 +128,7 @@ const SAMPLE = /Brand refresh|Q4 planning|Launch week|Auth gate|XENO launch|XENO
 
 // ───────── the corpus half of the fake platform: the server's rules, kept (a person ratifies; doctrine binds down)
 const DIV = 'dddddddd-dddd-4ddd-8ddd-00000000000d', T1 = 'abababab-abab-4bab-8bab-000000000001', TD = 'abababab-abab-4bab-8bab-00000000000d', PR = 'cdcdcdcd-cdcd-4dcd-8dcd-000000000001', CV = 'efefefef-efef-4fef-8fef-000000000001';
-const K = { ratified: false, rejected: false, tenets: [], canvas: null };
+const K = { ratified: false, rejected: false, tenets: [], canvas: null, funding: { canPropose: true, canDecide: false, campaigns: [], budgets: [], grants: [], ceiling: { activeId: null, limitMicro: null, proposalId: null, proposedMicro: null, proposedByMe: false } } };
 const tenet1 = { id: T1, key: 'site#builds', kind: 'tenet', subject: `project:${pid(1)}`, claim: 'The site builds from main.', assay: { kind: 'shell', run: 'npm run build' }, expect: '0', cadence: '24h', origin: 'authored',
   latest: { id: 'v2', state: 'lapsed', observed: '1', at: '2026-10-20T08:00:00.000Z', hash: 'b'.repeat(64), kid: 'k1' }, freshness: 'fresh' };
 const corpusOf = (kind, id) => ({ success: true, corpus: { id: 'c-' + id, scope: kind, scopeId: id, subject: `${kind}:${id}`, workspaceId: WT }, canManage: true,
@@ -146,6 +146,11 @@ function cp(q, m, p, body) {
   if (p === '/api/canvases' && m === 'GET') return json(200, { success: true, canvases: [{ id: CV, name: 'Truth board', project: { id: pid(1), name: 'Website' }, updatedAt: '2026-10-20T08:00:00Z' }] });
   if (p === `/api/canvases/${CV}` && m === 'GET') return json(200, { success: true, canvas: canvasDoc() });
   if (p === `/api/canvases/${CV}` && m === 'PUT') { K.canvas = body.content; return json(200, { success: true, canvas: canvasDoc() }); }
+  { const q2 = p.match(/^\/api\/corpus\/workspace\/([0-9a-f-]{36})\/query$/); if (q2) { K.asked = new URL(q.url()).searchParams.get('q'); return json(200, { success: true, tenets: K.asked === 'nothing' ? [] : [{ id: TD, key: 'edit-the-existing-document', claim: 'Edit the existing document.' }], inheritedDoctrine: [], aggregated: [] }); } }
+  { const fu = p.match(/^\/api\/chat\/projects\/([0-9a-f-]{36})\/funding(?:\/ceiling(?:\/([^/]+)\/decision)?)?$/);
+    if (fu && m === 'GET') return json(200, { success: true, ...K.funding });
+    if (fu && m === 'POST' && !fu[2]) { K.proposedCeiling = body; K.funding.ceiling = { ...K.funding.ceiling, proposalId: 'ffffffff-ffff-4fff-8fff-000000000001', proposedMicro: body.credits * 1e6, proposedByMe: true }; return json(200, { success: true, proposalId: K.funding.ceiling.proposalId, state: 'proposed' }); }
+    if (fu && m === 'POST') { K.decided = body; if (body.approve) K.funding.ceiling = { activeId: fu[2], limitMicro: K.funding.ceiling.proposedMicro, proposalId: null, proposedMicro: null, proposedByMe: false }; return json(200, { success: true, state: body.approve ? 'approved' : 'rejected' }); } }
   const s = p.match(/^\/api\/corpus\/(project|division|workspace)\/([0-9a-f-]{36})$/);
   if (s && m === 'GET') return json(200, corpusOf(s[1], s[2]));
   if (p === `/api/corpus/proposals/${PR}/decision`) {
@@ -195,6 +200,44 @@ try {
   ok(await path0() === `/workspace/divisions/${DIV}/corpus/${TD}` && /Doctrine: it binds every narrower scope/.test(t), 'a division tenet opens at /workspace/divisions/<id>/corpus/<tenet id> (' + await path0() + ')');
   await fresh();
   ok(/Edit the existing document/.test(await main()), 'and survives a fresh load');
+
+  // Workspace > Knowledge is the workspace's own corpus
+  await p.evaluate(() => window.XW.go('global', { global: 'workspace', item: 'Knowledge' })); await wait(900); t = await main();
+  ok(await path0() === '/workspace/workspace/Knowledge', 'Knowledge has its own address (' + await path0() + ')');
+  ok(/Tenets/.test(t) && /edit-the-existing-document/.test(t), 'Knowledge shows what this workspace holds to be true');
+  ok(!/Brand guidelines|128 sources|Product principles/.test(t + await p.evaluate(() => document.body.innerText)), 'and no sample sources');
+  if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + '/knowledge.png' });
+  await p.evaluate(() => { const i = document.querySelector('#main [data-xcp-search] input'); i.value = 'existing'; i.form.requestSubmit(); }); await wait(500); t = await main();
+  ok(K.asked === 'existing' && /Found/.test(t), 'searching it goes to the server and shows what it found');
+  await p.evaluate(() => { const i = document.querySelector('[data-xcp-search] input'); i.value = 'nothing'; i.form.requestSubmit(); }); await wait(500);
+  ok(/Nothing matches that/.test(await main()), 'and says so when nothing matches');
+  await p.evaluate(() => { const i = document.querySelector('[data-xcp-search] input'); i.value = ''; i.form.requestSubmit(); }); await wait(300);
+  await p.click(`#main [data-pg-ws="Knowledge/${TD}"]`); await wait(800);
+  ok(await path0() === `/workspace/workspace/Knowledge/${TD}` && /Doctrine: it binds every narrower scope/.test(await main()), 'a tenet opens at its own address (' + await path0() + ')');
+  ok(/Knowledge/.test(await p.evaluate(() => document.querySelector('.crumbs, #crumbs, [data-crumb]')?.parentElement?.innerText || '')) && !/null/.test(await p.evaluate(() => document.querySelector('[data-crumb]')?.parentElement?.innerText || '')), 'its breadcrumb reads Knowledge, Tenet');
+  await fresh(); ok(/Edit the existing document/.test(await main()), 'and survives a fresh load');
+  // New tenet: the Kind field is a real choice
+  await p.evaluate(() => window.XW.go('global', { global: 'workspace', item: 'Knowledge' })); await wait(800);
+  await p.evaluate(() => [...document.querySelectorAll('#main [data-xcp="new-tenet"]')][0].click()); await wait(300);
+  ok(await p.evaluate(() => !!document.querySelector('.xd select')), 'a new tenet’s kind is a choice, not a box to type in');
+  await p.evaluate(() => document.querySelector('.xd [data-xd-close]').click()); await wait(200);
+
+  // the Funding tab
+  await goProjects('Website/Funding'); await wait(900); t = await main();
+  ok(/Nothing has been funded here yet/.test(t) && /None set/.test(t) && !/isn’t available yet/.test(t), 'Funding says what is true of a project with no funding');
+  await p.evaluate(() => { window.XD.form = async () => ({ n: '700' }); document.querySelector('#main [data-pf="propose"]').click(); }); await wait(600); t = await main();
+  ok(K.proposedCeiling?.credits === 700 && typeof K.proposedCeiling.requestId === 'string', 'proposing a ceiling goes to the server, once');
+  ok(/700 credits proposed/.test(t) && /Another owner of the project decides it/.test(t) && /None set/.test(t) && !await p.$('#main [data-pf="approve"]'), 'a proposal shows, doesn’t apply, and its proposer can’t approve it');
+  K.funding.canDecide = true; K.funding.ceiling.proposedByMe = false;
+  K.funding.campaigns = [{ id: 'c1', status: 'open', beneficiary: 'Open fund', refundTerms: 'Credits go back to each person.', cancellationTerms: 'x', license: 'MIT', milestones: [{ id: 'm1', title: 'First step', status: 'open', thresholdMicro: 10e6, budgetMaxMicro: 20e6, raisedMicro: 5e6, contributors: 2, mineMicro: 1e6 }] }];
+  K.funding.budgets = [{ id: 'b1', purpose: 'Run the build', maximumMicro: 3e6, perRunMicro: 1e6, state: 'approved', spender: 'Bob' }];
+  K.funding.grants = [{ id: 'g1', amountMicro: 2e6, state: 'proposed', task: 'Fix the login' }];
+  await fresh(); await wait(1500); t = await main();
+  ok(/Open fund/.test(t) && /5 of 10 credits from 2 people/.test(t) && /1 from you/.test(t), 'a campaign shows totals and how many people, and your own part');
+  ok(/Run the build/.test(t) && /Fix the login/.test(t) && /Credits go back to each person/.test(t), 'budgets, requests and what happens to the money if it stops');
+  if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + '/funding.png' });
+  await p.click('#main [data-pf="approve"]'); await wait(600); t = await main();
+  ok(K.decided?.approve === true && /700 credits/.test(t) && !/proposed/.test(t.split('Monthly ceiling')[1] || ''), 'someone else approves it, and then it applies');
 
   // a verdict card on the project canvas
   await p.goto(base + `/workspace/tasks/canvas/${CV}`, { waitUntil: 'domcontentloaded' }); await wait(2000);

@@ -1,5 +1,19 @@
 # XENO Platform authentication status
 
+## CLI routing candidate — 2026-10-22
+
+Branch `codex/device-auth-routing` separates public activation pages from the
+immutable OIDC issuer, preserves device return paths through email activation,
+adds authenticated explicit device denial, and rejects stale consent responses
+after code edits. See [routing review](CLI_AUTH_ROUTING_REVIEW.md) for the full
+route table, standards comparison, rollout dependencies and unproved scenarios.
+
+Local evidence: 72 passing route/funnel/host/real-component-DOM/site-gate tests;
+production frontend build and 323 prerendered product pages passed. Provider
+denial/poll behavior is fixture-tested, not a new real-PostgreSQL concurrency
+qualification. Candidate changes are not deployed. Fresh VPS and live browser
+password/social/signup/device/PKCE interactions remain unverified.
+
 Evidence date: 2026-09-03
 
 Product phase: **Phase 1 — Demonstration** (`PHASE.md`).

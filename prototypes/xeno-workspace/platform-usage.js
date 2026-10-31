@@ -19,9 +19,13 @@
   const TOP = 5;
   const top = (rows) => { const s = rows.slice().sort((a, b) => b[1] - a[1]); if (s.length <= TOP + 1) return s; const rest = s.slice(TOP);
     return [...s.slice(0, TOP), [`${rest.length} others`, rest.reduce((n, r) => n + r[1], 0), rest.reduce((n, r) => n + r[2], 0)]]; };
+  // The rail button shows only the balance, so a page load asks for the balance alone. The six spending reads (three
+  // ranges x two groupings) wait until the person opens the popover (usage.want(), called by the popover), which once
+  // put six ledger reads on every load (2026-10-24).
+  let want = false;
   async function usage() {
-    const now = Date.now();
-    const asks = Object.entries(DAYS).flatMap(([range, days]) => GROUPS.map((group) => [range, group, api('GET', `/api/v2/ledger/usage?from=${encodeURIComponent(new Date(now - days * 86400000).toISOString())}&groupBy=${group}`).catch(() => null)]));
+    const now = Date.now(), spend = want;
+    const asks = !spend ? [] : Object.entries(DAYS).flatMap(([range, days]) => GROUPS.map((group) => [range, group, api('GET', `/api/v2/ledger/usage?from=${encodeURIComponent(new Date(now - days * 86400000).toISOString())}&groupBy=${group}`).catch(() => null)]));
     const [bill, ...parts] = await Promise.all([api('GET', '/api/billing/overview').catch(() => null), ...asks.map((a) => a[2])]);
     const credits = bill && bill.ok && bill.d.overview ? bill.d.overview.credits : null;
     if (!credits || !Number.isFinite(Number(credits.balance))) { S.status = 'error'; S.balance = null; throw new Error('balance unavailable'); }
@@ -30,8 +34,10 @@
       ? top(r.d.rows.filter((x) => Number(x.costMicro) > 0).map((x) => [String(x.key || 'other'), Number(x.costMicro) || 0, Number(x.events) || 0])) : null; });
     const balance = Number(credits.balance);
     S.status = 'ready'; S.balance = balance;
+    if (!spend) return { real: true, spendPending: true, availableMicro: balance * MICRO, postedMicro: balance * MICRO, frozen: false, held: [], by: { surface: [], model: [] }, byRange: null, activity: null };
     return { real: true, availableMicro: balance * MICRO, postedMicro: balance * MICRO, frozen: false, held: [], by: { surface: byRange['30d'].surface || [], model: byRange['30d'].model || [] }, byRange, activity: null };
   }
+  usage.want = () => { want = true; };
   window.XENO_SRC = Object.assign(window.XENO_SRC || {}, { usage });
   window.XENO_USAGE_LIVE = { served: true, state: () => ({ status: S.status, balance: S.balance }) };
 })();

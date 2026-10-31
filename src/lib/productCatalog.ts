@@ -110,16 +110,16 @@ export const PRODUCTS: Product[] = [
   // page copy imply a designed product. See src/content/products/photo.ts.
   { slug: 'photo', name: 'XENO Photo', tagline: 'RAW import, organize, retouch and cloud sync.', category: 'Create', status: 'coming-soon', delivery: 'soon', repo: 'xeno-photo' },
   { slug: 'motion', name: 'XENO Motion', tagline: 'Video editing, motion graphics and AI pipelines.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-motion' },
-  { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-sound' },
+  { slug: 'sound', name: 'XENO Sound', tagline: 'Audio editing, music and voice production.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-sound' },
 
   // ── Design ────────────────────────────────────────────────
   { slug: 'canvas', name: 'XENO Canvas', tagline: 'Multiplayer UI & product design with components.', category: 'Design', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-canvas' },
   { slug: 'layout', name: 'XENO Layout', tagline: 'Multi-page layouts for print and digital.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-layout' },
   { slug: 'form', name: 'XENO Form', tagline: '3D modeling, sculpting, animation and rendering.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-form' },
-  { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'coming-soon', delivery: 'soon', repo: 'xeno-architect' },
+  { slug: 'architect', name: 'XENO Architect', tagline: 'Architecture, CAD, BIM and interior design.', category: 'Design', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-architect' },
 
   // ── Office ────────────────────────────────────────────────
-  { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-docs' },
+  { slug: 'docs', name: 'XENO Docs', tagline: 'AI-native document editing.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-docs' },
   // Sheets 0.2.0 (2026-07-27) is the first build that actually carries the formula
   // engine — the withdrawn 0.1.0 scaffold was packaged ~70 min BEFORE the engine
   // commit landed. Verified in the packaged asar, not just the build log: the
@@ -147,7 +147,7 @@ export const PRODUCTS: Product[] = [
   // now carries scripts/packaged-smoke.mjs so the next release must launch too.
   // Windows only, experimental + unsigned, and NO in-app updater — electron-updater
   // is not even a dependency. Framing lives in src/content/products/slides.ts.
-  { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-slides' },
+  { slug: 'slides', name: 'XENO Slides', tagline: 'Presentations with AI built in.', category: 'Office', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-slides' },
   { slug: 'pdf', name: 'XENO PDF', tagline: 'Edit, convert, sign and chat with PDFs.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-pdf' },
 
   // ── Library ───────────────────────────────────────────────
@@ -161,7 +161,7 @@ export const PRODUCTS: Product[] = [
   // are compiled in and GraphView is rendered from App.tsx, notes:findBacklinks is in the
   // main bundle, and the app launches. Windows only. Experimental + unsigned; search is
   // MiniSearch (lexical), NOT semantic — see src/content/products/notes.ts.
-  { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-notes' },
+  { slug: 'notes', name: 'XENO Notes', tagline: 'Notes and knowledge base with AI.', category: 'Library', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-notes' },
 
   // ── Connect ───────────────────────────────────────────────
   // Internal alpha, not a beta: unsigned installer, alpha test accounts, agents + E2EE
@@ -201,7 +201,7 @@ export const PRODUCTS: Product[] = [
   { slug: 'extension', name: 'XENO Extension', tagline: 'Bring the XENO agent to Chrome and Edge.', category: 'Connect', status: 'beta', delivery: 'soon', operatingSystem: 'Chrome, Edge, Brave (Chromium)', r2: 'extension', repo: 'xeno-extension', signing: 'none', externalUrl: 'https://updates.xenostudio.ai/apps/extension/extension-stable-v1.2.0/xeno-browser-agent-stable-1.2.0.zip', externalLabel: 'Download 1.2.0 — load unpacked' },
 
   // ── Build ─────────────────────────────────────────────────
-  { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-engine' },
+  { slug: 'engine', name: 'XENO Engine', tagline: 'ECS game engine, physics and multiplayer.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-engine' },
   { slug: 'workflow', name: 'XENO Workflow', tagline: 'Visual node-based automation pipelines.', category: 'Build', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows, Linux', repo: 'xeno-workflow' },
   { slug: 'use', name: 'XENO Use', tagline: "The agent's hands across every device.", category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-use' },
   { slug: 'apps', name: 'XENO Apps', tagline: 'No-code custom apps and internal tools.', category: 'Build', status: 'coming-soon', delivery: 'soon', repo: 'xeno-apps' },
@@ -267,8 +267,18 @@ export const PRODUCTS: Product[] = [
   // XENO Spawn — every agent CLI (Claude Code, Codex, agy, opencode, XENO agent) in one place, and a XENO platform agent
   // started in a terminal with one line. 0.1.0-rc.42 is on R2 (apps/spawn/, beta, Windows x64), installed by a
   // checksum-verifying script; /install/spawn.ps1 302s to apps/spawn/install.ps1 (nginx). Not on npm.
+  // XENO Research — reproducible notebooks (xeno-research/SPEC.md §8 item 4). EARLY ACCESS, not shipping: it lives in the
+  // xenosystem.ai workspace, runs only in XENO Box, and until Box is qualified the platform refuses runs outside the XENO
+  // workspace. 'coming-soon' + 'soon' so the page offers "Get notified", never an Open that would refuse.
+  { slug: 'research', name: 'XENO Research', tagline: 'Reproducible notebooks: run in a sandbox, signed, and re-checked.', category: 'Develop', status: 'coming-soon', delivery: 'soon', repo: 'xeno-research' },
   { slug: 'spawn', name: 'XENO Spawn', tagline: 'Every coding agent in one place — and your XENO agents, one line away.', category: 'Develop', status: 'beta', delivery: 'cli', installVia: 'script', install: 'irm https://xenosystem.ai/install/spawn.ps1 | iex', operatingSystem: 'Windows', repo: 'xeno-spawn' },
   { slug: 'shell', name: 'XENO Shell', tagline: 'A desktop you can share, with a real terminal and folder-level permissions.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-shell' },
+  // XENO Storage desktop 0.1.0 (2026-10-21): experimental, unsigned, Windows x64. Drive letters for XENO Storage
+  // and Google Drive (through XENO Connect), each showing its own account's name and space via Dokany.
+  // XENO Corpus desktop 0.1.0 (2026-10-27): experimental, unsigned, Windows x64, with an in-app updater. The Corpus
+  // interface behind the XENO sign-in door; the corpus itself stays in the project (.xeno/corpus/).
+  { slug: 'corpus', name: 'XENO Corpus', tagline: 'Know which of your project’s claims are still true.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-corpus' },
+  { slug: 'storage', name: 'XENO Storage', tagline: 'Your XENO files and your Google Drive, as drives on this PC.', category: 'Platform', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-storage' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
   // they can install does not exist. It also suppressed an upgrade signal that

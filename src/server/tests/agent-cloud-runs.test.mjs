@@ -180,6 +180,10 @@ async function main() {
     runs.set(st.j.run.runId, 'completed'); seen.length = 0;
     const after = await call('GET', `/api/agents/${ag.id}/runs`, { token: A });
     check_(after.j.runs[0].state === 'completed' && after.j.runs[0].endedAt, 'when the runner reports it finished, the run ends');
+    const told = (await pool.query(`SELECT kind, ref, actor_kind FROM user_notifications WHERE source = 'agents' AND dedupe_key = $1`, [`run:${st.j.run.id}`])).rows;
+    check_(told.length === 1 && told[0].kind === 'run_finished' && told[0].ref.endsWith(`/Agents/${ag.id}/Work`) && told[0].actor_kind === 'agent', 'its owner is told, once, with the agent page as the address');
+    await call('GET', `/api/agents/${ag.id}/runs`, { token: A });
+    check_((await pool.query(`SELECT 1 FROM user_notifications WHERE source = 'agents' AND dedupe_key = $1`, [`run:${st.j.run.id}`])).rowCount === 1, 'reading its runs again tells nobody again');
     check_((await pool.query('SELECT 1 FROM workforce_run_revocations WHERE admission_id = $1', [adm.id])).rowCount === 1 && await heldMicro() === 0n, 'its admission is closed and its reservation released');
     check_((await call('GET', '/api/tasks/agent/me', { token: pa.credential })).s === 401, 'and its credential stops working');
     const pres2 = (await call('GET', '/api/agents/presence', { token: A })).j.agents.find((x) => x.id === ag.id);

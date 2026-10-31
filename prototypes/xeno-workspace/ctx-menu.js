@@ -334,5 +334,12 @@
     e.preventDefault(); e.stopPropagation(); it.run();
   }, true);
 
-  window.XCM = { register, open, show, close, resolve, isOpen: () => stack.length > 0, H };
+  // Rebuild the open submenus from their (function) sources, e.g. after the data a "Loading…" item waited for arrives.
+  function refresh() {
+    for (let lvl = stack.length - 2; lvl >= 0; lvl--) {
+      const btn = stack[lvl + 1] && stack[lvl + 1].parentBtn; if (!btn || !btn.isConnected) continue;
+      btn.setAttribute('aria-expanded', 'false'); openSub(lvl, btn, false);
+    }
+  }
+  window.XCM = { register, open, show, close, resolve, refresh, isOpen: () => stack.length > 0, H };
 })();

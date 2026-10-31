@@ -42,6 +42,8 @@ tmp-*
 # left untracked-but-unignored, so a generated file was one `git add -A` from
 # being committed. A pattern cannot be forgotten the way a list can.
 scripts/harness/.*.generated.mjs
+scripts/harness/.generation-card/
+scripts/harness/.chat-generation-image/
 
 # DR: Postgres backup dumps live under backups/ on the server checkout — never commit them
 backups/
@@ -73,3 +75,10 @@ secrets/
 # hand-rolled equivalents. Large, regenerated every deploy, and never source.
 # Ignored because `git add -A` has swept foreign files into a commit twice here.
 deploy*.tar
+
+# Local QA browser download and consent-design screenshots (scripts/auth-consent-design.test.mjs)
+.qa-browsers/
+.xeno/auth-design-evidence/
+
+# Scratch files for this repo (owner, 2026-10-28)
+scratchpad/

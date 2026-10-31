@@ -284,3 +284,17 @@ test('the deploy archive ships committed bytes, whatever the workstation autocrl
   assert.ok(crCount(plain) > 0, 'control: plain git archive under autocrlf=true injects CR — if this fails, git changed');
   assert.equal(crCount(pinned), 0, 'the pinned form must export the committed LF bytes');
 });
+
+test('only one deploy runs on the box at a time', () => {
+  /* 2026-10-24: two frontend deploys started 5 s apart and took the box down (load 149,
+   * API 502 for ~16 min). The lock must be taken on the box, non-blocking, before any
+   * candidate is extracted or any image is built, and a refusal must be its own exit code. */
+  const lock = remote.indexOf('exec 9>"$ROOT/.deploy/deploy.lock"');
+  const flock = remote.indexOf('if ! flock -n 9; then');
+  assert.ok(lock > -1 && flock > lock, 'remote-deploy.sh takes a non-blocking lock');
+  assert.ok(flock < remote.indexOf('CANDIDATE_ROOT='), 'the lock is taken before the candidate is extracted');
+  const build = remote.indexOf('build_dc build ');
+  assert.ok(build > -1 && flock < build, 'the lock is taken before any build');
+  assert.ok(flock < remote.indexOf('=== deploy start'), 'a refused deploy never logs a start');
+  assert.match(remote.slice(flock, flock + 400), /exit 4/, 'a refusal has its own exit code');
+});

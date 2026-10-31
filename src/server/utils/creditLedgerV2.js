@@ -514,6 +514,24 @@ export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
   return { ok: true };
 }
 
+/** A person's own limits. spentMicro is what the same sum assertWithinCaps tests has already used in that window. */
+export async function listSpendCaps(pool, userId) {
+  const { rows } = await pool.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1 ORDER BY window_sec', [userId]);
+  if (!rows.length) return [];
+  const held = await activeHoldsMicro(pool, userId);
+  const out = [];
+  for (const r of rows) {
+    const spent = await spentInWindowMicro(pool, userId, Number(r.window_sec));
+    out.push({ windowSec: Number(r.window_sec), limitMicro: String(r.limit_micro), spentMicro: String(spent + held) });
+  }
+  return out;
+}
+
+export async function clearSpendCap(pool, userId, windowSec) {
+  const r = await pool.query('DELETE FROM spend_caps WHERE user_id=$1 AND window_sec=$2', [userId, windowSec]);
+  return { ok: true, removed: r.rowCount > 0 };
+}
+
 /**
  * Throw SPEND_CAP_EXCEEDED if committing costMicro now would breach any window cap.
  *
@@ -532,18 +550,22 @@ export async function setSpendCap(pool, userId, { windowSec, limitMicro }) {
  */
 /** The most the account's spend caps still admit, as the tightest window's headroom, or null when it has no
  * cap. Headroom is limit − spent − held, the same sum assertWithinCaps has always tested. */
+async function spentInWindowMicro(client, userId, windowSec) {
+  const spent = await client.query(
+    `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
+      WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
+    [userId, windowSec],
+  );
+  return BigInt(spent.rows[0].s);
+}
+
 async function capHeadroomMicro(client, userId) {
   const caps = await client.query('SELECT window_sec, limit_micro FROM spend_caps WHERE user_id=$1', [userId]);
   if (caps.rows.length === 0) return null; // no cap configured → nothing to enforce
   const heldMicro = await activeHoldsMicro(client, userId);
   let tightest = null;
   for (const cap of caps.rows) {
-    const spent = await client.query(
-      `SELECT COALESCE(SUM(-amount),0)::bigint s FROM credit_transactions
-        WHERE user_id=$1 AND type='debit' AND created_at > now() - ($2 || ' seconds')::interval`,
-      [userId, cap.window_sec],
-    );
-    const headroom = BigInt(cap.limit_micro) - BigInt(spent.rows[0].s) - heldMicro;
+    const headroom = BigInt(cap.limit_micro) - await spentInWindowMicro(client, userId, cap.window_sec) - heldMicro;
     if (tightest === null || headroom < tightest.headroom) tightest = { headroom, windowSec: cap.window_sec };
   }
   return tightest;
@@ -590,64 +612,128 @@ async function mirrorLegacy(client, userId, balanceMicro) {
   await client.query('UPDATE users SET credits = $1 WHERE id = $2', [whole.toString(), userId]);
 }
 
-const GENESIS = 'GENESIS';
-function chainHash(prevHash, e) {
-  return crypto.createHash('sha256')
-    .update([prevHash, e.userId, e.type, e.amount, e.balanceAfter, e.refType, e.refId].join('|'))
-    .digest('hex');
+/**
+ * Append a journal entry. The per-account hash chain is built by the DATABASE
+ * (trigger ledger_chain_append, migrate-account-v2.js): the next sequence number
+ * under a per-account head lock, prev_hash = the head, entry_hash over the material
+ * fields, created_at from the commit order. So no writer -- this one or any other --
+ * can fork, reorder or skip the chain.
+ */
+async function insertLedgerEntry(client, e) {
+  await client.query(
+    `INSERT INTO credit_transactions
+       (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
+    [e.userId, e.accountId, e.type, e.amount, e.balanceAfter, e.refType, e.refId, e.description, e.metadata],
+  );
+}
+
+// ── Verification (independent of the database's own hash functions) ───────────────────────────────────────────
+// Recomputed here from the stored fields, so a replaced SQL function cannot vouch for itself.
+const lp = (t) => (t == null ? '-1:;' : `${Buffer.byteLength(t, 'utf8')}:${t};`);
+const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+export function ledgerEpochHash(e) {
+  return sha256(lp('xeno-ledger-epoch/2') + lp(e.accountId) + lp(String(e.epoch)) + lp(e.priorHead)
+    + lp(String(e.priorEntries)) + lp(e.openedAt));
+}
+export function ledgerEntryHash(r) {
+  return sha256(lp('xeno-ledger-entry/2') + lp(r.accountId) + lp(String(r.epoch)) + lp(String(r.seq)) + lp(r.prevHash)
+    + lp(r.userId) + lp(r.type) + lp(r.amount) + lp(r.balanceAfter) + lp(r.refType) + lp(r.refId) + lp(r.at));
+}
+
+/** The retired v1 chain (application-built, 2026-07 → 2026-10): reported as found, never "repaired". */
+function verifyLegacyChain(rows) {
+  const GENESIS = 'GENESIS';
+  const v1 = (prev, r) => crypto.createHash('sha256')
+    .update([prev, r.user_id, r.type, r.amount, r.balance_after, r.reference_type, r.reference_id].join('|')).digest('hex');
+  const hashed = rows.filter((r) => r.entry_hash);
+  const byPrev = new Map();
+  let forks = 0;
+  for (const r of hashed) { if (byPrev.has(r.prev_hash)) forks += 1; else byPrev.set(r.prev_hash, r); }
+  let prev = GENESIS; let linked = 0; let badHashes = 0;
+  while (byPrev.has(prev)) { const r = byPrev.get(prev); if (r.entry_hash !== v1(prev, r)) badHashes += 1; prev = r.entry_hash; linked += 1; }
+  return {
+    entries: rows.length, hashed: hashed.length, unhashed: rows.length - hashed.length,
+    linked, forks, badHashes, ok: hashed.length === rows.length && forks === 0 && badHashes === 0 && linked === hashed.length,
+  };
 }
 
 /**
- * Append a journal entry with a per-account hash chain (Arch §5, CloudTrail
- * pattern): entry_hash = SHA256(prev_hash ‖ user ‖ type ‖ amount ‖ balance_after
- * ‖ ref). Altering or deleting any past row breaks every subsequent hash → the
- * money journal is tamper-evident. Runs inside the caller's account-locked
- * transaction (credit_accounts FOR UPDATE), so the prev-hash read is race-free.
+ * Verify one account's journal. `ok` speaks for the v2 chain (the database-built one, from the account's
+ * first v2 entry): epoch hash, contiguous sequence, prev links, every entry hash recomputed here, the head
+ * record, and COMPLETENESS -- every row on the account is either one the epoch sealed or a chained entry,
+ * so a row slipped in with the trigger disabled is found even though it carries no hash. History before the
+ * epoch is reported under `legacy`, as found.
  */
-async function insertLedgerEntry(client, e) {
-  const prev = await client.query(
-    'SELECT entry_hash FROM credit_transactions WHERE account_id=$1 AND entry_hash IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1',
-    [e.accountId],
-  );
-  const prevHash = prev.rows[0]?.entry_hash || GENESIS;
-  const entryHash = chainHash(prevHash, e);
-  await client.query(
-    // now() is the transaction START, not its serialization order. A transaction
-    // that began first can acquire the account lock last; repeated writes in one
-    // transaction also share now(). Keep the existing journal order strictly advancing
-    // under that account lock, including a backwards wall-clock adjustment.
-    `INSERT INTO credit_transactions
-       (user_id, account_id, type, amount, balance_after, reference_type, reference_id, description, metadata, prev_hash, entry_hash, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,
-       GREATEST(clock_timestamp() AT TIME ZONE 'UTC',
-         (SELECT max(created_at)+interval '1 microsecond' FROM credit_transactions WHERE account_id=$2)))`,
-    [e.userId, e.accountId, e.type, e.amount, e.balanceAfter, e.refType, e.refId, e.description, e.metadata, prevHash, entryHash],
-  );
-  return entryHash;
+export async function verifyAccountChain(pool, accountId, { includeLegacy = false } = {}) {
+  const acct = (await pool.query('SELECT id, balance FROM credit_accounts WHERE id=$1', [accountId])).rows[0];
+  if (!acct) return { ok: true, entries: 0 };
+  const epochs = (await pool.query(
+    `SELECT epoch, prior_head, prior_entries, epoch_hash, ledger_ts(opened_at) AS opened_at
+       FROM ledger_chain_epochs WHERE account_id=$1 ORDER BY epoch`, [accountId])).rows;
+  const total = Number((await pool.query('SELECT count(*) AS n FROM credit_transactions WHERE account_id=$1', [accountId])).rows[0].n);
+  const out = { ok: true, accountId, entries: 0 };
+  if (includeLegacy) {
+    const legacyRows = (await pool.query(
+      `SELECT user_id::text, type, amount::text, balance_after::text, reference_type, reference_id, prev_hash, entry_hash
+         FROM credit_transactions WHERE account_id=$1 AND chain_seq IS NULL ORDER BY created_at, id`, [accountId])).rows;
+    out.legacy = verifyLegacyChain(legacyRows);
+  }
+  if (epochs.length === 0) {
+    // No v2 entry yet: nothing chained to check, but nothing may be missing either.
+    return { ...out, ok: true, epochs: 0, unchained: total };
+  }
+  const fail = (reason, extra = {}) => ({ ...out, ok: false, reason, ...extra });
+  const head = (await pool.query('SELECT epoch, seq, head_hash FROM ledger_chain_heads WHERE account_id=$1', [accountId])).rows[0];
+  let chained = 0; let last = null; let resealedRows = 0; let endOfPrevious = null; let lastEpochRows = 0;
+  for (const e of epochs) {
+    // A later epoch (a re-seal) must bind where the previous one ended, and a row count that can only grow.
+    if (endOfPrevious && (e.prior_head !== endOfPrevious.head || Number(e.prior_entries) < endOfPrevious.rows)) {
+      return fail('epoch-link', { epoch: e.epoch });
+    }
+    if (endOfPrevious) resealedRows += Number(e.prior_entries) - endOfPrevious.rows;
+    if (ledgerEpochHash({ accountId, epoch: e.epoch, priorHead: e.prior_head, priorEntries: e.prior_entries, openedAt: e.opened_at }) !== e.epoch_hash) {
+      return fail('epoch-hash', { epoch: e.epoch });
+    }
+    const rows = (await pool.query(
+      `SELECT chain_seq::text AS seq, prev_hash, entry_hash, user_id::text AS user_id, type, amount::text AS amount,
+              balance_after::text AS balance_after, reference_type, reference_id, ledger_ts(created_at::timestamp) AS at
+         FROM credit_transactions WHERE account_id=$1 AND chain_epoch=$2 ORDER BY chain_seq`, [accountId, e.epoch])).rows;
+    let prev = e.epoch_hash;
+    for (let i = 0; i < rows.length; i += 1) {
+      const r = rows[i];
+      if (Number(r.seq) !== i + 1) return fail('sequence-gap', { epoch: e.epoch, brokenAt: chained + i, expectedSeq: i + 1, seq: Number(r.seq), transactionId: r.reference_id });
+      const expect = ledgerEntryHash({
+        accountId, epoch: e.epoch, seq: r.seq, prevHash: prev, userId: r.user_id, type: r.type, amount: r.amount,
+        balanceAfter: r.balance_after, refType: r.reference_type, refId: r.reference_id, at: r.at,
+      });
+      if (r.prev_hash !== prev || r.entry_hash !== expect) {
+        return fail('entry-hash', { epoch: e.epoch, brokenAt: chained + i, seq: i + 1, transactionId: r.reference_id });
+      }
+      prev = r.entry_hash; last = r;
+    }
+    chained += rows.length;
+    lastEpochRows = rows.length;
+    endOfPrevious = { head: prev, rows: Number(e.prior_entries) + rows.length };
+    if (head && head.epoch === e.epoch && (Number(head.seq) !== rows.length || head.head_hash !== prev)) {
+      return fail('head-mismatch', { epoch: e.epoch, headSeq: Number(head.seq), chainSeq: rows.length });
+    }
+  }
+  const sealed = Number(epochs[0].prior_entries);
+  const unchained = total - Number(epochs[epochs.length - 1].prior_entries) - lastEpochRows;
+  if (unchained !== 0) return fail('unchained-entries', { entries: chained, unchained });
+  return {
+    ...out, ok: true, entries: chained, epochs: epochs.length, sealedHistory: sealed, resealedRows,
+    head: head?.head_hash, seq: head ? Number(head.seq) : 0,
+    balanceMatches: last ? String(last.balance_after) === String(acct.balance) : null,
+  };
 }
 
-/** Walk a user's journal, recompute the chain, report the first break (Arch §5). */
-export async function verifyChainV2(pool, userId) {
+/** Verify a user's own account (the /api/v2/ledger/verify route and the money suites). */
+export async function verifyChainV2(pool, userId, opts) {
   const acct = await pool.query('SELECT id FROM credit_accounts WHERE user_id=$1', [userId]);
   if (acct.rows.length === 0) return { ok: true, entries: 0 };
-  const rows = (await pool.query(
-    `SELECT type, amount, balance_after, reference_type, reference_id, prev_hash, entry_hash
-       FROM credit_transactions WHERE account_id=$1 AND entry_hash IS NOT NULL
-       ORDER BY created_at ASC, id ASC`,
-    [acct.rows[0].id],
-  )).rows;
-  let prevHash = GENESIS;
-  for (let i = 0; i < rows.length; i += 1) {
-    const r = rows[i];
-    const expect = chainHash(prevHash, {
-      userId, type: r.type, amount: r.amount, balanceAfter: r.balance_after, refType: r.reference_type, refId: r.reference_id,
-    });
-    if (r.prev_hash !== prevHash || r.entry_hash !== expect) {
-      return { ok: false, entries: rows.length, brokenAt: i, transactionId: r.reference_id };
-    }
-    prevHash = r.entry_hash;
-  }
-  return { ok: true, entries: rows.length, head: prevHash };
+  return verifyAccountChain(pool, acct.rows[0].id, opts);
 }
 
 /**

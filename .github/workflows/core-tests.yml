@@ -82,7 +82,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install postgres client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -95,7 +95,7 @@ jobs:
         working-directory: src/server
         run: |
           set -euo pipefail
-          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth browser-bff-session inference-routing-live chat-stream-own-key chat-area library-area workspace-area forum-tickets forum-moderation-actions forum-writeback xeno-tasks canvases chat-handoff task-folders workspace-foundation tasks-mcp-oauth xeno-mcp agents-divisions agent-cloud-runs agent-company-ownership agent-media-tools dpop-token-exchange readonly-preview-lifecycle leader-election fresh-db-boot password-change-atomicity byok-lifecycle-audit gateway-catalogue-sync email-delivery-events suspension-gate chat-branches artifacts library-organise storage-allowance account-security inference-session-keys browser-relay"
+          SUITES="authz-v2 oidc-v2 erasure account-recovery auth-token-confusion api-key-auth browser-bff-session inference-routing-live chat-stream-own-key chat-area library-area workspace-area forum-tickets forum-report-evidence forum-moderation-actions forum-writeback xeno-tasks canvases chat-handoff task-folders workspace-foundation tasks-mcp-oauth xeno-mcp agents-divisions agent-cloud-runs agent-company-ownership agent-media-tools dpop-token-exchange readonly-preview-lifecycle leader-election fresh-db-boot password-change-atomicity oidc-refresh-recovery byok-lifecycle-audit gateway-catalogue-sync email-delivery-events suspension-gate chat-branches artifacts library-organise storage-allowance project-folders chat-project-folders account-security inference-session-keys browser-relay"
           fail=0
           for t in $SUITES; do
             db="c_${t//-/_}"
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Typecheck (advisory)
         run: |
           npm ci --legacy-peer-deps || npm install --legacy-peer-deps

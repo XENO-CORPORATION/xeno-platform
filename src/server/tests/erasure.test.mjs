@@ -17,7 +17,7 @@ const ok = (c, m) => { if (c) { pass++; console.log(`  ✓ ${m}`); } else { fail
 
 const BASE = `
 CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text, username text, display_name text, avatar_url text, email_verified boolean DEFAULT true, is_active boolean DEFAULT true, credits bigint DEFAULT 0);
-CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, owner_kind varchar(16) DEFAULT 'user', balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32), amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128), description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS external_identity_links (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_system varchar(64) NOT NULL, external_user_id text, external_email text, platform_user_id uuid NOT NULL, metadata jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 `;
@@ -33,7 +33,7 @@ async function main() {
   // Order matters: forum_threads has an FK to forum_spaces, and forum_posts to
   // forum_threads. Naming them in dependency order is the price of not running
   // all 42 tables — and it is visible, which is the point.
-  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts', 'api_keys', 'email_logs', 'email_verifications', 'security_events', 'agent_identities'));
+  await pool.query(tablesDDL('user_sessions', 'forum_spaces', 'forum_threads', 'forum_posts', 'forum_tickets', 'forum_ticket_posts', 'forum_report_submissions', 'forum_report_evidence', 'api_keys', 'email_logs', 'email_verifications', 'security_events', 'agent_identities'));
   await migrateAccountV2(pool);
   // This suite builds its own schema rather than running the full migration set,
   // so the usage-credit consent tables are not here. Spending now consults them,

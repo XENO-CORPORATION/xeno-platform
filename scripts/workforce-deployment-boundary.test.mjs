@@ -39,9 +39,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
 
 /** HTTP framework and request authentication -- in-process libraries, none of them a service. */
-// 2026-10-20: the Orchestrator reaches XENO Tasks → support mail (uuid, bcryptjs via emailService) and mode-apply
-// reaches workspace tenancy → billing (stripe, an HTTP API client). All three run in this process; none is a deployable.
-const ALLOWED = new Set(['express', 'express-rate-limit', 'jsonwebtoken', 'uuid', 'bcryptjs', 'stripe']);
+// Reviewed 2026-10-24: each is an in-process library with no distributed-service client in it
+// (the two vendored engines and tiktoken/bcryptjs declare zero dependencies; rrule one, pure).
+const ALLOWED = new Set([
+  'express', 'express-rate-limit', 'jsonwebtoken',
+  '@xenosystem/orchestrator', // xeno-orchestrator's engine, vendored; pure planning logic (#919)
+  '@xenosystem/agent-sdk', // only /control-plane's WorkflowPlanner, in-process
+  'tiktoken', // token counting for billable input, WASM in-process
+  'uuid', 'bcryptjs', // id generation and hashing, reached through emailService
+  'xeno-research', // research engine, vendored; talks to Box over node:http, no client library
+  'rrule', // recurrence rules for chat schedules
+  '@xenosystem/anima-mind', // composes an agent's persona prompt and parses mind.xeno (YAML), in-process; no client of any service
+]);
 
 /** Clients for distributed services this backend could reach for. Named so a failure says WHY. */
 const DISTRIBUTED = ['ioredis', 'redis', 'bull', 'bullmq', 'kafkajs', 'amqplib', 'nats', 'meilisearch',
@@ -69,7 +78,11 @@ function importGraph(roots) {
     files.add(file);
     const text = read(file);
     // A graph walked through ESM syntax alone is blind to require(). Refuse rather than miss it.
-    if (/\brequire\s*\(|\bcreateRequire\b/.test(text)) loaders.push(file);
+    // Block comments and whole-line comments are not code: secretBox.js documents a key-generation
+    // command (`node -e "…require('crypto')…"`) in its header and loads nothing that way. A comment
+    // after code on the same line is still scanned, so this can only ignore text that cannot run.
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    if (/\brequire\s*\(|\bcreateRequire\b/.test(code)) loaders.push(file);
     for (const match of text.matchAll(SPECIFIER)) {
       const specifier = match[1] ?? match[2] ?? match[3];
       // A Node builtin is part of the runtime, not a dependency, with or without the `node:` prefix

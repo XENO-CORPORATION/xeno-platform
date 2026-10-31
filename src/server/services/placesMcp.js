@@ -24,6 +24,40 @@ export const TOOLS = [
       place: PLACE, expected_revision: { type: 'integer', description: 'The layout revision you read (place.revision).' },
       request_key: { type: 'string', description: 'Your own key for this change, 8–128 characters.' },
       layout: { type: 'object', description: '{ bays?, style?, slots?: {membershipId: n}, pods?: {teamId: {x0, zc}}, fixtures?: {floorKey: [{kind, x, z, w?, d?, h?, rot?, label?, id?}]}, removed?: {floorKey: [fixtureId]} } — floorKey is a division id or "lobby"; metres.' } } } },
+  { name: 'explore', title: 'Explore public places', annotations: RO,
+    description: 'Public buildings anyone signed in may watch (as a visitor: watch only, no talk or edit). Floors outside your scope stay nameless.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'sessions', title: 'List live sessions', annotations: RO,
+    description: 'Live hosted sessions you host, are invited to, have joined, or that are public. The code is shown only to the host.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'resolve_session', title: 'Look up a session code', annotations: RO,
+    description: 'What a session code (or a link with ?session=) opens — place, host, floors shown, permissions — before you join it.',
+    inputSchema: { type: 'object', required: ['code'], properties: { code: { type: 'string', description: 'ABCD-EF23, PLC-ABCD-EF23 or a link.' } } } },
+  { name: 'join_session', title: 'Join a hosted session', annotations: RW,
+    description: 'Join a live session with its code. A session only NARROWS: you see only the floors the host opened, with only watch/talk/handoff as granted.',
+    inputSchema: { type: 'object', required: ['code', 'request_key'], properties: { code: { type: 'string' }, request_key: { type: 'string', description: '8–128 characters.' } } } },
+  { name: 'invites', title: 'List my invitations', annotations: RO,
+    description: 'Pending workspace invitations addressed to you.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'receipts', title: 'My recent Places changes', annotations: RO,
+    description: 'The receipts of your last twelve Places changes (operation id, op, revision, time).', inputSchema: { type: 'object', properties: {} } },
+  { name: 'needs', title: 'What needs you', annotations: RO,
+    description: 'Tasks waiting on you: reviews you owe and blocked work of yours or your agents. Act on them with the Tasks tools.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'workforce', title: 'Workforce catalog', annotations: RO,
+    description: 'Agents you own or manage, where each has a desk, and desk offers waiting for your decision (agents lent to buildings you administer).',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'marketplace', title: 'Rentable agents and teams', annotations: RO,
+    description: 'Marketplace agents and teams for rent, with the price per period and whether you already hold a rental.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'funding', title: 'Credits and budgets', annotations: RO,
+    description: 'Your available credits, recent account history, and the monthly budget (approved ceiling and any proposal) of each building you administer.',
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'city', title: 'Read a XENO city', annotations: RO,
+    description: 'A XENO city: districts, lots (leased or for lease, monthly price), the buildings standing on them with their facades, sponsor slots (always labelled Sponsored), your bookings and buildings not yet placed. Land is leased monthly, never sold.',
+    inputSchema: { type: 'object', properties: { city: { type: 'string', description: 'A city id (meridian, halcyon, lindgren, …); default: where your building stands.' } } } },
+  { name: 'world', title: 'Read the XENO planet', annotations: RO,
+    description: 'Polis: continents, real-geography regions (open · opening soon · opens on demand · locked) with real pledge counts, and XENO cities with their buildings, free lots and waitlists.',
+    inputSchema: { type: 'object', properties: {} } },
 ];
 
 async function run(db, actor, op, input) {
@@ -37,6 +71,18 @@ export async function callTool(db, actor, name, a = {}) {
     case 'list': return ok(await run(db, actor, 'places.list', {}));
     case 'get': return ok(await run(db, actor, 'places.get', { placeId: a.place }));
     case 'save_layout': return ok(await run(db, actor, 'places.layout.save', { placeId: a.place, layout: a.layout, expectedRevision: a.expected_revision, requestId: a.request_key }));
+    case 'explore': return ok(await run(db, actor, 'places.explore', {}));
+    case 'sessions': return ok(await run(db, actor, 'sessions.list', {}));
+    case 'resolve_session': return ok(await run(db, actor, 'sessions.resolve', { code: a.code }));
+    case 'join_session': return ok(await run(db, actor, 'sessions.join', { code: a.code, requestId: a.request_key }));
+    case 'invites': return ok(await run(db, actor, 'invites.list', {}));
+    case 'receipts': return ok(await run(db, actor, 'receipts.list', {}));
+    case 'needs': return ok(await run(db, actor, 'needs.list', {}));
+    case 'workforce': return ok(await run(db, actor, 'workforce.catalog.list', {}));
+    case 'marketplace': return ok(await run(db, actor, 'marketplace.list', {}));
+    case 'funding': return ok(await run(db, actor, 'funding.get', {}));
+    case 'city': return ok(await run(db, actor, 'city.get', a.city ? { cityId: a.city } : {}));
+    case 'world': return ok(await run(db, actor, 'world.get', {}));
     default: throw new PlacesMcpError(`Unknown tool ${name}`, 'unknown_tool');
   }
 }

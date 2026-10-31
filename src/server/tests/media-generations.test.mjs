@@ -26,6 +26,7 @@ const expectCode=async(fn,code)=>{await assert.rejects(fn,error=>error.code===co
 const migration=await fs.readFile(new URL('../database/migrations/20261011160000-media-generations.sql',import.meta.url),'utf8');
 const keepMigration=await fs.readFile(new URL('../database/migrations/20261012090000-media-generation-keep.sql',import.meta.url),'utf8');
 const areaMigration=await fs.readFile(new URL('../database/migrations/20261012100000-media-generation-area.sql',import.meta.url),'utf8');
+const replacedMigration=await fs.readFile(new URL('../database/migrations/20261031140000-media-generation-replaced.sql',import.meta.url),'utf8');
 const uploadsDir=path.join(os.tmpdir(),'xeno-media-proof-'+crypto.randomUUID()); // never inside the repo
 const secret='disposable-test-media-quote-key';
 const PNG=Buffer.from('89504e470d0a1a0a0000000049454e44','hex');
@@ -33,10 +34,10 @@ const video=Buffer.from('000000186674797069736f6d0000000069736f6d6d703432','hex'
 let server,gatewayServer;
 try{
   await pool.query(`CREATE TABLE users(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),credits bigint DEFAULT 0);
-    CREATE TABLE credit_accounts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid UNIQUE,balance bigint DEFAULT 0,lifetime_earned bigint DEFAULT 0,lifetime_spent bigint DEFAULT 0,is_frozen boolean DEFAULT false,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
+    CREATE TABLE credit_accounts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid UNIQUE,owner_kind varchar(16) DEFAULT 'user',balance bigint DEFAULT 0,lifetime_earned bigint DEFAULT 0,lifetime_spent bigint DEFAULT 0,is_frozen boolean DEFAULT false,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
     CREATE TABLE credit_transactions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,account_id uuid,type varchar(32),amount bigint,balance_after bigint,reference_type varchar(64),reference_id varchar(128),description text,metadata jsonb,prev_hash text,entry_hash text,created_at timestamptz DEFAULT now());`);
   await pool.query(tablesDDL('api_usage_logs'));await migrateAccountV2(pool);await installUsageCreditFixture(pool);await installMediaIdentityFixture(pool);
-  await pool.query(`CREATE TABLE user_files(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,owner_user_id uuid,workspace_id uuid,created_by_user_id uuid,filename text,original_name text,file_type text,mime_type text,file_size bigint,storage_path text,storage_type text,metadata jsonb,content_sha256 text,created_at timestamptz DEFAULT now(),deleted_at timestamptz);
+  await pool.query(`CREATE TABLE user_files(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,owner_user_id uuid,workspace_id uuid,created_by_user_id uuid,filename text,original_name text,file_type text,mime_type text,file_size bigint,storage_path text,storage_type text,metadata jsonb,content_sha256 text,file_id uuid,created_at timestamptz DEFAULT now(),deleted_at timestamptz);
     CREATE TABLE chat_conversations(id uuid PRIMARY KEY,project_id uuid,deleted_at timestamptz);
     CREATE TABLE api_keys(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,key_hash text,key_prefix text,is_active boolean,expires_at timestamptz);`);
   await pool.query(tablesDDL('library_asset_ingestions','library_item_areas'));
@@ -44,6 +45,7 @@ try{
   await pool.query(migration.split('-- DOWN')[0]);await pool.query(migration.split('-- DOWN')[0]);
   await pool.query(keepMigration.split('-- DOWN')[0]);await pool.query(keepMigration.split('-- DOWN')[0]); // idempotent, like the first
   await pool.query(areaMigration.split('-- DOWN')[0]);await pool.query(areaMigration.split('-- DOWN')[0]);
+  await pool.query(replacedMigration.split('-- DOWN')[0]);await pool.query(replacedMigration.split('-- DOWN')[0]);
   const owner=(await pool.query('INSERT INTO users(credits) VALUES(1000) RETURNING id')).rows[0].id;
   const foreign=(await pool.query('INSERT INTO users(credits) VALUES(1000) RETURNING id')).rows[0].id;
   const agent=(await pool.query('INSERT INTO users(credits) VALUES(0) RETURNING id')).rows[0].id;
@@ -92,6 +94,25 @@ try{
   await expectCode(()=>approveGeneration(pool,agent,proposal.id,{quoteToken:proposal.quote.quoteToken,requestHash:proposal.requestHash,version:proposal.version},options),'human_approval_required');
   await expectCode(()=>getGeneration(pool,foreign,proposal.id),'generation_not_found');
   await Promise.all([1,2].map(()=>approveGeneration(pool,owner,proposal.id,{quoteToken:proposal.quote.quoteToken,requestHash:proposal.requestHash,version:proposal.version},options)));
+  // the person changes a proposal's settings before approving: their own generation, priced for those settings
+  const edit=await proposeGeneration(pool,agent,{...request,requestKey:'agent-proposal-edit'},options);
+  const ratios=descriptorFor(request.model).settings.ratio.values, newRatio=ratios.find(r=>r!==edit.request.settings.ratio);
+  const editedSettings={...edit.request.settings,ratio:newRatio};
+  const {requestKey:_rk,...editBase}=edit.request;
+  const editQuote=await quoteGeneration(pool,owner,{...editBase,settings:editedSettings},options);
+  await expectCode(()=>approveGeneration(pool,owner,edit.id,{quoteToken:edit.quote.quoteToken,requestHash:edit.requestHash,version:edit.version,settings:editedSettings},options),'quote_changed');
+  await expectCode(()=>approveGeneration(pool,owner,edit.id,{quoteToken:editQuote.quoteToken,requestHash:editQuote.requestHash,version:edit.version,settings:{...editedSettings,ratio:'7:5'}},options),'unsupported_setting');
+  await expectCode(()=>approveGeneration(pool,agent,edit.id,{quoteToken:editQuote.quoteToken,requestHash:editQuote.requestHash,version:edit.version,settings:editedSettings},options),'human_approval_required');
+  const mine=await approveGeneration(pool,owner,edit.id,{quoteToken:editQuote.quoteToken,requestHash:editQuote.requestHash,version:edit.version,settings:editedSettings},options);
+  const was=await getGeneration(pool,owner,edit.id);
+  ok(mine.id!==edit.id&&mine.state==='queued'&&mine.request.settings.ratio===newRatio&&mine.request.prompt===edit.request.prompt&&mine.request.model===edit.request.model,'changed settings run as the person’s own generation, same prompt and model, priced for the new settings');
+  ok(was.state==='cancelled'&&was.replacedBy===mine.id&&was.request.settings.ratio===edit.request.settings.ratio,'the proposal stays exactly as the agent made it, cancelled, and points at what ran');
+  const again=await approveGeneration(pool,owner,edit.id,{quoteToken:editQuote.quoteToken,requestHash:editQuote.requestHash,version:edit.version,settings:editedSettings},options);
+  ok(again.id===mine.id,'approving the same edit again gives the same generation, not a second one');
+  const mineRow=(await pool.query('SELECT actor_user_id,approved_by_user_id FROM media_generations WHERE id=$1',[mine.id])).rows[0];
+  ok(mineRow.actor_user_id===owner&&mineRow.approved_by_user_id===owner,'the person made and approved it');
+  await assert.rejects(()=>pool.query('UPDATE media_generations SET replaced_by=$2 WHERE id=$1',[edit.id,proposal.id]),/immutable media generation request/);pass++;console.log('PASS the link from a proposal to what replaced it never changes');
+  await cancelGeneration(pool,owner,mine.id);
   await runMediaGenerationBatch(pool,options);
   ok((await getGeneration(pool,owner,proposal.id)).state==='reconciling'&&jobs.size===1,'accepted timeout preserved as reconciling');
   const before=(await getBalanceV2(pool,owner)).availableMicro;

@@ -322,6 +322,21 @@ html, body, #root, #app {
   outline: none;
 }
 
+/* ── Elements fields paint their own focus — same opt-out, applied ────────
+ *
+ * A TextInput is a wrapper (.xeno-input) whose border brightens on
+ * :focus-within, around an inner field (.xeno-input-field) that already sets
+ * outline: none. The global ring above ties that rule in specificity and
+ * loads later, so the focused field drew BOTH: the wrapper's border plus a
+ * white outline floating 2px outside it — the doubled stroke on the auth
+ * pages (owner, 2026-10-22). Two classes beat one regardless of order, and
+ * the condition for the opt-out holds: the wrapper visibly changes on focus.
+ * A textarea is its own box with the same border-on-focus painting. */
+.xeno-input-field:focus-visible,
+.xeno-textarea:focus-visible {
+  outline: none;
+}
+
 /* ── Entrance motion, GLOBAL ────────────────────────────────────────────────
  *
  * `fadeSlideUp` / `.stagger-children` were defined in a <style> block INSIDE

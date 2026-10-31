@@ -19,7 +19,10 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = (m) => X()?.toast?.(m);
   const said = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
-  const S = { status: 'idle', ws: undefined, metrics: [], divisions: [], dashboards: [], current: 'overview', division: '', values: {}, error: null, making: false, undo: null };
+  const S = { status: 'idle', ws: undefined, metrics: [], divisions: [], dashboards: [], current: 'overview', division: '', values: {}, error: null, undo: null };
+  // each dashboard has its own address: /…/z/analytics (Overview) · /…/z/analytics/<dashboard id>
+  const curNow = () => { const it = String((X()?.S || {}).item || ''); return S.dashboards.some((x) => x.id === it) ? it : 'overview'; };
+  const goDash = (id) => X()?.go?.('zone', { zone: 'analytics', item: !id || id === 'overview' ? null : id });
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served ? window.XENO_SCOPE.uuid() : null);
   const q = (extra = {}) => { const p = new URLSearchParams(); if (S.ws) p.set('workspace', S.ws); for (const [k, v] of Object.entries(extra)) if (v !== '' && v != null) p.set(k, v); const s = p.toString(); return s ? '?' + s : ''; };
   const withWs = (b) => ({ ...(b || {}), ...(S.ws ? { workspace: S.ws } : {}) });
@@ -34,7 +37,7 @@
     const [m, d] = await Promise.all([api('GET', '/api/workspace-analytics/metrics' + q()).catch(() => null), api('GET', '/api/workspace-analytics/dashboards' + q()).catch(() => null)]);
     if (!m || !m.ok) { S.status = 'error'; S.error = said(m, 'Analytics could not be reached.'); return paint(); }
     S.metrics = m.d.metrics || []; S.divisions = m.d.divisions || []; S.dashboards = (d && d.ok && d.d.dashboards) || [];
-    if (S.current !== 'overview' && !S.dashboards.some((x) => x.id === S.current)) S.current = 'overview';
+    S.current = curNow();
     if (S.division && !S.divisions.some((x) => x.id === S.division)) S.division = '';
     S.status = 'ready'; paint(); await values();
   }
@@ -76,6 +79,8 @@
   window.XENO_ZONE_LIVE = window.XENO_ZONE_LIVE || {};
   window.XENO_ZONE_LIVE['corpo.analytics'] = {
     served: true,
+    items: true,
+    label: (item) => (S.dashboards.find((x) => x.id === item) || { name: 'Dashboard' }).name,
     work: () => (S.status === 'ready' ? ['Dashboards', [['Overview', 'All metrics', null, 'Analytics'], ...S.dashboards.slice(0, 6).map((d) => [d.name, `${d.widgets.length} widget${d.widgets.length === 1 ? '' : 's'}`, null, 'Analytics'])]] : null),
     badge: () => null,
     page: () => page(),
@@ -85,57 +90,56 @@
 
   const btn = (attrs, label, cls = 'btn ghost') => `<button class="${cls}" ${attrs}>${esc(label)}</button>`;
   function page() {
-    const head = `<div class="pj-head"><div><small>Corpo</small><h1>Analytics</h1></div></div><p class="hm-blurb">Your workspace’s numbers: credits, tasks, storage, support and agent runs.</p>`;
-    const wrap = (body) => `<div class="wrap pj hm" data-an-page="${esc(S.status)}">${head}${body}</div>`;
+    // the page's one header (XENO_PAGES): dashboards are tabs in the header bar, the division filter beside the
+    // actions, New dashboard right; creating opens the workspace dialog, never a form in the page
+    const h = window.XENO_PAGES.h, ready = S.status === 'ready';
+    if (ready) { const c = curNow(); if (c !== S.current) { S.current = c; setTimeout(values, 0); } }
+    const divs = ready && S.divisions.length ? `<div class="pg-bar"><label class="an-div">Division <select class="in" data-an-division aria-label="Division"><option value="">Whole workspace</option>${S.divisions.map((d) => `<option value="${esc(d.id)}" ${S.division === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label></div>` : '';
+    const acts = (ready && S.current !== 'overview' ? h.btn('Delete dashboard', `data-an-delete="${esc(S.current)}"`, true) : '') + h.btn('New dashboard', 'data-an-new', false, 'plus');
+    const head = h.head({ title: 'Analytics', sub: 'Your workspace’s numbers: credits, tasks, storage, support and agent runs.', acts }) + (ready ? h.tabs([['overview', 'Overview'], ...S.dashboards.map((d) => [d.id, d.name])], S.current, 'data-an-open') : '') + divs;
+    const wrap = (body) => h.page(`${head}<div class="wrap pj hm" data-an-page="${esc(S.status)}">${body}</div>`);
     if (S.status === 'idle' || S.status === 'loading' || S.ws !== wsId()) { if (S.status !== 'loading') load(); return wrap('<div class="pj-empty">Loading…</div>'); }
     if (S.status === 'error') return wrap(`<div class="pj-empty" data-an-error>${esc(S.error)} ${btn('data-an-reload', 'Try again')}</div>`);
-    const tabs = [['overview', 'Overview'], ...S.dashboards.map((d) => [d.id, d.name])].map(([id, name]) => `<button class="btn ${S.current === id ? '' : 'ghost'}" data-an-open="${esc(id)}" aria-pressed="${S.current === id}">${esc(name)}</button>`).join(' ');
-    const divs = S.divisions.length ? `<label class="an-div">Division <select class="in" data-an-division aria-label="Division"><option value="">Whole workspace</option>${S.divisions.map((d) => `<option value="${esc(d.id)}" ${S.division === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : '';
-    const del = S.current !== 'overview' ? btn(`data-an-delete="${esc(S.current)}"`, 'Delete dashboard') : '';
-    const maker = S.making ? `<div class="an-make" data-an-make><input class="in" data-an-name placeholder="Dashboard name" aria-label="Dashboard name" maxlength="120">
-        <div class="an-picks">${S.metrics.map((m) => `<label><input type="checkbox" data-an-pick="${esc(m.id)}" checked> ${esc(m.title)}</label>`).join('')}</div>
-        <label>Window <select class="in" data-an-days aria-label="Window"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="365">1 year</option></select></label>
-        <div>${btn('data-an-save', 'Save dashboard', 'btn')} ${btn('data-an-cancel', 'Cancel')}</div></div>` : btn('data-an-new', 'New dashboard', 'btn');
     const ws = widgetsOf();
     const grid = ws.length ? `<div class="an-grid">${ws.map(card).join('')}</div>` : '<div class="pj-empty">This dashboard has no widgets.</div>';
     const undo = S.undo ? `<div class="an-undo" data-an-undone>“${esc(S.undo.name)}” was deleted. ${btn(`data-an-undo="${esc(S.undo.id)}"`, 'Undo')}</div>` : '';
-    return wrap(`${undo}<div class="an-bar-top"><div class="an-tabs">${tabs}</div>${divs}</div><div class="an-actions">${maker} ${del}</div>${grid}`);
+    return wrap(`${undo}${grid}`);
+  }
+
+  // New dashboard: the workspace dialog (XD.form)
+  function newDash() {
+    window.XD.form({ title: 'New dashboard', submit: 'Save dashboard',
+      fields: [{ id: 'name', label: 'Dashboard name', required: true, max: 120 },
+        { id: 'metrics', type: 'checks', label: 'Metrics', required: true, value: S.metrics.map((m) => m.id), options: S.metrics.map((m) => [m.id, m.title]) },
+        { id: 'days', type: 'seg', label: 'Window', value: '30', options: [['7', '7 days'], ['30', '30 days'], ['90', '90 days'], ['365', '1 year']] }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/workspace-analytics/dashboards', withWs({ name: v.name, widgets: v.metrics.map((metric) => ({ metric, days: Number(v.days || 30) })) })).catch(() => null); if (!r || !r.ok) return said(r, 'That did not save.'); S.made = r.d.dashboard.id; return null; },
+    }).then(async (v) => { if (!v || !S.made) return; const id = S.made; S.made = null; toast('Dashboard saved'); await load(); goDash(id); });
   }
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-an-reload],[data-an-open],[data-an-new],[data-an-cancel],[data-an-save],[data-an-delete],[data-an-undo]');
-    if (!t || !t.closest('[data-an-page]')) return;
+    const t = e.target.closest('[data-an-reload],[data-an-open],[data-an-new],[data-an-delete],[data-an-undo]');
+    if (!t || !(t.closest('[data-an-page]') || t.closest('#main .topbar'))) return;
     e.preventDefault(); e.stopPropagation();
-    const root = t.closest('[data-an-page]'), d = t.dataset;
+    const d = t.dataset;
     if ('anReload' in d) return load();
-    if (d.anOpen) { S.current = d.anOpen; paint(); return values(); }
-    if ('anNew' in d) { S.making = true; return paint(); }
-    if ('anCancel' in d) { S.making = false; return paint(); }
-    if ('anSave' in d) {
-      const name = (root.querySelector('[data-an-name]') || {}).value || '', days = Number((root.querySelector('[data-an-days]') || {}).value || 30);
-      const widgets = [...root.querySelectorAll('[data-an-pick]:checked')].map((x) => ({ metric: x.dataset.anPick, days }));
-      if (!name.trim()) return toast('Name the dashboard first');
-      if (!widgets.length) return toast('Choose at least one metric');
-      const r = await api('POST', '/api/workspace-analytics/dashboards', withWs({ name, widgets })).catch(() => null);
-      if (!r || !r.ok) return toast(said(r, 'That did not save.'));
-      S.making = false; S.current = r.d.dashboard.id; toast('Dashboard saved'); return load();
-    }
+    if (d.anOpen) return goDash(d.anOpen);
+    if ('anNew' in d) return newDash();
     if (d.anDelete) {
       const id = d.anDelete, r = await api('DELETE', `/api/workspace-analytics/dashboards/${encodeURIComponent(id)}` + q()).catch(() => null);
       if (!r || !r.ok) return toast(said(r, 'That did not delete.'));
       const was = S.dashboards.find((x) => x.id === id);
-      S.undo = { id, name: was ? was.name : 'Dashboard' }; S.current = 'overview'; toast('Dashboard deleted'); return load();
+      S.undo = { id, name: was ? was.name : 'Dashboard' }; S.current = 'overview'; toast('Dashboard deleted'); goDash(null); return load();
     }
     if (d.anUndo) {
       const id = d.anUndo, u = await api('POST', `/api/workspace-analytics/dashboards/${encodeURIComponent(id)}/restore`, withWs({})).catch(() => null);
       if (!u || !u.ok) return toast(said(u, 'Could not restore it'));
-      S.undo = null; S.current = id; toast('Dashboard restored'); return load();
+      S.undo = null; toast('Dashboard restored'); await load(); return goDash(id);
     }
   }, true);
   document.addEventListener('change', (e) => {
-    const t = e.target.closest('[data-an-division]'); if (!t || !t.closest('[data-an-page]')) return;
+    const t = e.target.closest('[data-an-division]'); if (!t || !t.closest('#main')) return;
     S.division = t.value; paint(); values();
   }, true);
 
-  P.ready.then((u) => { if (u) load(); });
+  P.lazyZone(window.XENO_ZONE_LIVE['corpo.analytics'], () => load());   // the first load waits until the area is shown
 })();

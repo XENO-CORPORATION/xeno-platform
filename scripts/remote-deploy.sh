@@ -75,6 +75,20 @@ fi
 
 cd "$ROOT"
 mkdir -p .deploy/candidates
+# --- One deploy at a time on this box ------------------------------------------
+# 🔴 2026-10-24: two sessions started frontend deploys five seconds apart. Two image
+# builds on a VM ballooned to 8 GB took the load average to 149, every container went
+# unhealthy and the API answered 502 for about sixteen minutes. Nothing stopped the
+# second deploy, because each caller only looked at the box before it started and both
+# looked in the same gap. The lock is taken here, on the box, for the whole run (build,
+# swap, healthcheck, rollback), so a second deploy is refused instead of competing.
+# Non-blocking on purpose: a deploy that queues silently is how a stale one lands later.
+exec 9>"$ROOT/.deploy/deploy.lock"
+if ! flock -n 9; then
+  echo "remote-deploy: another deploy is already running on this box (see $ROOT/.deploy/deploy.log)." >&2
+  echo "remote-deploy: refusing to start a second one; retry when it has ended." >&2
+  exit 4
+fi
 LOG="$ROOT/.deploy/deploy.log"
 IMAGE="xeno-platform-$SERVICE"
 CANDIDATE_ROOT="$(mktemp -d "$ROOT/.deploy/candidates/$SHA-$SERVICE-XXXXXX")"
@@ -329,6 +343,24 @@ fi
 # carrying the network alias `backend` so nginx still resolves the pair — then
 # `up -d --no-deps backend-a` touches exactly one. That is a compose refactor,
 # not a deploy-script change, and it is what closes the last of P0.2/P0.4.
+
+# The schema moves BEFORE the swap, as its own job: the app connects as xeno_app, which cannot change it, and refuses to
+# start on a schema the job has not applied. Migrations are additive, so the replicas still serving are unharmed. A
+# failed job stops the deploy here with the old containers untouched.
+if [ "$SERVICE" = "backend" ]; then
+  log "running the migrate job with $IMAGE:latest ..."
+  if ! dc --profile jobs run --rm --no-deps -T migrate; then
+    log "migrate job FAILED — refusing swap"
+    if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then
+      docker tag "$IMAGE:rollback" "$IMAGE:latest"
+      log "restored $IMAGE:latest to :rollback"
+    fi
+    log "=== deploy end service=$SERVICE sha=$SHA FAILED (migrate) ==="
+    exit 1
+  fi
+  log "migrate job PASSED"
+fi
+
 log "swapping in new $SERVICE container(s) ..."
 dc up -d --no-deps --force-recreate "$SERVICE"
 
@@ -348,8 +380,35 @@ done
 # --- 6. Healthcheck gate ---------------------------------------------------
 # backend waits through migrations, so give it longer.
 if [ "$SERVICE" = "backend" ]; then TRIES=90; else TRIES=30; fi
+# --- 6b. Retention: superseded builds go once a newer one is live (owner, 2026-10-24) -----------
+# Every deploy left a ~1.2 GB SHA-tagged image and an extracted candidate tree behind, and nothing removed them: on
+# 2026-10-28 the box reached 100% disk and a frontend build died with ENOSPC. Keeps :latest, :rollback and the newest
+# KEEP_IMAGES SHA tags of this service, and the newest KEEP_CANDIDATES candidate trees (older than an hour, so a
+# concurrent deploy's tree is never touched). Best effort: a failure here never fails a deploy that already passed.
+prune_superseded() {
+  _keep="${KEEP_IMAGES:-3}"; _n=0
+  for _t in $(docker images "$IMAGE" --format '{{.Tag}}' 2>/dev/null); do
+    case "$_t" in latest|rollback|'<none>') continue ;; esac
+    _n=$((_n + 1))
+    [ "$_n" -le "$_keep" ] && continue
+    docker image rm "$IMAGE:$_t" >/dev/null 2>&1 && log "retention: removed superseded image $IMAGE:$_t"
+  done
+  docker image prune -f >/dev/null 2>&1 || true
+  if [ -d "$ROOT/.deploy/candidates" ]; then
+    _i=0
+    for _d in $(ls -1t "$ROOT/.deploy/candidates" 2>/dev/null); do
+      _i=$((_i + 1))
+      [ "$_i" -le "${KEEP_CANDIDATES:-4}" ] && continue
+      [ "$ROOT/.deploy/candidates/$_d" = "$CANDIDATE_ROOT" ] && continue
+      find "$ROOT/.deploy/candidates/$_d" -maxdepth 0 -mmin +60 -exec rm -rf {} + 2>/dev/null && log "retention: removed old candidate $_d"
+    done
+  fi
+  log "retention: $(df -h "$ROOT" 2>/dev/null | awk 'NR==2 {print $4 " free"}')"
+}
+
 if poll_health "$TRIES" release; then
   log "healthcheck PASSED ($(health_url))"
+  prune_superseded || true
   log "=== deploy end service=$SERVICE sha=$SHA OK ==="
   exit 0
 fi

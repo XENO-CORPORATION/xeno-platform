@@ -184,6 +184,104 @@
    ]
   },
   {
+   "name": "research.home.get",
+   "wire": "research__home__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_home"
+   ]
+  },
+  {
+   "name": "research.notebook.list",
+   "wire": "research__notebook__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_notebooks"
+   ]
+  },
+  {
+   "name": "research.notebook.get",
+   "wire": "research__notebook__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_notebook"
+   ]
+  },
+  {
+   "name": "research.run.create",
+   "wire": "research__run__create",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_run"
+   ]
+  },
+  {
+   "name": "research.run.verify",
+   "wire": "research__run__verify",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "agents:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_verify"
+   ]
+  },
+  {
+   "name": "research.run.get",
+   "wire": "research__run__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_run_get"
+   ]
+  },
+  {
+   "name": "research.claim.list",
+   "wire": "research__claim__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "research_claims"
+   ]
+  },
+  {
    "name": "corpus.corpus.query",
    "wire": "corpus__corpus__query",
    "version": "1.0.0",
@@ -548,6 +646,174 @@
    ]
   },
   {
+   "name": "places.place.explore",
+   "wire": "places__place__explore",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_explore"
+   ]
+  },
+  {
+   "name": "places.session.list",
+   "wire": "places__session__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_sessions"
+   ]
+  },
+  {
+   "name": "places.session.resolve",
+   "wire": "places__session__resolve",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_resolve_session"
+   ]
+  },
+  {
+   "name": "places.session.join",
+   "wire": "places__session__join",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "places:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_join_session"
+   ]
+  },
+  {
+   "name": "places.invite.list",
+   "wire": "places__invite__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_invites"
+   ]
+  },
+  {
+   "name": "places.receipt.list",
+   "wire": "places__receipt__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_receipts"
+   ]
+  },
+  {
+   "name": "places.needs.list",
+   "wire": "places__needs__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_needs"
+   ]
+  },
+  {
+   "name": "places.workforce.list",
+   "wire": "places__workforce__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_workforce"
+   ]
+  },
+  {
+   "name": "places.marketplace.list",
+   "wire": "places__marketplace__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_marketplace"
+   ]
+  },
+  {
+   "name": "places.funding.get",
+   "wire": "places__funding__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_funding"
+   ]
+  },
+  {
+   "name": "places.city.get",
+   "wire": "places__city__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_city"
+   ]
+  },
+  {
+   "name": "places.world.get",
+   "wire": "places__world__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "places:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "places_world"
+   ]
+  },
+  {
    "name": "places.layout.save",
    "wire": "places__layout__save",
    "version": "1.0.0",
@@ -573,6 +839,34 @@
    ],
    "aliases": [
     "agents_whoami"
+   ]
+  },
+  {
+   "name": "agents.skill.list",
+   "wire": "agents__skill__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "skills_list"
+   ]
+  },
+  {
+   "name": "agents.skill.get",
+   "wire": "agents__skill__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "agents:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "skills_get"
    ]
   },
   {
@@ -1444,6 +1738,230 @@
    ]
   },
   {
+   "name": "message.channel.list",
+   "wire": "message__channel__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "message:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_list_channels"
+   ]
+  },
+  {
+   "name": "message.channel.read",
+   "wire": "message__channel__read",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "message:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_read_channel"
+   ]
+  },
+  {
+   "name": "message.message.post",
+   "wire": "message__message__post",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "message:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_post_message"
+   ]
+  },
+  {
+   "name": "mail.thread.search",
+   "wire": "mail__thread__search",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_search_mail"
+   ]
+  },
+  {
+   "name": "mail.thread.get",
+   "wire": "mail__thread__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_read_thread"
+   ]
+  },
+  {
+   "name": "mail.thread.mark_read",
+   "wire": "mail__thread__mark_read",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_mark_read"
+   ]
+  },
+  {
+   "name": "mail.thread.star",
+   "wire": "mail__thread__star",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_star_threads"
+   ]
+  },
+  {
+   "name": "mail.thread.label",
+   "wire": "mail__thread__label",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_label_threads"
+   ]
+  },
+  {
+   "name": "mail.thread.archive",
+   "wire": "mail__thread__archive",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_archive_threads"
+   ]
+  },
+  {
+   "name": "mail.label.list",
+   "wire": "mail__label__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_list_labels"
+   ]
+  },
+  {
+   "name": "mail.draft.list",
+   "wire": "mail__draft__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_list_drafts"
+   ]
+  },
+  {
+   "name": "mail.draft.get",
+   "wire": "mail__draft__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "mail:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_read_draft"
+   ]
+  },
+  {
+   "name": "mail.draft.save",
+   "wire": "mail__draft__save",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_draft_mail"
+   ]
+  },
+  {
+   "name": "mail.thread.to_task",
+   "wire": "mail__thread__to_task",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_thread_to_task"
+   ]
+  },
+  {
+   "name": "mail.thread.to_ticket",
+   "wire": "mail__thread__to_ticket",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_thread_to_ticket"
+   ]
+  },
+  {
+   "name": "mail.thread.to_contact",
+   "wire": "mail__thread__to_contact",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "mail:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "mail_thread_to_contact"
+   ]
+  },
+  {
    "name": "support.ticket.create",
    "wire": "support__ticket__create",
    "version": "1.0.0",
@@ -1612,6 +2130,286 @@
    ]
   },
   {
+   "name": "compute.size.list",
+   "wire": "compute__size__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_sizes"
+   ]
+  },
+  {
+   "name": "compute.machine.list",
+   "wire": "compute__machine__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_list_machines"
+   ]
+  },
+  {
+   "name": "compute.machine.get",
+   "wire": "compute__machine__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_get_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.create",
+   "wire": "compute__machine__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_create_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.start",
+   "wire": "compute__machine__start",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_start_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.stop",
+   "wire": "compute__machine__stop",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_stop_machine"
+   ]
+  },
+  {
+   "name": "compute.agent.run",
+   "wire": "compute__agent__run",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_run_agent_task"
+   ]
+  },
+  {
+   "name": "compute.machine.idle_set",
+   "wire": "compute__machine__idle_set",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_set_idle_stop"
+   ]
+  },
+  {
+   "name": "compute.machine.delete",
+   "wire": "compute__machine__delete",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_delete_machine"
+   ]
+  },
+  {
+   "name": "compute.machine.exec",
+   "wire": "compute__machine__exec",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_exec"
+   ]
+  },
+  {
+   "name": "compute.file.read",
+   "wire": "compute__file__read",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_read_file"
+   ]
+  },
+  {
+   "name": "compute.file.write",
+   "wire": "compute__file__write",
+   "version": "1.0.0",
+   "class": "irreversible",
+   "scope": "compute:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_write_file"
+   ]
+  },
+  {
+   "name": "compute.usage.get",
+   "wire": "compute__usage__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_usage"
+   ]
+  },
+  {
+   "name": "compute.budget.list",
+   "wire": "compute__budget__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "compute:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "compute_budgets"
+   ]
+  },
+  {
+   "name": "automate.workflow.list",
+   "wire": "automate__workflow__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "automate:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_list_workflows"
+   ]
+  },
+  {
+   "name": "automate.workflow.get",
+   "wire": "automate__workflow__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "automate:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_get_workflow"
+   ]
+  },
+  {
+   "name": "automate.run.list",
+   "wire": "automate__run__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "automate:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_list_runs"
+   ]
+  },
+  {
+   "name": "automate.workflow.draft",
+   "wire": "automate__workflow__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "automate:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_draft_workflow"
+   ]
+  },
+  {
+   "name": "automate.workflow.edit",
+   "wire": "automate__workflow__edit",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "automate:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_edit_workflow"
+   ]
+  },
+  {
+   "name": "automate.workflow.disable",
+   "wire": "automate__workflow__disable",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "automate:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "automate_disable_workflow"
+   ]
+  },
+  {
    "name": "docs.doc.list",
    "wire": "docs__doc__list",
    "version": "1.0.0",
@@ -1724,6 +2522,34 @@
    ]
   },
   {
+   "name": "tools.tool.list",
+   "wire": "tools__tool__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "marketplace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "tools_list"
+   ]
+  },
+  {
+   "name": "tools.tool.suggest",
+   "wire": "tools__tool__suggest",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "marketplace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "tools_suggest"
+   ]
+  },
+  {
    "name": "analytics.metric.list",
    "wire": "analytics__metric__list",
    "version": "1.0.0",
@@ -1749,6 +2575,62 @@
    ],
    "aliases": [
     "analytics_query_metric"
+   ]
+  },
+  {
+   "name": "inbox.notification.list",
+   "wire": "inbox__notification__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "inbox:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_list_notifications"
+   ]
+  },
+  {
+   "name": "inbox.notification.mark_read",
+   "wire": "inbox__notification__mark_read",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "inbox:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_mark_read"
+   ]
+  },
+  {
+   "name": "inbox.notification.archive",
+   "wire": "inbox__notification__archive",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "inbox:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_archive"
+   ]
+  },
+  {
+   "name": "inbox.notification.snooze",
+   "wire": "inbox__notification__snooze",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "inbox:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "inbox_snooze"
    ]
   },
   {
@@ -1920,6 +2802,90 @@
    ]
   },
   {
+   "name": "releases.deploy.list",
+   "wire": "releases__deploy__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_list_deploys"
+   ]
+  },
+  {
+   "name": "releases.feature.list",
+   "wire": "releases__feature__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_list_features"
+   ]
+  },
+  {
+   "name": "releases.feature.get",
+   "wire": "releases__feature__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_get_feature"
+   ]
+  },
+  {
+   "name": "releases.internal_note.get",
+   "wire": "releases__internal_note__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "workspace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_get_internal_note"
+   ]
+  },
+  {
+   "name": "releases.internal_note.edit",
+   "wire": "releases__internal_note__edit",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_edit_internal_note"
+   ]
+  },
+  {
+   "name": "releases.note.draft",
+   "wire": "releases__note__draft",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "workspace:admin",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "releases_draft_note"
+   ]
+  },
+  {
    "name": "forum.thread.search",
    "wire": "forum__thread__search",
    "version": "1.0.0",
@@ -2052,6 +3018,51 @@
    ],
    "aliases": [
     "forum_mark_fixed"
+   ]
+  },
+  {
+   "name": "forum.report.submit",
+   "wire": "forum__report__submit",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forum:write",
+   "surfaces": [
+    "mcp",
+    "rest",
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_submit_report"
+   ]
+  },
+  {
+   "name": "forum.report.get",
+   "wire": "forum__report__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forum:read",
+   "surfaces": [
+    "mcp",
+    "rest",
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_get_report_submission"
+   ]
+  },
+  {
+   "name": "forum.evidence.get",
+   "wire": "forum__evidence__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forum:read",
+   "surfaces": [
+    "mcp",
+    "rest",
+    "forum-mcp"
+   ],
+   "aliases": [
+    "forum_get_report_evidence"
    ]
   }
  ]

@@ -27,6 +27,7 @@
  */
 import { resolveEntitlements } from '../utils/entitlementGate.js';
 import { normalizePath } from '../utils/modelPaths.js';
+import { tablesPresent } from '../utils/schemaPresence.js';
 
 // Lazy idempotent schema guarantee (billingService ensureSchema pattern) — the
 // canonical DDL lives in the migration; this only protects enforcement on an
@@ -34,14 +35,14 @@ import { normalizePath } from '../utils/modelPaths.js';
 let schemaPromise = null;
 function ensureSchema(db) {
   if (!schemaPromise) {
-    schemaPromise = db.query(`
+    schemaPromise = tablesPresent(db, ['inhouse_daily_usage']).then((present) => present || db.query(`
       CREATE TABLE IF NOT EXISTS inhouse_daily_usage (
         user_id uuid NOT NULL,
         day     date NOT NULL,
         count   int  NOT NULL DEFAULT 0,
         PRIMARY KEY (user_id, day)
       );
-    `).catch((e) => { schemaPromise = null; throw e; });
+    `)).catch((e) => { schemaPromise = null; throw e; });
   }
   return schemaPromise;
 }

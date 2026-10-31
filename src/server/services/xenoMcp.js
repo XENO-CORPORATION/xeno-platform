@@ -23,16 +23,25 @@ import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
 import * as peopleMcp from './peopleMcp.js';
 import * as corpusMcp from './corpusMcp.js';
+import * as skillsMcp from './skillsMcp.js';
+import * as researchMcp from './researchMcp.js';
 import * as canvases from './canvases.js';
 import * as agentsMcp from './agentsMcp.js';
 import * as storageMcp from './storageMcp.js';
 import * as supportMcp from './supportMcp.js';
+import * as releasesMcp from './releasesMcp.js';
 import * as customersMcp from './customersMcp.js';
+import * as computeMcp from './computeMcp.js';
+import * as automateMcp from './automateMcp.js';
 import * as publishMcp from './publishMcp.js';
+import * as messageMcp from './messageMcp.js';
+import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as formsMcp from './formsMcp.js';
+import * as toolsMcp from './toolsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
+import * as inboxMcp from './inboxMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -100,6 +109,14 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => corpusMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof corpusMcp.CorpusMcpError,
   },
+  // XENO Research (researchMcp.js): notebooks on a project, runs in XENO Box (refused when Box is not qualified), claims.
+  {
+    category: 'research', title: 'Research', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Research: reproducible notebooks — run in XENO Box, signed provenance, re-run and compare, claimed results as Corpus tenets.',
+    tools: () => researchMcp.TOOLS,
+    call: (db, actor, name, args) => researchMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof researchMcp.ResearchMcpError,
+  },
   // XENO Storage (storageMcp.js, WORKSPACE AGENT SURFACE P1): an agent works in its owner's Storage, the person in their own.
   {
     category: 'storage', title: 'Storage', version: '1.0.0', timeoutMs: 60_000,
@@ -116,6 +133,14 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => workforceMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof workforceMcp.WorkforceMcpError,
   },
+  // XENO Mail (mailMcp.js): the owner's mailbox through the platform. Read, label, draft; a person sends.
+  {
+    category: 'mail', title: 'Mail', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Mail (XENO Mail): search and read your owner’s mail, star, label and archive it, write drafts, turn mail into tasks, support requests and contacts. A person sends.',
+    tools: () => mailMcp.TOOLS,
+    call: (db, actor, name, args) => mailMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof mailMcp.MailMcpError,
+  },
   // XENO Publish (publishMcp.js): XENO Post through the platform. Drafts and proposed times; a person publishes.
   {
     category: 'publish', title: 'Publish', version: '1.0.0', timeoutMs: 60_000,
@@ -124,6 +149,14 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => publishMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof publishMcp.PublishMcpError,
   },
+  // XENO Message (messageMcp.js): XENO Comms through the platform. Agents read and post in channels they belong to.
+  {
+    category: 'message', title: 'Message', version: '1.0.0', timeoutMs: 30_000,
+    description: 'Message (XENO Comms): list the workspace channels you belong to, read them, and post.',
+    tools: () => messageMcp.TOOLS,
+    call: (db, actor, name, args) => messageMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof messageMcp.MessageMcpError,
+  },
   // XENO Customers (customersMcp.js): the workspace CRM. Agents read and draft; a person keeps, confirms, deletes.
   {
     category: 'customers', title: 'Customers', version: '1.0.0', timeoutMs: 20_000,
@@ -131,6 +164,22 @@ export const SERVICES = Object.freeze([
     tools: () => customersMcp.TOOLS,
     call: (db, actor, name, args) => customersMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof customersMcp.CustomersMcpError,
+  },
+  // XENO Compute (computeMcp.js): machines for agents, billed to their owner by the hour. No tool sets a cap or a price.
+  {
+    category: 'compute', title: 'Compute', version: '1.0.0', timeoutMs: 40_000,
+    description: 'Compute: list, create, start, stop and delete machines that work for you, read their cost and the workspace’s machine budgets.',
+    tools: () => computeMcp.TOOLS,
+    call: (db, actor, name, args) => computeMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof computeMcp.ComputeMcpError,
+  },
+  // XENO Automate (automateMcp.js) = XENO Workflow: read workflows and runs, DRAFT workflows a person turns on, turn one off.
+  {
+    category: 'automate', title: 'Automate', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Automate (XENO Workflow): read the workspace’s workflows and their runs, draft new ones and change them as drafts a person turns on, or turn one off.',
+    tools: () => automateMcp.TOOLS,
+    call: (db, actor, name, args) => automateMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof automateMcp.AutomateMcpError,
   },
   // XENO support (supportMcp.js): ask XENO for your owner, or — delegated — triage and DRAFT replies a person sends.
   {
@@ -148,6 +197,14 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => docsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof docsMcp.DocsMcpError,
   },
+  // XENO Tools (toolsMcp.js): find a tool and the address that opens it. Tools run on the person's side.
+  {
+    category: 'tools', title: 'Tools', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Tools: find the XENO tool that fits what someone wants to do, and the address that opens it for them.',
+    tools: () => toolsMcp.TOOLS,
+    call: (db, actor, name, args) => toolsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof toolsMcp.ToolsMcpError,
+  },
   // XENO Analytics (analyticsMcp.js): read-only metrics and saved dashboards of a workspace.
   {
     category: 'analytics', title: 'Analytics', version: '1.0.0', timeoutMs: 30_000,
@@ -164,6 +221,14 @@ export const SERVICES = Object.freeze([
     call: (db, actor, name, args) => formsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof formsMcp.FormsMcpError,
   },
+  // The inbox (inboxMcp.js): what was written to the agent itself. Its owner's inbox is not reachable from here.
+  {
+    category: 'inbox', title: 'Inbox', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Your inbox: what was written to you, newest first; mark it read, archive it, or snooze it.',
+    tools: () => inboxMcp.TOOLS,
+    call: (db, actor, name, args) => inboxMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof inboxMcp.InboxMcpError,
+  },
   // XENO Scheduling (schedulingMcp.js): read-only availability, booking pages, free slots and bookings.
   {
     category: 'scheduling', title: 'Scheduling', version: '1.0.0', timeoutMs: 30_000,
@@ -171,6 +236,14 @@ export const SERVICES = Object.freeze([
     tools: () => schedulingMcp.TOOLS,
     call: (db, actor, name, args) => schedulingMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof schedulingMcp.SchedulingMcpError,
+  },
+  // The platform's release record (releasesMcp.js): staff agents read deploys and features and DRAFT notes a person approves.
+  {
+    category: 'releases', title: 'Releases', version: '1.0.0', timeoutMs: 20_000,
+    description: 'The XENO platform release record: deploys, features and their changes; drafts customer notes a person approves. Staff agents only.',
+    tools: () => releasesMcp.TOOLS,
+    call: (db, actor, name, args) => releasesMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof releasesMcp.ReleasesMcpError,
   },
   // XENO Forum, folded in from /api/forum/mcp (kept): the same tools, the same function. Its wire names were
   // always `forum_<verb>`, so as a category the grandfathered alias is exactly the old name.
@@ -193,6 +266,14 @@ export const SERVICES = Object.freeze([
     tools: () => agentsMcp.TOOLS,
     call: (db, actor, name, args) => agentsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof agentsMcp.AgentsMcpError,
+  },
+  // the skills pinned to the agent (skillsMcp.js, docs/AGENT-IDENTITY-SKILLS-CORPUS.md D4). Agents only: people manage skills on their pages.
+  {
+    category: 'skills', title: 'Skills', version: '1.0.0', timeoutMs: 15_000, agentsOnly: true,
+    description: 'Your skills: list them, and read one (its SKILL.md and files) when it fits what you are doing.',
+    tools: () => skillsMcp.TOOLS,
+    call: (db, actor, name, args) => skillsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof skillsMcp.SkillsMcpError,
   },
   // what an agent can make and use (agentMedia.js). Agents only: a person's own screens already do all of this.
   ...[

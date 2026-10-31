@@ -133,6 +133,48 @@ test('an evaluation is a projection over evidence for a stated window, never a s
   const madeByWorker = (await decide(worker, worker, 'member.admit', 'membership', randomUUID(), [{ kind: 'review', ref: 'x' }])).rows[0].operation_id;
   const madeByAgent = (await decide(agentUser, worker, 'member.promote', 'membership', randomUUID())).rows[0].operation_id;
   const aboutScout = (await decide(owner, owner, 'division.assign', 'resource', scout)).rows[0].operation_id;
+  // XENO Tasks in the scope, in the shapes xenoTasks.js writes (status from/to, 'delegated' to an agent's user id).
+  const project = async (w) => (await pool.query(`INSERT INTO chat_projects(user_id,owner_user_id,workspace_id,created_by_user_id,updated_by_user_id,name)
+    VALUES(NULL,NULL,$1,$2,$2,'Eval') RETURNING id`, [w, owner])).rows[0].id;
+  const proj = await project(ws), projElsewhere = await project(elsewhere);
+  const task = async (p, reporter, assignee = null, delegate = null) => (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,delegate_id)
+    VALUES('t',$1,$2,$3,$4) RETURNING id`, [p, reporter, assignee, delegate])).rows[0].id;
+  const ev = (id, actor, kind, from = null, to = null, at = null) => pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind,from_value,to_value,created_at)
+    VALUES($1,$2,$3,$4,$5,$6,COALESCE($7::timestamptz, clock_timestamp()))`, [id, actor, actor === agentUser ? 'agent' : 'human', kind, from, to, at]);
+  const delegated = async (reporter) => { const id = await task(proj, reporter, worker, agentUser);
+    await ev(id, reporter, 'created'); await ev(id, reporter, 'delegated', null, agentUser); await ev(id, agentUser, 'status', 'todo', 'in_progress'); return id; };
+  // A: an agent does it, the worker reviews and accepts it (inside a minute)
+  const taskA = await delegated(worker);
+  await ev(taskA, agentUser, 'status', 'in_progress', 'in_review'); await ev(taskA, worker, 'comment'); await ev(taskA, worker, 'status', 'in_review', 'done');
+  // B: an agent closes it itself -- never reviewed
+  const taskB = await delegated(worker);
+  await ev(taskB, agentUser, 'status', 'in_progress', 'done');
+  // E: the task entered review before the window; the worker asks for changes inside it (well over a minute later)
+  const taskE = await delegated(worker);
+  await ev(taskE, agentUser, 'status', 'in_progress', 'in_review', new Date(Date.parse(since) - 120_000).toISOString());
+  await ev(taskE, worker, 'status', 'in_review', 'in_progress');
+  // C: the owner gives the worker a task; the worker does it and submits it for review
+  const taskC = await task(proj, owner, worker);
+  await ev(taskC, owner, 'created'); await ev(taskC, owner, 'assigned', null, worker);
+  await ev(taskC, worker, 'status', 'todo', 'in_progress'); await ev(taskC, worker, 'status', 'in_progress', 'in_review');
+  // Another workspace's task is not this scope's evidence
+  const away = await task(projElsewhere, worker, worker); await ev(away, worker, 'created'); await ev(away, worker, 'status', 'todo', 'done');
+  // Spend, as the gateway records it (usage names the PAYER, never a workspace): the worker pays 1000 directly and
+  // 2500 through its agent; the owner's 9000 is someone else's; the agent's media log holds 700 committed and 300
+  // released (not spent).
+  const usage = (payer, cost, agent = null) => pool.query(`INSERT INTO api_usage_logs(user_id,request_id,endpoint,method,provider,model,status,actual_cost_micro,dimensions)
+    VALUES($1,$2,'/v1/chat/completions','POST','openai','m','completed',$3,$4)`, [payer, randomUUID(), cost, agent ? JSON.stringify({ agent_user_id: agent }) : null]);
+  await usage(worker, 1000); await usage(worker, 2500, agentUser); await usage(owner, 9000, agentUser);
+  await pool.query(`INSERT INTO agent_spend_log(agent_user_id,payer_user_id,kind,amount_micro) VALUES($1,$2,'image',700),($1,$2,'video',300)`, [agentUser, worker]);
+  await pool.query(`UPDATE agent_spend_log SET state='released' WHERE agent_user_id=$1 AND amount_micro=300`, [agentUser]);
+  // An agent DEFINITION linked to the agent's account: its report is read through that account.
+  const linked = (await pool.query(`INSERT INTO workforce_resources(kind,owner_workspace_id,name) VALUES('agent',$1,'Linked') RETURNING id`, [ws])).rows[0].id;
+  await pool.query(`UPDATE agent_identities SET workforce_resource_id=$1, workforce_resource_kind='agent' WHERE user_id=$2`, [linked, agentUser]);
+  // The reporting line owner → worker → member, a division holding the member, a team naming the worker.
+  const division = (await pool.query(`INSERT INTO workforce_divisions(workspace_id,key,name,created_by_user_id) VALUES($1,'mix','Mix',$2) RETURNING id`, [ws, owner])).rows[0].id;
+  const team = (await pool.query(`INSERT INTO workforce_resources(kind,owner_workspace_id,name) VALUES('team',$1,'Crew') RETURNING id`, [ws])).rows[0].id;
+  await pool.query(`INSERT INTO workforce_employee_profiles(workspace_id,principal_id,manager_principal_id,team_resource_id,updated_by_user_id) VALUES($1,$2,$3,$4,$3)`, [ws, worker, owner, team]);
+  await pool.query(`INSERT INTO workforce_employee_profiles(workspace_id,principal_id,manager_principal_id,division_id,updated_by_user_id) VALUES($1,$2,$3,$4,$3)`, [ws, member, worker, division]);
   const until = await boundary();
   const window = { since, until };
 
@@ -157,6 +199,77 @@ test('an evaluation is a projection over evidence for a stated window, never a s
     assert.equal(person.decisions.withEvidence, 1, 'a decision that carried evidence is counted as such');
     assert.deepEqual([...person.records.decisions].sort(), [madeByWorker, madeByAgent].sort());
     assert.equal(person.runs.admitted, 3, 'the worker admitted the three runs in this scope');
+    assert.equal(first.tasks, null, 'an agent definition has no task identity');
+  });
+
+  await t.test('LIFE-04: what a person directed, did and reviewed in XENO Tasks, apart from what agents did', async () => {
+    const person = await read(owner, asWorker, window);
+    assert.deepEqual(person.tasks.mine, { created: 3, delegatedToAgents: 3, assignedToOthers: 0, started: 1, submittedForReview: 1, closedWithoutReview: 0, comments: 1 },
+      'another workspace\'s tasks are not this scope\'s evidence');
+    assert.deepEqual({ ...person.tasks.reviews, medianSeconds: typeof person.tasks.reviews.medianSeconds },
+      { accepted: 1, changesRequested: 1, decidedWithinAMinute: 1, medianSeconds: 'number' },
+      'a review is timed from the task\'s entry into review, even when that was before the window');
+    assert.ok(person.tasks.reviews.medianSeconds >= 55, 'the median sits between a seconds-long and a two-minute review');
+    assert.deepEqual(person.tasks.outcomes, { done: 2, viaAgent: 2, acceptedByHuman: 1, closedByAgent: 1, neverReviewed: 1 },
+      'work an agent closed itself is told apart from work a person accepted');
+    assert.deepEqual([...person.records.tasks].sort(), [taskA, taskB].sort(), 'every outcome counted is named');
+    const agent = await read(owner, { kind: 'principal', userId: agentUser }, window);
+    assert.deepEqual(agent.tasks.mine, { created: 0, delegatedToAgents: 0, assignedToOthers: 0, started: 3, submittedForReview: 1, closedWithoutReview: 1, comments: 0 },
+      'the agent\'s own actions are its own');
+    assert.equal(agent.tasks.outcomes.done, 2, 'and it answers for the tasks delegated to it');
+  });
+
+  await t.test('LIFE-04: credits as charged — paid directly, through agents, as an agent, and agent media apart', async () => {
+    const personal = { type: 'user', id: worker };
+    const person = await read(worker, asWorker, window, personal);
+    assert.equal(person.spend.usage, 'counted');
+    assert.deepEqual(person.spend.paid, { micro: '3500', requests: 2, viaAgentsMicro: '2500' }, 'what the person paid; someone else\'s spend is not theirs');
+    assert.deepEqual(person.spend.byAgent, [{ agentUserId: agentUser, micro: '2500', requests: 1 }], 'what went through which agent');
+    assert.deepEqual(person.spend.asAgent, { micro: '0', requests: 0 });
+    const agent = await read(worker, { kind: 'principal', userId: agentUser }, window, personal);
+    assert.deepEqual(agent.spend.asAgent, { micro: '2500', requests: 1 }, 'what the agent spent acting for this owner only');
+    assert.equal(agent.spend.agentMediaMicro, '700', 'committed media counts; released media does not');
+    // In a workspace the usage ledger cannot be placed, so it does not count there -- and the answer says so;
+    // what IS tied to the workspace is the charge on the runs admitted in it.
+    const inWs = await read(owner, asWorker, window);
+    assert.equal(inWs.spend.usage, 'not-tied-to-workspace');
+    assert.deepEqual(inWs.spend.paid, { micro: '0', requests: 0, viaAgentsMicro: '0' }, 'usage never counts in a workspace');
+    const held = (await pool.query(`SELECT coalesce(sum(h.amount_micro) FILTER (WHERE h.state='held'),0)::text AS r, coalesce(sum(h.settled_micro) FILTER (WHERE h.state='settled'),0)::text AS s
+      FROM workforce_run_admissions a JOIN workforce_run_holds wh ON wh.admission_id=a.id JOIN credit_holds h ON h.id=wh.hold_row_id
+      WHERE a.target_workspace_id=$1 AND a.actor_user_id=$2 AND a.parent_admission_id IS NULL AND a.admitted_at >= $3 AND a.admitted_at < $4`, [ws, worker, since, until])).rows[0];
+    assert.deepEqual(inWs.spend.runs, { settledMicro: held.s, reservedMicro: held.r }, 'run charges are the ledger holds of the runs admitted here');
+    assert.ok(BigInt(held.r) + BigInt(held.s) > 0n, 'and there are some');
+  });
+
+  await t.test('LIFE-04: an agent definition is reported through its agent account', async () => {
+    const def = await read(owner, { kind: 'agent', resourceId: linked }, window);
+    assert.equal(def.actingPrincipal, agentUser, 'it says which account acts for it');
+    assert.equal(def.tasks.mine.started, 3, 'its tasks are the account\'s');
+    assert.equal(def.spend.usage, 'not-tied-to-workspace');
+    const bare = await read(owner, asAgent, window);
+    assert.equal(bare.actingPrincipal, null);
+    assert.deepEqual([bare.tasks, bare.spend], [null, null], 'a definition with no account has neither, and says so');
+    assert.deepEqual(bare.notRecorded, ['contributions', 'tasks', 'spend']);
+  });
+
+  await t.test('LIFE-04: a manager reads the people below them; a roster is one row per member', async () => {
+    const { readWorkforceRoster } = await import('../src/server/services/workforceEvaluation.js');
+    assert.equal((await read(worker, { kind: 'principal', userId: member }, window)).subject.userId, member, 'a manager reads their report');
+    const refusal = (p) => p.then(() => 'allowed', (e) => e.code);
+    assert.equal(await refusal(read(member, asWorker, window)), 'not_found', 'a report does not read their manager');
+    const roster = (actor, group) => readWorkforceRoster(pool, ctx(actor), { owner: { type: 'workspace', id: ws }, group, window, expectedActorAccountId: actor });
+    const mine = await roster(worker, { kind: 'reports', id: worker });
+    assert.deepEqual(mine.members.map((m) => m.principalId), [member], 'a person reads their own reports');
+    const all = await roster(owner, { kind: 'reports', id: owner });
+    assert.deepEqual(all.members.map((m) => m.principalId).sort(), [worker, member].sort(), 'reports at every level');
+    const w = all.members.find((m) => m.principalId === worker);
+    assert.deepEqual([w.tasksCreated, w.delegatedToAgents, w.reviewDecisions, w.done, w.neverReviewed, w.closedByAgent, w.spentMicro],
+      [3, 3, 2, 2, 1, 1, (await read(owner, asWorker, window)).spend.runs.settledMicro], 'a row is that member\'s own evaluation');
+    assert.equal(all.total.spentMicro, all.members.reduce((a, m) => a + BigInt(m.spentMicro), 0n).toString(), 'the total is the sum of the rows');
+    assert.deepEqual((await roster(owner, { kind: 'division', id: division })).members.map((m) => m.principalId), [member], 'a division holds its people');
+    assert.deepEqual((await roster(owner, { kind: 'team', id: team })).members.map((m) => m.principalId), [worker], 'a team holds its people');
+    assert.equal(await refusal(roster(member, { kind: 'reports', id: worker })), 'not_found', 'nobody reads someone else\'s reports unless an admin');
+    assert.equal(await refusal(roster(worker, { kind: 'division', id: division })), 'not_found', 'a division roster is an admin\'s');
   });
 
   await t.test('LIFE-04: the same window reads the same after new evidence arrives', async () => {
@@ -199,10 +312,11 @@ test('an evaluation is a projection over evidence for a stated window, never a s
 
   await t.test('LIFE-04: what cannot be seen is said, not silently omitted or estimated', async () => {
     const r = await read(owner, asAgent, window);
-    assert.deepEqual(r.notRecorded, ['contributions', 'reviewerDecisions', 'settlements'], 'what cannot be seen is said, not silently omitted');
-    assert.deepEqual([...EVALUATION_NOT_RECORDED], r.notRecorded);
+    assert.deepEqual(r.notRecorded, ['contributions', 'tasks', 'spend'], 'what cannot be seen is said, not silently omitted');
+    assert.deepEqual([...EVALUATION_NOT_RECORDED, 'tasks', 'spend'], r.notRecorded);
+    assert.deepEqual((await read(owner, asWorker, window)).notRecorded, ['contributions'], 'a person\'s tasks and spend are read');
     // Each source named there is genuinely absent: when one is built, this fails and the projection must read it.
-    for (const table of ['workforce_contributions', 'workforce_reviewer_decisions', 'workforce_run_settlements']) {
+    for (const table of ['workforce_contributions']) {
       assert.equal((await pool.query('SELECT to_regclass($1) AS t', [table])).rows[0].t, null,
         `${table} now exists -- the evaluation must read it and stop declaring it unrecorded`);
     }

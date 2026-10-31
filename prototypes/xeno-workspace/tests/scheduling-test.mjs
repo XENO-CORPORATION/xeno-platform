@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // Corpo › Scheduling is real: booking pages, hours and bookings from /api/scheduling (a stand-in here).
 //   1. no sample mark; the area registers as live
 //   2. create a booking page → POST /pages with title, link name, length; it is listed with its public link
@@ -42,7 +43,7 @@ async function open(hash) {
     if (P.startsWith('/api/scheduling')) return json({ success: false, error: 'unexpected ' + P }, 500);
     if (P === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     return json({ success: false, error: 'not found' }, 404); });
-  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800);
+  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800); await shot(p, 'scheduling');
   return { p, errs };
 }
 
@@ -51,9 +52,11 @@ try {
   const s0 = await p.evaluate(() => ({ page: document.querySelector('[data-sc-page]')?.dataset.scPage, live: !!(window.XENO_ZONE_LIVE || {})['corpo.scheduling'], mark: !!document.querySelector('#main [data-sample-badge]') }));
   ok(s0.page === 'ready' && s0.live && !s0.mark, `Scheduling is real: live, no sample mark (${JSON.stringify(s0)})`);
 
-  await p.click('[data-sc-new]'); await wait(200);
-  await p.type('[data-sc-title]', 'Intro call'); await p.type('[data-sc-slug]', 'emilian-intro'); await p.select('[data-sc-dur]', '45');
-  await p.click('[data-sc-save]'); await wait(900);
+  ok(await p.$('#main .topbar .pg-top-acts [data-sc-new]') !== null && await p.$('#main .topbar .pg-top-tabs [data-sc-tab="pages"][aria-selected="true"]') !== null && await p.$('#main .mview [data-sc-tab], #main .mview [data-sc-new]') === null, 'tabs and New booking page live in the header bar, not the body');
+  await p.click('#main .topbar [data-sc-new]'); await wait(300);
+  ok(await p.$('.xd-sh[role="dialog"] #xdf-title') !== null, 'New booking page opens the workspace dialog');
+  await p.type('.xd-sh #xdf-title', 'Intro call'); await p.type('.xd-sh #xdf-slug', 'emilian-intro'); await p.click('.xd-sh [data-f="dur"] [data-v="45"]');
+  await p.click('.xd-sh [data-xd-submit]'); await wait(900);
   const post = db.calls.find((x) => x[0] === 'POST' && x[1].startsWith('/api/scheduling/pages'));
   ok(post && post[2].title === 'Intro call' && post[2].slug === 'emilian-intro' && post[2].durationMinutes === 45, `the page is created (${JSON.stringify(post && post[2])})`);
   ok(await p.evaluate(() => [...document.querySelectorAll('[data-sc-url]')].some((a) => a.textContent.endsWith('/api/scheduling/book/emilian-intro'))), 'it is listed with its public link');
@@ -63,7 +66,8 @@ try {
   await p.click('[data-sc-undo="p1"]'); await wait(900);
   ok(db.calls.some((x) => x[0] === 'POST' && x[1].startsWith('/api/scheduling/pages/p1/restore')) && db.pages.length === 1, 'Undo restores it');
 
-  await p.click('[data-sc-tab="availability"]'); await wait(300);
+  await p.click('[data-sc-tab="availability"]'); await wait(600);
+  ok(/\/z\/scheduling\/availability$/.test(await p.evaluate(() => window.XENO_ADDR.current().split('?')[0])), 'a tab has its own address');
   await p.click('[data-sc-on="3"]');
   await p.click('[data-sc-savehours]'); await wait(700);
   const put = db.calls.find((x) => x[0] === 'PUT');

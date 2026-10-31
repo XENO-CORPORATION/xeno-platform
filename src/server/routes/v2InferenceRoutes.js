@@ -30,6 +30,7 @@ import {
 import { attachManagedGrant } from '../services/inferenceGrants.js';
 import { recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
 import { credentialProbeLimiter, credentialModelDiscoveryLimiter } from '../middleware/rateLimiter.js';
+import { confirmationStatus } from '../services/accountConfirmation.js';
 
 /**
  * Run a credential-lifecycle op and its audit row in ONE transaction.
@@ -58,6 +59,20 @@ async function audited(req, type, metadataOf, op) {
 
 
 const router = express.Router();
+
+/**
+ * From a website session, adding a key takes a fresh "confirm it's you". A key's endpoint receives the prompts of every
+ * product routed to it, so a stolen browser tab must not be able to point them somewhere else. An app with its own token
+ * brings its own sign-in, and has no website session to confirm in.
+ */
+async function confirmedInBrowser(req, res, next) {
+  if (!req.browserSession) return next();
+  try {
+    const status = await confirmationStatus(req.db, { userId: req.user.id, sid: req.browserSession.sid });
+    if (status.confirmed) return next();
+    return res.status(403).json({ error: { code: 'confirmation_required', message: 'Confirm it’s you first' } });
+  } catch { return res.status(500).json({ error: { code: 'PLATFORM_ERROR', message: 'inference routing failed' } }); }
+}
 
 /**
  * One error shape for the whole router, matching the v2 convention
@@ -100,7 +115,7 @@ router.get('/credentials', async (req, res) => {
  * already know is dead just moves the confusion later.
  */
 // credentialProbeLimiter FIRST: a refused request must never reach the provider probe.
-router.post('/credentials', credentialProbeLimiter, async (req, res) => {
+router.post('/credentials', credentialProbeLimiter, confirmedInBrowser, async (req, res) => {
   if (!byokEnabled()) {
     return res.status(503).json({ error: { code: 'byok_disabled', message: 'bring-your-own-key is not enabled on this server' } });
   }

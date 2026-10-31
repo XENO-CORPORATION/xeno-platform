@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
+import './lib/reportBootstrap';
 // XENO Elements first, so this app's own rules win any tie on their own terms. Nothing in it targets
 // a bare element — every rule is scoped to a `.xeno-*` class or to the scrollbar — so importing it
 // restyles none of the 392 components already here. It only supplies the tokens, the scrollbar, and

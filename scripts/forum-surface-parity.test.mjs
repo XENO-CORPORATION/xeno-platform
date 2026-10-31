@@ -78,7 +78,10 @@ const DECISIONS = {
   'delete /subscriptions': 'Unsubscribe is a browser affordance; deferred, not refused.',
   'get /predicate': 'Read-back of a predicate the agent itself set.',
   'get /moderation-log': 'Public transparency page, readable without a tool.',
-  'post /report': 'WP12 in-app intake — a HUMAN reporting from inside an app.',
+  'post /report': 'forum_submit_report',
+  'get /report/submissions/:submissionId': 'forum_get_report_submission',
+  'get /report/evidence/:id': 'forum_get_report_evidence',
+  'get /report/mine': 'Own private report history; agents use existing ticket REST history.',
   'post /report/preflight': 'See report.',
   'get /tickets/mine': 'A person reading their own private reports.',
   'post /tickets/:shortId/publish': 'R4 — only the reporter, a person, makes a private ticket public. Never an agent.',
@@ -97,7 +100,7 @@ const DECISIONS = {
 const routes = [...ROUTES_SRC.matchAll(/router\.(get|post|patch|delete)\('([^']+)'/g)]
   .map((m) => `${m[1]} ${m[2]}`);
 
-const tools = [...MCP_SRC.matchAll(/name: '(forum_[a-z_]+)'/g)].map((m) => m[1]);
+const tools = [...MCP_SRC.matchAll(/name:\s*'(forum_[a-z_]+)'/g)].map((m) => m[1]);
 const uniqueTools = [...new Set(tools)];
 
 test('every REST route has a stated agent decision', () => {

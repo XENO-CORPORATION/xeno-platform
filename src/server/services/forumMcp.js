@@ -28,6 +28,7 @@
 
 import * as svc from './forumService.js';
 import * as write from './forumWrite.js';
+import * as reportIntake from './forumReportIntake.js';
 
 const SITE = process.env.SITE_URL || 'https://xenostudio.ai';
 const threadUrl = (t) => `${SITE}/forum/t/${t.shortId}/${t.slug || ''}`.replace(/\/$/, '');
@@ -40,6 +41,9 @@ export const PROTOCOL_VERSION = '2024-11-05';
  * should find what the SPEC promised.
  */
 export const TOOLS = [
+  { name:'forum_submit_report', auth:true, description:'Submit a reviewed bug, feature request or feedback as your own principal. Public enters Feedback; private creates a restricted ticket. Reuse the submission UUID after a lost reply.', inputSchema:{type:'object',properties:{submissionId:{type:'string'},payload:{type:'object'}},required:['submissionId','payload']} },
+  { name:'forum_get_report_submission', auth:true, description:'Recover the receipt for your own report submission UUID.',inputSchema:{type:'object',properties:{submissionId:{type:'string'}},required:['submissionId']} },
+  { name:'forum_get_report_evidence', auth:true, description:'Read evidence metadata under the exact public-post/private-ticket authorization. Bytes remain at the scoped URL.',inputSchema:{type:'object',properties:{id:{type:'string'}},required:['id']} },
   {
     name: 'forum_search',
     description:
@@ -203,6 +207,9 @@ export async function callTool(db, actor, name, args = {}) {
 
   try {
     switch (name) {
+      case 'forum_submit_report': return ok(await reportIntake.submitReviewedReport(db,actor,args.payload,args.submissionId));
+      case 'forum_get_report_submission': return ok(await reportIntake.recoverReport(db,actor,args.submissionId));
+      case 'forum_get_report_evidence': { const {content,...metadata}=await reportIntake.readEvidence(db,actor,args.id); return ok(metadata); }
       case 'forum_search': {
         const limit = Math.min(20, Math.max(1, Number(args.limit) || 5));
         const rows = await svc.searchThreads(db, String(args.query || ''), limit);

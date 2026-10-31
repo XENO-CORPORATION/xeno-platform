@@ -15,6 +15,7 @@
  */
 import crypto from 'node:crypto';
 import { availabilityMap } from './workforcePeople.js';
+import { cityOps } from './placesCity.js';
 
 export const CODES = Object.freeze(['bad_input', 'not_found', 'denied', 'needs_approval', 'conflict', 'rate_limited', 'unavailable', 'timeout', 'internal']);
 const STATUS = { bad_input: 400, not_found: 404, denied: 403, needs_approval: 409, conflict: 409, rate_limited: 429, unavailable: 503, timeout: 504, internal: 500 };
@@ -167,8 +168,9 @@ export async function buildSnapshot(db, me, place, access) {
   }
   const pids = [...new Set([...memberships.map((m) => m.principalId).filter((x) => !x.startsWith('res:')), ...shown.map((d) => d.head_principal_id).filter(Boolean)])];
   const principals = pids.length ? (await db.query(`SELECT u.id, COALESCE(NULLIF(u.display_name,''), u.username, 'Someone') AS name,
+      (SELECT ai.public_id FROM agent_identities ai WHERE ai.user_id = u.id) AS public_id,
       EXISTS (SELECT 1 FROM agent_identities ai WHERE ai.user_id = u.id) AS is_agent FROM users u WHERE u.id = ANY($1::uuid[])`, [pids])).rows
-    .map((u) => ({ id: u.id, displayName: u.name, isAgent: u.is_agent })) : [];
+    .map((u) => ({ id: u.id, displayName: u.name, isAgent: u.is_agent, ...(u.public_id ? { publicId: u.public_id } : {}) })) : [];
   for (const [id, name] of unnamed) principals.push({ id, displayName: name, isAgent: true });
   if (!principals.some((p) => p.id === me.id)) principals.push({ id: me.id, displayName: me.name || 'You', isAgent: me.kind === 'agent' });
 
@@ -267,6 +269,39 @@ export function validateLayout(layout) {
 
 const code = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const b = crypto.randomBytes(8); return [...b].map((x, i) => a[x % a.length] + (i === 3 ? '-' : '')).join(''); };
 
+// A session as the viewer may see it. The CODE is the host's alone; floors are the names the host chose to show
+// (exactly what a guest will see), never the others.
+const SESSION_SELECT = `SELECT s.*, p.name AS place_name, p.workspace_id, (s.host_principal_id = $1) AS host_is_me,
+    COALESCE(NULLIF(h.display_name,''), h.username, 'Someone') AS host_name,
+    (SELECT count(*)::int FROM place_session_guests g WHERE g.session_id=s.id) AS guest_count,
+    EXISTS (SELECT 1 FROM place_session_guests g WHERE g.session_id=s.id AND g.user_id=$1) AS joined
+  FROM place_hosted_sessions s JOIN places p ON p.id=s.place_id LEFT JOIN users h ON h.id=s.host_principal_id`;
+async function sessionView(db, s) {
+  const floors = s.floors ? (await db.query(`SELECT name FROM workforce_divisions WHERE id = ANY($1::uuid[]) AND workspace_id=$2 AND lifecycle='active' ORDER BY created_at, id`, [s.floors, s.workspace_id])).rows.map((r) => r.name) : 'all';
+  return { id: s.id, placeId: s.place_id, placeName: s.place_name, host: s.host_name, hostIsMe: !!s.host_is_me, title: s.title || '', audience: s.audience,
+    permissions: s.permissions, floors, guests: s.guest_count, startedAt: s.started_at, endsAt: s.ends_at, code: s.host_is_me ? s.code : null, joined: !!s.joined, state: s.state };
+}
+const INVITE_REFUSAL = { invite_not_found: ['not_found', 'That invite is no longer pending.'], invalid_invite_request: ['bad_input', 'That is not an invite id.'],
+  invite_not_pending: ['conflict', 'That invite is no longer pending.'], seat_limit: ['needs_approval', 'The workspace has no free seat. Ask its owner to add one.'],
+  workspace_identity_unavailable: ['not_found', 'That workspace is gone.'], account_identity_unavailable: ['denied', 'Your account cannot accept invites.'],
+  invalid_invite_role: ['denied', 'That invite carries a role you cannot be given.'], invite_identity_changed: ['conflict', 'The invite changed. Look again.'] };
+const CLIENT = 'xeno-places';
+const MONTH_S = 30 * 24 * 3600;
+/** A stable uuid from (actor, op, requestId): the owning services' own operation ids, so a Places retry is THEIR retry too. */
+const opUuid = (me, op, requestId) => { const h = crypto.createHash('sha256').update(`places:${me.id}:${op}:${requestId}`).digest('hex').split('');
+  h[12] = '4'; h[16] = '89ab'[parseInt(h[16], 16) % 4]; const t = h.join(''); return `${t.slice(0, 8)}-${t.slice(8, 12)}-${t.slice(12, 16)}-${t.slice(16, 20)}-${t.slice(20, 32)}`; };
+/** Map an owning service's typed refusal into the closed vocabulary (status → code). */
+const asPlace = (e) => {
+  if (e instanceof PlaceError) return e;
+  if (e?.code === 'INSUFFICIENT_GIFTABLE_CREDITS') return new PlaceError('denied', 'insufficient_giftable_credits', 'Only credits you paid for can be gifted, and you have not enough of them.');
+  const reason = e?.details?.reason || e?.code || 'refused';
+  const code = CODES.includes(e?.code) ? e.code : ({ 400: 'bad_input', 402: 'denied', 403: 'denied', 404: 'not_found', 409: 'conflict', 410: 'not_found', 429: 'rate_limited', 503: 'unavailable' }[e?.status]);
+  if (!code) return e;
+  return new PlaceError(code, String(reason).slice(0, 60), e.message || reason);
+};
+const person = (me) => { if (me.kind !== 'human') fail('denied', 'person_only', 'Only a person does this. An agent proposes; a person decides.'); };
+const normCode =(v) => String(v || '').toUpperCase().replace(/.*[?&]SESSION=/, '').replace(/[^A-Z0-9-]/g, '').replace(/^PLC-/, '');
+
 // ── operations ──────────────────────────────────────────────────────────────────────────────────────────────────
 const READS = {
   'catalog.get': async () => ({ STYLES: STYLES.map((id) => ({ id })), TEMPLATES: [{ id: 'empty', name: 'Empty lobby', divisions: [] }], CR: 1_000_000 }),
@@ -299,14 +334,222 @@ const READS = {
     for (const r of rows) if (!seen.has(r.id) || ['owner', 'admin'].includes(r.relation)) seen.set(r.id, { id: r.id, name: r.name, type: r.workspace_type, role: ['owner', 'admin'].includes(r.relation) ? r.relation : 'member', placeId: r.place_id });
     return { items: [...seen.values()] };
   },
-  'sessions.list': async (db, me) => ({ items: (await db.query(`SELECT s.id, s.place_id, p.name AS place_name, s.audience, s.permissions, s.floors, s.title, s.started_at, s.ends_at,
-      (s.host_principal_id = $1) AS host_is_me, CASE WHEN s.host_principal_id = $1 THEN s.code END AS code
-      FROM place_hosted_sessions s JOIN places p ON p.id = s.place_id WHERE s.state='live' AND s.ends_at>now()
-      AND (s.host_principal_id=$1 OR s.audience='public' OR $1 = ANY(s.invitees) OR EXISTS (SELECT 1 FROM place_session_guests g WHERE g.session_id=s.id AND g.user_id=$1))`, [me.id])).rows
-    .map((s) => ({ id: s.id, placeId: s.place_id, placeName: s.place_name, audience: s.audience, permissions: s.permissions, floors: s.floors || 'all', title: s.title, startedAt: s.started_at, endsAt: s.ends_at, hostIsMe: s.host_is_me, code: s.code })) }),
+  'sessions.list': async (db, me) => {
+    const rows = (await db.query(`${SESSION_SELECT} WHERE s.state='live' AND s.ends_at>now() AND p.lifecycle='active'
+      AND (s.host_principal_id=$1 OR s.audience='public' OR $1 = ANY(s.invitees) OR EXISTS (SELECT 1 FROM place_session_guests g WHERE g.session_id=s.id AND g.user_id=$1))
+      ORDER BY s.started_at DESC LIMIT 100`, [me.id])).rows;
+    const items = []; for (const s of rows) items.push(await sessionView(db, s));
+    return { items };
+  },
+  // A code (or a link carrying ?session=) → the session it opens, before joining. Reveals only what joining would.
+  'sessions.resolve': async (db, me, i) => {
+    const c = normCode(i.code);
+    if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)) fail('bad_input', 'code_invalid', 'A session code looks like ABCD-EF23.');
+    const s = (await db.query(`${SESSION_SELECT} WHERE s.code=$2`, [me.id, c])).rows[0];
+    if (!s || s.state !== 'live') fail('not_found', 'code_unknown', 'That code does not match a live session.');
+    if (new Date(s.ends_at) <= new Date()) fail('not_found', 'session_ended', 'That session has ended.');
+    return { session: await sessionView(db, s) };
+  },
+  'invites.list': async (db, me) => {
+    const u = (await db.query('SELECT email FROM users WHERE id=$1', [me.id])).rows[0];
+    const rows = (await db.query(`SELECT i.id, i.workspace_id, w.name AS workspace_name, i.role, i.created_at, i.expires_at,
+        COALESCE(NULLIF(f.display_name,''), f.username, 'Someone') AS from_name
+      FROM workspace_invites i JOIN workspaces w ON w.id=i.workspace_id AND w.status='active' LEFT JOIN users f ON f.id=i.invited_by_user_id
+      WHERE i.status='pending' AND (i.expires_at IS NULL OR i.expires_at > now())
+        AND (i.invited_user_id=$1 OR (i.invited_user_id IS NULL AND $2::text IS NOT NULL AND lower(i.invited_email)=lower($2)))
+      ORDER BY i.created_at DESC LIMIT 50`, [me.id, u?.email || null])).rows;
+    return { items: rows.map((r) => ({ id: r.id, kind: 'membership', workspaceId: r.workspace_id, workspaceName: r.workspace_name, from: r.from_name,
+      role: r.role === 'admin' ? 'admin' : 'member', createdAt: r.created_at, expiresAt: r.expires_at, state: 'pending' })) };
+  },
+  // Public places anyone signed in may watch (visitor: watch only). Closed floors stay nameless for a visitor too.
+  'places.explore': async (db, me) => {
+    const rows = (await db.query(`SELECT id FROM places WHERE lifecycle='active' AND visibility='public' ORDER BY opened_at DESC NULLS LAST, created_at DESC LIMIT 50`)).rows;
+    const items = [];
+    for (const { id } of rows) { const p = await loadPlace(db, id); const a = await accessFor(db, me, p); if (a) items.push(summary(p, a, await buildSnapshot(db, me, p, a))); }
+    return { items };
+  },
+  // ── Workforce / Marketplace / Funding inside Places: READ through the owning services; Places keeps no record ──
+  'workforce.catalog.list': async (db, me) => {
+    if (me.kind !== 'human') return { items: [], pending: [] };
+    const agents = await import('./platformAgents.js'), lending = await import('./agentLending.js');
+    const items = (await agents.list(db, me)).map((a) => ({ id: a.id, name: a.name, kind: 'agent', source: a.owner?.kind === 'company' ? 'company' : 'owned',
+      owner: a.owner?.kind === 'company' ? a.owner.name : (a.workspace?.name || 'You'), version: a.version ? `v${a.version}` : 'v1', skills: a.description || '',
+      desks: [...(a.workspace ? [a.workspace.name] : []), ...(a.lentTo || []).filter((l) => l.state === 'accepted').map((l) => l.workspace.name)], paused: a.paused || null }));
+    const pending = [];
+    for (const o of await lending.inbox(db, me)) {
+      const p = (await db.query(`SELECT id, name FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [o.workspace.id])).rows[0];
+      pending.push({ id: o.id, resourceId: o.agent?.id || null, resourceName: o.agent?.name || 'Agent', kind: 'agent', targetPlaceId: p?.id || null, targetPlaceName: p?.name || o.workspace.name,
+        targetDivisionId: o.division?.id || null, targetDivisionName: o.division?.name || null, proposedBy: o.from, proposedAt: o.offeredAt, state: 'proposed' });
+    }
+    return { items, pending };
+  },
+  'marketplace.list': async (db, me) => {
+    const svc = await import('./marketplaceService.js');
+    const out = [];
+    for (const kind of ['mind', 'team']) for (const l of (await svc.queryCatalog(db, { kind, limit: 50 })).listings) {
+      const price = (l.pricing || []).find((p) => p.model === 'rental'); if (!price) continue;
+      out.push({ id: l.id, name: l.title, kind: kind === 'mind' ? 'agent' : 'team', seller: l.developerName || 'XENO', text: l.summary || '',
+        priceMicro: Math.round(Number(price.priceCredits ?? price.price_credits ?? 0) * 1_000_000), unit: price.period || 'month',
+        rented: !!(await svc.getActiveEntitlement(db, me.id, l.id)) });
+    }
+    return { items: out };
+  },
+  'funding.get': async (db, me) => {
+    const { getBalanceV2 } = await import('../utils/creditLedgerV2.js');
+    const bal = await getBalanceV2(db, me.id);
+    let ledger = [];
+    if (me.kind === 'human') {
+      const { readAccountHistory } = await import('./accountHistory.js');
+      const h = await readAccountHistory(db, { actorUserId: me.id, clientId: CLIENT }, { limit: 30 }).catch(() => null);
+      ledger = (Array.isArray(h) ? h : []).map((r) => ({ at: r.at, kind: r.kind, direction: r.direction, amountMicro: Number(r.amountMicro ?? r.amount_micro ?? 0), memo: r.counterparty || r.detail || r.kind, status: r.status }));
+    }
+    // a workspace budget = its approved monthly scope ceiling (workforce_scope_spend_caps), read for places I administer
+    const ws = (await db.query(`SELECT DISTINCT p.id AS place_id, p.name, p.workspace_id FROM places p JOIN relationship_tuples t ON t.object_type='workspace' AND t.object_id=p.workspace_id::text
+      AND t.subject_type='user' AND t.subject_id=$1 AND t.relation IN ('owner','admin') WHERE p.lifecycle='active'`, [String(me.id)])).rows;
+    const allocations = [];
+    for (const w of ws) {
+      const caps = (await db.query(`SELECT id, limit_micro, state, proposed_by_user_id FROM workforce_scope_spend_caps WHERE scope_kind='workspace' AND scope_id=$1 AND window_seconds=$2 AND state IN ('approved','proposed') ORDER BY created_at DESC`, [w.workspace_id, MONTH_S])).rows;
+      const active = caps.find((c) => c.state === 'approved'), proposed = caps.find((c) => c.state === 'proposed');
+      allocations.push({ id: w.workspace_id, placeId: w.place_id, placeName: w.name, divisionName: 'Whole workspace', ceilingMicro: active ? Number(active.limit_micro) : null,
+        proposedMicro: proposed ? Number(proposed.limit_micro) : null, proposedByMe: proposed ? String(proposed.proposed_by_user_id) === String(me.id) : false, proposalId: proposed?.id || null });
+    }
+    return { balanceMicro: bal.availableMicro, ledger, allocations, giftsOpen: process.env.ACCOUNT_GIFTS_OPEN === 'true' };
+  },
+  'receipts.list': async (db, me) => ({ items: (await db.query(`SELECT receipt FROM place_operations WHERE actor_user_id=$1 ORDER BY created_at DESC LIMIT 12`, [me.id])).rows.map((r) => r.receipt) }),
+  'needs.list': async (db, me) => {
+    const live = await import('./placesLive.js');
+    const r = await live.needsYou(db, me); if (!r.ok) throw new PlaceError(r.error.code, r.error.reason, r.error.message);
+    return r.result;
+  },
 };
 
+async function wfDecide(c, me, i, accept) {
+  person(me);
+  const lending = await import('./agentLending.js');
+  try {
+    const r = await lending.decide(c, me, String(i.assignmentId || ''), accept);
+    const p = (await c.query(`SELECT id, name FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [r.workspace.id])).rows[0];
+    return { result: { assignmentId: r.id, state: accept ? 'accepted' : 'declined', placeId: p?.id || null }, revision: 2, summary: `${accept ? 'Seated' : 'Declined'} ${r.agent?.name || 'the agent'}${p ? ` · ${p.name}` : ''}` };
+  } catch (e) { throw asPlace(e); }
+}
 const WRITES = {
+  // Act on an occupant's task IN PLACE (the task card): THROUGH xenoTasks (transitionTask / updateTask), never a second
+  // write path, with this op's receipt. Tasks' own rules decide who may: a worker never accepts their own work, and an
+  // agent never approves anything it works on (also refused here, before Tasks is asked).
+  'tasks.act': async (c, me, i) => {
+    const tasks = await import('./xenoTasks.js');
+    const key = String(i.taskKey || '');
+    if (!/^T-\d{1,9}$/.test(key)) fail('bad_input', 'task_key_invalid', 'A task is named T-<number>.');
+    const action = String(i.action || '');
+    if (!['approve', 'request_changes', 'hand_off'].includes(action)) fail('bad_input', 'action_unknown', 'Approve, request changes or hand off.');
+    try {
+      const t = await tasks.getTask(c, me, key);
+      const worker = [t.assignee?.id, t.assigneeId, t.delegate?.id, t.delegateId].filter(Boolean).map(String).includes(String(me.id));
+      if (action === 'approve' && me.kind === 'agent' && worker) fail('denied', 'own_work', 'An agent never approves its own work.');
+      if (action === 'hand_off') {
+        const to = i.assigneeId === null ? null : uuid(i.assigneeId, 'assigneeId');
+        await tasks.updateTask(c, me, key, { assigneeId: to });
+      } else {
+        await tasks.transitionTask(c, me, key, { to: action === 'approve' ? 'done' : 'in_progress', note: i.note ? String(i.note).slice(0, 2000) : undefined, from: i.from || undefined });
+      }
+      const after = await tasks.getTask(c, me, key);
+      return { result: { taskKey: key, status: after.status, assignee: after.assignee || null }, revision: 1, summary: action === 'approve' ? `Approved ${key}` : action === 'request_changes' ? `Changes requested on ${key}` : `Handed off ${key}` };
+    } catch (e) {
+      if (e instanceof PlaceError) throw e;
+      if (e?.name === 'TaskError' || e?.constructor?.name === 'TaskError') throw new PlaceError({ 400: 'bad_input', 403: 'denied', 404: 'not_found', 409: 'conflict' }[e.status] || 'bad_input', e.code || 'task_refused', e.message);
+      throw e;
+    }
+  },
+  // Make an agent (platformAgents.create: the workforce definition + its principal). Owned by the workspace named, else you.
+  'workforce.agent.create': async (c, me, i, pool) => {
+    person(me);
+    const agents = await import('./platformAgents.js');
+    try {
+      const a = await agents.create(pool, me, { name: i.name, description: String(i.skills || '').slice(0, 500), workspaceId: i.ownerWorkspaceId || undefined });
+      return { result: { resourceId: a.id, name: a.name }, revision: 1, summary: `Created agent ${a.name}` };
+    } catch (e) { throw asPlace(e); }
+  },
+  // Give an agent a desk in another building = LEND it (agentLending: offered by the owner, accepted by the target's admin).
+  'workforce.assignment.propose': async (c, me, i) => {
+    person(me);
+    const p = await loadPlace(c, i.placeId);
+    const agents = await import('./platformAgents.js');
+    const divisionId = i.divisionId ? uuid(i.divisionId, 'divisionId') : undefined;
+    try {
+      const a = await agents.lend(c, me, String(i.resourceId || ''), { workspaceId: p.workspace_id, divisionId });
+      const l = (a.lentTo || []).filter((x) => x.workspace.id === String(p.workspace_id) && (x.division?.id || null) === (divisionId || null)).pop();
+      return { result: { assignmentId: l?.id || null, state: l?.state || 'proposed', placeId: p.id }, revision: 1, summary: `${l?.state === 'accepted' ? 'Seated' : 'Proposed'} ${a.name} → ${p.name}` };
+    } catch (e) { throw asPlace(e); }
+  },
+  'workforce.assignment.accept': async (c, me, i) => wfDecide(c, me, i, true),
+  'workforce.assignment.decline': async (c, me, i) => wfDecide(c, me, i, false),
+  // Rent a listing THROUGH marketplaceService.acquireListing: the ledger debit, transaction, entitlement and creator accrual.
+  // Spending credits already held is not a sale, so SALES_OPEN (which gates Stripe checkout) does not apply.
+  'marketplace.rent': async (c, me, i, pool) => {
+    person(me);
+    const svc = await import('./marketplaceService.js');
+    const listing = await svc.getListingById(pool, uuid(i.listingId, 'listingId'));
+    if (!listing || listing.status !== 'published') fail('not_found', 'listing_not_found', 'No such listing.');
+    const pricing = (await svc.getPricing(pool, listing.id)).find((x) => x.model === 'rental');
+    if (!pricing) fail('bad_input', 'not_rentable', 'This listing is not for rent.');
+    const cost = Math.round(Number(pricing.price_credits || 0) * 1_000_000);
+    if (i.approvedMicro != null && Number(i.approvedMicro) < cost) fail('needs_approval', 'budget_below_cost', 'The approved amount is below the rental cost.');
+    const r = await svc.acquireListing(pool, { user: { id: me.id }, listing, pricing, txnType: 'rent' });
+    if (!r.ok) fail(r.status === 402 ? 'denied' : r.status === 400 ? 'bad_input' : 'unavailable', r.status === 402 ? 'insufficient_credits' : 'rent_failed', r.status === 402 ? 'Not enough credits for this rental.' : String(r.error || 'The rental failed.'));
+    return { result: { entitlementId: r.entitlement.id, listingId: listing.id, chargedMicro: cost, expiresAt: r.entitlement.expires_at }, revision: 1, summary: `Rented ${listing.title}` };
+  },
+  // A gift THROUGH accountGifts (preview → confirmed commit, its own operation id = this requestId). Closed until ACCOUNT_GIFTS_OPEN.
+  'funding.gift': async (c, me, i, pool) => {
+    person(me);
+    if (process.env.ACCOUNT_GIFTS_OPEN !== 'true') fail('unavailable', 'gifts_closed', 'Gifting is not open yet.');
+    if (i.confirmed !== true) fail('bad_input', 'explicit_confirmation_required', 'Confirm the gift.');
+    const who = String(i.recipient || '').trim().replace(/^@/, '');
+    const r = UUID.test(who) ? { id: who } : (await c.query('SELECT id FROM users WHERE lower(username)=lower($1) AND is_active', [who])).rows[0];
+    if (!r) fail('not_found', 'gift_recipient_unavailable', 'No one by that name can receive gifts.');
+    const micro = Math.round(Number(i.amount) * 1_000_000);
+    if (!(micro > 0) || !Number.isSafeInteger(micro)) fail('bad_input', 'amount_invalid', 'Enter an amount above zero.');
+    const gifts = await import('./accountGifts.js');
+    try {
+      const ctx = { actorUserId: me.id, clientId: CLIENT };
+      const pv = await gifts.previewGift(pool, ctx, { recipientUserId: r.id, amountMicro: String(micro) });
+      const g = await gifts.giftCredits(pool, ctx, { recipientUserId: r.id, amountMicro: String(micro), operationId: opUuid(me, 'funding.gift', i.requestId), consentHash: pv.consentHash, confirmed: true });
+      return { result: { giftId: g.giftId, state: g.state, amountMicro: Number(g.amountMicro) }, revision: 1, summary: `Gifted ${(micro / 1e6).toFixed(2)} cr` };
+    } catch (e) { throw asPlace(e); }
+  },
+  // A workspace's monthly ceiling: PROPOSED here through workforceFunding (a second owner approves — never the proposer).
+  'funding.allocation.set': async (c, me, i, pool) => {
+    person(me);
+    const w = uuid(i.allocationId, 'allocationId');
+    const micro = Math.round(Number(i.ceiling) * 1_000_000);
+    if (!(micro >= 0) || !Number.isSafeInteger(micro)) fail('bad_input', 'ceiling_invalid', 'Enter a ceiling of zero or more.');
+    const f = await import('./workforceFunding.js');
+    try {
+      const cap = await f.proposeScopeSpendCap(pool, { actorUserId: me.id, clientId: CLIENT }, { operationId: opUuid(me, 'funding.allocation.set', i.requestId), scope: { kind: 'workspace', id: w }, windowSeconds: MONTH_S, limitMicro: String(micro) });
+      return { result: { allocationId: w, proposalId: cap.id, state: cap.state, ceilingMicro: micro }, revision: 1, summary: 'Budget proposed — another owner approves it' };
+    } catch (e) { throw asPlace(e); }
+  },
+  'funding.allocation.decide': async (c, me, i, pool) => {
+    person(me);
+    const f = await import('./workforceFunding.js');
+    try {
+      const active = (await c.query(`SELECT a.id FROM workforce_scope_spend_caps p JOIN workforce_scope_spend_caps a ON a.scope_kind=p.scope_kind AND a.scope_id=p.scope_id AND a.window_seconds=p.window_seconds AND a.state='approved' WHERE p.id=$1`, [uuid(i.proposalId, 'proposalId')])).rows[0];
+      const cap = await f.decideScopeSpendCap(pool, { actorUserId: me.id, clientId: CLIENT }, { capId: i.proposalId, operationId: opUuid(me, 'funding.allocation.decide', i.requestId), decision: i.approve ? 'approved' : 'rejected', expectedActiveId: active?.id || null });
+      return { result: { proposalId: cap.id, state: cap.state, ceilingMicro: Number(cap.limitMicro) }, revision: 1, summary: i.approve ? 'Budget approved' : 'Budget rejected' };
+    } catch (e) { throw asPlace(e); }
+  },
+  // Accept or decline a workspace invitation THROUGH the one invite-decision service (workspaceLifecycle.js); Places
+  // adds no membership record. An expired invite's terminal transition commits and answers state "expired".
+  'invites.respond': async (c, me, i) => {
+    if (me.kind === 'agent') fail('denied', 'agents_do_not_join', 'An agent does not accept workspace invitations.');
+    if (typeof i.accept !== 'boolean') fail('bad_input', 'accept_required', 'Say accept: true or false.');
+    const { decideWorkspaceInvite } = await import('./workspaceLifecycle.js');
+    let out;
+    try { out = await decideWorkspaceInvite(c, me.id, String(i.inviteId || ''), i.accept ? 'accept' : 'decline'); }
+    catch (e) { const m = INVITE_REFUSAL[e.code]; if (m) fail(m[0], e.code, m[1]); throw e; }
+    if (out.rejection) return { result: { inviteId: i.inviteId, state: 'expired', placeId: null }, revision: 1, summary: 'That invite had expired' };
+    const place = i.accept ? (await c.query(`SELECT id FROM places WHERE workspace_id=$1 AND lifecycle='active'`, [out.workspace_id])).rows[0] : null;
+    return { result: { inviteId: out.invite.id, state: out.invite.status, workspaceId: out.workspace_id, placeId: place ? place.id : null }, revision: 1, summary: i.accept ? 'Joined the workspace' : 'Declined the invite' };
+  },
   'places.layout.save': async (c, me, i) => {
     const p = await loadPlace(c, i.placeId, { lock: true }); const a = await accessFor(c, me, p);
     if (!a || !a.permissions.includes('edit')) fail('denied', 'no_edit', 'Only the workspace’s owners and admins edit the layout.');
@@ -366,10 +609,11 @@ const WRITES = {
     const s = (await c.query(`INSERT INTO place_hosted_sessions (place_id, host_principal_id, code, audience, invitees, permissions, floors, title, ends_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now() + ($9 || ' minutes')::interval) RETURNING id, code, ends_at`,
     [p.id, me.id, code(), i.audience || 'code', invitees, perms, floors, String(i.title || '').slice(0, 120), String(minutes)])).rows[0];
-    return { result: { session: { id: s.id, placeId: p.id, permissions: perms, floors: floors || 'all', endsAt: s.ends_at }, code: s.code }, revision: 1, summary: `Hosting ${p.name}` };
+    const view = await sessionView(c, (await c.query(`${SESSION_SELECT} WHERE s.id=$2`, [me.id, s.id])).rows[0]);
+    return { result: { session: view, code: s.code }, revision: 1, summary: `Hosting ${p.name} · ${s.code}` };
   },
   'sessions.join': async (c, me, i) => {
-    const raw = String(i.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    const raw = normCode(i.code);
     const s = (await c.query(`SELECT * FROM place_hosted_sessions WHERE ${i.sessionId ? 'id=$1' : 'code=$1'} FOR UPDATE`, [i.sessionId ? uuid(i.sessionId, 'sessionId') : raw])).rows[0];
     if (!s || s.state !== 'live') fail('not_found', 'code_unknown', 'That code does not match a live session.');
     if (new Date(s.ends_at) <= new Date()) fail('not_found', 'session_ended', 'That session has ended.');
@@ -386,6 +630,8 @@ const WRITES = {
     return { result: { sessionId: s.id }, revision: 2, summary: 'Session ended' };
   },
 };
+// City: leases, facades, sponsorship — one envelope, one access rule (services/placesCity.js)
+{ const city = cityOps({ fail, loadPlace, accessFor, uuid, opUuid, STYLES }); Object.assign(READS, city.READS); Object.assign(WRITES, city.WRITES); }
 export const OPS = Object.freeze([...Object.keys(READS), ...Object.keys(WRITES), 'places.opened']);
 
 /** THE entry point. Never throws: every outcome is the contract envelope. */
@@ -398,7 +644,7 @@ export async function call(db, me, op, input = {}) {
       const p = await loadPlace(db, input.placeId); if (!(await accessFor(db, me, p))) fail('denied', 'no_access', 'No access.');
       await db.query('UPDATE places SET opened_at=now() WHERE id=$1', [p.id]); return { ok: true, result: {} };
     }
-    if (WRITES[op]) { const { result, receipt } = await mutate(db, me, op, input, (c) => WRITES[op](c, me, input)); return { ok: true, result, receipt }; }
+    if (WRITES[op]) { const { result, receipt } = await mutate(db, me, op, input, (c) => WRITES[op](c, me, input, db)); return { ok: true, result, receipt }; }
     fail('not_found', 'op_unknown', `Unknown operation ${String(op).slice(0, 60)}.`);
   } catch (e) {
     if (e instanceof PlaceError) return { ok: false, error: { code: e.code, reason: e.reason, message: e.message } };

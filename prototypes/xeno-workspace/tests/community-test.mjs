@@ -1,15 +1,14 @@
 // platform-community.js: on the platform, Community is the real Forum. A stand-in /api/forum answers; the suite is
 // about the workspace's side: no sample threads, tickets or log; every action goes to the platform; refusals said.
-import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+import path from 'node:path'; import { fileURLToPath } from 'node:url';
+import {readFile} from 'node:fs/promises';import {createServer} from 'node:http';import puppeteer from 'puppeteer';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
-const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
-const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); };
 const PORT = 5195, base = `http://127.0.0.1:${PORT}`;
-const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
-await server.listen();
-const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
+const server = createServer(async(req,res)=>{try{let rel=new URL(req.url,'http://local').pathname.replace(/^\/workspace\/?/,'');if(!/\.[a-z]+$/i.test(rel))rel='index.html';const file=path.resolve(repo,'prototypes/xeno-workspace',rel);if(!file.startsWith(path.join(repo,'prototypes/xeno-workspace')+path.sep))throw new Error('outside workspace');res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8');res.end(await readFile(file));}catch{res.statusCode=404;res.end();}});
+await new Promise(r=>server.listen(PORT,'127.0.0.1',r));
+const b = await puppeteer.launch({headless:true});
 const USER = { id: 7, username: 'ada', email: 'ada@example.test', display_name: 'Ada', avatar_url: null, email_verified: true };
 const iso = (h) => new Date(Date.now() - h * 3600000).toISOString();
 const A = (name, kind = 'human') => ({ kind, handle: name.toLowerCase(), displayName: name });
@@ -52,8 +51,8 @@ async function open(hash) {
       if (path2 === '/spaces') return json({ success: true, spaces: [{ slug: 'questions', name: 'Questions', postPolicy: 'open' }, { slug: 'announcements', name: 'Announcements', postPolicy: 'staff_only' }] });
       if (path2 === '/dedup-check') return json({ success: true, candidates: sent.title.includes('layer') ? [{ shortId: 'aaaa1111', title: 'Exporting layers one by one' }] : [] });
       if (path2 === '/report/preflight') return json({ success: true, candidates: [] });
-      if (path2 === '/report') { if (sent.visibility === 'private') { const t = { shortId: 'eeee5555', product: sent.product, kind: sent.kind, title: sent.title, body: sent.body, status: 'open', statusLabel: 'Open', fixedIn: null, createdAt: iso(0), thread: null, posts: [] }; db.tickets.unshift(t); return json({ success: true, private: true, ticket: t }); }
-        const t = { shortId: 'ffff6666', slug: 'f', title: sent.title, status: 'open', space: { slug: 'feedback', name: 'Feedback' }, author: A('Ada'), postCount: 1, lastActivityAt: iso(0), tags: ['kind:' + sent.kind], score: 0, posts: [{ id: 'z0', body: sent.body, author: A('Ada'), createdAt: iso(0) }], duplicateOf: null }; db.threads.unshift(t); return json({ success: true, shortId: t.shortId }); }
+      if (path2 === '/report') { if (sent.visibility === 'private') { const t = { shortId: 'eeee5555', product: sent.product, kind: sent.kind, title: sent.title, body: sent.body, status: 'open', statusLabel: 'Open', fixedIn: null, createdAt: iso(0), thread: null, posts: [] }; db.tickets.unshift(t); return json({ success: true, private: true, shortId: t.shortId, ticket: t }); }
+        const t = { shortId: 'ffff6666', slug: 'f', title: sent.title, status: 'open', space: { slug: 'feedback', name: 'Feedback' }, author: A('Ada'), postCount: 1, lastActivityAt: iso(0), tags: ['kind:' + sent.kind], score: 0, posts: [{ id: 'z0', body: sent.body, author: A('Ada'), createdAt: iso(0) }], duplicateOf: null }; db.threads.unshift(t); return json({ success: true, private: false, shortId: t.shortId }); }
       if (path2 === '/tickets/mine') return json({ success: true, tickets: db.tickets.map(({ posts, ...s }) => s) });
       mm = path2.match(/^\/tickets\/([a-z0-9]+)$/); if (mm) { const t = db.tickets.find((x) => x.shortId === mm[1]); return t ? json({ success: true, ticket: t }) : json({ success: false, error: 'Ticket not found' }, 404); }
       mm = path2.match(/^\/tickets\/([a-z0-9]+)\/posts$/); if (mm) { db.tickets.find((x) => x.shortId === mm[1]).posts.push({ id: 'tp', kind: 'reply', body: sent.body, author: { kind: 'human', name: 'Ada', reporter: true }, createdAt: iso(0) }); return json({ success: true }); }
@@ -127,13 +126,17 @@ try {
     ok(called('POST', '/tickets/cccc3333/posts')[0]?.[2].body === 'Still happens on Linux.' && /Still happens on Linux\./.test((await main(p)).text), 'adding to a ticket goes to the platform');
     p.evaluate(() => document.querySelector('#main [data-cml="publish"]').click()); await wait(400); await p.evaluate(() => [...document.querySelectorAll('.xd [data-xd-ok]')].at(-1).click()); await wait(900);
     ok(called('POST', '/tickets/cccc3333/publish').length === 1 && /Open public thread/.test((await main(p)).text), 'making a ticket public asks first, then links the public thread');
-    p.evaluate(() => window.XA.report()); await wait(700); await fill(p, { title: 'Sidebar loses my place' }); await pickRadio(p, 'private'); await submitLast(p); await wait(1200);
+    await p.evaluate(() => window.XA.report()); await p.waitForSelector('.xreport[open]');
+    await p.type('.xreport input:not([type=checkbox])', 'Sidebar loses my place');await p.type('.xreport textarea','The sidebar selection is reset.');
+    await p.evaluate(()=>{document.querySelectorAll('.xreport select')[1].value='private';});
+    const clickReport=async text=>p.evaluate(t=>[...document.querySelectorAll('.xreport button')].find(b=>b.textContent===t).click(),text);
+    await clickReport('Review report');await wait(500);await clickReport('Send report');await p.waitForSelector('.xr-success');
     const rep = called('POST', '/report').at(-1);
-    ok(rep && rep[2].visibility === 'private' && rep[2].kind === 'bug' && rep[2].product === 'workspace' && (await p.evaluate(() => window.XENO_ADDR.current())).includes('eeee5555'), 'a private report becomes a ticket on the platform and opens it');
-    await wait(3000); ok(!/I can reproduce this and have passed it/.test((await main(p)).text), 'no invented reply writes itself into the new ticket');
-    p.evaluate(() => window.XA.report({ kind: 'feature' })); await wait(700); await fill(p, { title: 'Let me group chats by colour' }); await submitLast(p); await wait(1200);
+    ok(rep && rep[2].visibility === 'private' && rep[2].kind === 'bug' && rep[2].product === 'workspace' && await p.$eval('.xr-success',n=>n.textContent.includes('Private report sent')), 'a reviewed private report becomes a ticket with an explicit receipt');
+    await clickReport('Close');await goC(p,'My reports/eeee5555');await wait(1000);ok(!/I can reproduce this and have passed it/.test((await main(p)).text), 'no invented reply writes itself into the new ticket');
+    await p.evaluate(() => window.XA.report({ kind: 'feature' }));await p.waitForSelector('.xreport[open]');await p.type('.xreport input:not([type=checkbox])','Let me group chats by colour');await p.type('.xreport textarea','Group related conversations together.');await clickReport('Review report');await wait(500);await clickReport('Send report');await p.waitForSelector('.xr-success');
     const pub = called('POST', '/report').at(-1);
-    ok(pub && pub[2].visibility === 'public' && pub[2].kind === 'feature' && (await p.evaluate(() => window.XENO_ADDR.current())).includes('ffff6666'), 'a public idea is posted with its kind and opened');
+    ok(pub && pub[2].visibility === 'public' && pub[2].kind === 'feature' && await p.$eval('.xr-success a',n=>n.getAttribute('href').includes('ffff6666')), 'a public idea is posted with its kind and a link to the real thread');
     ok(errs.length === 0, `no page errors in reports (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
 
   // moderation
@@ -150,5 +153,5 @@ try {
     ok(fx && fx[2].version === '0.40.1' && /Fixed in 0\.40\.1\./.test((await main(p)).text) && !(await p.evaluate(() => !!document.querySelector('#main [data-cml="fixed"]'))), 'staff mark a thread fixed in a version; the thread shows it and stops offering it');
     ok(errs.length === 0, `no page errors in moderation (${JSON.stringify(errs.slice(0, 2))})`); await p.close(); }
 } catch (e) { fails++; console.log('FAIL the suite threw:', e.message); }
-await b.close(); await server.close();
+await b.close(); await new Promise(r=>server.close(r));
 console.log(fails ? `${fails} check(s) failed` : 'ALL PASS'); process.exit(fails ? 1 : 0);

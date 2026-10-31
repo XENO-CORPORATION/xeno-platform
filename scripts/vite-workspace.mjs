@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' }; // .txt: licence notices of vendored code (vendor/xterm/LICENSE.txt)
 export const shipped = (rel) => { const r = rel.split(path.sep).join('/'); return !r.startsWith('tests/') && !r.startsWith('node_modules/') && !/(^|\/)\./.test(r) && Object.hasOwn(TYPES, path.extname(r)) && !/(^|\/)package(-lock)?\.json$/.test(r); };
 
 // Every local script and stylesheet address in the page gets ?v=<hash of that file's bytes>.
@@ -36,6 +36,9 @@ export function xenoWorkspace(rootDir) {
   let outDir = path.join(rootDir, 'dist'), building = false;
   return {
     name: 'xeno-workspace',
+    // Other sessions' worktrees live under the repo. Watching them starves everything else in the process: on 2026-10-31,
+    // with 72 of them, puppeteer.launch never returned and every browser test hung with no output.
+    config: () => ({ server: { watch: { ignored: ['**/.claude/**', '**/scratchpad/**'] } } }),
     configResolved(config) { outDir = path.resolve(config.root, config.build.outDir); building = config.command === 'build'; },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {

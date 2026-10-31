@@ -60,7 +60,7 @@ export async function reconcileTask(db, taskId) {
 
 export async function addTaskFolder(db, me, key, { folderId, role = 'viewer' } = {}) {
   const t = await tasks.getTask(db, me, key);
-  if (!t.can || !(t.can.edit || t.can.triage)) throw new TaskFolderError('You can view this task but not change it', 'not_allowed', 403);
+  if (!t.can || !t.can.work) throw new TaskFolderError(tasks.NOT_YOURS, 'not_your_task', 403);   // owner, 2026-10-23: only whoever works it
   if (!ROLES.has(role)) throw new TaskFolderError('role is viewer or editor', 'invalid_role');
   const f = await shareableFolder(db, me, folderId);
   if (!f) throw new TaskFolderError('Folder not found, or not yours to share', 'folder_not_found', 404);
@@ -74,7 +74,7 @@ export async function addTaskFolder(db, me, key, { folderId, role = 'viewer' } =
 
 export async function removeTaskFolder(db, me, key, folderId) {
   const t = await tasks.getTask(db, me, key);
-  if (!t.can || !(t.can.edit || t.can.triage)) throw new TaskFolderError('You can view this task but not change it', 'not_allowed', 403);
+  if (!t.can || !t.can.work) throw new TaskFolderError(tasks.NOT_YOURS, 'not_your_task', 403);   // owner, 2026-10-23: only whoever works it
   const r = (await db.query(`DELETE FROM task_folders tf USING storage_folders f WHERE tf.task_id = $1 AND tf.folder_id = $2 AND f.id = tf.folder_id RETURNING f.owner_user_id, f.workspace_id`, [t.id, folderId])).rows[0];
   if (!r) throw new TaskFolderError('That folder is not on this task', 'not_linked', 404);
   if (!r.workspace_id) await reconcileShares(db, r.owner_user_id);

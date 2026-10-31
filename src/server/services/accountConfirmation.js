@@ -3,10 +3,12 @@
  * owns the account. Sensitive account routes ask for it (GitHub calls this sudo mode; OWASP ASVS
  * asks for re-authentication before a sensitive change).
  *
- * Two ways to prove it:
- *   password     for an account that has one
- *   email_code   a six-digit code sent to the account's address, for an account that signs in
- *                with Google, GitHub or X and has no password
+ * Ways to prove it:
+ *   password       for an account that has one
+ *   email_code     a six-digit code sent to the account's address, for an account that signs in
+ *                  with Google, GitHub or X and has no password
+ *   authenticator, passkey, recovery_code   an account with two-step sign-in. Changing two-step itself takes one of these
+ *                  (requireConfirmation({ factor: true })): a stolen password or inbox must not be able to switch it off.
  *
  * Rules that are deliberate:
  * - The proof belongs to the session (`sid`). A caller with no browser session, such as an API key,
@@ -151,6 +153,12 @@ export async function confirmWithCode(db, { userId, sid, code }) {
   return result.ok ? grant(db, { userId, sid, method: 'email_code' }) : result;
 }
 
+/** A second step already checked (services/twoStep.js), recorded as this session's confirmation. */
+export async function confirmWithSecondStep(db, { userId, sid, method }) {
+  if (!sid) return { unavailable: true };
+  return grant(db, { userId, sid, method });
+}
+
 /** Forget a session's confirmation, e.g. right after the one sensitive change it was given for. */
 export async function clearConfirmation(db, sid) {
   if (sid) await db.query('DELETE FROM account_confirmations WHERE sid = $1', [sid]);
@@ -160,11 +168,15 @@ export async function clearConfirmation(db, sid) {
  * Express gate for a sensitive account route. 403 `confirmation_required` when the session has
  * not confirmed lately; 403 `confirmation_unavailable` when the caller has no session to confirm in.
  */
-export function requireConfirmation() {
+const FACTORS = new Set(['authenticator', 'passkey', 'recovery_code']);
+export function requireConfirmation({ factor = false, hasSecondStep = null } = {}) {
   return async (req, res, next) => {
     try {
       const sid = req.auth?.sid || req.browserSession?.sid || null;
       const status = await confirmationStatus(req.db, { userId: req.user.id, sid });
+      if (status.confirmed && factor && !FACTORS.has(status.method) && await hasSecondStep(req.db, req.user.id)) {
+        return res.status(403).json({ success: false, error: 'Confirm it’s you with your second step', code: 'factor_required' });
+      }
       if (status.confirmed) return next();
       return res.status(403).json(status.available
         ? { success: false, error: 'Confirm it’s you first', code: 'confirmation_required' }

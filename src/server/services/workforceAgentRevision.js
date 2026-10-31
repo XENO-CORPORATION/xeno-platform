@@ -95,16 +95,18 @@ function runtimeOf(value, rec) {
 }
 /** The content of a revision -- the same grammar creation accepts, minus provenance and licence, which are inherited. */
 function content(value) {
-  const input = record(value, ['schemaVersion', 'instructions', 'skills', 'requestedCapabilities', 'secretReferences', 'runtime', 'provenance', 'license'], 'definition');
+  const input = record(value, ['schemaVersion', 'instructions', 'persona', 'skills', 'requestedCapabilities', 'secretReferences', 'runtime', 'provenance', 'license'], 'definition');
   // Named, not merely unknown: a caller asking to relabel what it is revising is told why it cannot.
   if (Object.hasOwn(input, 'provenance') || Object.hasOwn(input, 'license')) fail('bad_input', 'provenance_and_license_are_inherited');
   if (input.schemaVersion !== 1) fail('bad_input', 'unsupported_definition_schema');
   const instructions = input.instructions;
   if (typeof instructions !== 'string' || instructions.includes('\0') || Buffer.byteLength(instructions, 'utf8') > 32768) fail('bad_input', 'invalid_text');
   const skills = list(input.skills, 64, (item) => {
-    const skill = record(item, ['id', 'version', 'hash'], 'skill');
+    const skill = record(item, ['id', 'version', 'hash', 'bundleDigest'], 'skill');
     if (typeof skill.hash !== 'string' || !hashPattern.test(skill.hash)) fail('bad_input', 'invalid_definition_hash');
-    return { id: identifier(skill.id), version: identifier(skill.version), hash: skill.hash };
+    // XENO Corpus's bundle digest (D240), optional while pins move over from `hash` (expand/contract)
+    if (Object.hasOwn(skill, 'bundleDigest') && (typeof skill.bundleDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(skill.bundleDigest))) fail('bad_input', 'invalid_definition_hash');
+    return { id: identifier(skill.id), version: identifier(skill.version), hash: skill.hash, ...(skill.bundleDigest ? { bundleDigest: skill.bundleDigest } : {}) };
   }, (s) => s.id);
   const requestedCapabilities = list(input.requestedCapabilities, 64, identifier, (c) => c);
   const secretReferences = list(Object.hasOwn(input, 'secretReferences') ? input.secretReferences : [], 32, (item) => {
@@ -114,7 +116,17 @@ function content(value) {
     return { name: reference.name, ref: uuid(reference.ref, 'secret_reference') };
   }, (r) => r.name);
   const runtime = Object.hasOwn(input, 'runtime') ? runtimeOf(input.runtime, (v, a) => record(v, a, 'runtime')) : null;
-  return { instructions, skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) };
+  // WHO it is (docs/AGENT-IDENTITY-SKILLS-CORPUS.md D1): an Anima Mind — a role line and the Mind body (# Voice, # Style,
+  // # Boundaries, # Output …), composed by @xenosystem/anima-mind. Additive: a version without it has no persona.
+  let persona = null;
+  if (Object.hasOwn(input, 'persona') && input.persona !== null) {
+    const pr = record(input.persona, ['role', 'body'], 'persona');
+    const role = Object.hasOwn(pr, 'role') ? pr.role : '', body = Object.hasOwn(pr, 'body') ? pr.body : '';
+    if (typeof role !== 'string' || role.includes('\0') || role.length > 200) fail('bad_input', 'invalid_persona');
+    if (typeof body !== 'string' || body.includes('\0') || Buffer.byteLength(body, 'utf8') > 32768) fail('bad_input', 'invalid_persona');
+    if (role.trim() || body.trim()) persona = { role: role.trim(), body: body.trim() };
+  }
+  return { instructions, ...(persona ? { persona } : {}), skills, requestedCapabilities, secretReferences, ...(runtime && Object.keys(runtime).length ? { runtime } : {}) };
 }
 function actorOf(context) {
   const ctx = record(context, ['actorUserId', 'clientId', 'apiKeyId'], 'context');

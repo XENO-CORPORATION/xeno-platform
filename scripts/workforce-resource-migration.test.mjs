@@ -3,7 +3,7 @@ import test from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
-import { requireProofDatabase, workforceProofUnavailable } from './lib/workforce-proof-database.mjs';
+import { errorMatches, requireProofDatabase, workforceProofUnavailable } from './lib/workforce-proof-database.mjs';
 
 // Deliberately fails without an explicit disposable target; absence is not proof.
 test('workforce resource persistence against isolated PostgreSQL', { skip: workforceProofUnavailable() }, async t => {
@@ -19,7 +19,7 @@ test('workforce resource persistence against isolated PostgreSQL', { skip: workf
   const owner = randomUUID(), creator = randomUUID(), workspace = randomUUID();
   const agent = randomUUID(), team = randomUUID(), companyAgent = randomUUID();
   const hash = 'a'.repeat(64);
-  const denied = (sql, values, code) => assert.rejects(pool.query(sql, values), e => e.code === code);
+  const denied = (sql, values, code) => assert.rejects(pool.query(sql, values), e => errorMatches(e, code));
   let createdSchema = false;
   try {
     await pool.query(`CREATE SCHEMA "${schema}"`);

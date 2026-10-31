@@ -33,7 +33,7 @@ import { upstreamFetch } from './upstream.js';
  * would mean one careless click permanently disables the only warning the
  * business gets. Nobody can opt out of being told they are being sued for a
  * chargeback. */
-const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened', 'account_code', 'email_changed_notice']);
+const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened', 'account_code', 'email_changed_notice', 'two_step_changed']);
 
 // --------------------------------------------------------------------------
 // XENO branded email wrapper
@@ -591,6 +591,17 @@ const templates = {
    * apart by `purpose`: proving it is them before a sensitive change, and proving they can read a
    * new address before it replaces the old one. There is no link on purpose: the code is only
    * useful to the signed-in session that asked for it. */
+  /* What protects an account changed. If it wasn't them, this is how they find out. */
+  two_step_changed: ({ displayName, change = 'Your sign-in settings changed', when = 'just now' }) => ({
+    subject: 'Your XENO sign-in changed',
+    html: wrapInLayout('Your sign-in changed', `
+      ${mailHeading('Your sign-in changed')}
+      ${mailText(`Hi ${escapeHtml(displayName)}. ${escapeHtml(change)} on ${escapeHtml(when)}.`)}
+      ${hairline(14, 12)}
+      ${mailText('If this was you, there’s nothing to do. If it wasn’t, change your password and sign out everywhere from your account page, then contact support.', { muted: true })}
+    `, escapeHtml(change)),
+  }),
+
   account_code: ({ displayName, code = '000000', purpose, expiresIn }) => ({
     subject: purpose === 'email_change' ? 'Confirm your new XENO email address' : 'Your XENO confirmation code',
     html: wrapInLayout(purpose === 'email_change' ? 'Confirm your new email' : 'Confirm it’s you', `
@@ -827,6 +838,29 @@ const templates = {
     `, `${authorName || 'Someone'} named you in a thread.`),
   }),
   // XENO Tasks: one template for every task notification (assigned, review requested, mentioned, due, overdue …)
+  account_deletion: ({ displayName, eraseAt }) => {
+    const on = new Date(eraseAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return {
+      subject: `Your XENO account will be deleted on ${on}`,
+      html: wrapInLayout('Your account is being deleted', `
+      ${mailHeading('Your account is being deleted')}
+      ${mailText(`Hi ${escapeHtml(displayName || 'there')}, you asked to delete your XENO account. It will be deleted on ${escapeHtml(on)}.`)}
+      ${mailText('Changed your mind? Sign in before then and choose Keep my account in Settings. If this wasn’t you, sign in now and change your password.')}
+    `, `Your account will be deleted on ${on}`),
+    };
+  },
+  inbox_digest: ({ displayName, period, items = [], more, inboxUrl, unsubscribeUrl: unsubUrl }) => ({
+    subject: `Your XENO ${period === 'weekly' ? 'week' : 'day'}: ${items.length}${more ? '+' : ''} unread`,
+    html: wrapInLayout('Your inbox', `
+      ${mailHeading(period === 'weekly' ? 'Your week' : 'Your day')}
+      ${mailText(`Hi ${escapeHtml(displayName || 'there')}, this is what is unread in your inbox.`)}
+      ${items.map((t) => mailText(escapeHtml(t))).join('')}
+      ${more ? mailText('And more in your inbox.', { muted: true }) : ''}
+      ${mailButton(inboxUrl, 'Open your inbox')}
+      ${hairline(14, 12)}
+      ${mailText(`You chose this digest in your notification settings.${unsubUrl ? ` <a href="${escapeHtml(unsubUrl)}" style="color:#acacb4;">Turn off these emails</a>.` : ''}`, { muted: true })}
+    `, `${items.length}${more ? '+' : ''} unread in your inbox`),
+  }),
   task_notification: ({ displayName, heading, sentence, taskTitle, taskUrl, excerpt, unsubscribeUrl: unsubUrl }) => ({
     subject: `${heading}: ${taskTitle}`,
     html: wrapInLayout(heading, `

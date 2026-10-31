@@ -85,7 +85,7 @@ in `nginx/default.conf`, `public/robots.txt`, `scripts/prerender-products.mjs` o
 
 | What | Where | Reverting it by accident looks like |
 |---|---|---|
-| **Signup gated on all 3 paths** | `src/server/middleware/registrationGate.js` — one choke point for `POST /register`, `POST /register-with-handle`, **and the OAuth auto-create** in `findOrCreateOAuthUser` | ⚠️ **TEMPORARILY OPEN until 2026-08-28** for the YC review window — `REGISTRATION_OPEN_UNTIL=2026-08-28` is set in the **box's** `docker-compose.yml` (not the repo's). It **closes itself** on the 29th with no action needed; unset/malformed/past all resolve CLOSED. Pinned by `scripts/registration-gate.test.mjs` |
+| **Signup gated on all 3 paths** | `src/server/middleware/registrationGate.js` — one choke point for `POST /register`, `POST /register-with-handle`, **and the OAuth auto-create** in `findOrCreateOAuthUser` | **CLOSED, deliberately (owner, 2026-10-30: "no public sign in, we won't need that").** Measured that day: `REGISTRATION_OPEN=false` in the backend, and `POST /api/auth/register` answers 403 `registration_closed`. Do not reopen it as a side effect. Pinned by `scripts/registration-gate.test.mjs` |
 | **Suspension actually enforced** | `assertAccountUsable()` on every OAuth branch | Password login always checked `is_active`; **OAuth never did**. Removing those calls makes a suspension unenforced for the 162 OAuth accounts |
 | **`X-Robots-Tag: noindex, nofollow, noarchive`** | `nginx/default.conf` — server level **and** the 3 `location` blocks that set their own headers | nginx drops **all** inherited `add_header` in any block that declares one. Delete a copy and the header vanishes on static assets — and Google indexes images independently of their page |
 | **No sitemap** | `scripts/prerender-products.mjs` (generation commented out, stale `dist/sitemap.xml` removed) | Restoring it re-advertises 268 URLs with a fresh `<lastmod>` |
@@ -105,7 +105,11 @@ the API, OAuth, static assets, `/install/spawn.ps1`, and the sign-in/legal pages
 |---|---|---|
 | **Access code** | `SITE_GATE_CODE` typed on Coming soon → signed `__Host-xeno_gate` cookie, 7 days, 10 attempts / 15 min per address | Opens **pages only**. Rotating the code invalidates every issued cookie; there is no per-person revocation |
 | **Account** | An ACTIVE account that is an admin or matches `SITE_GATE_ALLOW` (`@xenosystem.ai,@bnkrsys.com`) | Signed in alone is NOT access — signup is open |
+| **Personal code** (owner, 2026-10-20) | Admin creates one per person/fund at `/workspace/support/access` (`/api/site-gate/codes`, admin only; `services/siteAccessCodes.js`). Shown ONCE; only a SHA-256 is stored. Scope `pages` (default) or `account` | The cookie (`v2.<exp>.<code id>.<hmac>`) names the code and `/check` re-reads its row, so **revoke/expiry shut every browser at once**. `account` also sets the PR #824 share invitation (24 h) so registrationGate admits signup — no second signup path. Expiry required (default 30 d, max 365), optional max uses, audit in `site_access_code_events` (country only, never an IP) |
 | Off | `SITE_GATE=` (anything but `on`) → 204 for everyone | The flag is the whole switch |
+
+**One host:** `www.xenosystem.ai` 301s every page to `https://xenosystem.ai` (path + query kept; `/api/` 308 so POSTs survive), because the `__Host-` gate cookie is per host. No OAuth client registers a www redirect URI (box, 2026-10-20).
+⚠️ Not built: a code that INVITES a specific email, and linking a created account back to the code it was created under (only "browsed under it while signed in" is recorded).
 
 🔴 **The sign-in page must never be gated.** The bypass serves the shell from the named
 `@spa_shell` location; `try_files … /index.html` is an internal redirect that re-enters the
@@ -116,6 +120,28 @@ the disabled sitemap staying a true 404.
 ⚠️ **The code and its cookie are not auth.** `/api/` still requires an account, and
 `/workspace` still redirects to `/login` for a code holder. A client-rendered site cannot hide
 its JS bundle either: the gate hides pages, not compiled assets.
+
+**Homepage is Home v21, a static document (owner, 2026-10-22).** `/` is served by nginx
+`location = /` from `public/home-v21/index.html` — the owner's `XENOsystem Home v21.dc.html`
+handoff forked verbatim with its dc-runtime (React/Babel vendored under `home-v21/vendor/`,
+no CDN), because its ~1,100 lines of DOM/canvas logic do not survive transcription.
+Re-import with `node scripts/import-homepage-v21.mjs <extracted zip dir>`. The SPA route `/`
+is only `HomeV21Redirect` (in-app navigation hands back to nginx); the previous React
+homepage stays at `/v3`. `/home-v21/` is `no-cache`, never the 1y immutable rule.
+`npm run test:homepage-v21` pins all of it. Its demo panels call `window.claude.complete`
+when a host provides it and otherwise toast that no model is reachable — that degradation
+is the prototype's own, not a bug.
+
+**Product pages are the v2 designs (owner, 2026-10-22).** `/products` and bare
+`/product/<slug>` serve the owner's XO PRODUCTS designs as static documents
+(`public/product-pages/…`, runtime under `public/products-v2/`), forked verbatim
+like the homepage; spec + falsification record: `specs/products-pages-v2.md`.
+Re-import with `node scripts/import-products-v2.mjs <extracted zip dir>` — it
+regenerates `src/lib/productDesigns.ts`, rewrites design cross-links and forces
+downloads through `/product/<slug>/download/win` (raw R2 installer URLs in a
+design are a gate bypass, never shipped). `sdk`, `acp`, `research`, `use`, `audio`
+have no design and keep their React pages; sub-addresses (download/releases/docs)
+are untouched. `npm run test:products-v2` pins all of it.
 
 
 ⚠️ **De-indexed ≠ inaccessible, and that distinction is deliberate.** Every page still returns
@@ -213,8 +239,18 @@ Rules that are easy to break:
 - **Never add a second code path.** REST, MCP tools and screens all call `xenoTasks.js`; an MCP tool that queries on its own will drift.
 - **A self-registered client's token is `aud: xeno-tasks` and must stay refused by every other API.** `authMiddleware` requires `xeno-api`; do not widen it.
 - **An OAuth sign-in acts as the person's own per-app agent (`agent_origin='mcp'`), never as the person.**
+- **Only whoever holds a task works on it** (owner, 2026-10-23; `../xeno-tasks/SPEC.md` §3a): anyone who can see it reads it and may take it; comment, images, sub-tasks, links, folders, moves and copy for agent need `mayWork` (assignee, agent delegate, creator, project admin) — the reviewer only reviews. New task actions go through `mayWork`/`mayComment` in `xenoTasks.js`, and screens read `can.work`/`can.comment`/`can.take`.
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
+
+## 🧰 XENO Tools (tools.xenosystem.ai) is its OWN product, served from HERE (owner, 2026-10-28)
+
+`src/toolHost/` (`Picker.tsx`, `chrome.tsx`, `main.tsx`, `tools.css`, served by `tool-host.html`) over
+`routes/toolsRoutes.js` → `services/toolPackages.js`. It is not a workspace page: XENO Workshop's 44px header, no side
+panel, results update as you type, **Create my own only after something is typed** (→ `workshop.xenosystem.ai/?start=`,
+xeno-workshop #26). The tools themselves, their signing (key #2 since 2026-10-28; Hub ≥ 0.11.22) and the rule that a
+person's own tool is never signed by XENO and only runs sealed are in `../xeno-tools/CLAUDE.md` §🌐. Design:
+https://claude.ai/artifact/EYy1EHJsDN8nFDecuBvi21 · test: `prototypes/xeno-workspace/tests/tools-test.mjs`.
 
 ## 🛟 XENO support lives HERE — Help ▸ Contact support (2026-10-20)
 
@@ -247,6 +283,18 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
 - **Dedupe**: one contact per email per workspace (unique index); CSV import is a dry run unless `confirm`, skips or
   fills blanks on an existing email, never overwrites.
 - Proofs: `npm run test:customers` (real Postgres, 60 checks, mutation-checked ×4) and `npm run test:customers-ui`.
+## ✉️ Office › Mail is a FRONT-END to XENO Mail (2026-10-23)
+
+`services/xenoMail.js` (the one service) → xeno-mail's capability surface, server-to-server, with a 60 s platform-signed
+assertion (`aud xeno-mail`, same contract as Publish). Routes `mailRoutes.js` (`/api/mail`), agents `mailMcp.js`
+(`mail.*`), screen `platform-mail.js` at `/workspace/office/spaces/mail/<folder>[/<thread id>]`. Record: `docs/MAIL-XENO-MAIL.md`.
+- **No mail is stored here** — only which of the person's own addresses a workspace reads (`mail_workspace_mailboxes`,
+  carried as `mail_address`; mail-core binds it or refuses, never falls back) and ids of agent drafts.
+- **Sending is a person's, with `confirm: true`** (the screen asks twice). An agent's send becomes a draft; MCP has no
+  send/discard/mailbox tool; mail-core refuses `act` on irreversible capabilities too.
+- Fails closed without `XENO_MAIL_API_URL`. mail-core's VM (132) was STOPPED on 2026-10-23 — see the record's Hosting.
+Proofs: `npm run test:workspace-mail` (real Postgres + fake mail-core), `scripts/workspace-mail-mutation-check.mjs`, `npm run test:mail-ui`.
+
 ## 📅 Corpo › Scheduling lives HERE (2026-10-20)
 
 `services/scheduling.js` is the one service (screen `platform-scheduling.js`, routes `schedulingRoutes.js`, agents
@@ -260,6 +308,53 @@ Private requests to XENO: `services/supportTickets.js` (the one service), `route
 - Mail is OFF unless `SCHEDULING_EMAILS=true` (listed in compose). Bookings show in Places/assignment through
   `workforcePeople.availability*` (`reason: 'in_meeting'`).
 Proofs: `npm run test:scheduling` (real Postgres, 58 checks, mutation-checked ×4), `npm run test:scheduling-ui`.
+
+## ⚙️ Dev › Automate IS XENO Workflow — never a second engine here (owner, 2026-10-23)
+
+*"for automate we already have xeno workflow that needs to power this … why are you inventing stuff that we already
+have as products?"* Decision record: `docs/AUTOMATE-XENO-WORKFLOW.md`. The engine is xeno-workflow's own, run by its
+headless runner (`xeno-workflow/src/headless`, `docs/HEADLESS-RUNNER.md`). This repo stores the graphs, delivers the
+triggers and owns the authority: `services/xenoWorkflow.js`, `routes/automateRoutes.js` (`/api/automate`, webhooks
+at `/api/automate/hooks/:id`), `workers/automateWorker.js` (leader only), `services/automateMcp.js`, screens
+`platform-automate.js`.
+- **Never add workflow execution logic here.** A node type, a retry rule or a step runner belongs in xeno-workflow.
+- **A run acts only through `/api/v1`**, with a per-run `xwk_` key for the workflow's OWN agent. That agent is granted
+  exactly the capabilities its graph calls, and only once a PERSON enables the workflow (a DB trigger refuses an
+  agent). Do not hand the runner any other credential.
+- Events are idempotent per `(workflow, event_key)`. A ticket event carries no title or body.
+- Unset `XENO_WORKFLOW_RUNNER_URL` means nothing runs (fail closed). Proofs: `test:xeno-workflow`,
+  `test:xeno-workflow-e2e` (needs the built runner bundle), `test:automate-mutation`, `test:automate-ui`.
+
+## 📦 The release record is XENO Index's governance core — HOSTED here (owner, 2026-10-20; owner moved, 2026-10-23)
+
+🔴 **The code is OWNED by `xeno-index`** (`packages/index/src/governance/`, `@xenosystem/index/governance`; decision
+`xeno-index/docs/decisions/0001-release-governance-record.md`). This repo HOSTS it: the tables (its migrations), identity,
+entitlements (injected in `services/releaseRecord.js`, fail-closed), `/api/releases`, the MCP transport and the screens —
+which are the Index's UI surface. The code is vendored byte-identical in `src/server/vendor/xeno-index/governance/`
+(+ `SOURCE.json`); `services/release*.js` are re-export shims so every import, URL and tool is unchanged.
+**Never edit the vendored files** — change xeno-index, then `node scripts/index-governance-vendor.mjs --sync --confirm`.
+`npm run test:index-governance-vendor` fails on an edited copy, a stale copy, or a migration that differs from the Index
+schema. A schema change = a new migration here AND the same bytes in `xeno-index/packages/index/schema/`. Never start a
+second release/changelog record.
+
+One record, three layers: the service (vendored, via `services/releaseRecord.js`), `routes/releaseRoutes.js` (`/api/releases`),
+`services/releasesMcp.js` (`releases.*`), screens `prototypes/xeno-workspace/platform-releases.js` at
+`/workspace/releases[/deploys[/<id>]|/features[/<id>]|/notes|/whats-new]`.
+
+- **Deploys are written by the deploy, never by hand.** `scripts/deploy-platform.mjs` pipes the facts it observed to
+  `src/server/scripts/record-deploy.mjs` inside the backend container at the end of every deploy, OK or failed. A
+  "RELEASE RECORD NOT WRITTEN" line is a defect to fix, not noise.
+- **History is imported, never typed:** `npm run release-history -- collect --out h.json` (gh + the box's
+  `.deploy/deploy.log`, read-only), then `import --file h.json` — DRY-RUN by default, `--confirm` to write, idempotent.
+  Deploys from the log are `reconstructed` with the log as evidence; the log never recorded who deployed, so that stays
+  empty. Features grouped from PR titles are `derived`.
+- **A PR names its feature** with a `Feature: <slug>` line (`.github/pull_request_template.md`).
+- **Nothing is public by default.** A customer's What's new shows a note only when it is APPROVED by a human on staff,
+  its feature is LIVE, and the feature is enabled for them (all / plans / workspaces). The customer read selects only
+  the note's words and date. Approving or enabling is a person's act: no agent tool, and a trigger refuses an agent's
+  or non-staff approval.
+- Proofs: `npm run test:release-record` (real Postgres), `test:release-record-mutation` (5 mutations, all caught),
+  `test:releases-ui` (browser), `scripts/release-history.test.mjs`.
 
 ## Project-aware chat: context must reach the model, not only the audit
 
@@ -286,6 +381,27 @@ A form belongs to a workspace (§8.11): viewers list, editors build and read res
 - Response → contact / task / ticket. Contact goes through `customersArea()`, the one seam to `services/customers.js`
   (`createContact` + a timeline note; a known email is matched, never duplicated). Each action runs once per response.
 - Proofs: `npm run test:forms` (real Postgres, 7/7 mutations killed), `npm run test:forms-ui` (browser, 4/4).
+
+## 🪪 An agent's identity is an Anima Mind; skills are the open Agent Skills format (owner, 2026-10-24)
+
+Decision record: `docs/AGENT-IDENTITY-SKILLS-CORPUS.md`. WHO an agent is lives in its version as `persona: { role, body }`
+(an Anima Mind body: `# Voice`, `# Style`, `# Boundaries`, `# Output` …) and is composed by `@xenosystem/anima-mind`'s own
+`composePersonaPrompt` in `agentGuidance.identityOf` — first in every brief, task guidance and `agents_whoami`. Import and
+export are mind.xeno through Anima's parser and injection scanner (`services/agentMind.js`). Never write a second
+persona composer or format. Skills (`skills.js`) and their Marketplace listings (`marketplaceSkillPackages.js`, kind `skill`) are
+immutable, hashed, pinned and never auto-updated; storage is moving into XENO Corpus per the record's §7 4a — follow
+Corpus's record and digest, never invent a third skills model.
+- **Corpus's code is vendored, never copied:** `src/server/vendor/xeno-corpus/` (`corpus-skill-format.mjs` = digest and
+  records, `corpus-secret-rules.mjs` = THE skill secret gate), byte-identical, pinned in `SOURCE.json`, gated by
+  `npm run test:corpus-skill-format-vendor`. Change xeno-corpus, then `--sync --commit <sha> --confirm`.
+- **A skill file's bytes never change:** text inline (BOM/CRLF kept), anything else in `skill_objects` by its digest.
+  Never decode an upload "to be safe" — that is what made binary skills impossible and digests disagree with Corpus.
+- **`npm run test:skills-corpus-import`** with `XENO_CORPUS_STORE=<corpus>/skills` imports a real store read-only and
+  fails if the platform ever disagrees with Corpus about a digest; with `XENO_REAL_SKILL_ROOTS=1` it also picks this
+  machine's Claude Code / Codex / agy / workspace skill folders and requires Corpus's survey and digests exactly.
+- **What a folder holds is Corpus's `detectBundles`; what a skill may do is `inspect`** (Corpus secrets + Anima
+  take-over + Corpus malicious-skill rules). Never add a detection or risk rule here — change xeno-corpus and re-sync.
+  block = never, confirm = a person's yes (`acknowledge`, people only), review = kept with the version.
 
 ## 🧭 Workforce runs are ADMITTED, then RE-ASKED — the authority lives HERE (2026-09-25/26)
 
@@ -359,6 +475,22 @@ What it means for work started from this side:
   declared on `.xeno`, a selector apps nest, so every nested scope reset it and both constructions
   rendered identically — with 864 tests green.
 - **When the base moves, merge it in — never rebase.** Someone else's history is not ours to rewrite.
+
+## 🔗 The credit ledger proves itself, and the app does not run as the database admin (owner, 2026-10-30)
+
+Read `docs/LEDGER-OPERATIONS.md` before touching `credit_transactions` or reacting to a `[LedgerChain]` log line, and
+`docs/DATABASE-ROLES.md` before changing a migration or a database credential. Record:
+`docs/decisions/2026-10-30-ledger-chain-v2.md`.
+
+- **The DATABASE numbers and fingerprints every journal row** (trigger `ledger_chain_append`), from any writer. Never compute
+  a chain hash in application code, and never recompute an existing one: history is sealed, not rewritten.
+- **Every hour the heads are signed and written to `xeno-artifacts/ledger-anchors/`** under a ten-year retention lock. A
+  disagreement with the bucket blocks new checkpoints on purpose. Do not "clear" it; read the operations doc.
+- **The app connects as `xeno_app`: data only.** Never run DDL during a request: it fails in production on whichever request
+  reaches it, and tests run as a superuser so they will not notice. `scripts/no-request-time-ddl.test.mjs` refuses it.
+- **Schema changes go in a migration, applied by the `migrate` job before the swap.** That job is the only service holding
+  `POSTGRES_PASSWORD`, and a gate refuses it anywhere else.
+- A scripted fake DB in a test must answer `to_regclass` presence checks; billing helpers ask before any fallback DDL.
 
 ## 💳 Billing is LIVE-provisioned and SALES ARE CLOSED BY A SWITCH (2026-09-11)
 

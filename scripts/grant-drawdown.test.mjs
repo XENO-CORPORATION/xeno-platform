@@ -46,6 +46,8 @@ function ledgerFixture(kinds, cost) {
     // refuseRunHold asks whether a workforce RUN owns this hold id. A drawdown hold never does, so the
     // probe finds nothing; answering it keeps this stub about the drawdown, not about the run path.
     if (sql.startsWith("SELECT 1 FROM credit_holds WHERE user_id=$1 AND hold_id=$2 AND surface=")) return { rows: [], rowCount: 0 };
+    // planFunding asks whose wallet it is (usageCreditFunding.js): these tests model a person's account
+    if (sql.startsWith('SELECT owner_kind FROM credit_accounts')) return { rows: [{ owner_kind: 'user' }] };
     throw new Error(`Unexpected query: ${sql}`);
   };
   return { pool: { connect: async () => ({ query, release() {} }) }, lots, writes, balance: () => balance };

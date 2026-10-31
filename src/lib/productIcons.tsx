@@ -8,7 +8,7 @@ import {
   Plug, Bot, TerminalSquare, Sparkles, Cpu, Package, SquareTerminal, Workflow,
   Gamepad2, MousePointerClick, Blocks,
   LayoutGrid, Globe, MessagesSquare, Puzzle, Send, MessagesSquare as Forum,
-  Boxes,
+  Boxes, FlaskConical, HardDrive, ShieldCheck,
 } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -68,6 +68,9 @@ export const PRODUCT_ICON: Record<string, React.ReactNode> = {
   sdk:       <Package className={I} />,
   shell:     <SquareTerminal className={I} />,
   spawn:     <Rocket className={I} />,
+  storage:   <HardDrive className={I} />,
+  corpus:    <ShieldCheck className={I} />,
+  research:  <FlaskConical className={I} />,
   workflow:  <Workflow className={I} />,
   engine:    <Gamepad2 className={I} />,
   use:       <MousePointerClick className={I} />,

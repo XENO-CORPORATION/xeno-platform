@@ -75,6 +75,7 @@
     play: '<path d="M8 5.5v13l10-6.5z"/>',
     flow: '<path d="M4 5h6v5H4zM14 14h6v5h-6zM7 10v4.5a2 2 0 0 0 2 2h5"/>',
     box: '<path d="M12 3.5 20 8v8l-8 4.5L4 16V8z"/><path d="M4 8l8 4.5L20 8M12 12.5v8"/>',
+    server: '<path d="M4.5 4.5h15v6h-15zM4.5 13.5h15v6h-15z"/><path d="M8 7.5h.01M8 16.5h.01M12 7.5h4M12 16.5h4"/>',
     grid: '<path d="M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z"/>',
     download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/>',
     activity: '<path d="M3.5 12h4l2.5-6 4 12 2.5-6h4"/>',
@@ -174,6 +175,8 @@
     const cur = (k) => (k === 'home' && S.view === 'mode') || (k === 'chat' && S.view === 'product' && S.product === 'chat') || (S.view === 'global' && S.global === k);
     const rb = (k, icon, label, kbd = '') => `<button class="rbtn" data-go="${k}" aria-label="${label}" data-tip="${label}" data-kbd="${kbd}" aria-current="${cur(k)}">${ic(icon)}${k === 'bell' ? '<span class="badge"></span>' : ''}</button>`;
     const pins = pinsFor(S.mode).map((id) => { const p = PR[id]; const on = S.view === 'product' && S.product === id; return `<button class="rbtn" data-product="${id}" data-tip="${esc(p.name)}" aria-label="${esc(p.name)}" aria-current="${on}">${pIcon(p, 22)}</button>`; }).join('');
+    // Cloud Shell (platform-shell.js): only for accounts it is open to, which is known after the rail is first built
+    const shellBtn = () => (window.XENO_SHELL && window.XENO_SHELL.available ? rb('shell', 'terminal', 'Cloud Shell — a terminal on your own machine', 'Ctrl `') : '');
     const rail = $('#rail'), logoMark = onDash ? 'xeno' : S.mode;
     const logoLabel = `${onDash ? 'Overview' : M[S.mode].name + ' mode'} — click for the next mode, right-click to choose`;
     const logoTip = `${onDash ? 'Overview' : M[S.mode].name} · click: next mode · right-click: all modes`;
@@ -186,11 +189,13 @@
       if (st && st.dataset.mode !== logoMark) { st.innerHTML = M[logoMark].svg; st.dataset.mode = logoMark; }
       rail.querySelectorAll('.rbtn[data-go]').forEach((b) => b.setAttribute('aria-current', String(cur(b.dataset.go))));
       updateZone();
+      const sh = rail.querySelector('[data-go="shell"]'), wantSh = shellBtn();
+      if (wantSh && !sh) rail.querySelector('[data-go="bell"]')?.insertAdjacentHTML('beforebegin', wantSh); else if (!wantSh && sh) sh.remove();
       const home = rail.querySelector('[data-go="home"]'); home.setAttribute('aria-label', `${M[S.mode].name} home`); home.dataset.tip = `${M[S.mode].name} home`;
       return;
     }
     rail.innerHTML = `
-      <button class="logo" id="logo" aria-label="${logoLabel}" aria-haspopup="menu" data-tip="${logoTip}" data-kbd="Alt 0–6"><span class="mk" data-mode="${logoMark}">${M[logoMark].svg}</span></button>
+      <button class="logo" id="logo" aria-label="${logoLabel}" aria-haspopup="menu" data-tip="${logoTip}" data-kbd="Alt 0–7"><span class="mk" data-mode="${logoMark}">${M[logoMark].svg}</span></button>
       <div class="rmid" id="rmid">
       ${rb('home', 'home', `${M[S.mode].name} home`)}
       ${rb('chat', 'chat', 'Chat')}
@@ -206,8 +211,9 @@
 
       <div class="rzone" id="rzone" data-for="">${zoneHTML()}</div>
       </div>
+      ${shellBtn()}
       ${rb('bell', 'bell', 'Notifications')}
-      ${rb('help', 'help', 'Help & report', 'F1')}
+      ${rb('help', 'help', 'Help & report', 'Shift R')}
       <button class="credits" data-go="usage" data-tip="Usage" aria-label="Usage">2.4k</button>
       <button class="avatar" data-go="account" data-tip="Account, settings, connected accounts, get the apps" aria-label="Account">E</button>`;
   }
@@ -318,6 +324,7 @@
   }
   // Product = the product's OWN sidebar (its views + its objects). Desktop apps keep their nav in
   // the app, so their panel is Open in Hub + recent files + projects. Planned products say so.
+  const LIVE_PRODUCT_SECTIONS = new Set(['mail', 'post']);   // these fill XENO_PRODUCT_NAV's sections from the server
   function panelProduct(id) {
     const p = PR[id];
     if (p.kind === 'chat') return panelChat();
@@ -337,7 +344,7 @@
         <button class="act primary" data-xl-new="${id}" data-xl-noun="${esc(nav.primary)}">${ic('plus')}${esc(nav.primary)}</button>
         ${(nav.views || []).length ? `<div class="views">${nav.views.map(viewRow).join('')}</div>` : ''}
         ${(nav.views || []).includes('Recent') ? '' : recentSec}
-        ${(nav.sections || []).map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
+        ${(window.XENO_PLATFORM?.served && !LIVE_PRODUCT_SECTIONS.has(id) ? [] : nav.sections || []).map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
       </div>`;
     return `${backHeader(id, p.name)}
       <div class="pbody">
@@ -423,8 +430,8 @@
     const prods = z.products || [], live = prods.filter((id) => PR[id] && PR[id].status !== 'soon');
     const { work: zw, sample } = areaWork(z);
     const rows = zw ? zw[1].filter((r) => (r[2] ? PR[r[2]] && PR[r[2]].status !== 'soon' : !prods.length || live.length)) : [];
-    const coming = prods.length && !live.length;
-    return [prods.length ? sec('products', 'Products', prods.map((id) => productRow(id)).join('')) : '',
+    const areaIsLive = !!zoneLive(z), shown = areaIsLive ? live : prods, coming = prods.length && !live.length && !areaIsLive;
+    return [shown.length ? sec('products', 'Products', shown.map((id) => productRow(id)).join('')) : '',
       rows.length ? sec('work', esc(zw[0]) + (sample ? ' ' + SAMPLE_MARK : ''), rows.map((r) => workRow(r, zw[0])).join('') + row(`data-item="All ${esc(zw[0].toLowerCase())}"`, `${ic('right')}<span class="t">View all</span>`, 'sub')) : '',
       coming ? `<div class="empty-note"><b>Nothing here yet.</b><span>${listJoin(prods.map((id) => esc(PR[id].name)))} ${prods.length > 1 ? 'are' : 'is'} planned, not built — your ${esc(z.label.toLowerCase())} will appear here once ${prods.length > 1 ? 'they launch' : 'it launches'}.</span></div>` : ''].join('');
   }
@@ -433,7 +440,7 @@
     const first = (z.products || []).find((id) => PR[id] && PR[id].status !== 'soon');
     const primary = z.action && first ? `<button class="act primary" data-xl-new="${first}" data-xl-noun="${esc(z.action)}">${ic('plus')}${esc(z.action)}</button>`
       : first ? `<button class="act primary" data-product="${first}">${ic('plus')}New in ${esc(PR[first].name)}</button>`
-      : (z.products || []).length ? window.XL.notifyBtn(z.products, 'act primary', `Notify me when ${z.products.length > 1 ? 'they launch' : 'it launches'}`) : '';
+      : (z.products || []).length && !window.XENO_ZONE_LIVE?.[`${z.of || k}.${z.id}`] ? window.XL.notifyBtn(z.products, 'act primary', `Notify me when ${z.products.length > 1 ? 'they launch' : 'it launches'}`) : '';
     return `<div class="ph"><div class="ttl msw-inline">${esc(z.label)}<span class="msw-bar"></span><span class="msw-count">${z.of ? M[z.of].name : M[k].name}</span></div><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>
       <div class="pbody">${primary}<div class="msw-help" style="padding:2px 10px 8px">${esc(z.blurb)}</div>${zoneRows(z)}</div>${z.of ? `<div class="pfoot"><button class="row" data-mode="${z.of}">${ic('layers')}<span class="t">Open ${M[z.of].name} mode</span><span class="meta">all ${zonesFor(z.of).length} areas</span></button></div>` : ''}`;
   }
@@ -479,6 +486,7 @@
     corpo: ['Run the business — with people and agents.', 'Your company, its wallet, its team, its customers and its numbers, in one view.'],
     dev: ['Build things that run.', 'Agent sessions, automations and the SDKs — with the runs that need you surfaced first.'],
     tools: ['A tool when you need one, not a product.', 'Resize, trim, transcribe, convert — open one, use it, close it.'],
+    research: ['Results that reproduce — and say so.', 'Notebooks run in an isolated sandbox, every run is signed, and each result you claim is re-checked — held, lapsed or not yet observed.'],
   };
   const DEMO_LINE = { frame: 'Lay out pages, components and prototypes', photo: 'Edit and retouch images layer by layer', timeline: 'Cut, grade and animate on a timeline', wave: 'Record, mix and master audio', page: 'Write and format documents', grid: 'Model numbers with formulas and charts', slide: 'Build presentations', post: 'Write once, publish to every channel', chat: 'Talk to people and agents', term: 'Run agents that write and test code', flow: 'Automate steps between your tools' };
   function productDemo(pid) {
@@ -1012,12 +1020,12 @@
     const newN = seen ? needs.filter((n) => n.at > seen).length : 0;
     const sentence = sentenceOf([needs.length && plural(needs.length, 'thing needs you', 'things need you'), running && `${plural(running, 'job is', 'jobs are')} running`, last && `you were last in ${PR[last.p].name}`].filter(Boolean), 'Nothing is waiting — a good moment to start something.') + (newN ? ` ${newN === 1 ? 'One is' : newN + ' are'} new since you were last here, ${agoWhen(seen)}.` : '');
     const sp = PR[m.start] || PR[last?.p];
-    const SIGL = { studio: 'In production and your work', office: 'Your desk and mail', social: 'This week and conversations', corpo: 'The company and its people', dev: 'Agent runs and automations', tools: 'Tools' };
+    const SIGL = { studio: 'In production and your work', office: 'Your desk and mail', social: 'This week and conversations', corpo: 'The company and its people', dev: 'Agent runs and automations', tools: 'Tools', research: 'Notebooks, runs and claims' };
     const secs = homeSections(m.id, [
       { id: 'needs', label: 'Needs you', html: () => homeState() === 'error' ? `<section class="hm2-sec"><div class="hm2-h"><h2>Needs you</h2></div><div class="hm2-err">${ic('reset')}<span><b>Couldn't load what needs you.</b> Your inbox is safe — nothing was changed.</span><button class="us-ghost" data-home-retry>Try again</button></div></section>` : homeNeeds(m.id, seen) },
       { id: 'kpis', label: 'This week', html: () => kpiSection(m.id) },
-      { id: 'sig', label: window.XENO_HOME_LIVE?.served ? 'Your work' : SIGL[m.id] || 'Your work', html: () => `<div class="hm2-sigwrap">${window.XENO_HOME_LIVE?.served ? window.XENO_HOME_LIVE.work(m) : window.XENO_SIG?.[m.id] ? window.XENO_SIG[m.id](m) : (SIG[m.id] || SIG.studio)(m)}</div>` },   // on the platform: the person's own work, never a sample section
-      { id: 'areas', label: 'Areas', html: () => `<section class="hm2-sec"><div class="hm2-h"><h2>Areas</h2></div><div class="hm2-areas">${zonesFor(m.id).map((z) => { const n = (z.products || []).filter((id) => PR[id] && PR[id].status !== 'soon').length; return `<button class="hm2-area" data-zone="${z.id}">${ic(z.icon)}<span><b>${esc(z.label)}</b><small>${n ? plural(n, 'product', 'products') : 'Coming soon'}</small></span></button>`; }).join('')}</div></section>` },
+      { id: 'sig', label: window.XENO_HOME_LIVE?.served ? 'Your work' : SIGL[m.id] || 'Your work', html: () => `<div class="hm2-sigwrap">${m.id === 'research' && window.XENO_RESEARCH?.served ? window.XENO_RESEARCH.homeWork() : window.XENO_HOME_LIVE?.served ? window.XENO_HOME_LIVE.work(m) : window.XENO_SIG?.[m.id] ? window.XENO_SIG[m.id](m) : (SIG[m.id] || SIG.studio)(m)}</div>` },   // on the platform: the person's own work, never a sample section
+      { id: 'areas', label: 'Areas', html: () => `<section class="hm2-sec"><div class="hm2-h"><h2>Areas</h2></div><div class="hm2-areas">${zonesFor(m.id).map((z) => { const n = (z.products || []).filter((id) => PR[id] && PR[id].status !== 'soon').length; return `<button class="hm2-area" data-zone="${z.id}">${ic(z.icon)}<span><b>${esc(z.label)}</b><small>${n ? plural(n, 'product', 'products') : window.XENO_ZONE_LIVE?.[`${m.id}.${z.id}`] ? esc(z.blurb || '') : 'Coming soon'}</small></span></button>`; }).join('')}</div></section>` },
     ]);
     return `<div class="wrap hm2${homeState() === 'loading' ? ' hm2--ghost' : ''}" data-home="${m.id}">
       ${homeHero({ eye: `${esc(M[m.id].name)} · ${esc(dayName())}`, sentence, acts: `${sp ? `<button class="us-primary" data-product="${sp.id}">${ic('plus')}New in ${esc(sp.name)}</button>` : ''}<button class="us-ghost" data-go="search">${ic('search')}Find anything<kbd>Ctrl K</kbd></button>`, cont: contCard(last, 'Continue') })}
@@ -1082,6 +1090,7 @@
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) return window.XENO_GENERATIONS.host();
     if (S.product === 'storage' && window.XENO_STORAGE) return window.XENO_STORAGE.page();   // XENO Storage: the account's space, on the real meter
     if (S.product === 'mcp' && window.XENO_MCP) return window.XENO_MCP.page();   // XENO MCP: the agents connected to XENO, managed here
+    if (S.product === 'research' && window.XENO_RESEARCH?.served) return window.XENO_RESEARCH.page();   // XENO Research: notebooks, runs and claims, from the platform
     if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
     if (p.kind === 'chat' && window.XENO_LIVE_CHAT) { const C = window.XENO_LIVE_CHAT; return `<div class="live-chat-host"><div class="live-chat chat-themed chat-theme-dark" style="${C.vars.replace(/"/g, '&quot;')}">${C.html}</div></div>`; }
     if (p.kind === 'chat') return `<div class="chat"><div class="thread"><div class="in"><div class="um">next one</div><div class="am"><p>Here is the next scenario. A company runs EC2 instances across three Availability Zones and needs a shared file system every instance can mount at once, with storage that grows automatically.</p><p>Which service fits best: <b>EFS</b>, <b>EBS Multi-Attach</b> or <b>FSx for Lustre</b>?</p></div></div></div>
@@ -1116,7 +1125,7 @@
     // a live area that addresses its own records (items: true) draws them itself, e.g. customers/contacts/<id>
     if (S.view === 'zone') { const L = zoneLive(zoneNow()); if (L && L.items && L.page) { const html = L.page(zoneNow()); if (html) return html; } }
     if (S.view === 'global' && S.global === 'projects' && (window.XENO_PROJECTS || {})[S.item.split('/')[0]] !== undefined || (S.view === 'global' && S.global === 'projects' && !/^(Archived projects)$/.test(S.item))) { const [nm, tb] = S.item.split('/'); return mainProject(nm, tb); }
-    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global] || '';
+    const owner = S.view === 'product' ? PR[S.product].name : S.view === 'zone' ? zoneNow().label : { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases', shell: 'Cloud Shell' }[S.global] || '';
     return `<div class="wrap"><div class="landing"><span class="ib" style="width:72px;height:72px;pointer-events:none">${ic('doc').replace('class="i"', 'class="i" style="width:40px;height:40px"')}</span><h1>${esc(S.item)}</h1><p>${esc(owner)} · ${esc(ctxName())}</p><div class="row2"><button class="btn ghost" data-back>Back</button></div><div class="note">Couldn’t find “${esc(S.item)}” in ${esc(owner)}. It may have been renamed, moved or deleted — check Trash in your Library.</div></div></div>`;
   }
   function crumbs() {
@@ -1126,10 +1135,11 @@
     if (S.view === 'dashboard') return '<b>Overview</b>';
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';
     if (S.view === 'mode') return `<b>${M[S.mode].name}</b>`;
-    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
+    if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases', shell: 'Cloud Shell' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
+      if (S.global === 'library' && S.item.startsWith('f/')) { const f = libFiles().find((x) => 'f/' + x.id === S.item); return `<a data-crumb="">${gn}</a>${sep}<b>${esc(f ? f.name : 'File')}</b>`; }   // a file's id address reads as its name
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
-      return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'workspace' && parts[0] === 'Knowledge' && i === 1 ? 'Tenet' : S.global === 'market' && window.XENO_MARKET?.label ? window.XENO_MARKET.label(x) : S.global === 'places' && window.XENO_PLACES?.label ? window.XENO_PLACES.label(x) : S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'shell' && window.XENO_SHELL?.label ? window.XENO_SHELL.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Skills' && window.XENO_SKILLS?.label ? window.XENO_SKILLS.label(x, i, parts) : S.global === 'workspace' && i === 1 && parts[0] === 'Teams' && window.XENO_TEAMS?.served ? (window.XENO_TEAMS.label(x) || 'Team') : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.label ? window.XENO_DIRECTORY.label(x, i, parts) :S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
+      return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => { const name = lbl(x, i); return name == null ? '' : sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(name)}</a>` : `<b>${esc(name)}</b>`); }).join(''); }
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
       const generationId = /^g\/[0-9a-f-]{36}$/i.test(S.item || '') ? S.item.slice(2) : null;
@@ -1173,9 +1183,9 @@
         : d.err ? `<span class="sb-fresh bad"><i></i>Inbox offline</span>${refresh('Retry')}`
         : `<span class="sb-fresh ok"><i></i><span data-at="${d.at}">Updated ${agoTxt(d.at)}</span></span>${refresh('Refresh')}`;
       const info = hs !== 'normal' || needN == null ? '' : `${needN} need${needN === 1 ? 's' : ''} you · ${runN} running`;
-      const keys = [['Ctrl K', 'Find'], ['Alt 0–6', 'Modes'], ['Ctrl \\', 'Sidebar']].map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('');
+      const keys = [['Ctrl K', 'Find'], ['Alt 0–7', 'Modes'], ['Ctrl \\', 'Sidebar']].map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('');
       const L = { normal: 'Normal', empty: 'First day', loading: 'Loading', error: 'Error' };
-      return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum"><span>${esc(dayName())}</span></div><div class="sp"></div><div class="pg-top-acts">${hs === 'empty' ? '' : `<button class="pg-btn ghost" data-home-custom aria-haspopup="dialog" aria-expanded="false">${ic('sliders')}<span>Customize</span></button>`}</div></div><div class="mview pg-mview has-foot">${body}</div><footer class="mfoot"><div class="sb-l">${fresh}${info ? `<span class="sb-sep"></span><span class="sb-info">${info}</span>` : ''}</div><div class="sb-r"><span class="sb-keys">${keys}</span><button class="sb-prev" data-pg-preview="home" title="Prototype only — data in the shape of GET /api/v2/modes/:mode/metrics + the inbox feed" aria-haspopup="listbox" aria-expanded="false">Preview <b>${L[hs]}</b>${ic('chev')}</button></div></footer>`;
+      return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum"><span>${esc(dayName())}</span></div><div class="sp"></div><div class="pg-top-acts">${hs === 'empty' ? '' : `<button class="pg-btn ghost" data-home-custom aria-haspopup="dialog" aria-expanded="false">${ic('sliders')}<span>Customize</span></button>`}</div></div><div class="mview pg-mview has-foot">${body}</div><footer class="mfoot"><div class="sb-l">${fresh}${info ? `<span class="sb-sep"></span><span class="sb-info">${info}</span>` : ''}</div><div class="sb-r"><span class="sb-keys">${keys}</span>${window.XENO_PLATFORM?.served ? '' : `<button class="sb-prev" data-pg-preview="home" title="Prototype only — data in the shape of GET /api/v2/modes/:mode/metrics + the inbox feed" aria-haspopup="listbox" aria-expanded="false">Preview <b>${L[hs]}</b>${ic('chev')}</button>`}</div></footer>`;
     }
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div>${stTop ? (stTop.left ? `<span class="pg-top-sep" aria-hidden="true"></span>${stTop.left}` : '') : ''}${window.XENO_GENERATIONS?.route?.() ? '' : isChat && window.XENO_CHAT && window.XENO_CHAT.served ? `<button class="tb-mid" data-chat-transcript aria-live="polite" data-tip="Copy the whole conversation, with its diagnostics">${ic('copy')}<span>Copy transcript</span></button>` : ''}<div class="sp"></div>${stTop ? stTop.right : ''}${window.XENO_GENERATIONS?.route?.() ? window.XENO_GENERATIONS.viewSwitch() : isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
@@ -1267,7 +1277,7 @@
   // listing key (every page reads it by that); the translation happens only here, at the address.
   // A workforce tab can carry a record id after it — /workspace/projects/<pid>/runs/<admission id> — so only the
   // tab's own segment is translated; the id after it is kept exactly as it is.
-  const PTAB = { Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes', Corpus: 'corpus' };
+  const PTAB = { Files: 'files', Tasks: 'tasks', Conversations: 'conversations', 'Team assignments': 'team', Resources: 'resources', Funding: 'funding', Activity: 'activity', Objectives: 'objectives', Runs: 'runs', Changes: 'changes', Corpus: 'corpus', Notebooks: 'notebooks', Claims: 'claims' };
   const tabOut = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const tabIn = (tb) => { const j = tb.indexOf('/'), t = j < 0 ? tb : tb.slice(0, j); return (PTAB_IN[t] || t) + (j < 0 ? '' : tb.slice(j)); };
   const PTAB_IN = Object.fromEntries(Object.entries(PTAB).map(([k, v]) => [v, k]));
@@ -1294,7 +1304,13 @@
   function memItemOut(item) { const x = String(item).match(MEM); if (!x) return item; if (x[1] === 'Agents' && window.XENO_AGENTS?.served && window.XENO_AGENTS.isId(x[2])) return item; const id = memId(memList().find((m) => m.name === x[2])); return id ? x[1] + '/' + id : item; }
   function memItemIn(item) { const x = String(item || '').match(MEM); if (!x) return item; if (x[1] === 'Agents' && window.XENO_AGENTS?.served && window.XENO_AGENTS.isId(x[2])) return item; const m = memList().find((y) => memId(y) === x[2]); return m ? x[1] + '/' + m.name : item; }
   window.XENO_MEMBER_ROUTE = { out: memItemOut, in: memItemIn };
-  const itemOut = () => (!S.item ? S.item : S.view === 'global' && S.global === 'projects' ? projItemOut(S.item) : S.view === 'global' && S.global === 'workspace' ? memItemOut(S.item) : S.item);
+  // A Library file's page: /workspace/library/f/<file id>, never its name. A name has a dot (nginx serves anything
+  // with an extension as a file, so a refresh 404'd), can repeat, and changes on rename. Same translation, at the
+  // address only: a name handed to go() (search, Recent) becomes the id form when the file is known.
+  const libFiles = () => ((window.XENO_PG_LIBRARY || {}).items || []);
+  function libItemOut(item) { const it = String(item); if (it.startsWith('f/')) return it; const f = libFiles().find((x) => x.name === it); return f ? 'f/' + f.id : it; }
+  window.XENO_LIBRARY_ROUTE = { out: libItemOut };
+  const itemOut = () => (!S.item ? S.item : S.view === 'global' && S.global === 'projects' ? projItemOut(S.item) : S.view === 'global' && S.global === 'workspace' ? memItemOut(S.item) : S.view === 'global' && S.global === 'library' ? libItemOut(S.item) : S.item);
   const itemIn = (item) => (!item ? item : S.view === 'global' && S.global === 'projects' ? projItemIn(item) : S.view === 'global' && S.global === 'workspace' ? memItemIn(item) : item);
   function stateToHash() {
     const raw = itemOut();
@@ -1312,12 +1328,12 @@
     if (m === 'adaptive') return { view: 'adaptive' };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
       if (kind === 'p' && PR[id]) return { view: 'product', product: id, zoneOf: 'overview', item };
-      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
+      if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases', 'shell'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
       return { view: 'dashboard' }; }
     if (!modeOk) return null;
     if (kind === 'z' && zonesFor(m).some((z) => z.id === id)) return { view: 'zone', mode: m, zone: id, zoneOf: 'mode', item };
     if (kind === 'p' && PR[id]) return { view: 'product', mode: m, product: id, zoneOf: 'mode', item };
-    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
+    if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases', 'shell'].includes(id)) return { view: 'global', mode: m, global: id, zoneOf: 'mode', item };
     return { view: 'mode', mode: m };
   }
   let applyingHash = false;
@@ -1516,11 +1532,10 @@
 
   // ---- data: one cache, stale-while-revalidate, each source names where it will come from ----
   // A "needs you" item as an inbox entry. On the platform it carries its own id and time; the picture's samples do not.
-  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, ref: n.ref || null, serverId: n.serverId || null, seen: !!n.seen, detail: n.detail, actor: n.actor || undefined, live: !!n.serverId, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: n.g === 'act' ? 'act' : 'needs', mention: n.kind === 'question' || n.kind === 'task_mentioned' }));
+  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, ref: n.ref || null, serverId: n.serverId || null, seen: !!n.seen, archived: !!n.archived, snoozedUntil: n.snoozedUntil || null, detail: n.detail, actor: n.actor || undefined, live: !!n.serverId, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: n.g === 'act' ? 'act' : 'needs', mention: n.kind === 'question' || n.kind === 'task_mentioned' }));
   const SRC = {
-    // notifications: no platform API yet (needs one — see the report); sample shaped like a feed
-    // Served by the platform there is no activity feed to read yet, so the inbox holds only what really waits on
-    // the person; the sample activity below is the picture's own and is never shown as theirs.
+    // Served by the platform the inbox is what was written for the person (platform-area.js); the sample activity below
+    // is the picture's own and is never shown as theirs.
     notes: () => (window.XENO_PLATFORM?.served ? NEED_NOTES() : [
       ...NEED_NOTES(),
       { id: 'a1', t: 'Atlas finished a research brief', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 4 * 60000, g: 'act' },
@@ -1598,16 +1613,39 @@
   }
 
   // ---- notifications: model ----
-  const NS = () => ({ read: new Set(store.get('readN', []) || []), arch: new Set(store.get('archN', []) || []), snooze: store.get('snoozeN', {}) || {}, done: store.get('doneN', {}) || {}, prefs: store.get('ntPrefs', { desktop: false, digest: 'daily', muted: [] }) });
+  const NS = () => ({ read: new Set(store.get('readN', []) || []), arch: new Set(store.get('archN', []) || []), snooze: store.get('snoozeN', {}) || {}, done: store.get('doneN', {}) || {}, prefs: store.get('ntPrefs', { desktop: false, sound: false, digest: 'off', muted: [] }) });
   // per-area notification level (§7z): all = everything · needs = only what needs you (activity leaves the inbox) ·
   // off = nothing rings either. One store (ntPrefs.levels); the old muted list is kept in step for anything reading it.
   const NT_LEVELS = [['all', 'Everything'], ['needs', 'Needs me'], ['off', 'Off']];
   const ntLevel = (st, m) => st.prefs.levels?.[m] || (st.prefs.muted.includes(m) ? 'off' : 'all');
-  function ntSetLevel(m, lv) { const st = NS(); const was = ntLevel(st, m); if (was === lv) return; st.prefs.levels = { ...(st.prefs.levels || {}), [m]: lv }; st.prefs.muted = MODES.map((x) => x.id).filter((id) => ntLevel(st, id) === 'off'); ntSave('ntPrefs', st.prefs); syncBell(); window.XENO_HIST?.record(`${M[m]?.name || m} notifications: ${NT_LEVELS.find((x) => x[0] === lv)[1]}`, null); }
+  function ntSetLevel(m, lv) { const st = NS(); const was = ntLevel(st, m); if (was === lv) return; st.prefs.levels = { ...(st.prefs.levels || {}), [m]: lv }; st.prefs.muted = MODES.map((x) => x.id).filter((id) => ntLevel(st, id) === 'off'); ntSave('ntPrefs', st.prefs); window.XENO_INBOX?.savePrefs?.({ levels: st.prefs.levels }); syncBell(); window.XENO_HIST?.record(`${M[m]?.name || m} notifications: ${NT_LEVELS.find((x) => x[0] === lv)[1]}`, null); }
+  // Desktop notifications need the browser's yes, asked when the person turns them on; a no is said, not hidden.
+  async function ntSetDevice(key, repaint) {
+    const st = NS(), on = !st.prefs[key];
+    if (key === 'desktop' && on) {
+      const yes = typeof Notification !== 'undefined' && (Notification.permission === 'granted' || await Notification.requestPermission().catch(() => 'denied') === 'granted');
+      if (!yes) { toast('Your browser did not allow notifications. You can allow them in its site settings.'); return repaint(); }
+    }
+    st.prefs[key] = on; ntSave('ntPrefs', st.prefs); repaint();
+  }
+  function ntSetDigest(v, repaint) { const st = NS(), was = st.prefs.digest; st.prefs.digest = v; ntSave('ntPrefs', st.prefs); repaint(); Promise.resolve(window.XENO_INBOX?.savePrefs?.({ digest: v }) ?? true).then((ok) => { if (ok) return; const s = NS(); s.prefs.digest = was; ntSave('ntPrefs', s.prefs); repaint(); toast('That could not be saved. Try again.'); }); }
+  function ntBlip() { try { const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.setValueAtTime(0.04, a.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.18); o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime + 0.18); o.onended = () => a.close(); } catch {} }
+  /** New rows arrived. Rings only for areas that are not off, and shows the operating system's notice only when the page is not in front. */
+  function ntArrived(rows) {
+    const st = NS(), ring = rows.filter((n) => ntLevel(st, n.m || 'overview') !== 'off'); if (!ring.length) return;
+    if (st.prefs.sound) ntBlip();
+    if (!st.prefs.desktop || !document.hidden || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    ring.slice(0, 3).forEach((r) => { const x = new Notification(r.t, { body: r.detail || r.meta || '', tag: String(r.serverId) }); x.onclick = () => { window.focus(); const n = ntAll().find((y) => y.serverId === r.serverId); if (n) ntOpen(n); x.close(); }; });
+  }
   const ntSave = (k, v) => store.set(k, k === 'snoozeN' || k === 'doneN' || k === 'ntPrefs' ? v : [...v]);
   const ntAll = () => (DS.notes && DS.notes.val) || [];
-  const viewOf = (n, st) => (st.arch.has(n.id) ? 'archive' : st.snooze[n.id] ? 'snoozed' : 'inbox');
-  const isUnread = (n, st) => (n.g === 'needs' || (n.g === 'act' && n.live)) && !n.seen && !st.read.has(n.id) && viewOf(n, st) === 'inbox';
+  // A row on the platform carries its own state. Only an item with no row (derived from what is waiting) keeps it here.
+  const asleep = (at) => { const t = Date.parse(at); return Number.isFinite(t) && t > Date.now(); };
+  const wakeOf = (n, st) => (n.live ? n.snoozedUntil : st.snooze[n.id]);
+  const viewOf = (n, st) => (n.live ? (n.archived ? 'archive' : asleep(n.snoozedUntil) ? 'snoozed' : 'inbox') : st.arch.has(n.id) ? 'archive' : asleep(st.snooze[n.id]) ? 'snoozed' : 'inbox');
+  const isUnread = (n, st) => viewOf(n, st) === 'inbox' && (n.live ? !n.seen : n.g === 'needs' && !n.seen && !st.read.has(n.id));
+  const wakeLabel = (at) => { const d = new Date(at); if (!Number.isFinite(d.getTime())) return ''; const hm = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); return d.toDateString() === new Date().toDateString() ? hm : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' + hm; };
+  const SNOOZES = () => { const h9 = (days) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(9, 0, 0, 0); return d.toISOString(); }; const toMon = ((8 - new Date().getDay()) % 7) || 7; return [['1 hour', new Date(Date.now() + 3600000).toISOString()], ['Tomorrow', h9(1)], ['Next week', h9(toMon)]]; };
   function ntFiltered(view, filter) {
     const st = NS();
     return ntAll().filter((n) => viewOf(n, st) === view && !(n.g === 'act' && ntLevel(st, n.m) !== 'all') && (filter === 'all' || (filter === 'mentions' ? n.mention : n.m === filter)));
@@ -1621,11 +1659,11 @@
     const tools = view === 'snoozed' ? iconBtn(`data-nt-unsnooze data-fk="u${n.id}"`, 'reset', 'Back to inbox')
       : view === 'archive' ? iconBtn(`data-nt-arch data-fk="r${n.id}"`, 'reset', 'Move to inbox')
         : done ? '' : `${iconBtn(`data-nt-snz data-fk="s${n.id}"`, 'clock', 'Snooze  S')}${iconBtn(`data-nt-arch data-fk="a${n.id}"`, 'archive', 'Archive  E')}`;
-    const action = view === 'snoozed' ? `<span class="nt2-wake">${ic('clock')}${esc(st.snooze[n.id])}</span>`
+    const action = view === 'snoozed' ? `<span class="nt2-wake">${ic('clock')}${esc(wakeLabel(wakeOf(n, st)))}</span>`
       : view === 'archive' ? ''
         : done ? `<span class="nt2-done">${ic('check')}${esc(done)}</span>`
-          : n.act ? `<button class="nt2-act${INLINE[n.kind] ? ' primary' : ''}" data-nt-do data-fk="d${n.id}">${esc(n.act)}</button>` : '';
-    const chooser = snoozing ? `<div class="nt2-snz" role="group" aria-label="Snooze until" data-nt="${n.id}"><span>Snooze until</span>${[['1 hour', 'In 1 hour'], ['Tomorrow', 'Tomorrow 9:00'], ['Next week', 'Mon 9:00']].map(([l, w]) => `<button data-nt-snooze="${esc(w)}" data-fk="z${n.id}${l}">${l}</button>`).join('')}<button class="pp-ib" data-nt-snz aria-label="Cancel">${ic('x')}</button></div>` : '';
+          : n.act ? (n.live ? `<span class="nt2-wake">${esc(n.act)}</span>` : `<button class="nt2-act${INLINE[n.kind] ? ' primary' : ''}" data-nt-do data-fk="d${n.id}">${esc(n.act)}</button>`) : '';
+    const chooser = snoozing ? `<div class="nt2-snz" role="group" aria-label="Snooze until" data-nt="${n.id}"><span>Snooze until</span>${SNOOZES().map(([l, w]) => `<button data-nt-snooze="${esc(w)}" data-fk="z${n.id}${l}">${l}</button>`).join('')}<button class="pp-ib" data-nt-snz aria-label="Cancel">${ic('x')}</button></div>` : '';
     return `<div class="nt2${un ? ' unread' : ''}${done ? ' done' : ''}${n.live ? ' arrived' : ''}" tabindex="0" role="button" data-nt="${n.id}" data-fk="n${n.id}" aria-label="${esc(n.t)}${un ? ', unread' : ''}">
       <span class="nt2-mark"></span><span class="nt2-ic">${p ? pIconFull(p, 18) : ic('bell')}</span>
       <span class="nt2-main">
@@ -1690,7 +1728,8 @@
       <div class="pl-stack">
         <section class="pl pl-list"><div class="pl-cap"><span>Delivery</span></div>
           <button class="us-toggle" role="switch" aria-checked="${p.desktop}" data-nt-pref="desktop" data-fk="pd"><span class="hp-t">Desktop notifications<small>Shown by your operating system when XENO is in the background</small></span><span class="sw"><i></i></span></button>
-          <div class="nt-seg-row"><span class="hp-t">Email digest<small>A summary of what you missed</small></span><div class="pl-seg" role="radiogroup" aria-label="Email digest">${['off', 'daily', 'weekly'].map((k) => `<button role="radio" aria-checked="${p.digest === k}" data-nt-digest="${k}" data-fk="dg${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
+          <button class="us-toggle" role="switch" aria-checked="${!!p.sound}" data-nt-pref="sound" data-fk="ps"><span class="hp-t">Sound<small>A short sound when something new arrives</small></span><span class="sw"><i></i></span></button>
+          <div class="nt-seg-row"><span class="hp-t">Email digest<small>What is unread in your inbox, once a day or a week</small></span><div class="pl-seg" role="radiogroup" aria-label="Email digest">${['off', 'daily', 'weekly'].map((k) => `<button role="radio" aria-checked="${p.digest === k}" data-nt-digest="${k}" data-fk="dg${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
         </section>
         <section class="pl pl-list"><div class="pl-cap"><span>Modes</span><span>What each mode tells you about</span></div>
           ${MODES.map((m) => { const lv = ntLevel(NS(), m.id); return `<div class="nt-seg-row"><span class="hp-t">${esc(M[m.id].name)}</span><div class="pl-seg" role="radiogroup" aria-label="${esc(M[m.id].name)} notifications">${NT_LEVELS.map(([k, l]) => `<button role="radio" aria-checked="${lv === k}" data-nt-level="${m.id}:${k}" data-fk="lv${m.id}${k}">${l}</button>`).join('')}</div></div>`; }).join('')}
@@ -1708,27 +1747,57 @@
     if (e.target.closest('[data-nt-all]')) return markAllRead(repaint);
     if (e.target.closest('[data-nt-set]')) { S.ntSettings = true; return repaint(); }
     if (e.target.closest('[data-nt-back]')) { S.ntSettings = false; return repaint(); }
-    const pf = e.target.closest('[data-nt-pref]'); if (pf) { st.prefs[pf.dataset.ntPref] = !st.prefs[pf.dataset.ntPref]; ntSave('ntPrefs', st.prefs); return repaint(); }
-    const dg = e.target.closest('[data-nt-digest]'); if (dg) { st.prefs.digest = dg.dataset.ntDigest; ntSave('ntPrefs', st.prefs); return repaint(); }
+    const pf = e.target.closest('[data-nt-pref]'); if (pf) return ntSetDevice(pf.dataset.ntPref, repaint);
+    const dg = e.target.closest('[data-nt-digest]'); if (dg) return ntSetDigest(dg.dataset.ntDigest, repaint);
     const lvb = e.target.closest('[data-nt-level]'); if (lvb) { const [m, lv] = lvb.dataset.ntLevel.split(':'); ntSetLevel(m, lv); return repaint(); }
     if (e.target.closest('[data-nt-viewall]')) { hidePops(); return go('global', { global: 'inbox', item: null }); }
     const gr = e.target.closest('[data-nt-grp]'); if (gr) { const a = new Set(S.ntOpenGroups || []); a.has(gr.dataset.ntGrp) ? a.delete(gr.dataset.ntGrp) : a.add(gr.dataset.ntGrp); S.ntOpenGroups = [...a]; return repaint(); }
     const row = e.target.closest('[data-nt]'); if (!row) return;
     const n = ntAll().find((x) => x.id === row.dataset.nt); if (!n) return;
     if (e.target.closest('[data-nt-snz]')) { S.ntSnoozeOpen = S.ntSnoozeOpen === n.id ? null : n.id; return repaint(); }
-    const sz = e.target.closest('[data-nt-snooze]'); if (sz) { st.snooze[n.id] = sz.dataset.ntSnooze; ntSave('snoozeN', st.snooze); S.ntSnoozeOpen = null; syncBell(); repaint(); return undoToast(`Snoozed until ${sz.dataset.ntSnooze}`, () => { const s = NS().snooze; delete s[n.id]; ntSave('snoozeN', s); syncBell(); repaint(); }); }
-    if (e.target.closest('[data-nt-unsnooze]')) { delete st.snooze[n.id]; ntSave('snoozeN', st.snooze); syncBell(); return repaint(); }
+    const sz = e.target.closest('[data-nt-snooze]'); if (sz) { S.ntSnoozeOpen = null; return ntSnooze(n, sz.dataset.ntSnooze, repaint); }
+    if (e.target.closest('[data-nt-unsnooze]')) return ntSnooze(n, null, repaint);
     if (e.target.closest('[data-nt-arch]')) return ntArchive(n, repaint);
     if (e.target.closest('[data-nt-do]') && INLINE[n.kind]) return ntInline(n, repaint);
     ntOpen(n);
   }
-  function markAllRead(repaint) { const st = NS(), ids = ntAll().filter((n) => isUnread(n, st)).map((n) => n.id); if (!ids.length) return toast('Nothing unread'); ids.forEach((i) => st.read.add(i)); ntSave('readN', st.read); { const srv = ntAll().filter((n) => ids.includes(n.id) && n.serverId).map((n) => n.serverId); if (srv.length) window.XENO_TASKS?.markRead?.(srv); } syncBell(); repaint(); undoToast(`Marked ${ids.length} as read`, () => { const r = NS().read; ids.forEach((i) => r.delete(i)); ntSave('readN', r); syncBell(); repaint(); }); }
+  // Show the result at once; the platform's answer decides whether it stands.
+  function ntSent(ok, undo, repaint, msg) { Promise.resolve(ok).then((good) => { if (good) return; undo(); syncBell(); repaint(); toast(msg); }); }
+  function markAllRead(repaint) {
+    const st = NS(), rows = ntAll().filter((n) => isUnread(n, st)); if (!rows.length) return toast('Nothing unread');
+    const live = rows.filter((n) => n.live), local = rows.filter((n) => !n.live);
+    local.forEach((n) => st.read.add(n.id)); ntSave('readN', st.read); live.forEach((n) => { n.seen = true; });
+    const back = () => { const r = NS().read; local.forEach((n) => r.delete(n.id)); ntSave('readN', r); live.forEach((n) => { n.seen = false; }); };
+    if (live.length) ntSent(window.XENO_INBOX?.read(live.map((n) => n.serverId)), back, repaint, 'That could not be marked read. Try again.');
+    syncBell(); repaint();
+    undoToast(`Marked ${rows.length} as read`, () => { back(); if (live.length) window.XENO_INBOX?.read(live.map((n) => n.serverId), false); syncBell(); repaint(); });
+  }
   // the Inbox page's sidebar primary action is the same command
   document.addEventListener('click', (e) => { if (S.view === 'global' && S.global === 'inbox' && e.target.closest('#panel .act.primary')) { e.stopPropagation(); markAllRead(paintInboxPage); } }, true);
   function ntArchive(n, repaint) {
+    if (n.live) {
+      const was = n.archived, seen = n.seen, wake = n.snoozedUntil, set = (a) => { n.archived = a; if (a) { n.seen = true; n.snoozedUntil = null; } };
+      const back = () => { n.archived = was; n.seen = seen; n.snoozedUntil = wake; };
+      set(!was); ntSent(window.XENO_INBOX?.archive([n.serverId], !was), back, repaint, 'That could not be changed. Try again.'); syncBell(); repaint();
+      if (!was) undoToast('Archived', () => { back(); window.XENO_INBOX?.archive([n.serverId], false); syncBell(); repaint(); });
+      return;
+    }
     const st = NS(), was = st.arch.has(n.id); was ? st.arch.delete(n.id) : st.arch.add(n.id); st.read.add(n.id);
     ntSave('archN', st.arch); ntSave('readN', st.read); syncBell(); repaint();
     if (!was) undoToast('Archived', () => { const a = NS().arch; a.delete(n.id); ntSave('archN', a); syncBell(); repaint(); });
+  }
+  /** Until a time, or null to wake it now. A row asleep comes back unread. */
+  function ntSnooze(n, until, repaint) {
+    const said = until ? `Snoozed until ${wakeLabel(until)}` : null;
+    if (n.live) {
+      const wake = n.snoozedUntil, seen = n.seen, back = () => { n.snoozedUntil = wake; n.seen = seen; };
+      n.snoozedUntil = until; if (until) n.seen = false;
+      ntSent(window.XENO_INBOX?.snooze([n.serverId], until), back, repaint, 'That could not be snoozed. Try again.'); syncBell(); repaint();
+      if (said) undoToast(said, () => { back(); window.XENO_INBOX?.snooze([n.serverId], null); syncBell(); repaint(); });
+      return;
+    }
+    const st = NS(); if (until) st.snooze[n.id] = until; else delete st.snooze[n.id]; ntSave('snoozeN', st.snooze); syncBell(); repaint();
+    if (said) undoToast(said, () => { const s = NS().snooze; delete s[n.id]; ntSave('snoozeN', s); syncBell(); repaint(); });
   }
   // act in place, optimistically: the row shows the result at once, rolls back if the server refuses
   function ntInline(n, repaint) {
@@ -1739,9 +1808,11 @@
       undoToast(`${label}: ${n.t}`, () => { const x = NS(); delete x.done[n.id]; x.arch.delete(n.id); ntSave('doneN', x.done); ntSave('archN', x.arch); syncBell(); repaint(); });
     }, 700);
   }
-  function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled();
+  function ntOpen(n) { const st = NS(); if (n.live) { if (!n.seen) { n.seen = true; window.XENO_INBOX?.read([n.serverId]); } } else { st.read.add(n.id); ntSave('readN', st.read); } syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled();
+    if (n.ref && n.ref.startsWith('/workspace')) return window.XENO_ADDR.go(window.XENO_ADDR.toHash(n.ref));   // the row names its own address
+    if (n.ref && n.ref.startsWith('/invite/')) return location.assign(n.ref);
     if (n.ref && /^support\/T-\d+$/.test(n.ref)) return go('global', { global: 'support', item: n.ref.slice(8) });
-    if (n.ref && /^T-\d+$/.test(n.ref)) { if (n.serverId) window.XENO_TASKS?.markRead?.([n.serverId]); return go('global', { global: 'tasks', item: n.ref }); } go('product', { product: n.p, item: n.t }); }
+    if (n.ref && /^T-\d+$/.test(n.ref)) return go('global', { global: 'tasks', item: n.ref }); go('product', { product: n.p, item: n.t }); }
   function ntKey(e, el, repaint) {
     if (!el || !el.dataset.nt) { if (el && el.dataset.ntGrp && e.key === 'Enter') { e.preventDefault(); el.click(); } return; }
     const n = ntAll().find((x) => x.id === el.dataset.nt); if (!n) return;
@@ -1765,7 +1836,10 @@
     popKeys(m, '.nt2', (e, el) => ntKey(e, el, () => openBell(true)));
     if (!keep) (m.querySelector('.nt2') || m.querySelector('[role="tab"][aria-selected="true"]'))?.focus({ preventScroll: true });
   }
-  window.XENO_NT = { levels: NT_LEVELS, level: (m) => ntLevel(NS(), m), setLevel: ntSetLevel, modes: () => MODES.map((m) => [m.id, M[m.id].name]) };
+  window.XENO_NT = { levels: NT_LEVELS, level: (m) => ntLevel(NS(), m), setLevel: ntSetLevel, modes: () => MODES.map((m) => [m.id, M[m.id].name]), prefs: () => NS().prefs, arrived: ntArrived,
+    setDevice: (k, repaint) => ntSetDevice(k, repaint || render), setDigest: (v, repaint) => ntSetDigest(v, repaint || render),
+    remotePrefs: (p) => { const st = NS(); st.prefs.digest = p.digest; st.prefs.levels = p.levels || {}; ntSave('ntPrefs', st.prefs); syncBell(); },
+    drainLocalArchive: () => { const a = NS().arch, ids = [...a].filter((i) => i.startsWith('n-note-')); if (!ids.length) return []; ids.forEach((i) => a.delete(i)); ntSave('archN', a); return ids.map((i) => i.slice(7)); } };
   // the bell rings only for unread inbox items in areas that are not off
   function syncBell() {
     const st = NS(), un = ntAll().filter((n) => isUnread(n, st) && ntLevel(st, n.m) !== 'off').length;
@@ -1810,12 +1884,12 @@
       if (q) {
         const res = DOCS.filter(([t, s]) => (t + ' ' + s).toLowerCase().includes(q)).slice(0, 5);
         const mark = (t) => esc(t).replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>');
-        const acts = [['report', 'edit', 'Report a problem', 'F1'], ['support', 'mail', 'Contact support', ''], ['keys', 'terminal', 'Keyboard shortcuts', 'Ctrl /'], ['community', 'community', 'Ask the community', ''], ['idea', 'megaphone', 'Suggest a feature', '']].filter((r) => hit(r[2]));
+        const acts = [['report', 'edit', 'Report a problem', 'Shift R'], ['support', 'mail', 'Contact support', ''], ['keys', 'terminal', 'Keyboard shortcuts', 'Ctrl /'], ['community', 'community', 'Ask the community', ''], ['idea', 'megaphone', 'Suggest a feature', '']].filter((r) => hit(r[2]));
         body.innerHTML = `<section class="pl pl-list"><div class="pl-cap"><span>Docs</span><span>${res.length || 'No'} result${res.length === 1 ? '' : 's'}</span></div>${res.map(([t, s], i) => `<button class="mi hp" data-hp="doc" data-doc="${esc(t)}" data-fk="doc${i}">${ic('doc')}<span class="hp-t">${mark(t)}<small>${esc(s)}</small></span></button>`).join('')}<button class="mi hp" data-hp="search" data-fk="docall">${ic('search')}<span class="hp-t">Search all docs for “${esc(input.value.trim())}”</span><kbd>Enter</kbd></button></section>`
           + (acts.length ? `<section class="pl pl-list"><div class="pl-cap"><span>Actions</span></div>${acts.map(([id, i, t, k]) => `<button class="mi hp" data-hp="${id}" data-fk="a${id}">${ic(i)}<span class="hp-t">${esc(t)}</span>${k ? `<kbd>${k}</kbd>` : ''}</button>`).join('')}</section>` : '');
         return;
       }
-      body.innerHTML = `<div class="hp-quick">${[['report', 'edit', 'Report', 'a problem · F1'], ['support', 'mail', 'Support', 'private ticket'], ['keys', 'terminal', 'Shortcuts', 'Ctrl /']].map(([id, i, t, k]) => `<button class="pl hp-q mi hp" data-hp="${id}" data-fk="q${id}" aria-label="${esc(t)} ${esc(k)}"><span class="hp-q-ic">${ic(i)}</span><span class="hp-q-t"><b>${esc(t)}</b><small>${esc(k)}</small></span></button>`).join('')}</div>
+      body.innerHTML = `<div class="hp-quick">${[['report', 'edit', 'Report', 'a problem · Shift R'], ['support', 'mail', 'Support', 'private ticket'], ['keys', 'terminal', 'Shortcuts', 'Ctrl /']].map(([id, i, t, k]) => `<button class="pl hp-q mi hp" data-hp="${id}" data-fk="q${id}" aria-label="${esc(t)} ${esc(k)}"><span class="hp-q-ic">${ic(i)}</span><span class="hp-q-t"><b>${esc(t)}</b><small>${esc(k)}</small></span></button>`).join('')}</div>
         <button class="pl hp-news mi hp" data-hp="new" data-fk="new"><span class="hp-news-k">${!seen ? '<span class="hp-badge">New</span>' : ''}What's new<em>Sep 17</em></span><b>Canvas 0.39 ships the shared agent panel</b><small>Your agent conversation, docked inside Canvas.</small><span class="hp-go">${ic('right')}</span></button>
         <section class="pl pl-list"><div class="pl-cap"><span>Tips for ${esc(ctxName)}</span>${MODE_INTRO[ctxId] ? `<button class="pl-capbtn" data-hp="intro" data-fk="intro">Mode intro</button>` : ''}</div>${(MODE_TIPS[ctxId] || MODE_TIPS.overview).map(([t, s], i) => `<button class="mi hp hp-tip" data-hp="tip" data-doc="${esc(t)}" data-fk="tip${i}">${ic('spark')}<span class="hp-l" title="${esc(t)} · ${esc(s)}">${esc(t)}</span><span class="hp-tipgo">${ic('right')}</span></button>`).join('')}</section>`;
     };
@@ -1850,7 +1924,7 @@
     s.classList.add('on'); s.querySelector('[data-kb-close]').focus();
   }
   function closeShortcuts() { const s = document.getElementById('kbsheet'); if (!s) return; s.classList.remove('on'); sheetOpener?.focus?.(); sheetOpener = null; }
-  { const K = window.XENO_KEYS; if (K) { [['Ctrl K', 'Search everything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Ctrl / or ?', 'Keyboard shortcuts'], ['F1', 'Report a problem'], ['Esc', 'Close the open panel']].forEach(([k, l]) => K.add('General', k, l));
+  { const K = window.XENO_KEYS; if (K) { [['Ctrl K', 'Search everything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Ctrl / or ?', 'Keyboard shortcuts'], ['Shift R', 'Report a problem'], ['Esc', 'Close the open panel']].forEach(([k, l]) => K.add('General', k, l));
     [['Alt 0', 'Overview'], ['Alt 1–6', 'Switch mode']].forEach(([k, l]) => K.add('Moving around', k, l));
     [['↑ ↓', 'Move between notifications'], ['Enter', 'Open'], ['E', 'Archive'], ['S', 'Snooze']].forEach(([k, l]) => K.add('Notifications', k, l)); } }
   // ? opens the sheet too (Gmail, GitHub, Linear) — never while typing or with a dialog open
@@ -1862,13 +1936,15 @@
   const SURFACE = { xeno_agent: 'Agent', motion: 'Motion', xeno_api: 'Chat & API', xeno_post: 'Post' };
   const usageLeft = () => { const u = DS.usage && DS.usage.val; return u ? u.availableMicro / MICRO : null; };
   function openUsage(keep) {
+    // served: the load that drew the balance did not ask for spending; opening the popover asks for it once
+    { const d0 = DS.usage; if (d0 && d0.val && d0.val.spendPending && !d0.loading && window.XENO_SRC?.usage?.want) { window.XENO_SRC.usage.want(); load('usage'); } }
     const d = data('usage'), u = d.val, range = S.usRange || '30d', group = S.usGroup || 'surface';
     const alert = store.get('lowAlert', { on: true, at: 500 });
     let main;
     const ghostU = !u && !d.err;
     if (!u && d.err) main = errorPlate('usage', 'your usage');
     else {
-      const u = d.val || PH.usage();
+      const u0 = d.val || PH.usage(), spendGhost = !!u0.spendPending, u = spendGhost ? { ...PH.usage(), availableMicro: u0.availableMicro, postedMicro: u0.postedMicro, held: [], activity: null } : u0;
       const left = u.availableMicro / MICRO, held = (u.postedMicro - u.availableMicro) / MICRO, availPct = u.postedMicro ? (u.availableMicro / u.postedMicro) * 100 : 0;
       const real = u.byRange ? u.byRange[range] || {} : null, g2 = group === 'recent' && u.activity ? 'surface' : group === 'recent' ? 'surface' : group;
       const f = real ? 1 : RANGES[range][1], rows = ((real ? real[g2] : u.by[g2]) || []).map(([k, c, ev]) => [k, (c / MICRO) * f, Math.round(ev * f)]);
@@ -1885,7 +1961,7 @@
         <div class="us-legend"><span><i class="a"></i>${fmt(left)} available</span>${held > 0 ? `<button class="us-held" data-us-held aria-expanded="${!!S.usHeld}" data-fk="held"><i class="h"></i>${fmt(held)} held by ${u.held.length} jobs ${ic(S.usHeld ? 'up' : 'chev')}</button>` : '<span>Nothing held</span>'}</div>
         ${S.usHeld && held > 0 ? `<div class="us-jobs">${u.held.map(([t, p, c]) => `<div class="us-lg us-act"><span class="us-n">${esc(t)}</span><span class="us-t">${esc(p)}</span><span class="us-v">${c}</span></div>`).join('')}</div>` : ''}
       </section>
-      <section class="pl us-spend">
+      ${spendGhost ? '<div class="ph-shape" aria-busy="true" aria-label="Loading">' : ''}<section class="pl us-spend">
         <div class="us-head"><span>Spending</span><div class="pl-seg" role="radiogroup" aria-label="Range" data-seg="range" style="--i:${Object.keys(RANGES).indexOf(range)};--n:3">${Object.entries(RANGES).map(([k, [l]]) => `<button role="radio" aria-checked="${range === k}" data-us-range="${k}" data-fk="r${k}">${l}</button>`).join('')}</div></div>
         <div class="us-stats">
           <div class="us-stat us-tile"><small>Total · ${RANGES[range][0]}</small><b>${fmt(total)}</b></div>
@@ -1896,7 +1972,7 @@
         <div class="us-list">${spendUnknown ? '<p class="us-none" data-us-none="unknown">Spending for this period couldn’t be loaded.</p>' : !rows.length && real ? '<p class="us-none" data-us-none="empty">Nothing spent in this period.</p>' : group === 'recent' && u.activity
           ? u.activity.slice(0, 4).map(([f2, c, t]) => `<div class="us-lg us-act"><span class="us-n">${esc(feat(f2))}</span><span class="us-t">${esc(agoShort(t))} ago</span><span class="us-v">−${c}</span></div>`).join('')
           : `<div class="us-stack" aria-hidden="true">${rows.map(([k, c], i) => `<i style="width:${(c / total) * 100}%;background:${tone[i % 4]}"></i>`).join('')}</div>${rows.map(([k, c], i) => `<div class="us-lg"><i style="background:${tone[i % 4]}"></i><span class="us-n">${esc(name(k))}</span><span class="us-pc">${Math.round((c / total) * 100)}%</span><span class="us-v">${fmt(c)}</span></div>`).join('')}`}</div>
-      </section>`;
+      </section>${spendGhost ? '</div>' : ''}`;
       if (ghostU) main = `<div class="ph-shape" aria-busy="true" aria-label="Loading">${main}</div>`;
     }
     const m = railPopOpen('usage', 'usm', `<header class="pl pl-head"><b>Usage</b>${u && u.frozen ? '<span class="pl-pill">Frozen</span>' : ''}${freshLine('usage')}<span class="pp-tools">${iconBtn('data-retry="usage" data-fk="refresh"', 'reset', 'Refresh')}</span></header>
@@ -2046,7 +2122,7 @@
       if (g === 'chat') { const h = homeHash('product', { product: 'chat' }); return [H.nav(h, click, 'Open Chat'), [{ label: 'New chat', icon: 'plus', kbd: 'Ctrl ⇧ O', run: () => { go('product', { product: 'chat' }); } }]]; }
       if (g === 'home') return [H.nav(inOv() ? '#/overview' : '#/' + S.mode, click, 'Go home'), [{ label: 'Customize home…', icon: 'sliders', run: () => { click(); setTimeout(() => document.querySelector('[data-home-custom]')?.click(), 250); } }]];
       if (g === 'account') return [[{ label: 'Open account', icon: 'open', run: click }, { label: 'Settings…', icon: 'sliders', kbd: 'Ctrl ,', run: () => window.XA.settings() }]];
-      if (g === 'help') return [[{ label: 'Open help', icon: 'open', run: click }, { label: 'Keyboard shortcuts', icon: 'grid', kbd: 'Ctrl /', run: () => openShortcuts() }, { label: 'Report a problem…', icon: 'info', kbd: 'F1', run: () => window.XA.report() }]];
+      if (g === 'help') return [[{ label: 'Open help', icon: 'open', run: click }, { label: 'Keyboard shortcuts', icon: 'grid', kbd: 'Ctrl /', run: () => openShortcuts() }, { label: 'Report a problem…', icon: 'info', kbd: 'Shift R', run: () => window.XA.report() }]];
       if (g === 'usage') return [[{ label: 'Open usage', icon: 'open', run: click }, { label: 'Plans & credits…', icon: 'chart', run: () => window.XA.plans() }]];
       return [[{ label: `Open ${label}`, icon: 'open', run: click }]];
     } });
@@ -2227,9 +2303,8 @@
     if (e.key === 'Escape') { if (S.switching) closeSwitcher(); hidePops(); closePalette(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
     if ((e.ctrlKey || e.metaKey) && e.code === 'Backslash') { e.preventDefault(); setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); }
-    if (e.altKey && /^Digit[0-6]$/.test(e.code)) { e.preventDefault(); const n = +e.code.slice(5); n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
+    if (e.altKey && /^Digit[0-7]$/.test(e.code)) { e.preventDefault(); const n = +e.code.slice(5); n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
     if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && document.activeElement?.id === 'logo') { e.preventDefault(); openSwitcher(); }
-    if (e.key === 'F1' && !document.querySelector('.xd')) { e.preventDefault(); hidePops(); window.XA.report(); }
   });
 
 
@@ -2244,7 +2319,7 @@
     if (up || dn) { e.stopPropagation(); const id = (up || dn).dataset.mmUp || (up || dn).dataset.mmDown, ord = modeOrder(), i = ord.indexOf(id), j = i + (up ? -1 : 1);
       if (j < 0 || j >= ord.length) return; [ord[i], ord[j]] = [ord[j], ord[i]]; setOrder(ord); const layer = $('#panel > .msw-layer'); if (layer) layer.innerHTML = panelManage(); return; }
   }, true);
-  // switcher keyboard: type to filter, arrows move, Enter opens, digits 0-6 jump
+  // switcher keyboard: type to filter, arrows move, Enter opens, digits 0-7 jump
   document.addEventListener('input', (e) => {
     if (!e.target.matches('[data-msw-filter]')) return;
     const q = e.target.value.trim().toLowerCase(); let any = false;
@@ -2259,7 +2334,7 @@
     let i = rows.findIndex((r) => r.classList.contains('kb')); if (i < 0) i = Math.max(0, rows.findIndex((r) => r.getAttribute('aria-selected') === 'true'));
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); rows.forEach((r) => r.classList.remove('kb')); const n = rows[(i + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length]; n.classList.add('kb'); n.scrollIntoView({ block: 'nearest' }); }
     else if (e.key === 'Enter') { e.preventDefault(); (rows[i] || rows[0]).click(); }
-    else if (/^[0-6]$/.test(e.key) && !document.activeElement?.matches('[data-msw-filter]')) { e.preventDefault(); const n = +e.key; n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
+    else if (/^[0-7]$/.test(e.key) && !document.activeElement?.matches('[data-msw-filter]')) { e.preventDefault(); const n = +e.key; n === 0 ? go('dashboard') : openMode(MODES[n - 1].id); }
   });
   // tooltips
   const tip = $('#tip'); let tipT = 0;

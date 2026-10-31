@@ -61,15 +61,23 @@ window.XENO_MODE_ZONES = {
     { id: 'automate', label: 'Automate', icon: 'flow', blurb: 'Workflows and apps', products: ['workflow', 'apps'],
       work: ['Runs', [['Nightly asset sync', 'Done · 1 cr', 'workflow'], ['Weekly report', 'Mon 09:00', 'workflow'], ['Lead enrich', 'Failed', 'workflow']]] },
     { id: 'build', label: 'Build', icon: 'box', blurb: 'Engine, Shell and Spawn', products: ['engine', 'shell', 'spawn'] },
+    { id: 'compute', label: 'Compute', icon: 'server', blurb: 'Machines for agents, billed by the hour', products: [] },
     { id: 'sdks', label: 'SDKs', icon: 'download', blurb: 'Runtimes and libraries', products: ['rt', 'lib'] },
   ],
-  tools: [
-    { id: 'image', label: 'Image', icon: 'spark', blurb: 'Image tools', products: ['tool-resize', 'tool-bg', 'tool-upscale'] },
-    { id: 'video', label: 'Video', icon: 'film', blurb: 'Video tools', products: ['tool-trim'] },
-    { id: 'audio', label: 'Audio', icon: 'play', blurb: 'Audio tools', products: ['tool-transcribe'] },
-    { id: 'documents', label: 'Documents', icon: 'doc', blurb: 'Document tools', products: ['tool-pdfmerge'] },
-    { id: 'data', label: 'Data', icon: 'grid', blurb: 'Data tools', products: ['tool-csv'] },
-    { id: 'developer', label: 'Developer', icon: 'box', blurb: 'Developer tools', products: ['tool-json'] },
+  tools: [  // the real XENO tools (platform-tools.js): the same signed packages Hub runs, on the web
+    { id: 'image', label: 'Image', icon: 'spark', blurb: 'Resize, cut out, upscale and convert images', products: [] },
+    { id: 'design', label: 'Design', icon: 'grid', blurb: 'Fonts, UI kits, materials and styles', products: [] },
+    { id: 'video', label: 'Video', icon: 'film', blurb: 'Motion and animation', products: [] },
+    { id: 'audio', label: 'Audio', icon: 'play', blurb: 'Transcribe speech', products: [] },
+    { id: 'documents', label: 'Documents', icon: 'doc', blurb: 'PDF and LaTeX', products: [] },
+  ],
+  // Research: one product, five areas — what a lab does with a result, in the order it does it
+  research: [
+    { id: 'notebooks', label: 'Notebooks', icon: 'doc', blurb: 'Jupyter notebooks on your projects', products: ['research'] },
+    { id: 'runs', label: 'Runs', icon: 'play', blurb: 'Every run in XENO Box, signed', products: ['research'] },
+    { id: 'claims', label: 'Claims', icon: 'check', blurb: 'Results that are re-checked, held or lapsed', products: ['research'] },
+    { id: 'data', label: 'Data', icon: 'grid', blurb: 'The inputs a result was computed from', products: ['research'] },
+    { id: 'publish', label: 'Publish', icon: 'send', blurb: 'Export a result with its provenance', products: ['research'] },
   ],
 };
 window.XENO_BADGES = { 'social.publish': 2, 'social.message': 1, 'dev.agents': 'live', 'dev.automate': 'live', 'studio.create': 'live', 'overview.activity': 4 };
@@ -107,6 +115,10 @@ window.XENO_DESKTOP_NAV = { views: ['Recent files', 'Projects'] };
 // ── Globals (MODES §4): their real top level. Community = XENO's own forum (FORUM SPEC §2.1:
 //    Spaces by kind, the Record + your Feed). Marketplace = two storefront modes (MARKETPLACE §14).
 window.XENO_GLOBAL_NAV = {
+  // the release record (platform-releases.js): What's new for everyone; deploys, features and notes for XENO staff
+  releases: ['Releases', 'What changed, and for whom', '', [['Views', [['What’s new', '', null, 'whats-new'], ['Deploys', 'XENO staff', null, 'deploys'], ['Features', 'XENO staff', null, 'features'], ['Notes', 'XENO staff', null, 'notes']]]]],
+  // Cloud Shell (platform-shell.js): a terminal on the person's own Compute machine; the page is /workspace/shell/<machine id>
+  shell: ['Cloud Shell', 'A terminal on your own machine', null, []],
   // XENO support (platform-support.js): private requests to XENO; staff see the queue and saved replies
   support: ['Support', 'Private help from XENO', 'Contact support', [['Views', [['My requests', '', null, 'mine'], ['Queue', 'XENO staff', null, 'queue'], ['Saved replies', 'XENO staff', null, 'macros']]]]],
   // XENO Tasks (codename Telos): the shared work tracker — the board, then the views people use every day
@@ -122,7 +134,7 @@ window.XENO_GLOBAL_NAV = {
   places: ['Places', 'Your workspace as a building', null, [['Building', [['All floors', ''], ['Lobby', '']]]]],
   anima: ['Anima', 'Your agent', 'New chat with Anima', [['Minds', [['Atlas — research', 'Running'], ['Juno — inbox', 'Idle'], ['Kit — code review', 'Idle']]], ['Soul', [['Memory', '1,204 episodes'], ['Skills it learned', '17']]], ['Together', [['Swarms', '1']]], ['Chats', [['Plan the offsite', 'Today'], ['Summarise my week', 'Mon']]]]],
   community: ['Community', 'Forum', 'New thread', [['Your feed', [['For you', ''], ['Following', '3 new'], ['My threads', '2 replies']]], ['Spaces', [['Questions', ''], ['Discussions', ''], ['Showcase', ''], ['Feedback', ''], ['Announcements', '']]], ['Report', [['Report a problem', 'F1'], ['My reports', ''], ['Moderation', '']]]]],
-  market: ['Marketplace', 'Store', 'Browse', [['Apps', [['All apps', ''], ['Tools', ''], ['Blocks', ''], ['Plugins & MCP', ''], ['Blueprints', '']]], ['Agents', [['All agents', ''], ['Minds', ''], ['Teams', ''], ['Models', '']]], ['Yours', [['Purchases', '2'], ['Rentals', '1'], ['Seller console', '']]]]],
+  market: ['Marketplace', 'Store', 'Browse', [['Apps', [['All apps', ''], ['Tools', ''], ['Blocks', ''], ['Plugins & MCP', ''], ['Blueprints', '']]], ['Agents', [['All agents', ''], ['Minds', ''], ['Teams', ''], ['Models', '']]], ['Yours', [['Purchases', ''], ['Rentals', ''], ['Seller console', '']]]]],
 };
 
 // ── Chat keeps ONE history per context: a chat started in Studio stays in Studio, Overview's
@@ -163,5 +175,5 @@ window.XENO_PROJECTS = {
 //    "<mode>-<zone>"; the zone object is the mode's own, so content can never diverge.
 window.XENO_OVERVIEW_MAIN = { studio: ['create'], office: ['write'], social: ['publish'], corpo: ['company'], dev: ['agents'], tools: ['image'] };  // ONE main area per mode — six icons fit every screen; the rest is one click away (Open <mode> mode)
 // every area of every mode is addressable from Overview; the rail shows them grouped under their mode
-window.XENO_MODE_ZONES.overview = ['studio', 'office', 'social', 'corpo', 'dev', 'tools'].flatMap((m) => window.XENO_MODE_ZONES[m].map((z) => ({ ...z, id: m + '-' + z.id, of: m })));
+window.XENO_MODE_ZONES.overview = ['studio', 'office', 'social', 'corpo', 'dev', 'tools', 'research'].flatMap((m) => window.XENO_MODE_ZONES[m].map((z) => ({ ...z, id: m + '-' + z.id, of: m })));
 Object.entries({ ...window.XENO_BADGES }).forEach(([k, v]) => { const [m, z] = k.split('.'); if (m !== 'overview') window.XENO_BADGES['overview.' + m + '-' + z] = v; });

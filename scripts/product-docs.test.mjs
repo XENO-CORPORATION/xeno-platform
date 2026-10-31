@@ -9,11 +9,12 @@ const indexSource = readFileSync(join(docsRoot, 'index.ts'), 'utf8');
 
 const required = {
   agent: { version: '0.3.17', pages: ['introduction', 'chat-and-agent-modes', 'sessions-and-resume', 'goal-loop-handoff', 'nested-agents', 'ade-workbench', 'troubleshooting'] },
-  'agent-cli': { version: '0.5.43', pages: ['introduction', 'chat-and-agent-modes', 'sessions', 'goal-loop-handoff', 'delegation', 'cli-reference', 'troubleshooting'] },
-  sdk: { version: '0.9.24', pages: ['introduction', 'agent-loop', 'sessions', 'goal-loop-handoff', 'governed-automation', 'package-exports', 'versioning-stability'] },
+  'agent-cli': { version: '0.5.128', pages: ['introduction', 'self-review', 'authentication', 'chat-and-agent-modes', 'sessions', 'goal-loop-handoff', 'delegation', 'cli-reference', 'troubleshooting'] },
+  sdk: { version: '0.10.75', pages: ['introduction', 'self-review', 'agent-loop', 'sessions', 'goal-loop-handoff', 'governed-automation', 'package-exports', 'versioning-stability'] },
   acp: { version: '0.2.14', pages: ['introduction', 'architecture', 'coordination-extension', 'session-lifecycle', 'agent-endpoint', 'troubleshooting'] },
   hub: { version: '0.11.18', pages: ['introduction', 'agent', 'agent-runtime-updates', 'updates', 'troubleshooting'] },
   browser: { version: '0.5.8', pages: ['introduction', 'installation', 'signing-in', 'tabs-and-workspaces', 'agent-api', 'troubleshooting'] },
+  corpus: { version: '0.3.3', pages: ['introduction', 'installation', 'signing-in', 'quickstart', 'notes', 'agent-panel', 'tenets-and-verdicts', 'checks', 'connecting-agents', 'command-line', 'command-reference', 'exit-codes', 'troubleshooting'] },
   shell: { version: '0.1.0-beta.6', pages: ['introduction', 'installation', 'signing-in', 'bringing-apps-in', 'sharing', 'shared-folders-and-terminals', 'troubleshooting'] },
 };
 

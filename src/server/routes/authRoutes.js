@@ -11,7 +11,9 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
-import { siteOrigin, siteUrl, mailDomain } from '../config/hosts.js';
+import { siteOrigin, siteUrl, mailDomain, publicSiteOrigin, acceptedSiteOrigins } from '../config/hosts.js';
+import { confirmationStatus } from '../services/accountConfirmation.js';
+import { exchangeAuthorizationCode, revokeToken } from '../utils/oidcProvider.js';
 import { MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
 import { deductCredits } from '../utils/creditTransactions.js';
 import { sendEmail, sendWelcomeEmail } from '../services/emailService.js';
@@ -28,7 +30,8 @@ import {
 import { describeClient } from '../utils/userAgent.js';
 import { optOut } from '../services/emailPreferences.js';
 import { resolveOAuthLandingPath } from '../lib/onboardingHandoff.js';
-import { browserSessionCookies } from '../middleware/browserSession.js';
+import { browserSessionCookies, parseCookies } from '../middleware/browserSession.js';
+import * as twoStep from '../services/twoStep.js';
 import { resolveAuthedUser, authMiddleware, requireAdmin } from '../middleware/auth.js';
 import { issuePreviewSession } from '../middleware/previewSession.js';
 import { PREVIEW_MODE } from '../lib/previewPolicy.mjs';
@@ -163,6 +166,13 @@ function generateCodeChallenge(verifier) {
 }
 
 // Store OAuth state in Redis
+class LinkRefused extends Error {}
+/** The state a connect flow carries. A refusal ends the request here, before the person is sent to the provider. */
+async function linkOr(req) {
+  const intent = await linkIntent(req);
+  if (intent?.refused) throw new LinkRefused(intent.refused);
+  return intent || {};
+}
 async function storeOAuthState(state, data) {
   await redis.setex(`oauth:state:${state}`, OAUTH_STATE_TTL, JSON.stringify(data));
 }
@@ -529,6 +539,88 @@ async function issueLoginCredential(db, user, req, res) {
   return issueSessionToken(db, user, req);
 }
 
+// ── the second step ─────────────────────────────────────────────
+// Every way of signing in with a first factor passes through here (services/twoStep.js). No session exists until
+// the second step succeeds. The challenge sits in an HttpOnly cookie for a browser, and is handed over only to a
+// client that has no cookies, so it never reaches a URL.
+const TWO_STEP_COOKIE = `${browserSessionCookies.session.startsWith('__Host-') ? '__Host-' : ''}xeno_two_step`;
+const challengeFrom = (req) => parseCookies(req.headers.cookie).get(TWO_STEP_COOKIE) || (typeof req.body?.challenge === 'string' ? req.body.challenge : null);
+async function secondStepFor(db, user, req, res, { mode, returnUrl = null, isNew = false }) {
+  if (!await twoStep.hasSecondStep(db, user.id)) return null;
+  const token = await twoStep.startChallenge(db, { userId: user.id, mode, returnUrl, isNew });
+  res.cookie(TWO_STEP_COOKIE, token, { ...browserCookieOptions(), httpOnly: true, maxAge: twoStep.CHALLENGE_MINUTES * 60 * 1000 });
+  return token;
+}
+// ── connecting Google, GitHub or X to the account you are signed in to ─────────────────
+// Asked for from a signed-in browser that has just confirmed it's you. Who is asking is fixed when the flow starts and
+// kept server-side, because the provider returns to a host that may not have this browser's session.
+export async function linkIntent(req) {
+  if (req.query?.link !== '1') return null;
+  const resolved = await resolveAuthedUser(req);
+  if (!resolved.user) return { refused: 'sign_in' };
+  const status = await confirmationStatus(req.db, { userId: resolved.user.id, sid: req.browserSession?.sid || null });
+  if (!status.confirmed) return { refused: 'confirm' };
+  const origin = `https://${req.get('host')}`;
+  return { linkUserId: resolved.user.id, linkOrigin: acceptedSiteOrigins().includes(origin) ? origin : null };
+}
+/** One provider account belongs to one person. Taking it from someone else would hand their sign-in to you. */
+export async function linkProvider(db, userId, provider, profile) {
+  const held = (await db.query('SELECT user_id FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2', [provider, String(profile.id)])).rows[0];
+  if (held && String(held.user_id) !== String(userId)) return { refused: 'taken' };
+  if ((await db.query('SELECT 1 FROM oauth_accounts WHERE user_id = $1 AND provider = $2 AND provider_user_id <> $3', [userId, provider, String(profile.id)])).rowCount) return { refused: 'has_one' };
+  if (held) return { linked: true, already: true };
+  await db.query(`INSERT INTO oauth_accounts (user_id, provider, provider_user_id, provider_email, provider_username, provider_avatar_url, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6, NOW(), NOW())`,
+    [userId, provider, String(profile.id), profile.email || null, profile.username || null, profile.avatar || null]);
+  return { linked: true };
+}
+const SETTINGS_SECURITY = '/workspace/settings/security';
+async function finishLink(req, res, state, provider, profile) {
+  const base = state.linkOrigin || FRONTEND_URL;
+  try {
+    const out = await linkProvider(req.db, state.linkUserId, provider, profile);
+    if (out.refused) return res.redirect(`${base}${SETTINGS_SECURITY}?link_error=${out.refused}`);
+    if (!out.already) {
+      await recordSecurityEvent(req.db, EVENTS.TWO_STEP_CHANGED, { userId: state.linkUserId, req, metadata: { change: `${provider} sign-in connected` } });
+      const who = (await req.db.query('SELECT email, display_name, username FROM users WHERE id = $1', [state.linkUserId])).rows[0];
+      if (who?.email) sendEmail(req.db, 'two_step_changed', who.email, { displayName: who.display_name || who.username || 'there', change: `${provider === 'twitter' ? 'X' : provider[0].toUpperCase() + provider.slice(1)} sign-in was connected`, when: new Date().toUTCString() }, state.linkUserId).catch(() => {});
+    }
+    return res.redirect(`${base}${SETTINGS_SECURITY}?linked=${encodeURIComponent(provider)}`);
+  } catch (e) {
+    console.error('[auth] link', e.message);
+    return res.redirect(`${base}${SETTINGS_SECURITY}?link_error=failed`);
+  }
+}
+export async function finishOAuth(req, res, user, returnUrl, isNew) {
+  const pending = await secondStepFor(req.db, user, req, res, { mode: 'oauth', returnUrl, isNew });
+  if (pending) return res.redirect(`${FRONTEND_URL}/login?two_step=1`);
+  const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
+  return handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+}
+const publicUser = (user) => ({ id: user.id, username: user.username, email: user.email, display_name: user.display_name, avatar_url: user.avatar_url, created_at: user.created_at, email_verified: user.email_verified, is_active: user.is_active, credits: user.credits, bonus_credits_claimed: user.bonus_credits_claimed });
+/** The session a sign-in asked for, once every step it needed is done. */
+async function completeSignIn(req, res, userId, { mode, returnUrl, isNew, method }) {
+  const user = (await req.db.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
+  if (!user) throw new twoStep.TwoStepError('challenge_expired', 'Sign in again.', 410);
+  assertAccountUsable(user);
+  await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+  await recordSecurityEvent(req.db, EVENTS.LOGIN, { userId: user.id, req, metadata: { method } });
+  res.clearCookie(TWO_STEP_COOKIE, { ...browserCookieOptions(), httpOnly: true });
+  if (mode === 'oauth') {
+    const token = await issueOAuthCredential(req.db, user, req, res, returnUrl);
+    return res.json({ success: true, user: publicUser(user), redirect: buildOAuthRedirectUrl(returnUrl || '/workspace', token, isNew) });
+  }
+  const token = mode === 'preview' ? (await issuePreviewSession(req.db, user, req, res), null)
+    : mode === 'browser' ? (await issueBrowserSession(req.db, user, req, res), null)
+      : await issueSessionToken(req.db, user, req);
+  return res.json({ success: true, user: publicUser(user), token, message: 'Login successful' });
+}
+const twoStepFail = (res, e, label) => {
+  if (e instanceof twoStep.TwoStepError) return res.status(e.status).json({ success: false, code: e.code, error: e.message });
+  if (e instanceof AccountSuspendedError) return res.status(403).json({ success: false, code: e.code, error: 'This account is suspended.' });
+  console.error(`[auth] ${label}`, e.message);
+  return res.status(500).json({ success: false, error: 'Sign-in failed' });
+};
+
 async function issueOAuthCredential(db, user, req, res, returnUrl) {
   if (String(returnUrl || '').startsWith('xeno://')) {
     return issueSessionToken(db, user, req);
@@ -586,37 +678,7 @@ router.post('/init', async (req, res) => {
     const adminEmail = 'admin@xenostudio.local';
     const legacyAdminEmail = 'admin@xenostudio.ai';
 
-    // Create users table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        username VARCHAR(50) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        display_name VARCHAR(255) NOT NULL,
-        avatar_url VARCHAR(500),
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        last_login TIMESTAMP,
-        email_verified BOOLEAN DEFAULT FALSE,
-        is_active BOOLEAN DEFAULT TRUE,
-        reset_token VARCHAR(255),
-        reset_token_expires TIMESTAMP
-      )
-    `);
-
-    // Add missing columns to existing users table if they don't exist
-    try {
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
-      await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
-    } catch (error) {
-      console.log('Note: Some columns may already exist in users table');
-    }
-
+    // The users table is owned by database/migrations/, applied by the migrate job.
     // user_sessions schema is owned by database/migrations/ (baseline +
     // 20260719010000-unify-user-sessions.sql) — runAllMigrations applies it at boot,
     // fail-closed, before this route is reachable. No inline DDL here (the previous
@@ -855,6 +917,12 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    const loginMode = req.get('x-xeno-session-mode') === PREVIEW_MODE ? 'preview' : wantsBrowserSession(req) ? 'browser' : 'token';
+    const pendingSecondStep = await secondStepFor(req.db, user, req, res, { mode: loginMode });
+    if (pendingSecondStep) {
+      return res.status(401).json({ success: false, code: 'two_step_required', error: 'Confirm it’s you with your second step.', methods: await twoStep.methodsFor(req.db, user.id), ...(loginMode === 'token' ? { challenge: pendingSecondStep } : {}) });
+    }
+
     // Update last login
     await req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
     await recordSecurityEvent(req.db, EVENTS.LOGIN, { userId: user.id, req, metadata: { method: 'password' } });
@@ -893,6 +961,46 @@ router.post('/login', async (req, res) => {
 // ============================================
 // PASSWORD RESET
 // ============================================
+
+// GET /api/auth/two-step — is a second step waiting, and how can it be done. POST …/verify finishes it.
+router.get('/two-step', async (req, res) => {
+  try {
+    const info = await twoStep.challengeInfo(req.db, challengeFrom(req));
+    res.set('Cache-Control', 'no-store');
+    return info ? res.json({ success: true, ...info }) : res.status(404).json({ success: false, code: 'challenge_expired', error: 'Sign in again.' });
+  } catch (e) { return twoStepFail(res, e, 'two-step status'); }
+});
+router.post('/two-step/passkey/options', async (req, res) => {
+  try { res.json({ success: true, ...(await twoStep.challengePasskeyOptions(req.db, challengeFrom(req))) }); }
+  catch (e) { return twoStepFail(res, e, 'two-step passkey'); }
+});
+router.post('/two-step/verify', async (req, res) => {
+  try {
+    const { method, code, response } = req.body || {};
+    const done = await twoStep.verifyChallenge(req.db, { token: challengeFrom(req), method, code, response });
+    return await completeSignIn(req, res, done.userId, done);
+  } catch (e) {
+    if (e instanceof twoStep.TwoStepError && e.code === 'code_wrong') recordSecurityEvent(req.db, EVENTS.LOGIN_FAILED, { req, metadata: { reason: 'second_step' } }).catch(() => {});
+    return twoStepFail(res, e, 'two-step verify');
+  }
+});
+router.delete('/two-step', async (req, res) => {
+  try { await twoStep.dropChallenge(req.db, challengeFrom(req)); res.clearCookie(TWO_STEP_COOKIE, { ...browserCookieOptions(), httpOnly: true }); return res.json({ success: true }); }
+  catch (e) { return twoStepFail(res, e, 'two-step cancel'); }
+});
+// A passkey signs in by itself: it proved the device and the person.
+router.post('/passkey/options', async (req, res) => {
+  try { res.json({ success: true, ...(await twoStep.passkeySignInOptions(req.db)) }); }
+  catch (e) { return twoStepFail(res, e, 'passkey options'); }
+});
+router.post('/passkey/verify', async (req, res) => {
+  try {
+    const { ceremonyId, response } = req.body || {};
+    const userId = await twoStep.passkeySignIn(req.db, { ceremonyId, response });
+    if (!userId) return res.status(401).json({ success: false, code: 'passkey_refused', error: 'That passkey didn’t work. Try again, or sign in another way.' });
+    return await completeSignIn(req, res, userId, { mode: req.get('x-xeno-session-mode') === PREVIEW_MODE ? 'preview' : wantsBrowserSession(req) ? 'browser' : 'token', method: 'passkey' });
+  } catch (e) { return twoStepFail(res, e, 'passkey sign-in'); }
+});
 
 // POST /api/auth/forgot-password — issue a reset link.
 // Always responds 200 with the same generic message, whether or not the account
@@ -1157,8 +1265,9 @@ router.post('/browser-session', async (req, res) => {
   }
 });
 
-// GET /api/auth/validate - Validate current session
-router.get('/validate', async (req, res) => {
+// GET /api/auth/validate - Validate current session. Exported so XENO Comms' one validation URL
+// (GET /api/comms/identity, routes/commsIdentityRoutes.js) answers a session token exactly as this does.
+export async function validateSession(req, res) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     
@@ -1230,7 +1339,8 @@ router.get('/validate', async (req, res) => {
       // SECURITY: error.message not exposed to clients
     });
   }
-});
+}
+router.get('/validate', validateSession);
 
 // POST /api/auth/logout - Logout (invalidate session)
 router.post('/logout', async (req, res) => {
@@ -1292,15 +1402,6 @@ router.post('/migrate', async (req, res) => {
     // destroyed every live session on a world-reachable(-behind-setup-token) endpoint.
     // The route is now strictly ADDITIVE: no DROPs, ever.
 
-    // Step 2: Add missing columns to existing users table (additive-only)
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(255)`);
-    await req.db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP`);
-    console.log('✅ User table columns added/verified');
-
     // Step 3: Check if admin user exists and update/create it
     const adminCheck = await req.db.query(
       'SELECT id FROM users WHERE id = $1 OR email IN ($2, $3)',
@@ -1348,6 +1449,9 @@ router.post('/migrate', async (req, res) => {
   }
 });
 
+// The three roles (user < moderator < admin); anything else, `service` included, reads as `user`.
+export const meRole = (role) => (role === 'admin' || role === 'moderator' ? role : 'user');
+
 // GET /api/auth/me - Get current user profile
 router.get('/me', async (req, res) => {
   try {
@@ -1367,7 +1471,7 @@ router.get('/me', async (req, res) => {
     
     const result = await req.db.query(`
       SELECT id, username, email, display_name, avatar_url, 
-             created_at, last_login, email_verified, is_active, credits, bonus_credits_claimed
+             created_at, last_login, email_verified, is_active, credits, bonus_credits_claimed, role
       FROM users 
       WHERE id = $1
     `, [decoded.userId]);
@@ -1394,7 +1498,13 @@ router.get('/me', async (req, res) => {
         email_verified: user.email_verified,
         is_active: user.is_active,
         credits: user.credits,
-        bonus_credits_claimed: user.bonus_credits_claimed
+        bonus_credits_claimed: user.bonus_credits_claimed,
+        // The ROLE the session already has, so a page shows staff tools to staff without probing a staff-only route
+        // (the workspace's Support and Releases pages did, and every customer got 403/404s, 2026-10-24). KIND and
+        // ROLE are separate axes (XENO ACCOUNT - ARCHITECTURE §2.7): `service` is a kind stored in the role column,
+        // so it reads as role `user`. A label for the UI only — every staff route still checks for itself.
+        role: meRole(user.role),
+        kind: user.role === 'service' ? 'service' : 'human'
       }
     });
 
@@ -1826,18 +1936,8 @@ router.post('/use-credits', async (req, res) => {
     }
     const updateResult = { rows: [{ credits: debit.newBalance }] };
 
-    // Log usage (create table if needed)
+    // Log usage
     try {
-      await req.db.query(`
-        CREATE TABLE IF NOT EXISTS credit_usage (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL,
-          feature VARCHAR(100) NOT NULL,
-          credits_used INTEGER NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW()
-        )
-      `);
-
       await req.db.query(
         'INSERT INTO credit_usage (user_id, feature, credits_used) VALUES ($1, $2, $3)',
         [decoded.userId, feature, amount]
@@ -2061,7 +2161,7 @@ router.get('/google', async (req, res) => {
       // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
       // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
       // xenosystem.ai is never sent.
-      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), provider: 'google', returnUrl, createdAt: Date.now() });
+      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), ...(await linkOr(req, res)), provider: 'google', returnUrl, createdAt: Date.now() });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
@@ -2075,6 +2175,7 @@ router.get('/google', async (req, res) => {
 
     res.redirect(`${config.authUrl}?${params.toString()}`);
   } catch (error) {
+    if (error instanceof LinkRefused) return res.redirect(`${SETTINGS_SECURITY}?link_error=${error.message}`);
     console.error('Google OAuth init error:', error);
     res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
@@ -2134,6 +2235,7 @@ router.get('/google/callback', async (req, res) => {
     }
 
     // Find or create user
+    if (stateData.linkUserId) return await finishLink(req, res, stateData, 'google', { id: googleUser.id, email: googleUser.email, avatar: googleUser.picture, username: googleUser.email?.split('@')[0] });
     const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'google', {
       id: googleUser.id,
       email: googleUser.email,
@@ -2145,8 +2247,7 @@ router.get('/google/callback', async (req, res) => {
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
     const returnUrl = stateData.returnUrl || '/workspace';
-    const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
-    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+    await finishOAuth(req, res, user, returnUrl, isNew);
 
   } catch (error) {
     // A closed registration or a suspended account is a DECISION, not a failure.
@@ -2180,7 +2281,7 @@ router.get('/github', async (req, res) => {
       // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
       // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
       // xenosystem.ai is never sent.
-      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), provider: 'github', returnUrl, createdAt: Date.now() });
+      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), ...(await linkOr(req, res)), provider: 'github', returnUrl, createdAt: Date.now() });
 
     const params = new URLSearchParams({
       client_id: config.clientId,
@@ -2191,6 +2292,7 @@ router.get('/github', async (req, res) => {
 
     res.redirect(`${config.authUrl}?${params.toString()}`);
   } catch (error) {
+    if (error instanceof LinkRefused) return res.redirect(`${SETTINGS_SECURITY}?link_error=${error.message}`);
     console.error('GitHub OAuth init error:', error);
     res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
@@ -2274,6 +2376,7 @@ router.get('/github/callback', async (req, res) => {
     }
 
     // Find or create user
+    if (stateData.linkUserId) return await finishLink(req, res, stateData, 'github', { id: String(githubUser.id), email, avatar: githubUser.avatar_url, username: githubUser.login });
     const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'github', {
       id: String(githubUser.id),
       email: email,
@@ -2285,8 +2388,7 @@ router.get('/github/callback', async (req, res) => {
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
     const returnUrl = stateData.returnUrl || '/workspace';
-    const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
-    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+    await finishOAuth(req, res, user, returnUrl, isNew);
 
   } catch (error) {
     if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
@@ -2320,7 +2422,7 @@ router.get('/twitter', async (req, res) => {
       // The access-code invitation, captured where the flow STARTS (that host has the cookie) and kept server-side,
       // because the provider returns to OIDC/OAuth callback on xenostudio.ai, where a __Host- cookie set on
       // xenosystem.ai is never sent.
-      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie),
+      gateInvite: hasGateInvite(req.headers.cookie), shareInvite: hasShareInvite(req.headers.cookie), ...(await linkOr(req, res)),
       provider: 'twitter',
       returnUrl,
       codeVerifier,
@@ -2339,6 +2441,7 @@ router.get('/twitter', async (req, res) => {
 
     res.redirect(`${config.authUrl}?${params.toString()}`);
   } catch (error) {
+    if (error instanceof LinkRefused) return res.redirect(`${SETTINGS_SECURITY}?link_error=${error.message}`);
     console.error('Twitter OAuth init error:', error);
     res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
@@ -2403,6 +2506,7 @@ router.get('/twitter/callback', async (req, res) => {
     }
 
     // Find or create user (Twitter doesn't provide email in v2 API by default)
+    if (stateData.linkUserId) return await finishLink(req, res, stateData, 'twitter', { id: twitterUser.id, email: null, avatar: twitterUser.profile_image_url?.replace('_normal', '_400x400'), username: twitterUser.username });
     const { user, isNew } = await findOrCreateOAuthUserWithReq(req, 'twitter', {
       id: twitterUser.id,
       email: null, // Twitter v2 API doesn't provide email without elevated access
@@ -2414,8 +2518,7 @@ router.get('/twitter/callback', async (req, res) => {
     // Session-backed JWT (sid claim + unified user_sessions row; same issuer as
     // password login so revocation works identically for OAuth sign-ins).
     const returnUrl = stateData.returnUrl || '/workspace';
-    const jwtToken = await issueOAuthCredential(req.db, user, req, res, returnUrl);
-    handleOAuthRedirect(res, returnUrl, jwtToken, isNew);
+    await finishOAuth(req, res, user, returnUrl, isNew);
 
   } catch (error) {
     if (error instanceof AccountCreationBlockedError || error instanceof AccountSuspendedError) {
@@ -3065,6 +3168,73 @@ router.post('/onboarding', async (req, res) => {
   } catch (err) {
     console.error('[onboarding] write failed:', err.message);
     res.status(500).json({ success: false, error: 'Could not save' });
+  }
+});
+
+// ── Sign-in for a XENO product on its OWN host (tools.xenosystem.ai, owner 2026-10-28) ──────────────────────────────
+// A __Host- session cookie belongs to the exact host that set it, so a product served on its own host needs its own
+// browser session. This is a backend-for-frontend on the REAL XENO sign-in: authorization code + PKCE-S256 against
+// /api/oauth2/authorize as the product's own first-party client, the code exchanged in-process, then an ordinary
+// browser session (issueBrowserSession) on that host. The tokens the exchange mints are not kept: the refresh token is
+// revoked at once; only the identity is used. A host gets a client here, and its callback in migrate-oidc-clients.js.
+// The PKCE verifier, state and return path ride in one short-lived HttpOnly cookie on that host (the NextAuth shape):
+// no server-side state, and tampering with it can only break the person's own sign-in (state and PKCE both bind).
+export const HOST_SIGNIN_CLIENTS = Object.freeze({ 'tools.xenosystem.ai': 'xeno-tools-web' });
+const HOST_STATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-xeno_host_signin' : 'xeno_host_signin';
+const hostOf = (req) => String(req.headers.host || '').toLowerCase().split(':')[0];
+const hostClient = (req) => HOST_SIGNIN_CLIENTS[hostOf(req)] || null;
+// a path on this host only: one leading slash, never `//host` or `/\host`, no spaces or backslashes
+const hostReturnPath = (p) => (typeof p === 'string' && /^\/(?![/\\])[^\s\\]{0,511}$/.test(p) ? p : '/');
+const readCookie = (req, name) => {
+  for (const part of String(req.headers.cookie || '').split(';')) { const i = part.indexOf('='); if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim()); }
+  return null;
+};
+const htmlEsc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// a fresh same-site navigation, so the Strict session cookie set by this response is sent with the next page
+const continuePage = (res, path, note = 'Signing you in…') => res.status(200).type('html').set('Cache-Control', 'no-store')
+  .send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=${htmlEsc(path)}"><title>XENO</title><body style="background:#0a0a0a;color:#a3a3a3;font:14px system-ui;padding:32px">${htmlEsc(note)} <a style="color:#fafafa" href="${htmlEsc(path)}">Continue</a></body>`);
+
+router.get('/host/start', async (req, res) => {
+  const clientId = hostClient(req);
+  if (!clientId) return res.status(404).json({ success: false, error: 'Not a XENO product host' });
+  try {
+    const host = hostOf(req);
+    const state = crypto.randomBytes(24).toString('base64url');
+    const verifier = crypto.randomBytes(48).toString('base64url');
+    const carry = Buffer.from(JSON.stringify({ s: state, v: verifier, c: clientId, h: host, r: hostReturnPath(req.query.return) })).toString('base64url');
+    res.cookie(HOST_STATE_COOKIE, carry, { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
+    const q = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: `https://${host}/api/auth/host/callback`, scope: 'openid profile email', state, code_challenge: generateCodeChallenge(verifier), code_challenge_method: 'S256' });
+    return res.redirect(302, `${publicSiteOrigin()}/api/oauth2/authorize?${q}`);
+  } catch (error) {
+    console.error('[auth] host sign-in start', error.message);
+    return res.status(500).json({ success: false, error: 'Sign-in could not start' });
+  }
+});
+
+router.get('/host/callback', async (req, res) => {
+  const clientId = hostClient(req);
+  if (!clientId) return res.status(404).json({ success: false, error: 'Not a XENO product host' });
+  const host = hostOf(req);
+  let carry = null;
+  try { carry = JSON.parse(Buffer.from(readCookie(req, HOST_STATE_COOKIE) || '', 'base64url').toString('utf8')); } catch { carry = null; }
+  res.clearCookie(HOST_STATE_COOKIE, { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', path: '/' });
+  const { code, state, error } = req.query;
+  if (error) return continuePage(res, '/', 'Sign-in was cancelled.');
+  if (typeof state !== 'string' || typeof code !== 'string' || !carry || typeof carry.s !== 'string' || carry.s !== state
+      || carry.c !== clientId || carry.h !== host || typeof carry.v !== 'string') return res.status(400).type('text').send('This sign-in link is not valid any more. Start again.');
+  try {
+    const tokens = await exchangeAuthorizationCode(req.db, { code, clientId, redirectUri: `https://${host}/api/auth/host/callback`, codeVerifier: carry.v });
+    if (tokens.refresh_token) await revokeToken(req.db, { token: tokens.refresh_token }).catch(() => {});
+    const sub = jwt.decode(tokens.access_token || tokens.id_token)?.sub;
+    const u = sub ? (await req.db.query('SELECT * FROM users WHERE id::text = $1', [String(sub)])).rows[0] : null;
+    if (!u) return res.status(400).type('text').send('That account could not be found.');
+    assertAccountUsable(u);
+    await issueBrowserSession(req.db, u, req, res);
+    return continuePage(res, hostReturnPath(carry.r));
+  } catch (e) {
+    if (e instanceof AccountSuspendedError) return res.status(403).type('text').send('This account is suspended.');
+    console.error('[auth] host sign-in callback', e.message);
+    return res.status(400).type('text').send('Sign-in did not complete. Start again.');
   }
 });
 

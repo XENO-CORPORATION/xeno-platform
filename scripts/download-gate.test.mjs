@@ -36,6 +36,7 @@ const catalog = read('src/lib', 'productCatalog.ts');
 
 const UI = [
   ['src/components/product', 'ReleaseFeed.tsx'],
+  ['src/components/product/v2', 'ReleaseEntry.tsx'],
   ['src/pages', 'ProductReleaseDetail.tsx'],
   ['src/pages', 'ProductDownload.tsx'],
   ['src/pages', 'ProductPage.tsx'],
@@ -112,10 +113,16 @@ test('an ungranted request is never handed an installer', () => {
 });
 
 test('a browser navigation is sent somewhere it can act', () => {
-  /* A bare 401 in a browser tab is a dead end. HTML gets the sign-in page with
-   * a returnUrl; everything else gets JSON it can branch on. */
+  /* A bare 401 in a browser tab is a dead end. Since #898 (2026-10-22) a navigation
+   * goes to the product's download page, whose Download controls mint a grant on
+   * click and carry sign-in and plan refusals onward (downloadFlow.ts). It used to
+   * go to /login?returnUrl=, which bounced straight back here in a 302 loop.
+   * Everything else gets JSON it can branch on. */
   assert.ok(route.includes('wantsHtml(req)'), 'the route no longer distinguishes a navigation from an API call');
-  assert.ok(route.includes('/login?returnUrl='), 'a browser navigation is not sent anywhere it can act');
+  assert.ok(route.includes('res.redirect(302, `/product/${encodeURIComponent(slug)}/download`)'),
+    'a browser navigation is not sent anywhere it can act');
+  assert.ok(read('src/pages', 'ProductDownload.tsx').includes('onClick={downloadClickHandler('),
+    'the page a navigation lands on cannot mint a grant');
   assert.ok(route.includes('download_grant_required'), 'the JSON refusal lost its code');
 });
 
@@ -250,4 +257,37 @@ test('update and download stay SEPARABLE, on one named seam', () => {
     'the update capability is no longer a named seam — splitting it is now a refactor, not a line');
   assert.ok(route.includes('assertEntitlement(req.db, userId, UPDATE_CAPABILITY)'),
     'the update endpoint no longer goes through its own capability constant');
+});
+
+/* ── 6 · The updater's FEED behind the plan (owner, 2026-10-25) ─────────── */
+
+test('the gated feed is refused before anything is read', () => {
+  const start = route.indexOf("updateGrantRouter.get('/:slug/feed/:file'");
+  assert.ok(start > -1, 'the gated feed route is gone');
+  const body = route.slice(start);
+  const gate = body.indexOf('assertEntitlement(req.db, userId, UPDATE_CAPABILITY)');
+  assert.ok(gate > -1, 'the feed does not assert the update capability');
+  assert.ok(gate < body.indexOf('await loadReleases(slug)'), 'the feed looks a release up before the paywall');
+  assert.ok(gate < body.indexOf('await fetch('), 'the feed reads R2 before the paywall, leaking that an update exists');
+});
+
+test('the gated feed mints under the same cap and audit as every other grant', () => {
+  const body = route.slice(route.indexOf("updateGrantRouter.get('/:slug/feed/:file'"));
+  assert.ok(body.indexOf('enforceGrantCap(req, userId)') > -1, 'the feed mints grants with no per-account cap');
+  assert.ok(body.indexOf('auditGrant(req,') > -1, 'the feed mints grants with no audit row');
+  const mint = body.indexOf('mintDownloadGrant(');
+  assert.ok(body.slice(mint, body.indexOf(')', mint)).includes('version: release.version'), 'the feed grant is not bound to the resolved version');
+});
+
+test('the feed rewrite points every file at the grant route and keeps the checksum', async () => {
+  const { rewriteFeed } = await import('../src/server/routes/productDownloadRoutes.js');
+  const feed = "version: 0.42.22\nfiles:\n  - url: v0.42.22/XENO Canvas Setup 0.42.22.exe\n    sha512: ABC==\n    size: 135276996\npath: v0.42.22/XENO Canvas Setup 0.42.22.exe\nsha512: ABC==\nreleaseDate: '2026-10-25T00:23:30.908Z'\n";
+  const out = rewriteFeed(feed, { slug: 'canvas', os: 'windows', version: '0.42.22', grant: 'g.1' });
+  assert.ok(out, 'a matching feed was refused');
+  assert.equal((out.match(/\/product\/canvas\/download\/win\/0\.42\.22\?grant=g\.1/g) || []).length, 2, 'not every url/path was rewritten');
+  assert.ok(!out.includes('v0.42.22/XENO'), 'a public CDN path survived the rewrite');
+  assert.equal((out.match(/sha512: ABC==/g) || []).length, 2, 'the checksum the updater verifies was changed');
+  assert.ok(out.includes('size: 135276996'), 'the size was changed');
+  assert.equal(rewriteFeed(feed, { slug: 'canvas', os: 'windows', version: '0.42.23', grant: 'g' }), null,
+    'a feed naming another version than the release was served anyway');
 });

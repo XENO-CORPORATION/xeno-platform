@@ -6,8 +6,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node --max-http-header-size=80000 --max-old-space-size=4096 index.js",
-      "start:chat-workers": "node --max-old-space-size=2048 workers/chatProjectWorkerProcess.js",
-      "start:chat-extractor": "node --max-old-space-size=768 workers/chatAssetExtractorProcess.js",
+    "start:chat-workers": "node --max-old-space-size=2048 workers/chatProjectWorkerProcess.js",
+    "start:chat-extractor": "node --max-old-space-size=768 workers/chatAssetExtractorProcess.js",
     "dev": "nodemon --max-http-header-size=80000 --max-old-space-size=4096 index.js",
     "test": "node tests/run-all.js",
     "test:hosts": "node tests/hosts.test.mjs",
@@ -20,6 +20,11 @@
     "oidc:register-client": "node scripts/register-oidc-client.mjs"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^14.0.3",
+    "@xenosystem/agent-sdk": "0.10.0",
+    "@xenosystem/anima-mind": "0.0.15",
+    "@xenosystem/orchestrator": "file:vendor/xenosystem-orchestrator-0.1.0-f838e9f5.tgz",
+    "@xenosystem/web-context-client": "0.1.1",
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
     "cheerio": "^1.0.0",
@@ -46,6 +51,7 @@
     "pdf-lib": "^1.17.1",
     "pg": "^8.11.3",
     "puppeteer-core": "^25.9.0",
+    "qrcode": "^1.5.4",
     "rrule": "2.8.1",
     "sharp": "^0.35.3",
     "socket.io": "^4.7.5",
@@ -54,8 +60,8 @@
     "tiktoken": "^1.0.18",
     "uuid": "^14.0.2",
     "ws": "^8.14.0",
-    "@xenosystem/web-context-client": "0.1.1",
-    "xeno-ai": "^0.1.1"
+    "xeno-ai": "^0.1.1",
+    "xeno-research": "file:vendor/xeno-research-0.1.0-e6df130.tgz"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

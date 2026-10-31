@@ -224,7 +224,7 @@ if (KEY && configured.length) {
     if (issues.length) {
       for (const p of issues) warn(`${i.id} (${i.priceEnv}): ${p}`);
     } else {
-      const cadence = i.kind === 'subscription' ? `/${price.recurring.interval}` : ' one-time';
+      const cadence = (i.kind === 'subscription' || i.kind === 'storage') ? `/${price.recurring.interval}` : ' one-time';
       console.log(`  ✓  ${i.id.padEnd(20)} ${(price.unit_amount / 100).toFixed(2)} ${price.currency.toUpperCase()}${cadence}`);
     }
   }

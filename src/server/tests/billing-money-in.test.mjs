@@ -48,7 +48,7 @@ const C = (n) => n * MICRO_PER_CREDIT;
 const BASE = `
 CREATE TABLE IF NOT EXISTS users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), credits bigint DEFAULT 0);
 CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), metadata jsonb DEFAULT '{}'::jsonb, updated_at timestamptz DEFAULT now());
-CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+CREATE TABLE IF NOT EXISTS credit_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid UNIQUE, owner_kind varchar(16) DEFAULT 'user', balance bigint DEFAULT 0, lifetime_earned bigint DEFAULT 0, lifetime_spent bigint DEFAULT 0, is_frozen boolean DEFAULT false, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS credit_transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, account_id uuid, type varchar(32), amount bigint, balance_after bigint, reference_type varchar(64), reference_id varchar(128), description text, metadata jsonb, prev_hash text, entry_hash text, created_at timestamptz DEFAULT now());
 `;
 
@@ -295,6 +295,34 @@ async function main() {
   const failingProvider = { subscriptions: { retrieve: async () => { throw new Error('fixture provider unavailable'); } } };
   await assert.rejects(handleEvent(pool, evt('evt_team_failed', 'invoice.payment_failed', { customer: teamSession.customer, subscription: 'sub_team' }), { provider: failingProvider }));
   ok((await pool.query("SELECT metadata->'billing'->>'status' AS status FROM workspaces WHERE id=$1", [workspaceId])).rows[0].status === 'active', 'provider failure rolls back subscription state and requests webhook retry');
+
+  // Storage packs (owner, 2026-10-27): a monthly subscription that is extra space, never a plan.
+  await pool.query(`CREATE TABLE IF NOT EXISTS storage_grants (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL,
+    bytes bigint NOT NULL CHECK (bytes > 0), reason text NOT NULL, expires_at timestamptz, revoked_at timestamptz, created_at timestamptz NOT NULL DEFAULT now())`);
+  await pool.query(readFileSync(new URL('../database/migrations/20261102130000-storage-packs.sql', import.meta.url), 'utf8').split(/^--\s*DOWN\b/m)[0]);
+  const packUser = await newUser();
+  const packSession = { ...paidSession(packUser, 0, null), mode: 'subscription', subscription: 'sub_pack',
+    metadata: { xenoUserId: packUser, itemId: 'storage_100gb_monthly', kind: 'storage' } };
+  const packResource = { id: 'sub_pack', customer: packSession.customer, status: 'active', created: 300,
+    metadata: { xenoUserId: packUser, itemId: 'storage_100gb_monthly' }, items: { data: [{ price: { id: 'price_pack_test' }, quantity: 1 }] } };
+  const packProvider = { subscriptions: { retrieve: async () => structuredClone(packResource) } };
+  const grants = async () => (await pool.query('SELECT bytes, revoked_at, item_id FROM storage_grants WHERE user_id=$1', [packUser])).rows;
+  await handleEvent(pool, evt('evt_pack_paid', 'checkout.session.completed', packSession), { provider: packProvider });
+  let g = await grants();
+  ok(g.length === 1 && Number(g[0].bytes) === 100 * 1024 ** 3 && g[0].revoked_at === null, 'a paid storage pack adds its space');
+  ok((await getPlan(pool, packUser)).plan === 'free', 'and never changes the plan');
+  await handleEvent(pool, evt('evt_pack_renewed', 'invoice.paid', { customer: packSession.customer, subscription: 'sub_pack' }), { provider: packProvider });
+  ok((await grants()).length === 1, 'a renewal keeps one grant per pack');
+  packResource.status = 'past_due';
+  await handleEvent(pool, evt('evt_pack_retry', 'invoice.payment_failed', { customer: packSession.customer, subscription: 'sub_pack' }), { provider: packProvider });
+  ok((await grants())[0].revoked_at === null, 'a failed payment Stripe is still retrying keeps the space');
+  packResource.status = 'canceled';
+  await handleEvent(pool, evt('evt_pack_ended', 'customer.subscription.deleted', { id: 'sub_pack', customer: packSession.customer }), { provider: packProvider });
+  g = await grants();
+  ok(g.length === 1 && g[0].revoked_at !== null, 'a cancelled pack is revoked, the row kept');
+  packResource.status = 'active';
+  await handleEvent(pool, evt('evt_pack_back', 'customer.subscription.updated', { id: 'sub_pack', customer: packSession.customer }), { provider: packProvider });
+  ok((await grants())[0].revoked_at === null, 'a resumed pack adds its space again');
 
   // Real SQL ownership/item/expiry checks, not mocks that ignore WHERE clauses.
   await assert.rejects(requireCheckoutConsent(pool, u1, 'credits_small'), { code: 'consent_unavailable' });

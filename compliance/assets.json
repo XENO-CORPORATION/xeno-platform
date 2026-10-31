@@ -345,6 +345,16 @@
       "rights": "Project owner explicitly confirms ownership and permission to use in this platform; recorded as user-provided evidence, not independent legal verification.",
       "evidence": "compliance/asset-owner-confirmation-2026-09-05.json",
       "note": "Original creation method not independently established; no generation record is fabricated."
+    },
+    {
+      "path": "public/home-v21/site/hero-bg.png",
+      "sha256": "ee7b3bbfc0efe0d401e141dca7ac262c28cd90a8ea77dab0a7cec7b793d28d02",
+      "origin": "ai-generated",
+      "generator": "OpenAI gpt-image (pre-2.0), OpenAI Media Service API",
+      "rights": "Provider output-rights assignment, subject to applicable terms and law; not an assertion of exclusive copyright or third-party clearance.",
+      "evidence": "compliance/generated-assets-2026-10-24.json",
+      "rightsEvidence": "docs/release-evidence/openai-output-rights-basis-2026-09-05.md",
+      "note": "Origin read from the C2PA credential embedded in the file (signed by OpenAI, created 2026-05-07); decorative homepage background."
     }
   ],
   "correction": {

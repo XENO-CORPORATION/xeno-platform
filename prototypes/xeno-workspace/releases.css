@@ -1,0 +1,24 @@
+/* releases.css — the release record (platform-releases.js). Workspace tokens only; emphasis by surface and text
+   brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens instead.
+   Forms and the side console reuse support.css (.sp-form, .sp-console, .sp-row, .sp-layout). */
+.rl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 16px}
+.rl-stat{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px;border-radius:10px;background:var(--n18);border:1px solid var(--n31);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.rl-stat b{font-size:18px;font-weight:600}.rl-stat span{font-size:12px;color:var(--muted)}
+.rl-stat:hover{background:var(--n20);border-color:var(--n42)}
+.rl-news{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px;max-width:760px}
+.rl-news li{display:grid;grid-template-columns:140px minmax(0,1fr);gap:16px;padding:16px;border-radius:10px;background:var(--n18);border:1px solid var(--n31)}
+.rl-news h3{margin:0 0 6px;font-size:14px;font-weight:600;color:var(--text)}
+.rl-news p{margin:0;font-size:13px;line-height:1.6;color:var(--muted);white-space:pre-wrap}
+.rl-date{font-size:12px;color:var(--dim)}
+.rl-dl{display:grid;grid-template-columns:160px minmax(0,1fr);gap:8px 16px;margin:12px 0;font-size:13px}
+.rl-dl dt{color:var(--muted)}.rl-dl dd{margin:0;color:var(--text);word-break:break-word}
+.rl-bar{display:flex;gap:8px;margin:8px 0 12px;flex-wrap:wrap}
+.rl-bar input,.rl-form input,.rl-form select{padding:8px 10px;border-radius:6px;background:var(--n20);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none}
+.rl-bar input:focus,.rl-form input:focus,.rl-form select:focus{border-color:var(--n58);outline:0}
+.rl-form{display:flex;flex-direction:column;gap:12px}
+.rl-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.rl-h{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--text)}
+@media (max-width:760px){.rl-news li{grid-template-columns:1fr;gap:6px}.rl-dl{grid-template-columns:1fr}}
+
+/* the internal release note (staff only): each section keeps its line breaks */
+.rl-inote .rl-dl dd { white-space: pre-wrap; }

@@ -5,6 +5,7 @@
 // the person themself does (positive control, so "hidden" is not just "never rendered").
 //   DATABASE_URL=postgresql://…/<disposable> node prototypes/xeno-workspace/tests/directory-test.mjs
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url'; import http from 'node:http';
+import { shot } from './shot.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(path.join(repo, 'src/server/package.json'));
 const puppeteer = createRequire(import.meta.url)('puppeteer'), express = require('express'), pg = require('pg');
@@ -23,6 +24,14 @@ const owner = await mk('owner', 'Olga Owner'), emp = await mk('emp', 'Emil Emplo
 const W = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'company','Dir Co',$2) RETURNING id`, [owner, `${tag}-co`])).rows[0].id;
 await writeTuples(pool, { writes: [{ object: `workspace:${W}`, subject: `user:${owner}`, relation: 'owner' }, { object: `workspace:${W}`, subject: `user:${emp}`, relation: 'editor' }, { object: `workspace:${W}`, subject: `user:${peer}`, relation: 'editor' }] });
 await people.updateProfile(pool, { id: owner }, { workspaceId: W, principalId: emp, title: 'Sound engineer', managerId: owner, privatePhone: '+49 555 0101', privateNotes: 'SECRET-NOTE-42' });
+// Work report evidence: the employee made two tasks in a project of this workspace and closed one without a review.
+const { readWorkforceEvaluation, readWorkforceRoster } = await import('../../../src/server/services/workforceEvaluation.js');
+const proj = (await pool.query(`INSERT INTO chat_projects(user_id,owner_user_id,workspace_id,created_by_user_id,updated_by_user_id,name) VALUES(NULL,NULL,$1,$2,$2,'Mix') RETURNING id`, [W, owner])).rows[0].id;
+for (const done of [true, false]) {
+  const tid = (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,status) VALUES('Master the track',$1,$2,$2,$3) RETURNING id`, [proj, emp, done ? 'done' : 'todo'])).rows[0].id;
+  await pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind) VALUES($1,$2,'human','created')`, [tid, emp]);
+  if (done) await pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind,from_value,to_value) VALUES($1,$2,'human','status','in_progress','done')`, [tid, emp]);
+}
 
 const app = express(); app.use(express.json());
 app.use('/api/people', (req, _res, next) => { req.db = pool; req.owner = req.get('x-test-user'); next(); }, peopleRoutes);
@@ -47,6 +56,30 @@ const page = async () => {
     const user = (await pool.query('SELECT id, username, email, display_name FROM users WHERE id = $1', [who])).rows[0];
     if (u.pathname === '/api/auth/me') return json(200, { success: true, user: { ...user, avatar_url: null, email_verified: true } });
     if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: W, workspace_type: 'company', name: 'Dir Co', member_role: 'editor' }] });
+    if (u.pathname.startsWith('/api/compensation/')) {
+      // the REAL compensation service, as the signed-in user (the route is a thin shell over it)
+      const C = await import('../../../src/server/services/workforceCompensation.js');
+      const c = { actorUserId: who }, qs = Object.fromEntries(u.searchParams), body = q.postData() ? JSON.parse(q.postData()) : {};
+      const p = u.pathname.replace('/api/compensation', '');
+      try {
+        const d = p === '/agreements' && q.method() === 'GET' ? await C.listAgreements(pool, c, { workspaceId: qs.workspace })
+          : p === '/agreements' ? await C.setAgreement(pool, c, body)
+            : p === '/payouts' ? await C.listPayouts(pool, c, { workspaceId: qs.workspace })
+              : p === '/payouts/prepare' ? await C.preparePayouts(pool, c, body)
+                : /^\/payouts\/[^/]+\/decide$/.test(p) ? await C.decidePayout(pool, c, { ...body, payoutId: p.split('/')[2] }) : null;
+        if (!d) return json(404, { success: false });
+        seen.push(JSON.stringify(d)); return json(200, { success: true, ...d });
+      } catch (e) { return json(e.status || 500, { success: false, code: e.code, error: e.details?.reason }); }
+    }
+    if (u.pathname === '/api/workforce/evaluation/roster') {
+      try { const d = await readWorkforceRoster(pool, { actorUserId: who, clientId: 'legacy-workforce-session' }, JSON.parse(q.postData())); seen.push(JSON.stringify(d)); return json(200, d); }
+      catch (e) { return json(e.status || 500, { success: false, code: e.code }); }
+    }
+    if (u.pathname === '/api/workforce/evaluation') {
+      // the REAL service, as the signed-in user (its route's own shape checks are proven in scripts/workforce-routes.test.mjs)
+      try { const d = await readWorkforceEvaluation(pool, { actorUserId: who, clientId: 'legacy-workforce-session' }, JSON.parse(q.postData())); seen.push(JSON.stringify(d)); return json(200, d); }
+      catch (e) { return json(e.status || 500, { success: false, code: e.code }); }
+    }
     if (u.pathname.startsWith('/api/people')) {
       const r = await fetch(REAL + u.pathname + u.search, { method: q.method(), headers: { 'content-type': 'application/json', 'x-test-user': who }, body: ['GET', 'HEAD'].includes(q.method()) ? undefined : q.postData() });
       const body = await r.text(); seen.push(body);
@@ -64,6 +97,8 @@ try {
   const p = await page();
   await p.goto(`${base}/workspace/workspace/Directory?ws=${W}`, { waitUntil: 'domcontentloaded' });
   ok(await until(p, () => /Emil Employee/.test(document.querySelector('#main')?.innerText || '') && /Sound engineer/.test(document.querySelector('#main')?.innerText || '')), 'the directory lists the workspace’s people with their titles');
+  await shot(p, 'directory');
+  ok(await p.evaluate(() => !!document.querySelector('#main .topbar .pg-top-tabs [data-xdir="tab"][data-to="Directory/org-chart"]') && !document.querySelector('#main .mview [data-xdir="tab"]')), 'Directory · Org chart · My work are tabs in the header bar, not a row in the body');
   await p.evaluate((id) => document.querySelector(`[data-xdir="open"][data-id="${id}"]`).click(), emp);
   ok(await until(p, (id) => location.pathname.endsWith(`/Directory/${id}`), 8000, emp) || new URL(p.url()).pathname.endsWith(`/Directory/${emp}`), 'a person opens at their id');
   ok(await until(p, () => /Reports to/.test(document.querySelector('#main')?.innerText || '')), 'the person page shows the reporting line');
@@ -83,7 +118,75 @@ try {
   const p3 = await page();
   await p3.goto(at, { waitUntil: 'domcontentloaded' });
   ok(await until(p3, () => /SECRET-NOTE-42/.test(document.querySelector('#main')?.innerText || '') && !!document.querySelector('[data-private]')), 'the person sees their own private fields');
-  ok(![p, p2, p3].some((x) => x.errs.length), `no page errors (${[p, p2, p3].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
+  // ── work report: what a person directed, did, checked and answers for; counts, never a score
+  await p3.evaluate(() => [...document.querySelectorAll('[data-xdir="tab"]')].find((b) => /Work report/.test(b.textContent))?.click());
+  await until(p3, () => /\/work\/30$/.test(location.pathname));
+  ok(new URL(p3.url()).pathname.endsWith(`/Directory/${emp}/work/30`), 'Work report opens at /Directory/<id>/work/30');
+  ok(await until(p3, () => /Work report/.test(document.querySelector('#main')?.innerText || '') && /Emil Employee/.test(document.querySelector('#main')?.innerText || '') && /Tasks created/.test(document.querySelector('#main')?.innerText || '')), 'the person sees their own work report');
+  const rep = await p3.evaluate(() => Object.fromEntries([...document.querySelectorAll('.xdir-tile')].map((t) => [t.querySelector('span').textContent, t.querySelector('b').textContent])));
+  ok(rep['Tasks created'] === '2' && rep['Closed without review'] === '1' && rep.Finished === '1' && rep['Never reviewed'] === '1', `the counts are the records' (${JSON.stringify(rep)})`);
+  ok(/None of the 1 finished tasks went through a review/.test(await text(p3)), 'a fact is stated plainly, not as a verdict');
+  ok(!/(score|rating)\s*[:=]?\s*\d/i.test(await text(p3)) && /no score/.test(await text(p3)), 'no score, and the page says so');
+  ok(await p3.evaluate(() => !!document.querySelector('#main .topbar .pg-top-tabs [data-to$="/work/7"]')), 'the periods are tabs in the header bar');
+  await p3.evaluate(() => document.querySelector('[data-to$="/work/7"]').click());
+  // the breadcrumb names the period: … / Work report / 7 days
+  ok(await until(p3, () => /\/work\/7$/.test(location.pathname) && /Work report\s*\/\s*7 days/.test(document.querySelector('#main')?.innerText || '')), 'a period has its own address, named in the breadcrumb');
+  const wat = p3.url();
+  await p3.reload({ waitUntil: 'domcontentloaded' });
+  ok(await until(p3, () => /Work report\s*\/\s*7 days/.test(document.querySelector('#main')?.innerText || '') && /Tasks created/.test(document.querySelector('#main')?.innerText || '')) && p3.url() === wat, 'refresh lands on the same report and period');
+  who = owner;
+  const p4 = await page(); await p4.goto(wat, { waitUntil: 'domcontentloaded' });
+  ok(await until(p4, () => /Work report/.test(document.querySelector('#main')?.innerText || '') && /Emil Employee/.test(document.querySelector('#main')?.innerText || '')), 'an admin of the workspace sees it (fresh tab)');
+  who = peer; seen.length = 0;
+  const p5 = await page(); await p5.goto(wat, { waitUntil: 'domcontentloaded' });
+  ok(await until(p5, () => /You cannot see this report/.test(document.querySelector('#main')?.innerText || '')), 'a peer is told they cannot see it');
+  ok(!seen.some((b) => /closedWithoutReview|"tasks"/.test(b)), 'and no figure of it was sent to the peer');
+  ok(/Credits/.test(await text(p4)) && /Runs charged/.test(await text(p4)) && /billed to the person/.test(await text(p4)), 'credits in a workspace are the run charges, and the page says why');
+  // ── group work: one row per member; the owner manages the employee
+  who = owner;
+  const p6 = await page(); await p6.goto(`${base}/workspace/workspace/Directory/reports/${owner}/30?ws=${W}`, { waitUntil: 'domcontentloaded' });
+  ok(await until(p6, () => /Emil Employee/.test(document.querySelector('#main')?.innerText || '') && /Never reviewed/.test(document.querySelector('#main')?.innerText || '')), 'a manager sees their reports’ work, one row each');
+  // Name | Created 2 | To agents 0 | Reviews 0 | Within a minute 0 | Finished 1 | Never reviewed 1 | Closed by agent 0 | Runs 0 | Credits 0
+  const row = await p6.evaluate((id) => [...document.querySelector(`[data-to="Directory/${id}/work/30"]`).children].map((c) => c.textContent.trim()), emp);
+  ok(row.slice(1).join(',') === '2,0,0,0,1,1,0,0,0', `the row carries the member's counts (${row.join(' | ')})`);
+  ok(await p6.evaluate(() => /Reports work\s*\/\s*Olga Owner\s*\/\s*30 days/.test(document.querySelector('#main')?.innerText || '')), 'the breadcrumb names the group and period');
+  await p6.evaluate((id) => document.querySelector(`[data-to="Directory/${id}/work/30"]`).click(), emp);
+  ok(await until(p6, (id) => /\/work\/30$/.test(location.pathname) && /Tasks created/.test(document.querySelector('#main')?.innerText || '')), 'a row opens that member’s own report');
+  who = peer; seen.length = 0;
+  const p7 = await page(); await p7.goto(`${base}/workspace/workspace/Directory/reports/${owner}/30?ws=${W}`, { waitUntil: 'domcontentloaded' });
+  ok(await until(p7, () => /You cannot see this report/.test(document.querySelector('#main')?.innerText || '')), 'a peer cannot read someone else’s reports');
+  ok(!seen.some((b) => /tasksCreated/.test(b)), 'and no row was sent to them');
+  // ── Pay: a finished week in which the owner accepted one of Emil's tasks from review; the owner sets his pay
+  // (20 credits per accepted task), prepares the week, approves it in the confirmation dialog -- and it is paid
+  // from the workspace wallet. Emil sees his own pay and cannot decide it.
+  const { ensureWorkspaceWallet } = await import('../../../src/server/services/walletService.js');
+  const { addGrant } = await import('../../../src/server/utils/creditLedgerV2.js');
+  const C = await import('../../../src/server/services/workforceCompensation.js');
+  await ensureWorkspaceWallet(pool, W); await addGrant(pool, W, { amountMicro: 100_000_000, kind: 'paid', sourceRef: `${tag}-fund` });
+  const d0 = new Date(); d0.setUTCHours(0, 0, 0, 0); d0.setUTCDate(d0.getUTCDate() - 9);
+  const weekStart = d0.toISOString().slice(0, 10), inWeek = new Date(d0.getTime() + 86_400_000).toISOString();
+  const accTask = (await pool.query(`INSERT INTO tasks(title,project_id,reporter_id,assignee_id,status) VALUES('Mix the stems',$1,$2,$3,'done') RETURNING id`, [proj, owner, emp])).rows[0].id;
+  await pool.query(`INSERT INTO task_events(task_id,actor_id,actor_kind,kind,from_value,to_value,created_at) VALUES($1,$2,'human','status','in_progress','in_review',$4),($1,$3,'human','status','in_review','done',$4)`, [accTask, emp, owner, inWeek]);
+  await C.setAgreement(pool, { actorUserId: owner }, { workspaceId: W, principalId: emp, basis: 'per_accepted_task', amountMicro: '20000000', period: 'week', startsOn: '2026-01-01' });
+  who = owner;
+  const p8 = await page(); const payUrl = `${base}/workspace/workspace/Directory/pay/${weekStart}/week?ws=${W}`;
+  await p8.goto(payUrl, { waitUntil: 'domcontentloaded' });
+  ok(await until(p8, () => /Agreements/.test(document.querySelector('#main')?.innerText || '') && /Per task a person accepted/.test(document.querySelector('#main')?.innerText || '')), 'Pay lists the agreement');
+  ok(await p8.evaluate(() => !!document.querySelector('#main .topbar .pg-top-tabs [data-to="Directory/pay"]')), 'Pay is a tab in the header bar');
+  await p8.evaluate(() => document.querySelector('[data-xpay="prepare"]').click());
+  ok(await until(p8, () => /Waiting for a decision/.test(document.querySelector('#main')?.innerText || '') && /1 task a person accepted/.test(document.querySelector('#main')?.innerText || '')), 'preparing reads the work report: one accepted task');
+  const before = BigInt((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1', [emp])).rows[0]?.balance ?? 0);
+  await p8.evaluate(() => document.querySelector('[data-xpay="approve"]').click());
+  ok(await until(p8, () => /Pay 20 credits to Emil Employee\?/.test(document.querySelector('.xd')?.innerText || '')), 'approving asks first, naming the amount and the payee');
+  await p8.evaluate(() => document.querySelector('.xd [data-xd-ok]').click());
+  ok(await until(p8, () => /\bPaid\b/.test(document.querySelector('#main')?.innerText || '') && !document.querySelector('[data-xpay="approve"]')), 'it is paid, and nothing is left to decide');
+  const after = BigInt((await pool.query('SELECT balance FROM credit_accounts WHERE user_id=$1', [emp])).rows[0]?.balance ?? 0);
+  ok(after - before === 20_000_000n, `20 credits reached Emil (${after - before} micro)`);
+  who = emp;
+  const p9 = await page(); await p9.goto(payUrl, { waitUntil: 'domcontentloaded' });
+  ok(await until(p9, () => /Week of/.test(document.querySelector('#main')?.innerText || '') && /Emil Employee[^]*\bPaid\b/.test(document.querySelector('#main')?.innerText || '')), 'the member sees their own pay');
+  ok(await p9.evaluate(() => !document.querySelector('[data-xpay="prepare"], [data-xpay="approve"], [data-xpay="set"]')), 'and cannot prepare, approve or set it');
+  ok(![p, p2, p3, p4, p5, p6, p7, p8, p9].some((x) => x.errs.length), `no page errors (${[p, p2, p3, p4, p5, p6, p7, p8, p9].flatMap((x) => x.errs).slice(0, 3).join(' | ')})`);
 } finally { await br.close(); await server.close(); real.close(); await pool.end(); }
 console.log(failed ? `${failed} failed` : 'directory-test: all passed');
 process.exit(failed ? 1 : 0);

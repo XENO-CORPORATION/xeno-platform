@@ -5,19 +5,32 @@ import { meModesRouter, workspaceModesRouter } from './routes/modesRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
 import { TASKS_OPENAPI } from './services/tasksOpenApi.js';
 import platformAgentRoutes from './routes/platformAgentRoutes.js';
+import skillsRoutes from './routes/skillsRoutes.js';
 import workforceDivisionRoutes from './routes/workforceDivisionRoutes.js';
 import workforcePeopleRoutes from './routes/workforcePeopleRoutes.js';
 import peopleLifecycleRoutes from './routes/peopleLifecycleRoutes.js';
 import orchestratorRoutes from './routes/orchestratorRoutes.js';
 import workforceEventRoutes from './routes/workforceEventRoutes.js';
 import corpusRoutes from './routes/corpusRoutes.js';
+import { createResearchRouter } from './routes/researchRoutes.js';
+import { recoverInterrupted as recoverResearchRuns } from './services/xenoResearch.js';
 import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
+import { sendDigests, digestsEnabled } from './services/inbox.js';
+import { sweep as sweepAccountDeletions } from './services/accountDeletion.js';
+import { sweepLiveRuns } from './services/agentCloudRuns.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
+import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
+import { startAutomateWorker } from './workers/automateWorker.js';
+import { startLedgerChainAudit } from './services/ledgerChainAudit.js';
+import { startComputeMeter } from './workers/computeMeter.js';
+import messageRoutes from './routes/messageRoutes.js';
+import commsIdentityRoutes from './routes/commsIdentityRoutes.js';
+import mailRoutes from './routes/mailRoutes.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import workspaceDocsRoutes from './routes/workspaceDocsRoutes.js';
@@ -36,7 +49,7 @@ if (!isLocalPreview()) dotenv.config({ path: path.resolve(__dirname, '../../.env
 
 import express from 'express';
 import cors from 'cors';
-import { apiOrigin, acceptedSiteOrigins, extensionOrigins, pathScopedOriginAllowed } from './config/hosts.js';
+import { apiOrigin, acceptedSiteOrigins, extensionOrigins, pathScopedOriginAllowed, issuerForHost } from './config/hosts.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
@@ -71,6 +84,7 @@ import videoRoutes from './routes/videoRoutes.js';
 import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import libraryRoutes from './routes/libraryRoutes.js';
+import projectFolderRoutes from './routes/projectFolderRoutes.js';
 import tokenizerRoutes from './routes/tokenizerRoutes.js';
 import userDataRoutes from './routes/userDataRoutes.js';
 import browserRoutes from './routes/browserRoutes.js';
@@ -128,25 +142,38 @@ import siteGateRoutes from './routes/siteGateRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
 import shellSessionRoutes from './routes/shellSessionRoutes.js';
 import v2MeRoutes from './routes/v2MeRoutes.js';
+import spawnProfileRoutes from './routes/spawnProfileRoutes.js';
+import spawnSkillRoutes from './routes/spawnSkillRoutes.js';
+import toolsRoutes from './routes/toolsRoutes.js';
+import spawnDeviceRoutes from './routes/spawnDeviceRoutes.js';
+import spawnCanvasRoutes from './routes/spawnCanvasRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
 import browserRelayRoutes, { accountBrowserRouter } from './routes/browserRelayRoutes.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
+import { handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade as authenticatePortUpgrade } from './services/computePorts.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
 import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
+import { relatedOrigins } from './services/twoStep.js';
+import companyRoutes from './routes/companyRoutes.js';
+import { requireDpopIfBound } from './middleware/dpopResource.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
-import { databaseMiddleware } from './middleware/database.js';
+import { databaseMiddleware, pool as researchPool } from './middleware/database.js';
 import { browserSessionMiddleware } from './middleware/browserSession.js';
 import { previewSessionMiddleware } from './middleware/previewSession.js';
 import blogRoutes from './routes/blogRoutes.js';
 import learnRoutes from './routes/learnRoutes.js';
 import forumRoutes from './routes/forumRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
+import releaseRoutes from './routes/releaseRoutes.js';
 import customersRoutes from './routes/customersRoutes.js';
+import computeRoutes from './routes/computeRoutes.js';
+import liveRoutes from './routes/liveRoutes.js';
 import schedulingRoutes from './routes/schedulingRoutes.js';
+import compensationRoutes from './routes/compensationRoutes.js';
 import { sendDueReminders as sendSchedulingReminders } from './services/scheduling.js';
 import { requireActivated } from './services/accountActivation.js';
 import agentRoutes from './routes/agentRoutes.js';
@@ -158,7 +185,7 @@ import { suspensionGate } from './middleware/suspensionGate.js';
 import { initCleanupService } from './services/cleanupService.js';
 import { startDownloadCleanup } from './services/downloadService.js';
 import { startConversionWorker } from './services/conversionWorker.js';
-import { runRequiredStartupMigrations } from './services/startupSchema.js';
+import { runStartupSchema } from './services/startupSchema.js';
 import { startScheduledTasksWorker } from './workers/chatScheduledWorker.js';
 import { startLibraryIngestionWorker } from './workers/libraryIngestionWorker.js';
 import mediaGenerationRoutes from './routes/mediaGenerationRoutes.js';
@@ -189,6 +216,7 @@ import {
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
 import { rateLimitKey } from './utils/clientIp.js';
+import { globalLimiterSkips, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -351,10 +379,8 @@ const globalLimiter = rateLimit({
   validate: { ip: false }, // custom key (CF-Connecting-IP) — skip the built-in req.ip validator
   keyGenerator: rateLimitKey, // real client IP behind Cloudflare, not the collapsed upstream hop
   message: { success: false, error: 'Too many requests, please try again later.' },
-  skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/api/status' || req.path === '/health';
-  },
+  // Mounted on '/api/', so req.path has '/api' stripped: compare the FULL path, or the skip never matches.
+  skip: (req) => globalLimiterSkips(req.baseUrl + req.path),
 });
 app.use('/api/', globalLimiter);
 
@@ -397,7 +423,11 @@ app.use('/api/favicon', faviconRoutes);
 // used to share ONE bucket of 10 requests / 15 min per IP that counted successes,
 // which locked a whole NAT out of every auth endpoint after ten sign-ins — found
 // by dogfooding 2026-09-17. Failures count; a correct password never does.
+// The other XENO site hosts that may use this site's passkeys (WebAuthn related origins). Public by design, like the spec's.
+app.get('/.well-known/webauthn', (_req, res) => { res.set('Cache-Control', 'public, max-age=3600'); res.json(relatedOrigins()); });
 app.use('/api/auth/login', loginAddressCeiling, loginFailureLimiter);
+app.use('/api/auth/two-step', loginFailureLimiter);
+app.use('/api/auth/passkey', loginFailureLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/register-with-handle', registerLimiter);
 app.use('/api/auth/forgot-password', recoveryMailLimiter);
@@ -529,9 +559,16 @@ app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), (req,
 console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pre-json)');
 // Mail delivery events (Resend, Svix-signed) — same raw-body, pre-json contract.
 app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
+// Dev › Automate's signed webhook trigger (services/xenoWorkflow.js): the HMAC covers the raw body, so it is read before the JSON parser
+app.use('/api/automate/hooks', express.raw({ type: '*/*', limit: '256kb' }), (req, res, next) => { req.db = pool; next(); }, automateHooksRoutes);
+// XENO Storage: an app's project files (services/projectFolders.js). Mounted BEFORE the global body parsers so a
+// project's .json or .txt arrives as its own bytes, not parsed into an object.
+app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploadsDir }));
 
 // ULTRA HIGH LIMITS for base64 image data processing
-app.use(express.json({ 
+// Bound evidence requests before the general 100 MB parser allocates their body.
+app.use('/api/forum/report', express.json({ limit: '17mb', type: 'application/json' }));
+app.use(express.json({
   limit: '100mb',
   parameterLimit: 50000,
   type: ['application/json', 'text/plain']
@@ -652,12 +689,19 @@ console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/d
 // Workspaces / teams (multi-tenant): workspace entity tables + ReBAC membership
 // (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
 app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated, workspaceRoutes);
+app.use('/api/orgs', databaseMiddleware, authMiddleware, requireActivated, companyRoutes);
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
 // Corpo › Forms (services/forms.js): auth per route — the respondent's /public/:token side needs no account
 app.use('/api/forms', databaseMiddleware, formsRoutes);
+app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
+// XENO Message = XENO Comms, server-to-server (services/xenoComms.js). The platform keeps no messages.
+app.use('/api/message', databaseMiddleware, authMiddleware, requireActivated, messageRoutes);
+// XENO Comms' validation URL: it asks here about every bearer it receives (the workspace's assertions and app sessions).
+app.use('/api/comms', databaseMiddleware, commsIdentityRoutes);
+app.use('/api/mail', databaseMiddleware, authMiddleware, requireActivated, mailRoutes);   // Office › Mail = XENO Mail, server-to-server (services/xenoMail.js)
 app.use('/api/workspace-analytics', databaseMiddleware, authMiddleware, requireActivated, workspaceAnalyticsRoutes);
 app.use('/api/workspace-docs', databaseMiddleware, authMiddleware, requireActivated, workspaceDocsRoutes);   // Office › Write and Notes: documents that are Storage files (services/workspaceDocs.js)   // Corpo › Analytics: a workspace's own dashboards (services/analytics.js)   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
@@ -670,7 +714,7 @@ app.use('/api/site-gate', databaseMiddleware, siteGateRoutes);
 // agents reach Tasks with their own credential (Bearer xtk_...), checked before the person sign-in middleware
 // MCP discovery (RFC 9728 protected-resource metadata; RFC 8414 authorization-server metadata) at the site root
 app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api/tasks/mcp'], protectedResourceMetadata);
-app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery()));
+app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery(issuerForHost(req.headers.host))));
 // The Tasks REST contract is public: a document with no data in it, so native clients can check their schemas
 // against it in CI without a credential.
 app.get('/api/tasks/openapi.json', (req, res) => { res.set('cache-control', 'public, max-age=300'); res.json(TASKS_OPENAPI); });
@@ -692,6 +736,8 @@ app.use('/api/mcp', databaseMiddleware, authMiddleware, requireActivated, mcpPer
 // REST over the same catalogue (WORKSPACE AGENT SURFACE P1): /api/v1/<division>/<domain>/<verb> + /api/v1/openapi.json
 app.use('/api/v1', databaseMiddleware, workspaceApiRoutes);
 app.use('/api/agents', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, platformAgentRoutes);
+// the skills library (docs/AGENT-IDENTITY-SKILLS-CORPUS.md): a person's and their workspaces' skills, pinned to agents
+app.use('/api/skills', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, skillsRoutes);
 app.use('/api/divisions', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceDivisionRoutes);
 // People in a company workspace (xeno-company SPEC §7.3 D-EMP): profiles, org chart, directory, time off, on/offboarding.
 app.use('/api/people', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, peopleLifecycleRoutes);
@@ -700,6 +746,8 @@ app.use('/api/orchestrator', databaseMiddleware, authMiddleware, requireActivate
 app.use('/api/audit', databaseMiddleware, authMiddleware, requireActivated, mcpPersonOnly, workforceEventRoutes);
 // XENO Corpus: tenets, signed verdicts, proposals (services/xenoCorpus.js). Not person-only: an agent proposes here too.
 app.use('/api/corpus', databaseMiddleware, authMiddleware, requireActivated, corpusRoutes);
+// XENO Research (services/xenoResearch.js): notebooks on a project, runs in XENO Box, claims in Corpus.
+app.use('/api/research', databaseMiddleware, authMiddleware, requireActivated, createResearchRouter({ pool: researchPool }));
 app.use('/api/notifications', databaseMiddleware, authMiddleware, requireActivated, userNotificationsRoutes);
 console.log('🏢 Workspace routes integrated: /api/workspaces/* + /api/workspace-invites/*');
 
@@ -735,8 +783,17 @@ app.use('/api/v2/inference/service', databaseMiddleware, inferenceServiceRoutes)
 // JWKS surface for "Sign in with XENO" across the ecosystem.
 if (process.env.OIDC_ENABLED === 'true') {
   // Mounted under /api/* because the edge only routes /api to the backend.
+  app.post('/api/oauth2/token', rateLimit(oauthTokenLimiterOptions(rateLimitKey)));
   app.use('/api/oauth2', databaseMiddleware, oauth2Routes);
   app.use('/api/v2/me', databaseMiddleware, oidcAuth, v2MeRoutes);
+  // Spawn's account calls: a key-bound token must bring its proof (Spawn sends DPoP on every call; htu on the host it
+  // calls is accepted through XENO_ALIAS_SITE_ORIGINS, utils/dpop.js htuMatches).
+  app.use('/api/v2/spawn/profiles', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnProfileRoutes);
+  app.use('/api/v2/spawn/skills', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnSkillRoutes);
+  app.use('/api/tools', toolsRoutes);
+  app.use('/api/v2/spawn/devices', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnDeviceRoutes);
+  // Signs in inside the router (authMiddleware + requireDpopIfBound), as the Compute routes do.
+  app.use('/api/v2/spawn/canvases', databaseMiddleware, spawnCanvasRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);
   // Per-product inference routing + the provider-key vault.
   // 🔴 POST /api/v2/inference/credentials CARRIES A USER'S PROVIDER KEY.
@@ -754,7 +811,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
   // XENO Shell shared sessions: discovery + signalling only; content is peer-to-peer, E2E encrypted.
   app.use('/api/v2/shell/sessions', databaseMiddleware, oidcAuth, shellSessionRoutes);
-  app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery()));
+  app.get('/api/oauth2/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery(issuerForHost(req.headers.host))));
   console.log('🔐 OIDC provider integrated: /api/oauth2/* + /api/v2/me + /api/v2/authz (OIDC_ENABLED)');
 }
 console.log('🛒 Marketplace routes integrated: /api/marketplace/*');
@@ -873,10 +930,15 @@ app.use('/api/learn', databaseMiddleware, learnRoutes);
 app.use('/api/forum', databaseMiddleware, forumRoutes);
 // XENO support — Help ▸ Contact support (supportTickets.js): private requests, XENO staff, agent drafts ratified by a person.
 app.use('/api/support', databaseMiddleware, supportRoutes);
+// The platform's own release record (releaseRecord.js): deploys, features, notes — staff only; customers read What's new.
+app.use('/api/releases', databaseMiddleware, releaseRoutes);
 // XENO Customers — Corpo › Customers (customers.js): the workspace CRM; agents read and draft, people keep and delete.
 app.use('/api/customers', databaseMiddleware, customersRoutes);
+app.use('/api/compute', databaseMiddleware, computeRoutes);
+app.use('/api/live', databaseMiddleware, liveRoutes);
 // Corpo › Scheduling (services/scheduling.js): workspace booking pages + public guest booking/manage pages + ICS feed.
 app.use('/api/scheduling', databaseMiddleware, schedulingRoutes);
+app.use('/api/compensation', databaseMiddleware, compensationRoutes);
 // Agent identity — a PLATFORM primitive shared with Marketplace, Company and
 // Comms (XENO FORUM - SPEC.md D8). Under /api/v2/* per the identity plan's
 // rule that new surfaces sit beside the frozen legacy /api/auth/*.
@@ -3018,7 +3080,9 @@ app.use((req, res) => {
 const server = http.createServer(app);
 
 // Create WebSocket server
-const wss = new WebSocket({ server });
+// A Compute named port answers with its own subprotocol, never the one-use ticket offered beside it; every other
+// socket keeps ws's default (the first one offered).
+const wss = new WebSocket({ server, handleProtocols: (protocols, req) => (isPortRequest(req) ? selectProtocol(protocols) : (protocols.values().next().value ?? false)) });
 
 // Store connected clients with their session info
 const wsClients = new Map();
@@ -3226,6 +3290,11 @@ wss.on('connection', (ws, req) => {
   // the two owners are told apart once, at the top, rather than by whichever `message` handler runs first.
   // The relay's own frames are decoded by services/browserRelaySocket.js; the collaboration socket below
   // never sees them, and neither branch can shadow the other.
+  // XENO Compute named ports (services/computePorts.js): a socket to a server on the caller's machine.
+  if (isPortRequest(req)) {
+    handlePortConnection(ws, req, pool, { authenticate: (r) => authenticatePortUpgrade(pool, r) }).catch((e) => { console.error('[compute-ports] connection failed', e && e.message); try { ws.close(1011, 'port error'); } catch {} });
+    return;
+  }
   if (isRelayRequest(req)) {
     handleRelayConnection(ws, req).catch((e) => {
       console.error('[browser-relay] connection failed', e && e.message);
@@ -4034,7 +4103,9 @@ app.locals.migrationsReady = false;
  * best-effort (not schema-critical), so its failure does not block readiness.
  */
 async function runStartupMigrations() {
-  await runRequiredStartupMigrations(pool);
+  await runStartupSchema(pool);
+  // XENO Corpus's bundle digest on skill versions made before it existed (expand step; idempotent)
+  await import('./services/skills.js').then((m) => m.backfillBundleDigests(pool)).then((n) => n && console.log(`[Skills] bundle digest filled on ${n} version(s)`)).catch(err => console.error('[Skills] bundle digest backfill warning (non-fatal):', err.message));
   await seedMarketplace(pool).catch(err => console.error('[Seed] marketplace warning (non-fatal):', err.message));
   // The Forum needs its SPACES to exist before anything works — with no spaces a
   // deploy yields an empty page and every post fails with "unknown space".
@@ -4200,9 +4271,24 @@ initBackgroundJobs(pool).catch(err => {
 backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // XENO Tasks: notification email (on unless TASK_NOTIFICATION_EMAILS=false) and due reminders, on the leader only
 backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases }));
+// the inbox: a run that ended tells its owner even if nobody has its page open; digests go out hourly when switched on
+backgroundLeader.whenLeader(() => {
+  const runs = setInterval(() => sweepLiveRuns(pool).catch((e) => console.error('[AgentRuns] sweep failed:', e.message)), 60000);
+  const mail = setInterval(() => sendDigests(pool).catch((e) => console.error('[Inbox] digest sweep failed:', e.message)), 3600000);
+  const erase = setInterval(() => sweepAccountDeletions(pool).catch((e) => console.error('[AccountDeletion] sweep failed:', e.message)), 3600000);
+  runs.unref?.(); mail.unref?.(); erase.unref?.();
+  console.log(`[Inbox] live run sweep every 60s, digests hourly (${digestsEnabled() ? 'on' : 'off'})`);
+  return () => { clearInterval(runs); clearInterval(mail); clearInterval(erase); };
+});
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
+// Dev › Automate: the ONE delivery loop for workspace workflows (schedules due → runs queued → the XENO Workflow runner)
+backgroundLeader.whenLeader(() => startAutomateWorker(pool));
+// The money journal's hash chain, verified every hour for every account (services/ledgerChainAudit.js)
+backgroundLeader.whenLeader(() => startLedgerChainAudit(pool));
+// XENO Compute: settle running machines' hours and reserve the next, on the leader only (workers/computeMeter.js)
+backgroundLeader.whenLeader(() => startComputeMeter(pool));
 // Invitation mail is CLAIMED durably before it is dispatched, so a crash between the
 // commit and the send cannot lose an invitation — which the previous inline send could.
 // Leader-elected because two replicas draining one queue would double-send: the claim
@@ -4232,6 +4318,8 @@ server.listen(PORT, process.env.BACKEND_HOST, () => {
   console.log(`🎯 SAM 2 segmentation available via FAL.ai integration`);
   console.log(`📊 Real-time file synchronization enabled`);
   console.log(`\n✅ Server ready! Use Ctrl+C to stop.`);
+  // a research run that was in Box when the process stopped cannot be resumed: fail it, then pick up the queue
+  recoverResearchRuns(researchPool).catch((e) => console.error('[research] recover', e.message));
 }); 
 
 export default app;

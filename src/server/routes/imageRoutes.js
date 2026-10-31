@@ -776,50 +776,7 @@ router.delete('/assets/:assetId', async (req, res) => {
  */
 router.post('/generations/init', async (req, res) => {
   try {
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS image_generations (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        prompt TEXT NOT NULL,
-        image_urls JSONB NOT NULL DEFAULT '[]',
-        model VARCHAR(100) NOT NULL,
-        aspect_ratio VARCHAR(20),
-        resolution VARCHAR(20),
-        count INTEGER DEFAULT 1,
-        provider VARCHAR(50),
-        generation_time_ms INTEGER,
-        is_favorite BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Add is_favorite column if it doesn't exist (migration for existing tables)
-    await req.db.query(`
-      ALTER TABLE image_generations
-      ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false
-    `);
-
-    // Add reference_images column if it doesn't exist (migration for existing tables)
-    await req.db.query(`
-      ALTER TABLE image_generations
-      ADD COLUMN IF NOT EXISTS reference_images JSONB DEFAULT '[]'
-    `);
-
-    await req.db.query(`
-      CREATE INDEX IF NOT EXISTS idx_image_generations_user
-        ON image_generations(user_id)
-    `);
-
-    await req.db.query(`
-      CREATE INDEX IF NOT EXISTS idx_image_generations_user_created
-        ON image_generations(user_id, created_at DESC)
-    `);
-
-    await req.db.query(`
-      CREATE INDEX IF NOT EXISTS idx_image_generations_user_favorites
-        ON image_generations(user_id, is_favorite) WHERE is_favorite = true
-    `);
-
+    // The schema is owned by database/migrations/, applied by the migrate job.
     console.log('✅ Image generations table initialized');
 
     res.json({

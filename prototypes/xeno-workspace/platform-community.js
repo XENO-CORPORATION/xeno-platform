@@ -30,6 +30,8 @@
   const TSTEPS = [['open', 'Received'], ['acknowledged', 'Looked at'], ['planned', 'Planned'], ['fixed', 'Fixed']];
   const C = { status: 'loading', threads: [], detail: new Map(), me: null, tickets: null, ticket: new Map(), flags: null, log: null, version: 0 };
   window.XENO_PG_FORUM = [];
+  { const g = window.XENO_GLOBAL_NAV?.community; if (g) g[3][0][1] = g[3][0][1].map(([t]) => [t, '']); }   // the picture's counts aren't anyone's
+  window.XENO_FORUM_LIVE = { failed: () => C.status === 'error', following: () => (Array.isArray(C.me?.followingThreads) ? new Set(C.me.followingThreads) : null) };
   const repaint = () => { C.version++; try { if (X()?.S?.view === 'global' && X().S.global === 'community') X().render(); } catch {} };
   const fresh = (kind) => C[kind] === null;
 
@@ -98,6 +100,7 @@
     return h.page(h.head({ obj: true, eyebrow: '<a data-go="community">Community</a> · <a data-cml="mine">My reports</a>', title: t.title, sub: `Private ticket · ${h.cap(t.kind)} · ${esc(t.product)} · ${esc(t.statusLabel)}`, acts })
       + `<ol class="cm-steps">${TSTEPS.map(([k, l], i) => `<li class="${i < idx || (closed && i < 1) ? 'done' : i === idx ? 'on' : ''}"><i></i><span>${l}</span></li>`).join('')}</ol>`
       + (t.fixedIn ? `<p class="cm-banner" data-cm-fixed>${ic('check')}<span><b>Fixed in ${esc(t.fixedIn)}.</b> Update to get it — or tell us here if it’s still happening.</span></p>` : '')
+      + ((t.attachments||[]).length?`<section class="pg-sec"><h3>Private evidence</h3>${t.attachments.map(a=>`<figure class="xr-attachment">${a.type.startsWith('image/')?`<img src="${esc(a.url)}" alt="${esc(a.name)}" loading="lazy">`:`<video src="${esc(a.url)}" controls preload="metadata"></video>`}<figcaption><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name)}</a></figcaption></figure>`).join('')}<p class="pg-dim">Making this ticket public keeps its evidence private.</p></section>`:'')
       + `<div class="pg-thread"><article class="pg-post op"><div><header><b>You</b><small>${h.ago(t.createdAt)} ago</small></header><p>${esc(t.body || t.title)}</p></div></article>${(t.posts || []).map((p) => `<article class="pg-post${p.author.reporter ? '' : ' answer'}${p.kind === 'status' ? ' cm-status' : ''}"><div><header><b>${esc(p.author.reporter ? 'You' : p.author.name || 'XENO')}</b>${p.author.kind === 'agent' ? '<em class="pg-kind">Agent</em>' : ''}<small>${h.ago(p.createdAt)} ago</small></header><p>${esc(p.body)}</p></div></article>`).join('')}
         ${closed ? '<p class="cm-banner">' + ic('check') + '<span>This ticket is closed.</span></p>' : `<form class="pg-reply" data-cm-ticket-reply="${esc(id)}"><textarea rows="3" placeholder="Add to this ticket" aria-label="Reply"></textarea><div><span class="pg-dim">Only you, the XENO team and the product’s developer agent see this.</span><button class="pg-btn" type="submit">${ic('send')}<span>Send</span></button></div></form>`}</div>`
       + h.foot('community', `GET /api/forum/tickets/${esc(id)}`));
@@ -130,7 +133,7 @@
   const ACT = {
     open: (id) => go(id), mine: () => go('My reports'), ticket: (id) => go('My reports/' + id),
     async follow(id) { const t = C.detail.get(id); if (!t) return; const on = !t.subscribed; const r = await api('PUT', `/api/forum/threads/${encodeURIComponent(id)}/subscription`, { subscribed: on }).catch(() => null);
-      if (!r || !r.ok) return toast(said(r, 'That couldn’t be changed.')); t.subscribed = on; repaint(); toast(on ? 'Following — replies come to your notifications' : 'No longer following'); },
+      if (!r || !r.ok) return toast(said(r, 'That couldn’t be changed.')); t.subscribed = on; if (Array.isArray(C.me?.followingThreads)) C.me.followingThreads = on ? [...new Set([...C.me.followingThreads, id])] : C.me.followingThreads.filter((x) => x !== id); repaint(); toast(on ? 'Following — replies come to your notifications' : 'No longer following'); },
     async vote(pid) { const t = [...C.detail.values()].find((x) => x.posts && x.posts.some((p) => p.id === pid)), p = t && t.posts.find((x) => x.id === pid), undo = !!(p && p.myVote > 0);
       const r = await api(undo ? 'DELETE' : 'POST', `/api/forum/posts/${encodeURIComponent(pid)}/vote`, undo ? undefined : { value: 1 }).catch(() => null);
       if (!r || !r.ok) return toast(said(r, undo ? 'That couldn’t be taken back.' : 'That couldn’t be counted.')); if (t) await loadThread(t.id); toast(undo ? 'Vote taken back' : 'Marked helpful'); },
@@ -197,28 +200,9 @@
     await loadList(); go(r.d.shortId || (r.d.thread && r.d.thread.shortId)); toast('Posted in Community');
   }
   async function report({ kind = 'bug', visibility = 'public', title = '' } = {}) {
-    const diag = `XENO Workspace · ${window.XENO_ADDR.toPath(window.XENO_ADDR.current())} · ${innerWidth}×${innerHeight} · ${navigator.language}`, support = title === 'Contact support';
-    const v = await D().form({ title: kind === 'feature' ? 'Suggest a feature' : support ? 'Contact support' : 'Report a problem', sub: 'Sent as you. You choose who can read it.', submit: 'Send', fields: [
-      { id: 'kind', label: 'This is', type: 'seg', value: kind, options: [['bug', 'Something is broken'], ['feature', 'An idea'], ['feedback', 'Feedback']] },
-      { id: 'title', label: 'In one line', required: true, max: 200, value: support ? '' : title, placeholder: 'e.g. Export stops at 80 %', validate: (x) => (x.trim().length < 8 ? 'A few more words, so others can find it.' : null) },
-      { id: 'body', label: 'What happened', type: 'textarea', rows: 4, max: 20000, placeholder: 'What did you do, what did you expect, what happened instead?' },
-      { id: 'vis', label: 'Who can read it', type: 'choice', cols: 2, value: support ? 'private' : visibility, options: [['public', 'Everyone', 'Posted in Community, so others with the same problem find it'], ['private', 'Only XENO', 'A private ticket — you can make it public later']] },
-      { id: 'diag', label: 'Attach', type: 'checks', value: ['diag'], options: [['diag', `Technical details — ${diag}`]] }],
-      aside: '<b class="xd-sum-h">Exactly what is sent</b><p class="xd-note">Your one line and description, the kind, and — only if ticked — the technical details shown. Nothing else: no files, no screen, no chat history.</p>' });
-    if (!v) return;
-    const body = [v.body || '', (v.diag || []).length ? `\n\n${diag}` : ''].join('').trim(), base = { product: 'workspace', kind: v.kind, title: v.title.trim(), body, os: navigator.platform || '' };
-    if (v.vis === 'public') {
-      const pre = await api('POST', '/api/forum/report/preflight', { title: base.title, product: base.product }).catch(() => null), cands = pre && pre.ok ? (pre.d.candidates || []).slice(0, 4) : [];
-      if (cands.length) { const pick = await D().form({ title: 'Someone may have reported this already', sub: 'Joining adds you as another person with the problem — it moves it up faster than a new copy.', submit: 'Continue', size: 'sm', fields: [{ id: 'd', label: 'Choose', type: 'choice', cols: 1, value: cands[0].shortId, options: [...cands.map((c) => [c.shortId, c.title]), ['new', 'Mine is different — post it']] }] });
-        if (!pick) return; if (pick.d !== 'new') { const r = await api('POST', '/api/forum/report', { ...base, joinShortId: pick.d }).catch(() => null); if (!r || !r.ok) return toast(said(r, 'That couldn’t be sent.')); await afterThread(pick.d); go(pick.d); return toast('Added you to it — you’re following it now'); } }
-      const r = await api('POST', '/api/forum/report', { ...base, visibility: 'public' }).catch(() => null);
-      if (!r || !r.ok) return toast(said(r, 'The report couldn’t be sent. Nothing was published.')); await loadList(); go(r.d.shortId); toast('Posted in Community');
-    } else {
-      const r = await api('POST', '/api/forum/report', { ...base, visibility: 'private' }).catch(() => null);
-      if (!r || !r.ok || !r.d.ticket) return toast(said(r, 'The ticket couldn’t be sent.'));
-      C.tickets = null; go('My reports/' + r.d.ticket.shortId); toast('Ticket sent — replies come to your notifications');
-    }
+    return window.XENO_REPORT.open({kind,visibility,title});
   }
+
   const followThread = (id) => ACT.follow(id), markAnswer = (arg) => { const [id, pid] = arg.split('|'); return ACT.answer(`${pid}|${id}`); };
   const hook = () => { if (window.XA) Object.assign(window.XA, { report, newThread, followThread, markAnswer }); if (window.XENO_COMM && !window.XENO_COMM.live) { const pic = window.XENO_COMM.route; window.XENO_COMM.route = (it) => route(it) ?? (it && !/^(Moderation|My reports)/.test(it) ? null : pic(it)); window.XENO_COMM.tickets = () => []; window.XENO_COMM.unseen = () => 0; window.XENO_COMM.live = true; } };
   hook(); if (document.readyState === 'loading') addEventListener('DOMContentLoaded', hook);

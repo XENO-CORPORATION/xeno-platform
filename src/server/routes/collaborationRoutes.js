@@ -8,9 +8,9 @@ import express from 'express';
  * defaulted to https://xeno-studio.com — a domain that is NOT this site —
  * whenever FRONTEND_URL was unset, which it is in production. Every
  * collaboration link sent from the live platform pointed at a dead host.
- * The canonical helper already defaults to xenostudio.ai and is the only
- * place that default should live. */
-import { siteOrigin } from '../config/hosts.js';
+ * The helper is the only place that default lives: publicSiteOrigin(), the
+ * host people open links on (xenosystem.ai), not the pinned OIDC issuer. */
+import { siteOrigin, publicSiteOrigin } from '../config/hosts.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth.js';
@@ -78,7 +78,7 @@ router.post('/sessions', authMiddleware, requireEntitlement('collaboration'), as
           containerId: session.container_id,
           name: session.name,
           shareToken: session.share_token,
-          shareUrl: `${siteOrigin()}/os/join/${session.share_token}`,
+          shareUrl: `${publicSiteOrigin()}/os/join/${session.share_token}`,
           maxParticipants: session.max_participants,
           permissions: session.permissions,
           expiresAt: session.expires_at,
@@ -147,7 +147,7 @@ router.post('/sessions', authMiddleware, requireEntitlement('collaboration'), as
         containerId: session.container_id,
         name: session.name,
         shareToken: session.share_token,
-        shareUrl: `${siteOrigin()}/os/join/${session.share_token}`,
+        shareUrl: `${publicSiteOrigin()}/os/join/${session.share_token}`,
         maxParticipants: session.max_participants,
         permissions: session.permissions,
         expiresAt: session.expires_at,
@@ -417,7 +417,7 @@ router.post('/sessions/:sessionId/invite', authMiddleware, async (req, res) => {
       invitation: {
         id: invitation.id,
         email: invitation.invited_email,
-        inviteUrl: `${siteOrigin()}/os/invite/${invitationToken}`,
+        inviteUrl: `${publicSiteOrigin()}/os/invite/${invitationToken}`,
         expiresAt: invitation.expires_at
       }
     });

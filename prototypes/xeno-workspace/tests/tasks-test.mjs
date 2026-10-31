@@ -17,7 +17,14 @@ const now = () => new Date().toISOString();
 const MOVES = { raised: ['todo', 'wont_do'], todo: ['in_progress', 'wont_do'], in_progress: ['blocked', 'in_review', 'done'], blocked: ['in_progress'], in_review: ['done', 'in_progress'], done: ['raised'], wont_do: ['raised'] };
 const ME = { id: 'u1', kind: 'human', name: 'Me' };
 const PEOPLE = [{ id: 'u1', name: 'Me', username: 'me', kind: 'human', me: true }, { id: 'u2', name: 'Codrin', username: 'codrin', kind: 'human' }, { id: 'a1', name: 'Builder', username: 'builder', kind: 'agent' }];
-const view = (t) => ({ attachments: [], children: db.tasks.filter((c) => c.parentKey === t.key).map((c) => ({ key: c.key, title: c.title, status: c.status, priority: c.priority, assignee: c.assignee })), links: [], watchers: t.watching ? [ME] : [], canLink: true, subtasks: { total: db.tasks.filter((c) => c.parentKey === t.key).length, done: 0 }, parent: t.parentKey ? { key: t.parentKey, title: (db.tasks.find((x) => x.key === t.parentKey) || {}).title } : null, ...t, can: { edit: true, attach: true, delete: true, moves: (MOVES[t.status] || []).filter((m) => !(m === 'done' && t.status === 'in_progress' && t.reviewRequired)) } });
+const view = (t) => ({ attachments: [], children: db.tasks.filter((c) => c.parentKey === t.key).map((c) => ({ key: c.key, title: c.title, status: c.status, priority: c.priority, assignee: c.assignee })), links: [], watchers: t.watching ? [ME] : [], canLink: true, subtasks: { total: db.tasks.filter((c) => c.parentKey === t.key).length, done: 0 }, parent: t.parentKey ? { key: t.parentKey, title: (db.tasks.find((x) => x.key === t.parentKey) || {}).title } : null, ...t, can: canOf(t) });
+// the stand-in answers `can` as the server does (owner, 2026-10-23): whoever made or holds a task works it; everyone
+// else reads it and may take it (when nobody holds it) or ask to be assigned
+const NOT_YOURS = 'Take this task or ask to be assigned to work on it.';
+function canOf(t) {
+  const own = !t.reporter || t.reporter.id === ME.id, work = own || !!(t.assignee && t.assignee.id === ME.id);
+  return { edit: own, attach: work, delete: own, work, comment: work, take: !t.assignee && !['done', 'wont_do'].includes(t.status), moves: work ? (MOVES[t.status] || []).filter((m) => !(m === 'done' && t.status === 'in_progress' && t.reviewRequired)) : [] };
+}
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, body: b.body || '', kind: b.kind || 'task', priority: b.priority || 'none', status: 'raised', area: b.area ?? null, project: b.projectId ? { id: b.projectId, name: 'Website' } : null, assignee: b.assigneeId ? PEOPLE.find((p) => p.id === b.assigneeId) : null, reviewer: null, reviewRequired: false, reporter: ME, labels: b.labels || [], dueAt: b.dueAt || null, parentKey: b.parentKey || null, watching: true, createdAt: now(), updatedAt: now(), events: [{ id: 'e' + Math.random(), kind: 'created', actor: ME, at: now() }] }; if (t.parentKey) { const p = db.tasks.find((x) => x.key === t.parentKey); t.area = p.area; } db.tasks.push(t); return t; };
 mk({ title: 'Fix the signup copy', area: 'studio', priority: 'high', labels: ['copy'] }); mk({ title: 'Office budget', area: 'office' });
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4a00000000049454e44ae426082', 'hex');
@@ -35,12 +42,12 @@ p.on('request', (q) => {
   db.calls.push([method, u.pathname + u.search, b]);
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
-  if (u.pathname === '/api/notifications') return json(200, { success: true, unread: db.notes.filter((n) => !n.read).length, items: db.notes });
+  if (u.pathname === '/api/notifications') return json(200, { success: true, unread: db.notes.filter((n) => !n.read).length, items: db.notes.map((n) => ({ label: 'Update', asks: ['assigned', 'review_requested', 'review_assigned', 'changes_requested', 'mentioned', 'due_soon', 'overdue'].includes(n.kind), ...n })) });
   if (u.pathname === '/api/notifications/read') { for (const n of db.notes) if (b.all || (b.ids || []).includes(n.id)) n.read = true; return json(200, { success: true, unread: 0, items: [] }); }
   if (u.pathname === '/api/tasks/views') { if (method === 'POST') db.views.push({ id: 'v' + (db.views.length + 1), name: b.name, area: b.area, filters: b.filters }); if (method === 'DELETE') db.views = []; return json(200, { success: true, views: db.views }); }
   if (u.pathname === '/api/tasks' && method === 'GET') { if (fail) return json(500, { success: false }); const a = u.searchParams.get('area'), pid = u.searchParams.get('projectId'); return json(200, { success: true, tasks: db.tasks.filter((t) => (!a || t.area === a) && (!pid || (t.project && t.project.id === pid))).map(view) }); }
   if (u.pathname === '/api/tasks' && method === 'POST') { const t = mk(b); return json(201, { success: true, task: view(t) }); }
-  if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: PEOPLE });
+  if (u.pathname === '/api/tasks/assignees') return new Promise((r) => setTimeout(() => r(json(200, { success: true, assignees: PEOPLE })), 600)); // slow on purpose: the menu must not freeze the first answer
   if (u.pathname === '/api/tasks/folders/linkable') return json(200, { success: true, folders: [{ id: 'f0000000-0000-4000-8000-000000000001', name: 'Weapon renders', path: 'Assets / Weapon renders', team: null }, { id: 'f0000000-0000-4000-8000-000000000002', name: 'Voice lines', path: 'Voice lines', team: null }] });
   { const fm = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/folders$/); if (fm && method === 'POST') { (db.folderLinks ||= []).push({ key: fm[1], ...b }); return json(201, { success: true, folders: [] }); } }
   const am = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/attachments(?:\/([\w-]+))?$/);
@@ -49,7 +56,7 @@ p.on('request', (q) => {
     if (method === 'POST') { const id = '00000000-0000-4000-8000-0000000000' + String(10 + t.attachments.length + db.uploads); t.attachments.push({ id, filename: u.searchParams.get('name'), mime: 'image/png', size: 10, at: now(), uploader: ME }); db.uploads++; t.updatedAt = now(); return json(201, { success: true, task: view(t) }); }
     return q.respond({ status: 200, contentType: 'image/png', body: PNG });
   }
-  const m = u.pathname.match(/^\/api\/tasks\/(T-\d+)(\/\w+)?(?:\/([\w.-]+))?$/);
+  const m = u.pathname.match(/^\/api\/tasks\/(T-\d+)(\/[\w-]+)?(?:\/([\w.-]+))?$/);
   if (m) {
     if (m[2] === '/restore' && db.deleted && db.deleted.key === m[1]) { db.tasks.push(db.deleted); const back = db.deleted; db.deleted = null; return json(200, { success: true, task: view(back) }); }
     const t = db.tasks.find((x) => x.key === m[1]); if (!t) return json(404, { success: false, error: 'Task not found' });
@@ -66,6 +73,8 @@ p.on('request', (q) => {
     if (m[2] === '/watch') { t.watching = method === 'PUT'; return json(200, { success: true, task: view(t) }); }
     if (m[2] === '/transition') { if (b.from && b.from !== t.status) return json(409, { success: false, error: 'Someone moved this task first.' }); if (!(MOVES[t.status] || []).includes(b.to)) return json(400, { success: false, error: 'Not allowed' }); ev({ kind: 'status', from: t.status, to: b.to, note: b.note }); t.status = b.to; return json(200, { success: true, task: view(t) }); }
     if (m[2] === '/claim') { if (t.assignee) return json(409, { success: false, error: 'Someone already took it' }); t.assignee = ME; ev({ kind: 'claimed' }); return json(200, { success: true, task: view(t) }); }
+    if (m[2] === '/ask-assignment') { (db.asks ||= []).push(t.key); return json(200, { success: true, asked: true, repeated: db.asks.filter((k) => k === t.key).length > 1, task: view(t) }); }
+    if (!canOf(t).work && method !== 'GET' && !['/claim', '/watch'].includes(m[2])) return json(403, { success: false, error: NOT_YOURS, code: 'not_your_task' });
     if (m[2] === '/comments' && method === 'POST') { ev({ kind: 'comment', note: b.body }); return json(200, { success: true, task: view(t) }); }
     if (m[2] === '/comments' && m[3]) { const c = t.events.find((x) => x.id === m[3]); if (method === 'PATCH') { c.note = b.body; c.editedAt = now(); } else { c.note = null; c.removed = true; } t.updatedAt = now(); return json(200, { success: true, task: view(t) }); }
   }
@@ -227,12 +236,19 @@ try {
   await p.click('[data-tk="bulk"][data-arg="priority"]'); await p.waitForSelector('.xcm', { timeout: 3000 }); await menuClick(/^Low/); await settle(900);
   ok(db.tasks.find((x) => x.key === 'T-1').priority === 'low' && db.tasks.find((x) => x.key === 'T-4').priority === 'low' && !/selected/.test(await main()), 'one action changes every selected task');
   ok(await renders() === 0, 'the board redrew in place throughout');
-  db.tasks.push({ ...db.tasks[0], key: 'T-9', number: 9, title: 'Raised by Codrin', status: 'raised', assignee: null, priority: 'none', events: [], updatedAt: now() });
+  db.tasks.push({ ...db.tasks[0], project: { id: 'p-fresh', name: 'Fresh' }, key: 'T-9', number: 9, title: 'Raised by Codrin', status: 'raised', assignee: null, priority: 'none', events: [], updatedAt: now() });
   await p.evaluate(() => window.XENO_TASKS.poll()); await settle();
   ok(!!(await p.$('[data-tk-col="raised"] [data-tk-card="T-9"]')), 'a task someone else adds appears on the board without reloading the page');
   await p.click('[data-tk-card="T-9"]', { button: 'right' }); await p.waitForSelector('.xcm', { timeout: 3000 });
   const items = await p.$$eval('.xcm .xcm-i', (els) => els.map((e) => e.textContent.trim()));
   ok(['Open', 'Take it', 'Move to', 'Assign to', 'Priority', 'Rename', 'Add sub-task', 'Select', 'Delete task'].every((w) => items.some((x) => x.startsWith(w))), 'right-clicking a card gives its full menu (' + items.length + ' items)');
+  { // owner, 2026-10-23: hovering "Assign to" sat on "Loading people…" for good
+    const handles = await p.$$('.xcm .xcm-i'); let assign = null;
+    for (const h of handles) if ((await h.evaluate((e) => e.textContent.trim())).startsWith('Assign to')) assign = h;
+    await assign.hover();
+    const shown = await p.waitForFunction(() => [...document.querySelectorAll('.xcm.sub .xcm-i')].some((e) => e.textContent.includes('Codrin')), { timeout: 2000 }).then(() => true, () => false);
+    ok(shown && !(await p.$$eval('.xcm.sub .xcm-i', (els) => els.some((e) => /Loading people/.test(e.textContent)))), 'hovering Assign to lists the people at once, never a stuck "Loading people…"');
+  }
   await p.keyboard.press('Escape');
   await p.evaluate(() => { const card = document.querySelector('[data-tk-card="T-9"]'), col = document.querySelector('[data-tk-col="todo"] .tk-col-b'); const dt = new DataTransfer(); card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt })); col.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); col.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); card.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt })); });
   await settle();
@@ -251,6 +267,28 @@ try {
   await p.type('[data-tk-comment] textarea', 'half written');
   db.tasks[2].title = 'Write the launch post v3'; db.tasks[2].updatedAt = new Date(Date.now() + 9000).toISOString(); await p.evaluate(() => window.XENO_TASKS.poll()); await settle();
   ok(/launch post v3/.test(await main()) && await p.$eval('[data-tk-comment] textarea', (e) => e.value) === 'half written', 'a comment being written survives the task redrawing under it');
+  // ── only whoever holds a task works on it (owner, 2026-10-23)
+  { const held = mk({ title: 'Codrin’s own task', area: 'studio' }); held.reporter = PEOPLE[1]; held.assignee = PEOPLE[1]; held.status = 'in_progress';
+    await nav('#/studio/g/tasks/' + held.key);
+    const has = (sel) => p.$(sel).then((e) => !!e);
+    ok(!(await has('[data-tk-comment]')) && /ask to be assigned/i.test(await p.$eval('[data-tk-locked]', (e) => e.textContent).catch(() => '')), 'on a task someone else holds there is no comment box, only "take it or ask to be assigned"');
+    ok(!(await has('[data-tk="prompt"]')) && !(await has('[data-tk="claim"]')) && await has('[data-tk="ask-assign"]') && !(await has('[data-tk-kidadd]')) && !(await has('[data-tk-move]')), 'no Copy for agent, no sub-task box and no moves — one "Ask to be assigned" instead');
+    await p.$eval('[data-tk="ask-assign"]', (b) => b.click()); await settle();
+    ok((db.asks || []).includes(held.key), 'Ask to be assigned sends the request');
+    await nav('#/studio/g/tasks'); await p.evaluate(() => window.XENO_TASKS.poll()); await settle();
+    await p.keyboard.press('Escape'); await settle(300);   // the toast from asking sits over the board
+    await p.$eval(`[data-tk-card="${held.key}"]`, (c) => { c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 10, clientY: r.top + 10, button: 2 })); });
+    await p.waitForSelector('.xcm', { timeout: 3000 });
+    const its = await p.$$eval('.xcm .xcm-i', (els) => els.map((e) => e.textContent.trim()));
+    ok(its.some((x) => x.startsWith('Ask to be assigned')) && !its.some((x) => /^(Hand to an agent|Copy as agent prompt|Add sub-task|Link a task|Add images|Move to|Take it)/.test(x)), `its card menu offers asking, and none of the working actions (${its.join(' | ')})`);
+    await p.keyboard.press('Escape'); await settle(200);
+    // nobody holds it: Take it, and once taken it is yours to work
+    held.assignee = null; held.updatedAt = new Date(Date.now() + 20000).toISOString();
+    await nav('#/studio/g/tasks/' + held.key); await p.evaluate(() => window.XENO_TASKS.poll()); await settle();
+    ok(await has('[data-tk="claim"]') && !(await has('[data-tk="ask-assign"]')) && /Take this task to comment/.test(await p.$eval('[data-tk-locked]', (e) => e.textContent).catch(() => '')), 'when nobody holds it the page offers Take it');
+    await p.$eval('[data-tk="claim"]', (b) => b.click()); await settle();
+    ok(held.assignee && held.assignee.id === ME.id && await has('[data-tk-comment] textarea') && await has('[data-tk="prompt"]') && !(await has('[data-tk-locked]')), 'after taking it the comment box and Copy for agent appear');
+  }
   fail = true; await nav('#/office/g/tasks');
   ok(/couldn’t be loaded/.test(await main()), 'a failed load says so and offers a retry'); fail = false;
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');

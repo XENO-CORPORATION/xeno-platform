@@ -7,12 +7,13 @@ import { createFolderLink, folderLinkActivity, listFolderLinks, revokeFolderLink
 import { createLink, fileForLink, foldersSharedWith, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { localLibraryPath } from '../services/storageObjects.js';
+import { duplicateFile, moveToProject } from '../services/libraryCopies.js';
 import { storageUsage } from '../services/storageAllowance.js';
 import express from 'express';
 import fs from 'fs';
 import sharp from 'sharp';
 import { authMiddleware } from '../middleware/auth.js';
-import { siteOrigin } from '../config/hosts.js';
+import { siteOrigin, publicSiteOrigin } from '../config/hosts.js';
 import {
   createSignedLibraryContentPath,
   createAuthorizedLibraryContentPath,
@@ -29,6 +30,7 @@ import { requireResourceRelation, sendChatAuthorityError } from '../services/cha
 import {
   emptyLibraryTrash, placeLibraryItem, purgeLibraryItem, renameLibraryItem, restoreLibraryItem, starLibraryItem, trashLibraryItem,
 } from '../services/libraryOrganise.js';
+import { storageChanges } from '../services/storageChanges.js';
 import { readArea, readAreaFilter } from '../utils/resourceArea.js';
 
 const router = express.Router();
@@ -152,6 +154,8 @@ const folderReply = (res, result, body = {}) => {
 };
 const folderId = (value) => (value === null || value === undefined || value === '' || value === 'root' ? null : String(value));
 const folders = (run) => async (req, res) => { try { await run(req, res); } catch (error) { console.error('Storage folder request failed:', error); res.status(500).json({ success: false, error: 'Internal server error' }); } };
+// The desktop drive asks which folders changed since its cursor (services/storageChanges.js), instead of relisting all.
+router.get('/changes', folders(async (req, res) => { res.json({ success: true, ...(await storageChanges(req.db, req.user.id, req.query.since ? String(req.query.since) : null)) }); }));
 router.get('/folders', folders(async (req, res) => {
   if (req.query.shared === 'true') return res.json({ success: true, folders: await foldersSharedWith(req.db, req.user.id), path: [] });   // folders other people shared with me
   const team = req.query.workspace ? String(req.query.workspace) : null;   // a workspace's team folders
@@ -291,7 +295,7 @@ router.get('/assets/file/:id/shares', folders(async (req, res) => { const r = aw
 router.get('/folders/:id/shares', folders(async (req, res) => { const r = await listShares(req.db, req.user.id, { folderId: req.params.id }); shareReply(res, r, { shares: r.shares }); }));
 router.post('/folders/:id/shares', folders(async (req, res) => { const r = await shareWithPerson(req.db, req.user.id, { folderId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share }); }));
 router.post('/assets/file/:id/shares', folders(async (req, res) => {
-  if (req.body?.link === true) { const r = await createLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null }); return shareReply(res, r, r.ok ? { share: r.share, url: `${siteOrigin()}/api/library/links/${r.token}` } : {}); }
+  if (req.body?.link === true) { const r = await createLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null }); return shareReply(res, r, r.ok ? { share: r.share, url: `${publicSiteOrigin()}/api/library/links/${r.token}` } : {}); }
   const r = await shareWithPerson(req.db, req.user.id, { fileId: req.params.id }, req.body?.with, req.body?.role === 'editor' ? 'editor' : 'viewer'); shareReply(res, r, { share: r.share });
 }));
 router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await revokeShare(req.db, req.user.id, req.params.id)); }));
@@ -301,7 +305,7 @@ router.delete('/shares/:id', folders(async (req, res) => { shareReply(res, await
 router.get('/folders/:id/links', folders(async (req, res) => { const r = await listFolderLinks(req.db, req.user.id, req.params.id); shareReply(res, r, { links: r.links }); }));
 router.post('/folders/:id/links', folders(async (req, res) => {
   const r = await createFolderLink(req.db, req.user.id, req.params.id, { expiresInDays: req.body?.expiresInDays ?? null, label: req.body?.label ?? null });
-  shareReply(res, r, r.ok ? { link: r.link, url: `${/^(xenosystem\.ai|xenostudio\.ai)$/.test(String(req.get('host'))) ? `https://${req.get('host')}` : siteOrigin()}/storage/shared/${r.token}` } : {});
+  shareReply(res, r, r.ok ? { link: r.link, url: `${publicSiteOrigin()}/storage/shared/${r.token}` } : {});
 }));
 router.get('/folder-links/:id/activity', folders(async (req, res) => { const r = await folderLinkActivity(req.db, req.user.id, req.params.id); shareReply(res, r, r.ok ? { link: r.link, events: r.events } : {}); }));
 router.delete('/folder-links/:id', folders(async (req, res) => { shareReply(res, await revokeFolderLink(req.db, req.user.id, req.params.id)); }));
@@ -343,6 +347,19 @@ router.get('/operations/:key', folders(async (req, res) => {
 router.put('/assets/:source/:id/folder', organise('move', async (req, res, principal, source, id) => {
   const result = await moveItemToFolder(req.db, principal, source, id, folderId(req.body?.folder));
   sendOrganised(res, result, { folder: result.folderId ?? null });
+}));
+router.post('/assets/file/:id/duplicate', folders(async (req, res) => {
+  const r = await duplicateFile(req.db, req.user.id, req.params.id);
+  if (r.full) return res.status(507).json({ success: false, code: 'storage_full', error: 'Your storage is full. Nothing was copied.' });
+  if (r.conflict) return res.status(409).json({ success: false, code: r.code, error: 'This file could not be read just now. Nothing was copied.' });
+  sendOrganised(res, r, { file: r.file });
+}));
+/** PUT /assets/:source/:id/project { project: id | null } -- file it in the project's own folder, or take it out. */
+router.put('/assets/:source/:id/project', organise('move to project', async (req, res, principal, source, id) => {
+  const r = await moveToProject(req.db, principal.id, source, id, req.body?.project ?? null);
+  if (r.full) return res.status(507).json({ success: false, code: 'storage_full', error: 'That project’s storage is full.' });
+  if (r.conflict && r.code === 'folder_other_place') return res.status(409).json({ success: false, code: r.code, error: 'A personal file can’t go into a workspace’s project. Copy it into the workspace first.' });
+  sendOrganised(res, r, { folder: r.folderId ?? null });
 }));
 router.put('/assets/:source/:id/star', organise('star', async (req, res, principal, source, id) => {
   sendOrganised(res, await starLibraryItem(req.db, principal, source, id, true), { starred: true });

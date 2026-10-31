@@ -51,6 +51,7 @@
   function field(f) {
     const id = 'xdf-' + f.id, hint = f.hint ? `<small class="xd-hint">${esc(f.hint)}</small>` : '';
     const lab = `<label class="xd-lab" for="${id}">${esc(f.label)}${f.required ? '' : '<em>Optional</em>'}</label>`;
+    if (f.type === 'select') return `<div class="xd-f" data-f="${f.id}">${lab}<select id="${id}" class="set-sel">${(f.options || []).map(([v, l]) => `<option value="${esc(v)}"${String(f.value) === String(v) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${f.hint ? `<small class="xd-hint">${esc(f.hint)}</small>` : ''}<small class="xd-err" hidden></small></div>`;
     if (f.type === 'textarea') return `<div class="xd-f" data-f="${f.id}">${lab}<textarea id="${id}" rows="${f.rows || 3}" maxlength="${f.max || 500}" placeholder="${esc(f.placeholder || '')}">${esc(f.value || '')}</textarea>${hint}<small class="xd-err" hidden></small></div>`;
     if (f.type === 'choice') return `<div class="xd-f" data-f="${f.id}"><span class="xd-lab" id="${id}">${esc(f.label)}</span><div class="xd-choice${f.cols ? ' c' + f.cols : ''}" role="radiogroup" aria-labelledby="${id}">${f.options.map(([v, l, sub, glyph]) => `<button type="button" role="radio" aria-checked="${v === f.value}" tabindex="${v === f.value ? 0 : -1}" data-v="${esc(v)}">${glyph || ''}<span><b>${esc(l)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`).join('')}</div>${hint}</div>`;
     if (f.type === 'seg') return `<div class="xd-f xd-f--row" data-f="${f.id}"><span class="xd-lab" id="${id}">${esc(f.label)}</span><div class="xd-seg" role="radiogroup" aria-labelledby="${id}">${f.options.map(([v, l]) => `<button type="button" role="radio" aria-checked="${v === f.value}" tabindex="${v === f.value ? 0 : -1}" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div></div>`;
@@ -85,7 +86,7 @@
     if (f.type === 'choice' || f.type === 'seg' || f.type === 'icon') return w.querySelector('[aria-checked="true"]')?.dataset.v ?? null;
     if (f.type === 'checks') return [...w.querySelectorAll('[aria-checked="true"]')].map((x) => x.dataset.v);
     if (f.type === 'chips') { const inp = w.querySelector('input'); return [...w.querySelectorAll('[data-chip]')].map((x) => x.dataset.chip).concat(inp.value.trim() ? inp.value.split(/[,;\s]+/).filter(Boolean) : []); }
-    const el = w.querySelector('input,textarea'); return f.type === 'password' ? el.value : el.value.trim(); };
+    const el = w.querySelector('input,textarea,select'); return f.type === 'password' ? el.value : el.value.trim(); };
 
   // ---------- XD.form ----------
   function form({ title, sub, fields, submit = 'Save', danger = false, size = 'md', onSubmit, aside }) {
@@ -178,7 +179,7 @@
         ${row('Product analytics', 'Anonymous usage counts that help us fix what is slow or broken', sw('analytics'))}
         ${row('Download my data', 'Everything in your account, as a ZIP', '<button type="button" class="xd-btn ghost sm" data-export>Request export</button>', 'gdpr export')}
         ${row('Clear this device', 'Forgets layouts, pins and previews saved in this browser', '<button type="button" class="xd-btn ghost sm danger" data-clear-local>Clear…</button>', 'cache local storage reset')}`,
-      keyboard: () => `<h3>Keyboard</h3>${[['Ctrl K', 'Find anything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Alt 0–6', 'Overview and each mode'], ['Ctrl ,', 'Settings'], ['Ctrl /', 'All shortcuts'], ['/', 'Search this page'], ['F1', 'Report a problem']].map(([k, l]) => row(l, '', `<kbd class="xd-kbd">${esc(k)}</kbd>`, k)).join('')}<button type="button" class="xd-btn ghost" data-all-keys>Show every shortcut</button>`,
+      keyboard: () => `<h3>Keyboard</h3>${[['Ctrl K', 'Find anything'], ['Ctrl \\', 'Show or hide the sidebar'], ['Alt 0–7', 'Overview and each mode'], ['Ctrl ,', 'Settings'], ['Ctrl /', 'All shortcuts'], ['/', 'Search this page'], ['F1', 'Report a problem']].map(([k, l]) => row(l, '', `<kbd class="xd-kbd">${esc(k)}</kbd>`, k)).join('')}<button type="button" class="xd-btn ghost" data-all-keys>Show every shortcut</button>`,
       account: () => `<h3>Account</h3>${row('Name', '', `<span class="xd-val">${window.XENO_ME.nameHtml()}</span>`)}${row('Email', '', `<span class="xd-val">${window.XENO_ME.emailHtml()}</span>`)}${row('Plan', 'Credits and billing', '<button type="button" class="xd-btn ghost sm" data-plan>Plan & credits</button>')}
         <div class="xd-danger">${row('Sign out', 'Ends this session on this device', `<button type="button" class="xd-btn ghost sm" data-signout>${ic('leave')}Sign out</button>`)}</div>`,
     };

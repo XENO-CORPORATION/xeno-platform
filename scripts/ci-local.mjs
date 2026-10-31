@@ -66,9 +66,9 @@ const WF = join(ROOT, '.github', 'workflows');
 const CORE_DB_SUITES = [
   'authz-v2', 'oidc-v2', 'erasure', 'account-recovery',
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
-  'inference-routing-live', 'chat-stream-own-key', 'chat-area', 'library-area', 'workspace-area', 'forum-tickets', 'forum-moderation-actions', 'forum-writeback', 'xeno-tasks', 'canvases', 'chat-handoff', 'task-folders', 'workspace-foundation', 'tasks-mcp-oauth', 'xeno-mcp', 'agents-divisions', 'agent-cloud-runs', 'agent-company-ownership', 'agent-media-tools', 'dpop-token-exchange', 'readonly-preview-lifecycle',
-  'leader-election', 'fresh-db-boot', 'password-change-atomicity',
-  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'account-security', 'inference-session-keys', 'browser-relay',
+  'inference-routing-live', 'chat-stream-own-key', 'chat-area', 'library-area', 'workspace-area', 'forum-tickets', 'forum-report-evidence', 'forum-moderation-actions', 'forum-writeback', 'xeno-tasks', 'canvases', 'chat-handoff', 'task-folders', 'workspace-foundation', 'tasks-mcp-oauth', 'xeno-mcp', 'agents-divisions', 'agent-cloud-runs', 'agent-company-ownership', 'agent-media-tools', 'dpop-token-exchange', 'readonly-preview-lifecycle',
+  'leader-election', 'fresh-db-boot', 'password-change-atomicity', 'oidc-refresh-recovery',
+  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'project-folders', 'chat-project-folders', 'account-security', 'inference-session-keys', 'browser-relay',
 ];
 const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [
@@ -189,6 +189,7 @@ const PG = { container: 'xeno-ci-local-pg', port: '55995', password: 'test', ima
  * take minutes, so they run only when asked (`--only=browser`), never in a default run -- but they are named here so
  * gates-are-reachable.test.mjs counts them as reached, and so the one runner that executes them is this file. */
 const BROWSER_SUITES = [
+  'workspace-report.browser.test.mjs', 'workspace-report-contrast.browser.test.mjs', 'homepage-v21.browser.test.mjs', 'products-v2.browser.test.mjs',
   'chat-project-context-browser.test.mjs',
   'studio-feed-browser.test.mjs',
   'chat-handoff-browser.test.mjs',

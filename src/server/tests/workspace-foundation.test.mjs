@@ -47,7 +47,7 @@ async function main() {
   const helper = await mk('wsf-agent-owner');
   const bot = (await createAgent(pool, { id: helper, kind: 'human', handle: 'wsf-agent-owner' }, { name: 'wsf-bot', displayName: 'Bot', agentRole: 'other' })).agent;
   const botId = (await pool.query('SELECT id FROM users WHERE username = $1', [bot.handle])).rows[0].id;
-  const sql = fs.readFileSync(path.resolve('src/server/database/migrations/20261016180000-workspace-root-and-company.sql'), 'utf8');
+  const sql = fs.readFileSync(new URL('../database/migrations/20261016180000-workspace-root-and-company.sql', import.meta.url), 'utf8');
   await pool.query(sql.slice(0, sql.indexOf('-- DOWN')));
   await pool.query(sql.slice(0, sql.indexOf('-- DOWN')));   // and again: re-running changes nothing
   ok((await personals(early)).length === 1, 'the migration gives an account with no workspace its personal workspace (once, even run twice)');

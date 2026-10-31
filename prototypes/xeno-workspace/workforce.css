@@ -162,3 +162,12 @@ button.wf-fn:not([disabled]):hover{filter:brightness(1.15)}
 .fd-cap[aria-checked="true"]{background:var(--n233);border-color:var(--n233)}
 .fd-cap svg.i{width:13px;height:13px;color:var(--n10)}
 @media (max-width:1180px){.fd-sums{grid-template-columns:repeat(3,1fr)}}
+/* ---------- work report (platform-directory.js, Directory/<id>/work/<days>): counts as tiles, facts as plain lines ---------- */
+.xdir-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.xdir-tile{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:8px;background:var(--n18);border:1px solid var(--n31);min-width:0}
+.xdir-tile b{font-size:20px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.xdir-tile span{font-size:12.5px;color:var(--muted)}
+.xdir-tile small{font-size:11px;color:var(--dim)}
+.xdir-sec-sub{margin:-6px 0 10px}
+.xdir-facts{list-style:none;margin:0 0 18px;padding:10px 12px;display:grid;gap:4px;border-radius:8px;background:var(--n28);border:1px solid var(--n44);font-size:12.5px;color:var(--text)}
+.xdir-note{margin-top:4px;line-height:1.5}

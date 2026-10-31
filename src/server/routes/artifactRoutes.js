@@ -22,12 +22,14 @@ import {
   listComments,
   listRevisions,
   markCommentsDelivered,
+  keepAsTool,
   publicUrlFor,
   reviseArtifact,
   resolveReadable,
   setVisibility,
 } from '../services/artifactService.js';
 import { mintViewToken } from '../services/artifactViewToken.js';
+import { contentOrigin } from './artifactViewerRoutes.js';
 import { recordSecurityEvent } from '../services/securityEvents.js';
 
 const router = express.Router();
@@ -65,7 +67,8 @@ const audit = (req, type, artifactId, metadata = {}) => recordSecurityEvent(req.
 
 router.get('/', wrap(async (req, res) => {
   const limit = Number.parseInt(String(req.query.limit ?? '50'), 10) || 50;
-  const artifacts = await listArtifactsForOwner(req.db, req.user.id, { limit });
+  const kind = typeof req.query.kind === 'string' ? req.query.kind : null;
+  const artifacts = await listArtifactsForOwner(req.db, req.user.id, { limit, kind });
   res.json({ artifacts: artifacts.map((a) => withUrl(req, a)), enabled: artifactsEnabled() });
 }));
 
@@ -78,6 +81,13 @@ router.post('/', requireEnabled, wrap(async (req, res) => {
   await applyRetentionPolicy(req.db, artifact.id);
   await audit(req, 'artifact_published', artifact.id, { revision: 1, title: artifact.title });
   res.status(201).json({ artifact: withUrl(req, await getArtifactForOwner(req.db, artifact.id, req.user.id)) });
+}));
+
+// Keep a page as a tool in My tools (docs/decisions/2026-10-29-personal-tools-are-artifacts.md).
+router.post('/:id/keep-as-tool', requireEnabled, wrap(async (req, res) => {
+  const artifact = await keepAsTool(req.db, { artifactId: req.params.id, ownerUserId: req.user.id, category: req.body?.category ?? null });
+  await audit(req, 'artifact_kept_as_tool', artifact.id, { category: artifact.category ?? null });
+  res.json({ artifact: withUrl(req, artifact) });
 }));
 
 router.get('/:id', wrap(async (req, res) => {
@@ -125,7 +135,8 @@ router.post('/:id/view-token', wrap(async (req, res) => {
   const artifact = await resolveReadable(req.db, { artifactId: req.params.id, userId: req.user.id, shareToken: req.body?.shareToken });
   if (!artifact) throw new ArtifactError(404, 'Artifact not found.', 'not_found');
   const token = mintViewToken({ artifactId: artifact.id, revision: artifact.viewRevision });
-  res.json({ viewToken: token, revision: artifact.viewRevision, expiresInSeconds: 3600 });
+  // frameUrl: where the sealed raw page lives (the user-content origin in production), so a client never rebuilds it
+  res.json({ viewToken: token, revision: artifact.viewRevision, expiresInSeconds: 3600, frameUrl: `${contentOrigin() ?? ''}/a/${artifact.id}/v/${token}/r/${artifact.viewRevision}/index.html` });
 }));
 
 router.get('/:id/comments', wrap(async (req, res) => {

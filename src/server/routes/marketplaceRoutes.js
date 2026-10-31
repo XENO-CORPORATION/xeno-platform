@@ -19,6 +19,8 @@
  * users.role here (the column exists, default 'user').
  */
 
+import { resolvePrincipal } from '../services/agentIdentity.js';
+import * as skillPackages from '../services/marketplaceSkillPackages.js';
 import express from 'express';
 import { assertServiceGranted, ServicePrincipalDeniedError } from '../services/servicePrincipalGate.js';
 import { workspaceFromReq } from '../utils/workspaceContext.js';
@@ -415,6 +417,70 @@ router.post('/listings/:id/import-team', authMiddleware, async (req, res) => {
   }
 });
 
+/** Who is acting on a skill: a person, or (refused by skills.js) an agent or service. Read from the principal, never assumed. */
+async function callerOfSkills(req) {
+  const p = await resolvePrincipal(req.db, req.user.id);
+  return { id: req.user.id, kind: p && p.kind ? p.kind : 'human' };
+}
+
+/** GET /developer/skill-listings -- my skill listings, each with the library skill its latest version came from. */
+router.get('/developer/skill-listings', authMiddleware, async (req, res) => {
+  try {
+    const dev = await getDeveloperForUser(req.db, req.user.id);
+    if (!dev) return res.json({ success: true, developer: null, listings: [] });
+    const { rows } = await req.db.query(`SELECT l.id, l.slug, l.title, l.status, l.current_version, l.license,
+        (SELECT v.manifest->>'sourceSkill' FROM marketplace_listing_versions v WHERE v.listing_id = l.id ORDER BY v.created_at DESC LIMIT 1) AS source_skill,
+        (SELECT jsonb_build_object('state', s.state, 'version', v.version) FROM marketplace_submissions s JOIN marketplace_listing_versions v ON v.id = s.listing_version_id
+          WHERE s.listing_id = l.id ORDER BY s.created_at DESC LIMIT 1) AS last_submission
+      FROM marketplace_listings l WHERE l.developer_id = $1 AND l.kind = 'skill' ORDER BY l.created_at DESC`, [dev.id]);
+    return res.json({ success: true, developer: { id: dev.id, name: dev.display_name, handle: dev.slug, trustTier: dev.trust_tier },
+      listings: rows.map((r) => ({ id: r.id, slug: r.slug, title: r.title, status: r.status, currentVersion: r.current_version, license: r.license, sourceSkill: r.source_skill, lastSubmission: r.last_submission })) });
+  } catch (e) {
+    console.error('[Marketplace] skill listings error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to list your skill listings' });
+  }
+});
+
+/** GET /developer/listings -- everything this seller lists, with whether it has a version to send and how its last review went. */
+router.get('/developer/listings', authMiddleware, async (req, res) => {
+  try {
+    const dev = await getDeveloperForUser(req.db, req.user.id);
+    if (!dev) return res.json({ success: true, listings: [] });
+    const { rows } = await req.db.query(`SELECT l.id, l.slug, l.kind, l.title, l.status, l.current_version,
+        (SELECT count(*)::int FROM marketplace_listing_versions v WHERE v.listing_id = l.id) AS versions,
+        (SELECT jsonb_build_object('state', s.state) FROM marketplace_submissions s WHERE s.listing_id = l.id ORDER BY s.created_at DESC LIMIT 1) AS last_submission
+      FROM marketplace_listings l WHERE l.developer_id = $1 ORDER BY l.created_at DESC`, [dev.id]);
+    return res.json({ success: true, listings: rows.map((r) => ({ id: r.id, slug: r.slug, kind: r.kind, title: r.title, status: r.status, currentVersion: r.current_version, versions: r.versions, lastSubmission: r.last_submission })) });
+  } catch (e) {
+    console.error('[Marketplace] developer listings error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to list your listings' });
+  }
+});
+
+/** GET /skills/:listingId/preview -- what a skill is before anyone gets it: publisher, versions, files, scripts. */
+router.get('/skills/:listingId/preview', optionalAuthMiddleware, async (req, res) => {
+  try { return res.json({ success: true, ...(await skillPackages.preview(req.db, req.params.listingId)) }); }
+  catch (e) {
+    if (e instanceof skillPackages.SkillPackageError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
+    console.error('[Marketplace] skill preview error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to read the skill' });
+  }
+});
+
+/** POST /listings/:id/install-skill { versionId?, workspaceId?, name? } -- put a published version into a library. */
+router.post('/listings/:id/install-skill', authMiddleware, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const out = await skillPackages.installSkill(req.db, await callerOfSkills(req), { listingId: req.params.id,
+      versionId: typeof b.versionId === 'string' ? b.versionId : null, workspaceId: typeof b.workspaceId === 'string' ? b.workspaceId : null, name: typeof b.name === 'string' ? b.name : null });
+    return res.status(out.installed === 'new' ? 201 : 200).json({ success: true, skill: out });
+  } catch (e) {
+    if (e instanceof skillPackages.SkillPackageError) return res.status(e.status).json({ success: false, error: e.message, code: e.code, ...(e.details ? { details: e.details } : {}) });
+    console.error('[Marketplace] skill install error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to install the skill' });
+  }
+});
+
 /** GET /team-imports/:teamId -- where an imported team came from, to whoever may manage its owner. */
 router.get('/team-imports/:teamId', authMiddleware, async (req, res) => {
   try {
@@ -741,6 +807,21 @@ router.post('/listings/:id/versions', authMiddleware, async (req, res) => {
     const { version } = req.body || {};
     if (!isNonEmptyString(version) || version.length > 40) return badRequest(res, 'version is required (e.g. 1.0.0)');
 
+    // a skill version's package is BUILT by the platform from one skill in the seller's library (D3), never supplied
+    if (listing.kind === 'skill') {
+      const supplied = ['skillPackage', 'skill_package', 'manifest', 'artifactR2Key', 'artifactUrl', 'sha256', 'ed25519Sig', 'ed25519PubKey']
+        .filter((key) => Object.hasOwn(req.body, key));
+      if (supplied.length) return res.status(400).json({ success: false, error: 'skill_package_is_built_by_the_platform', fields: supplied });
+      try {
+        const built = await skillPackages.exportSkillPackage(req.db, await callerOfSkills(req), { listing, skillId: req.body.skillId,
+          version: isString(req.body?.skillVersion) ? req.body.skillVersion : null, releaseNotes: isString(req.body?.releaseNotes) ? req.body.releaseNotes : null });
+        return res.status(201).json({ success: true, ...built });
+      } catch (e) {
+        if (e instanceof skillPackages.SkillPackageError) return res.status(e.status).json({ success: false, error: e.message, code: e.code, ...(e.details ? { details: e.details } : {}) });
+        throw e;
+      }
+    }
+
     // MKT-04 / D22: a team version's package is BUILT by the platform from one canonical team the seller
     // manages -- never supplied. A caller-sent package, artifact or manifest is refused, so nothing but the
     // allowlisted configuration can reach a listing whatever the caller puts in the body.
@@ -933,7 +1014,10 @@ router.get('/submissions', authMiddleware, requireAdmin, async (req, res) => {
     if (state) { params.push(state); where = `WHERE s.state = $1`; }
     const { rows } = await req.db.query(
       `SELECT s.id, s.state, s.checks, s.notes, s.submitted_at, s.decided_at,
-              l.slug, l.title, l.kind, l.trust_tier, v.version, d.display_name AS developer
+              l.id AS listing_id, l.slug, l.title, l.kind, l.trust_tier, v.version, d.display_name AS developer, d.slug AS developer_slug,
+              -- a skill is reviewed by READING it: its SKILL.md, its files and which of them are scripts
+              v.skill_package->'files'->0->>'content' AS skill_md, v.manifest->'scripts' AS skill_scripts,
+              (SELECT jsonb_agg(f->>'path') FROM jsonb_array_elements(v.skill_package->'files') f) AS skill_files
        FROM marketplace_submissions s
        JOIN marketplace_listings l ON l.id = s.listing_id
        JOIN marketplace_listing_versions v ON v.id = s.listing_version_id
@@ -990,6 +1074,9 @@ router.post('/submissions/:id/approve', authMiddleware, requireAdmin, async (req
     // MKT-03: the database refuses to publish an agent version that is unlicensed, unsigned, not a canonical
     // .xanima of the listing's kind, or carrying a private Soul -- including when a reviewer approves it.
     // That is the rule working, not a fault, so it is answered as a refusal rather than a 500.
+    if (error.code === '23514' && /skill package/.test(error.message || '')) {
+      return res.status(422).json({ success: false, error: 'skill_package_not_publishable', reason: error.message });
+    }
     if (error.code === '23514' && /team package/.test(error.message || '')) {
       return res.status(422).json({ success: false, error: 'team_package_not_publishable', reason: error.message });
     }

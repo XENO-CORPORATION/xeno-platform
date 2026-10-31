@@ -1,5 +1,20 @@
 # XENO CLI Auth Contract
 
+## Current candidate routing contract (2026-10-22)
+
+The OIDC account implementation supersedes the historical custom Redis protocol
+below. See [CLI auth routing review](CLI_AUTH_ROUTING_REVIEW.md) for exact paths,
+benchmark, candidate evidence and remaining release qualification. Chat requires
+a canonical account session; explicit unattended credentials remain supported by
+`xeno run`. Public browser/device pages use `xenosystem.ai`, independently of the
+existing pinned OIDC issuer. Browser PKCE, state, nonce and device polling remain
+owned by the canonical account package. Device consent supports both approval
+and refusal, and email activation preserves the original device return path.
+
+The sections below are historical compatibility documentation, not the current
+CLI sign-in or token-storage contract. Token paste and browser localStorage
+credential persistence described there are retired paths.
+
 Locked spec for the Codex-CLI-style 3-option login UX in `xeno-agent-cli`,
 shared by backend (xenostudio-backend), frontend (xenostudio-frontend), and CLI.
 

@@ -136,10 +136,10 @@ router.get('/:slug/download/:os{/:version}', async (req, res) => {
   const verdict = verifyDownloadGrant(req.query.grant, wanted);
   if (!verdict.ok) {
     if (wantsHtml(req)) {
-      // Send the browser somewhere it can act. The SPA reads returnUrl and
-      // comes back here with a grant once the account can actually download.
-      const back = encodeURIComponent(req.originalUrl.split('?')[0]);
-      return res.redirect(302, `/login?returnUrl=${back}`);
+      // Send the browser to the dedicated product download page where the client
+      // application can mint a grant cleanly using the user's active session,
+      // avoiding a 302 loop between /product/:slug/download/:os and /login.
+      return res.redirect(302, `/product/${encodeURIComponent(slug)}/download`);
     }
     return res.status(401).json({
       error: {
@@ -434,4 +434,80 @@ updateGrantRouter.get('/:slug/grant', async (req, res) => {
     url: `/product/${slug}/download/${osParam}/${release.version}?grant=${encodeURIComponent(grant)}`,
     expiresInSeconds: GRANT_TTL_SECONDS,
   });
+});
+
+/**
+ * The updater's FEED behind the plan — so an installed app updates only for an account allowed to.
+ *
+ *   GET /api/updates/:slug/feed/latest.yml        (Windows)
+ *   GET /api/updates/:slug/feed/latest-linux.yml  (Linux)
+ *   GET /api/updates/:slug/feed/latest-mac.yml    (macOS)
+ *     → 200 the R2 feed, every installer URL rewritten to the grant-checked download route for exactly
+ *           the version the feed names; sha512 and size untouched, so electron-updater still verifies the
+ *           bytes it receives against what we published
+ *     → 401 (authMiddleware) / 403 plan_upgrade_required / 404 / 502 feed unreadable
+ *
+ * electron-updater's generic provider fetches `<feed url>/latest.yml` then the file it names, resolving a
+ * leading-slash URL against the feed's origin. So an app sets its feed to `<platform>/api/updates/<slug>/feed`
+ * with the account's Bearer token (`@xenosystem/primitives/updates`) and needs nothing else: the download
+ * route redeems the grant and redirects to the bytes.
+ *
+ * Same authority as the grant endpoint above, so the same order (entitlement BEFORE reading anything, so a
+ * refusal leaks no version), the same per-account cap and the same audit row. Differential downloads are
+ * off in the client: a `.blockmap` appended to a grant URL is not a file, and a full download is correct.
+ */
+const FEED_FILES = { 'latest.yml': 'windows', 'latest-linux.yml': 'linux', 'latest-mac.yml': 'mac' };
+const OS_PARAM = { windows: 'win', linux: 'linux', mac: 'mac' };
+
+/** Rewrite every `url:` / `path:` value in an electron-builder feed. Exported for its test. */
+export function rewriteFeed(text, { slug, os, version, grant }) {
+  const vLine = /^version:\s*['"]?([^'"\s]+)/m.exec(text);
+  if (!vLine || vLine[1].replace(/^v/i, '') !== version) return null;   // a feed naming another version: refuse
+  const target = `/product/${slug}/download/${OS_PARAM[os]}/${version}?grant=${encodeURIComponent(grant)}`;
+  let rewrote = 0;
+  const out = text.replace(/^(\s*(?:-\s+)?(?:url|path):\s*).+$/gm, (_m, lead) => { rewrote += 1; return `${lead}'${target}'`; });
+  return rewrote ? out : null;
+}
+
+updateGrantRouter.get('/:slug/feed/:file', async (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase();
+  const os = FEED_FILES[String(req.params.file || '')];
+  const channel = req.query.channel === 'beta' ? 'beta' : 'stable';
+  res.set('Cache-Control', 'no-store');
+  if (!/^[a-z0-9-]+$/.test(slug) || !os) {
+    return res.status(404).json({ error: { code: 'BAD_FEED', message: 'Unknown product or feed file' } });
+  }
+  const userId = req.user?.id;
+  if (!userId || !req.db) return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Sign in to update.' } });
+
+  const check = await assertEntitlement(req.db, userId, UPDATE_CAPABILITY);
+  if (!check.allowed) return res.status(403).json(check.body);
+
+  const releases = await loadReleases(slug);
+  const release = releases.length ? pickRelease(releases, { channel }) : null;
+  if (!release?.assets?.[os]?.[0]?.file) {
+    return res.status(404).json({ error: { code: 'NO_RELEASE', message: `No ${os} release for "${slug}"` } });
+  }
+
+  let feed = '';
+  try {
+    const r = await fetch(`${R2_PUBLIC}/apps/${slug}/${req.params.file}`, { cache: 'no-cache' });
+    if (!r.ok) throw new Error(`feed ${r.status}`);
+    feed = await r.text();
+  } catch (e) {
+    console.error('[Updates] feed unreadable', slug, e.message);
+    return res.status(502).json({ error: { code: 'FEED_UNAVAILABLE', message: 'The update feed could not be read.' } });
+  }
+
+  const capped = await enforceGrantCap(req, userId);
+  if (capped) return res.status(429).json(capped);
+  const grant = mintDownloadGrant({ userId, slug, os, version: release.version });
+  const body = rewriteFeed(feed, { slug, os, version: release.version, grant });
+  if (!body) {
+    // The feed and releases.json disagree about the latest version: serve nothing rather than mismatched bytes.
+    console.error('[Updates] feed/release mismatch', slug, release.version);
+    return res.status(409).json({ error: { code: 'FEED_MISMATCH', message: 'The update feed is being published; try again shortly.' } });
+  }
+  await auditGrant(req, { userId, slug, os, version: release.version, plan: check.ent?.plan || null });
+  res.type('text/yaml').send(body);
 });

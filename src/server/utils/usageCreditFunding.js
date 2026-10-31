@@ -14,7 +14,11 @@ export async function quarantinedGrantIds(client, userId) {
 // Boolean promise: disabling overage cannot invalidate an already admitted request.
 export async function planFunding(client, userId) {
   const { rows: prefs } = await client.query('SELECT enabled FROM usage_credit_preferences WHERE user_id=$1', [userId]);
-  const enabled = prefs[0]?.enabled === true;
+  // The usage-credit consent protects a PERSON's bought credits from silently topping up their plan allowance. A
+  // WORKSPACE wallet has no plan allowance and no person to ask (its preference row cannot exist: the FK is to users);
+  // its credits were put there to be spent, so they are always spendable. Without this, no workspace wallet could pay.
+  const { rows: kind } = await client.query('SELECT owner_kind FROM credit_accounts WHERE user_id=$1', [userId]);
+  const enabled = prefs[0]?.enabled === true || kind[0]?.owner_kind === 'workspace';
   const quarantined = new Set(await quarantinedGrantIds(client, userId));
   const { rows: lots } = await client.query(`SELECT g.id,g.kind,g.expires_at,
       g.remaining_micro-COALESCE((SELECT SUM(f.reserved_micro) FROM credit_hold_funding f

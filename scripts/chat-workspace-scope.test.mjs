@@ -18,13 +18,13 @@ test('conflicting contexts and malformed explicit scopes never become personal s
   }
 });
 
-async function invoke({ member = true, resource = true, path = '/projects', body = {}, fail = false, personalOwner = null } = {}) {
+async function invoke({ member = true, grant = false, resource = true, path = '/projects', body = {}, fail = false, personalOwner = null } = {}) {
   const queries = [];
   const req = { headers: { 'x-xeno-workspace': A }, query: {}, body, path, user: { id: B }, db: {
     async query(sql, params) {
       queries.push({ sql, params });
       if (fail) throw new Error('database unavailable');
-      if (sql.includes('SELECT relation FROM relationship_tuples')) return { rows: member ? [{ relation: 'owner' }] : [] };
+      if (sql.includes('SELECT relation FROM relationship_tuples')) return { rows: (params[0] === 'workspace' ? member : grant) ? [{ relation: 'owner' }] : [] };
       if (sql.includes('relationship_tuples')) return { rows: [] };
       // SES-01: the adapter asks whether the context is a personal wrapper, and whose.
       if (sql.includes("workspace_type = 'personal'")) return { rows: personalOwner ? [{ owner_user_id: personalOwner }] : [] };
@@ -53,7 +53,7 @@ test('project detail, nested files and conversation bindings enforce project wor
     assert.equal(result.next, false);
     // The third parameter is the personal owner, NULL for a team workspace: a team context never
     // admits a personally owned chat or project into its scope.
-    assert.deepEqual(result.queries.at(-1).params, [P, A, null]);
+    assert.ok(result.queries.some((q) => JSON.stringify(q.params) === JSON.stringify([P, A, null])), 'the scope query ran with no personal owner');
   }
 });
 test("SES-01: under the caller's OWN personal wrapper, their personally owned resources are in scope", async () => {
@@ -63,7 +63,7 @@ test("SES-01: under the caller's OWN personal wrapper, their personally owned re
   assert.match(own.queries.at(-1).sql, /COALESCE\(p\.owner_user_id,c\.owner_user_id\)=\$3::uuid/);
   // Another person's personal wrapper admits nobody's personal resources, including the caller's.
   const foreign = await invoke({ path: `/conversations/${P}/messages`, personalOwner: P, resource: false });
-  assert.deepEqual(foreign.queries.at(-1).params, [P, A, null]);
+  assert.ok(foreign.queries.some((q) => JSON.stringify(q.params) === JSON.stringify([P, A, null])));
   assert.equal(foreign.status, 404);
 });
 test('conversation scope derives through its project parent', async () => {
@@ -80,4 +80,12 @@ test('scope lookup failure fails closed', async () => {
   const result = await invoke({ fail: true });
   assert.equal(result.status, 500);
   assert.equal(result.next, false);
+});
+
+test('a person invited to the project reaches its chat from their own workspace (2026-10-20)', async () => {
+  const invited = await invoke({ resource: false, grant: true, path: '/conversations/' + P });
+  assert.equal(invited.status, 200);
+  assert.equal(invited.next, true);
+  const stranger = await invoke({ resource: false, grant: false, path: '/conversations/' + P });
+  assert.equal(stranger.status, 404);
 });

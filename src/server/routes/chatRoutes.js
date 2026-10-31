@@ -1,3 +1,4 @@
+import { ensureChatProjectFolder, projectFolderUsage, renameChatProjectFolder, syncProjectFolderAccess, releaseChatProjectFolder } from '../services/chatProjectFolders.js';
 import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
 import { handOff } from '../services/chatHandoff.js';
@@ -35,6 +36,7 @@ import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import liveConversationCollaborationRoutes from './liveConversationCollaborationRoutes.js';
 import projectDirectoryBindingRoutes from './projectDirectoryBindingRoutes.js';
 import * as insights from '../services/projectInsights.js';
+import * as projectFunding from '../services/projectFundingView.js';
 import {
   assertLiveCollaborationAuthority,
   createLiveShare,
@@ -375,106 +377,7 @@ router.post('/init', async (req, res) => {
     if (process.env.NODE_ENV === 'production') {
       return res.status(403).json({ success: false, error: 'Database initialization disabled in production. Use migration scripts.' });
     }
-    // Create conversations table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS chat_conversations (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL DEFAULT 'New Chat',
-        model_id VARCHAR(255),
-        system_prompt TEXT,
-        persona_id VARCHAR(50),
-        interface_id VARCHAR(100) DEFAULT 'playground',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        last_message_at TIMESTAMP,
-        deleted_at TIMESTAMP,
-        is_archived BOOLEAN DEFAULT FALSE
-      )
-    `);
-
-    // Create messages table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS chat_messages (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        role VARCHAR(20) NOT NULL,
-        content TEXT NOT NULL,
-        model_id VARCHAR(255),
-        thinking TEXT,
-        has_thinking BOOLEAN DEFAULT FALSE,
-        attachments JSONB,
-        search_context JSONB,
-        prompt_tokens INTEGER,
-        completion_tokens INTEGER,
-        total_tokens INTEGER,
-        created_at TIMESTAMP DEFAULT NOW(),
-        message_index INTEGER NOT NULL,
-        turn JSONB
-      )
-    `);
-    // Existing databases receive the column through the migration of the same name; a fresh one
-    // gets it here so the two paths agree (2026-09-17, chat-message-turn).
-    await req.db.query('ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS turn JSONB');
-    // Branches (2026-09-18, chat-message-branches): the tree edge and the leaf the person is on.
-    await req.db.query('ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES chat_messages(id) ON DELETE CASCADE');
-    await req.db.query('CREATE INDEX IF NOT EXISTS idx_chat_messages_parent ON chat_messages(parent_id)');
-    await req.db.query('ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS active_leaf_id UUID');
-
-    // Create personas table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS chat_personas (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(100) NOT NULL,
-        description VARCHAR(500),
-        prompt TEXT NOT NULL,
-        icon VARCHAR(50),
-        color VARCHAR(20),
-        use_count INTEGER DEFAULT 0,
-        last_used_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        sort_order INTEGER DEFAULT 0,
-        is_favorite BOOLEAN DEFAULT FALSE
-      )
-    `);
-
-    // Create shared conversations table
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS chat_shared_conversations (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-        owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        share_token VARCHAR(64) UNIQUE NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        revoked_at TIMESTAMP,
-        accept_count INTEGER DEFAULT 0
-      )
-    `);
-
-    // Create share acceptances table (tracks who accepted which shares)
-    await req.db.query(`
-      CREATE TABLE IF NOT EXISTS chat_share_acceptances (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        share_id UUID NOT NULL REFERENCES chat_shared_conversations(id) ON DELETE CASCADE,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        new_conversation_id UUID NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
-        accepted_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(share_id, user_id)
-      )
-    `);
-
-    // Create indexes
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_chat_conversations_user ON chat_conversations(user_id, deleted_at)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_chat_conversations_updated ON chat_conversations(user_id, updated_at DESC)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id, message_index)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_chat_personas_user ON chat_personas(user_id, sort_order)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_chat_shared_token ON chat_shared_conversations(share_token)`);
-    await req.db.query(`CREATE INDEX IF NOT EXISTS idx_chat_shared_conv ON chat_shared_conversations(conversation_id, owner_id)`);
-
+    // The schema is owned by database/migrations/, applied by the migrate job.
     console.log('✅ Chat tables initialized successfully');
     res.json({ success: true, message: 'Chat tables initialized' });
   } catch (error) {
@@ -2839,6 +2742,24 @@ router.post('/projects', async (req, res) => {
 });
 
 // PUT /api/chat/projects/:id - Update project
+// The project's own Storage folder (services/chatProjectFolders.js): made on the first open if it does not exist yet,
+// with what the project's files take up. Anyone who may see the project may see where its files are.
+router.get('/projects/:id/storage', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    await requireResourceRelation(req.db, userPrincipal(userId), 'project', req.params.id, 'viewer');
+    const out = await ensureChatProjectFolder(req.db, req.params.id);
+    if (!out.folder) return res.status(out.reason === 'storage_full' ? 507 : 409).json({ success: false, code: out.reason === 'storage_full' ? 'storage_full' : 'project_folder_unavailable', error: out.reason === 'storage_full' ? 'Storage is full, so the project folder could not be made yet' : 'The project folder could not be made yet' });
+    const usage = await projectFolderUsage(req.db, out.folder.id);
+    res.json({ success: true, created: out.created, folder: { id: out.folder.id, name: out.folder.name, workspaceId: out.folder.workspace_id || null, url: `/workspace/corpo/apps/storage/f/${out.folder.id}` }, usage });
+  } catch (error) {
+    if (error instanceof ChatAuthorizationError) return res.status(404).json({ success: false, error: 'Project not found', code: 'project_not_found' });
+    console.error('[chat] project storage', error);
+    res.status(500).json({ success: false, error: 'Project storage failed' });
+  }
+});
+
 router.put('/projects/:id', async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -2870,6 +2791,7 @@ router.put('/projects/:id', async (req, res) => {
     );
 
     if (rows.length === 0) return res.status(404).json({ success: false, error: 'Project not found' });
+    if (name !== undefined && rows[0]) await renameChatProjectFolder(req.db, id).catch((e) => console.warn(`[project-folder] rename ${id}: ${e.message}`));
     res.json({ success: true, project: rows[0] });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -2892,6 +2814,21 @@ const insight = (fn) => async (req, res) => {
 router.get('/projects/:id/people', insight((req) => insights.people(req.db, { id: req.user.id }, req.params.id)));
 router.get('/projects/:id/summary', insight((req) => insights.summary(req.db, { id: req.user.id }, req.params.id)));
 router.get('/projects/:id/activity', insight((req) => insights.activity(req.db, { id: req.user.id }, req.params.id, { before: req.query.before, limit: req.query.limit })));
+
+// The Funding tab: what a project has been funded with and may spend. It moves no money (services/projectFundingView.js).
+const fundingCall = (fn) => async (req, res) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    res.json({ success: true, ...(await fn(req)) });
+  } catch (error) {
+    if (error instanceof projectFunding.ProjectFundingError) return res.status(error.status).json({ success: false, error: error.message, code: error.code });
+    console.error('[projects] funding', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+router.get('/projects/:id/funding', fundingCall((req) => projectFunding.read(req.db, { id: req.user.id }, req.params.id)));
+router.post('/projects/:id/funding/ceiling', fundingCall((req) => projectFunding.proposeCeiling(req.db, { id: req.user.id }, req.params.id, req.body || {})));
+router.post('/projects/:id/funding/ceiling/:proposalId/decision', fundingCall((req) => projectFunding.decideCeiling(req.db, { id: req.user.id }, req.params.id, req.params.proposalId, req.body || {})));
 
 router.get('/projects/:id/access', async (req, res) => {
   try {
@@ -2946,6 +2883,7 @@ router.put('/projects/:id/access/user/by-email', async (req, res) => {
       );
       await writeTuples(tx, { writes: [{ object: `project:${req.params.id}`, relation, subject: `user:${identity.id}` }] });
     });
+    await syncProjectFolderAccess(req.db, req.params.id);
     res.json({ success: true, grant: { relation, subject: `user:${identity.id}`, identity } });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -2973,6 +2911,7 @@ router.put('/projects/:id/access/:subjectType/:subjectId', async (req, res) => {
       );
       await writeTuples(tx, { writes: [{ object: `project:${req.params.id}`, relation, subject: `${subjectType}:${subjectId}` }] });
     });
+    await syncProjectFolderAccess(req.db, req.params.id);
     res.json({ success: true, grant: { relation, subject: `${subjectType}:${subjectId}` } });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -2995,6 +2934,7 @@ router.delete('/projects/:id/access/:subjectType/:subjectId', async (req, res) =
        AND subject_type=$2 AND subject_id=$3 AND relation IN ('viewer','reviewer','editor','admin')`,
       [req.params.id, subjectType, subjectId],
     );
+    await syncProjectFolderAccess(req.db, req.params.id);
     res.json({ success: true });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
@@ -3065,6 +3005,7 @@ router.delete('/projects/:id/permanent', async (req, res) => {
       if (gone.length) await tx.query("DELETE FROM relationship_tuples WHERE object_type = 'schedule' AND object_id = ANY($1::text[])", [gone]);
       const dead = (await tx.query('DELETE FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NOT NULL RETURNING id', [id])).rows.map((r) => String(r.id));
       if (dead.length) await tx.query("DELETE FROM relationship_tuples WHERE object_type = 'conversation' AND object_id = ANY($1::text[])", [dead]);
+      await releaseChatProjectFolder(tx, id);   // the folder and its files stay in Storage; only the binding goes
       await tx.query("DELETE FROM relationship_tuples WHERE (object_type = 'project' AND object_id = $1) OR (subject_type = 'project' AND subject_id = $1)", [String(id)]);
       await tx.query('DELETE FROM chat_projects WHERE id = $1', [id]);
       return { status: 200, body: { success: true, deleted: true } };

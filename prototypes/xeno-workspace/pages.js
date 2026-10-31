@@ -38,6 +38,9 @@
   // object pages (a project, a run, a Mind) keep the object's own title in the body — it is the content
   const head = ({ eyebrow, title, sub, acts = '', meta = '', obj = false }) => `<header class="pg-head ${obj ? 'pg-head--obj' : 'pg-head--col'}"><div class="pg-ttl">${eyebrow ? `<small>${eyebrow}</small>` : ''}<h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ''}</div>${acts ? `<div class="pg-acts">${acts}</div>` : ''}</header>${meta ? `<div class="pg-meta">${meta}</div>` : ''}`;
   const btn = (label, attrs, ghost, icon) => `<button class="pg-btn${ghost ? ' ghost' : ''}" ${attrs}>${icon ? ic(icon) : ''}<span>${esc(label)}</span></button>`;
+  // A page's TABS: written right after its head and lifted by framed() into the header bar, beside the path — on every
+  // page, never a second row in the body. items = [[key, label, count?]]; attr is the click attribute (data-sp-go …).
+  const tabs = (items, cur, attr) => `<div class="pg-tabs" role="tablist">${items.map(([k, l, n]) => `<button role="tab" aria-selected="${k === cur}" ${attr}="${esc(k)}">${esc(l)}${n != null && n !== '' ? `<em>${esc(n)}</em>` : ''}</button>`).join('')}</div>`;
   const seg = (key, name, opts, cur) => `<div class="pg-seg" role="tablist" aria-label="${esc(name)}">${opts.map(([v, l, n]) => `<button role="tab" aria-selected="${v === cur}" data-pg-seg="${key}" data-v="${esc(v)}">${esc(l)}${n != null ? `<em>${n}</em>` : ''}</button>`).join('')}</div>`;
   const search = (key, ph, q) => `<label class="pg-search">${ic('search')}<input data-pg-q="${key}" value="${esc(q)}" placeholder="${esc(ph)}" aria-label="${esc(ph)}" spellcheck="false">${q ? `<button data-pg-clear="${key}" aria-label="Clear search">${ic('x')}</button>` : '<kbd>/</kbd>'}</label>`;
   // dropdown: a labelled button that opens a real menu (sort, filters that do not fit a segmented control)
@@ -105,9 +108,14 @@
     const libFor = window.XENO_PG_LIBRARY.items.filter((f) => f.project === name && !f.trashedAt);
     const empty = (icon, t, b, a = '') => box(icon, t, b, a, 'sm');
     // on the platform, a tab with no API behind it says so, and Overview shows only what the platform knows
-    const wfRec = window.XENO_WFP?.served && window.XENO_WFP.tabs.includes(cur) ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
+    // research first: its tabs, and a research run (rr_…) inside Runs, which a workforce run id can never look like
+    const rsTab = !!window.XENO_RESEARCH?.served && (['Notebooks', 'Claims'].includes(cur) || (cur === 'Runs' && window.XENO_RESEARCH.isRun(sub)));
+    // a link made before the project list loaded (or from another area) names the project by its id: that is enough here
+    const rsRec = rsTab ? ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name || String(p.id) === name) || (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name) ? { id: name, name } : null)) : null;
+    const wfRec = !rsTab && window.XENO_WFP?.served && window.XENO_WFP.tabs.includes(cur) ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
     const cpRec = !wfRec && window.XENO_CORPUS?.served && cur === 'Corpus' ? (window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name) : null;
-    const liveTab = wfRec ? window.XENO_WFP.projectTab(cur, sub, wfRec, window.XENO_PAGES.h) : cpRec ? window.XENO_CORPUS.projectTab(cur, sub, cpRec, window.XENO_PAGES.h) : window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
+    const pfRec = !wfRec && !cpRec && window.XENO_PFILES?.served && cur === 'Files' ? ((window.XENO_PG_PROJECTS.items || []).find((p) => p.name === name || String(p.id) === name) || null) : null;
+    const liveTab = rsTab ? (rsRec ? window.XENO_RESEARCH.projectTab(cur, sub, rsRec, window.XENO_PAGES.h) : box('refresh', 'Loading the project', '', '', 'sm')) : wfRec ? window.XENO_WFP.projectTab(cur, sub, wfRec, window.XENO_PAGES.h) : cpRec ? window.XENO_CORPUS.projectTab(cur, sub, cpRec, window.XENO_PAGES.h) : pfRec ? window.XENO_PFILES.projectTab(cur, sub, pfRec, window.XENO_PAGES.h) : window.XENO_WORK && window.XENO_WORK.served ? window.XENO_WORK.projectTab(cur, name, { box, esc, ic, btn }) : null;
     const body = liveTab ?? gate(fam, 'rows', () => empty('folder', 'This project is empty', 'Add a task, attach a chat or file, or assign a team to get started.', btn('New task', `data-xa="newTask" data-arg="${esc(name)}"`, false, 'plus') + btn('Assign a team', `data-xa="assign" data-arg="${esc(name)}"`, true))) ?? ({
       Overview: () => `<div class="pg-cols"><div>
           ${meta.needsYou ? `<section class="pg-sec"><h3>Waiting on you <em>${meta.needsYou}</em></h3>${(window.XENO_NEEDS || []).filter((n) => (P.mode || '').toLowerCase() === n.m).slice(0, meta.needsYou).map((n) => `<div class="pg-need-row"><span>${esc(n.t)}</span>${btn(n.meta, `data-xa="resolveNeed" data-arg="${esc(n.t)}"`, n.meta !== 'Approve')}</div>`).join('') || '<p class="pg-dim">Open the Inbox to act on it.</p>'}</section>` : ''}
@@ -211,7 +219,9 @@
   // =====================================================================================
   function itemPage(name) {
     const x = X(), s = S(), fam = 'item';
-    const file = window.XENO_PG_LIBRARY.items.find((f) => f.name === name);
+    // a Library file's address is its id (/workspace/library/f/<id>); a name still opens it (old links, search, Recent)
+    const file = window.XENO_PG_LIBRARY.items.find((f) => 'f/' + f.id === name) || window.XENO_PG_LIBRARY.items.find((f) => f.name === name);
+    if (file) name = file.name;
     let run = null; Object.entries(window.XENO_PG_AREAS).forEach(([k, A]) => { const r = A.rows.find((rr) => rr[0] === name); if (r) run = { k, A, r }; });
     const pid = s.view === 'product' ? s.product : run ? run.r[run.r.length - 1] : file ? file.source.product : null;
     const owner = pid ? pname(pid) : s.view === 'zone' ? x.zoneNow().label : 'XENO';
@@ -221,7 +231,7 @@
       file ? [['Type', KIND[file.kind][0]], ['Size', bytes(file.bytes)], ['Made in', esc(pname(file.source.product))], file.project && ['Project', `<a data-pg-go-project="${esc(file.project)}">${esc(file.project)}</a>`], ['Updated', ago(file.updatedAt) + ' ago']].filter(Boolean) : [['Where', esc(owner)], ['Context', esc(x.ctxName())]];
     const steps = isAgentRun ? (status === 'Failed' ? [['Planned the change', 'done'], ['Edited 6 files', 'done'], ['Ran the test suite', 'failed', '3 tests failed — electron ABI mismatch']] : status === 'Waiting on you' ? [['Planned the change', 'done'], ['Edited 2 files', 'done'], ['Asked: “Can I delete the retry wrapper?”', 'need']] : status === 'Running' ? [['Planned the change', 'done'], ['Edited 4 files', 'done'], ['Running tests', 'live']] : [['Planned', 'done'], ['Made the change', 'done'], ['Tests passed', 'done'], ['Finished', 'done']]) : null;
     const body = gate(fam, 'rows', () => box('file', 'This item is gone', 'It may have been deleted or moved. Check the Trash in your Library.', btn('Open Library', 'data-go="library"', true))) ?? `<div class="pg-cols pg-cols--item"><div>
-        ${isAgentRun ? runLog(run, status) : `<div class="pg-item-pv">${file && file.live ? window.XENO_LIB.preview(file, ic(KIND[file.kind][1])) : x.mini(pid || 'docs')}</div>`}
+        ${isAgentRun ? runLog(run, status) : (file && file.live && window.XENO_LIB?.textPreview?.(file)) || `<div class="pg-item-pv">${file && file.live ? window.XENO_LIB.preview(file, ic(KIND[file.kind][1])) : x.mini(pid || 'docs')}</div>`}
         ${steps ? `<section class="pg-sec">${status === 'Waiting on you' ? `<div class="pg-answer">${btn('Allow', `data-xa="allowRun" data-arg="${esc(name)}"`)}${btn('Answer in the session', `data-product="${pid}"`, true)}</div>` : status === 'Failed' ? `<div class="pg-answer">${btn('Retry', `data-xa="retryRun" data-arg="${esc(name)}"`)}${btn('Open the log', 'data-xa="showLog"', true)}</div>` : ''}</section>` : ''}
       </div><aside><section class="pg-sec pg-card-s"><h3>Details</h3><dl class="pg-props">${props.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${b}</dd>`).join('')}</dl></section></aside></div>`;
     return page(head({ obj: true, eyebrow: `${esc(owner)} · ${esc(x.ctxName())}`, title: name, sub: run ? `${run.A.noun.replace(/s$/, '')} in ${esc(owner)}` : file ? `${KIND[file.kind][0]} from ${esc(pname(file.source.product))}` : '',
@@ -309,8 +319,9 @@
     const spaces = ['Questions', 'Discussions', 'Showcase', 'Feedback', 'Announcements'];
     const sp = spaces.includes(view) ? view : u.seg.space || 'all';
     if (view === 'Report a problem') setTimeout(() => window.XA.report(), 50);
-    const rows = F.filter((t) => (sp === 'all' || t.space === sp) && (view !== 'My threads' || t.author.name === youName()) && matchQ(u.q, t.title));
-    const res = gate(key, 'rows', () => box('community', 'No threads yet', 'Ask a question, share what you made, or tell us what to build next. People and agents answer here, in public.', btn('New thread', 'data-xa="newThread"', false, 'plus'))) ?? (!rows.length ? filtered(key, u.q || sp, 'threads') :
+    const live = window.XENO_FORUM_LIVE, followed = view === 'Following' ? live?.following?.() : null;
+    const rows = F.filter((t) => (sp === 'all' || t.space === sp) && (view !== 'My threads' || t.author.name === youName()) && (!followed || followed.has(t.id)) && matchQ(u.q, t.title));
+    const res = gate(key, 'rows', () => box('community', 'No threads yet', 'Ask a question, share what you made, or tell us what to build next. People and agents answer here, in public.', btn('New thread', 'data-xa="newThread"', false, 'plus'))) ?? (live?.failed?.() ? box('x', 'The forum couldn’t be loaded', 'Nothing was changed.', btn('Try again', 'data-cml="retryList"', true)) : !rows.length ? (u.q ? filtered(key, u.q, 'threads') : box('community', view === 'Following' ? 'You aren’t following any threads' : view === 'My threads' ? 'You haven’t started a thread' : 'No threads here yet', view === 'Following' ? 'Follow a thread to have its replies come to your notifications.' : 'Ask a question, or share what you made.', btn('New thread', 'data-xa="newThread"', false, 'plus'))) :
       table(['Thread', 'Space', 'Replies', 'State', 'Activity'], rows.map((t) => tr(`data-pg-gitem="${esc(t.id)}"`, [`<b class="pg-name">${esc(t.title)}</b><small>${avatar(t.author)} ${esc(t.author.name)}${t.author.kind === 'agent' ? ' · agent' : ''}</small>`, esc(t.space), String(t.replies), chip(cap(t.state)), `<small>${ago(t.lastActivityAt)}</small>`])), 'pg-table--forum'));
     return page(head({ eyebrow: 'Community · the XENO forum', title: spaces.includes(view) ? view : view && view !== 'For you' ? view : 'Community', sub: 'Public answers from people and agents. Sorted by what gets resolved, not what gets clicks.', acts: btn('Report a problem', 'data-xa="report"', true) + btn('New thread', 'data-xa="newThread"', false, 'plus') })
       + bar(search(key, 'Search the forum', u.q), spaces.includes(view) ? '' : seg('space', 'Space', [['all', 'All'], ...spaces.map((s) => [s, s])], sp)) + `<div class="pg-body" data-pg-results>${res}</div>` + foot(key, 'GET /api/forum/threads', 'thread'));
@@ -327,7 +338,7 @@
     if (view === 'Seller console') return page(head({ eyebrow: '<a data-go="market">Marketplace</a> · Seller console', title: 'Seller console', sub: 'Sell apps, agents and blueprints to every XENO workspace.' }) + box('market', 'You are not selling anything yet', 'List an app or rent out a Mind you trained. Earnings land in your wallet; payouts start when your company is verified.', btn('Create a listing', 'data-xa="newListing"', false, 'plus')) + foot(key, 'GET /api/marketplace/seller'));
     const rows = L.filter((x2) => (owned ? x2.owned && (view === 'Rentals') === /Rent/.test(x2.price) : x2.mode === mode) && (k === 'all' || x2.kind === k || (k === 'plugin' && x2.kind === 'mcp')) && matchQ(u.q, x2.name, x2.blurb, x2.seller));
     const res = gate(key, 'grid', () => box('market', 'The store is empty', 'Nothing is listed yet.')) ?? (!rows.length ? (owned ? box('market', `No ${view.toLowerCase()} yet`, 'What you buy or rent shows up here, with renewals and receipts.', btn('Browse the store', 'data-pg-ws-market', true)) : filtered(key, u.q || k, 'listings')) :
-      `<div class="pg-grid pg-grid--market">${rows.map((x2) => `<div class="pg-card pg-card--lst" tabindex="0"><div class="pg-card-top"><span class="pg-thumb pg-thumb--ic sq">${ic(x2.mode === 'agents' ? (x2.kind === 'model' ? 'box' : 'bot') : x2.kind === 'blueprint' ? 'layers' : 'grid')}</span><span class="pg-tag">${esc(cap(x2.kind === 'mcp' ? 'MCP' : x2.kind))}</span></div><b><a data-mk="open" data-arg="${x2.id}">${esc(x2.name)}</a></b><small class="pg-clamp">${esc(x2.blurb)}</small><div class="pg-card-foot"><span>${esc(x2.seller)} · ${esc(TRUST[x2.trust])}</span><b class="pg-price">${esc(x2.price)}</b></div>${btn(x2.owned ? 'Open' : /Rent/.test(x2.price) ? 'Rent' : x2.price === 'Free' ? 'Get' : 'Buy', `data-xa="${x2.owned ? 'openListing' : 'getListing'}" data-arg="${x2.id}"`, x2.owned)}</div>`).join('')}</div>`);
+      `<div class="pg-grid pg-grid--market">${rows.map((x2) => `<div class="pg-card pg-card--lst" tabindex="0"><div class="pg-card-top"><span class="pg-thumb pg-thumb--ic sq">${ic(x2.mode === 'agents' ? (x2.kind === 'model' ? 'box' : 'bot') : x2.kind === 'blueprint' ? 'layers' : 'grid')}</span><span class="pg-tag">${esc(cap(x2.kind === 'mcp' ? 'MCP' : x2.kind))}</span></div><b><a data-mk="open" data-arg="${x2.id}">${esc(x2.name)}</a></b><small class="pg-clamp">${esc(x2.blurb)}</small><div class="pg-card-foot"><span>${esc(x2.seller)} · ${esc(TRUST[x2.trust])}</span><b class="pg-price">${esc(x2.price)}</b></div>${btn(x2.owned || x2.opens ? 'Open' : /Rent/.test(x2.price) ? 'Rent' : x2.price === 'Free' ? 'Get' : 'Buy', `data-xa="${x2.owned || x2.opens ? 'openListing' : 'getListing'}" data-arg="${x2.id}"`, x2.owned || x2.opens)}</div>`).join('')}</div>`);
     return page(head({ eyebrow: 'Marketplace', title: owned ? view : 'Marketplace', sub: owned ? 'Everything you bought or rent.' : 'Apps, agents, tools, blocks and blueprints — official, verified and sandboxed community listings.' })
       + bar(search(key, 'Search the store', u.q), owned ? '' : seg('mode', 'Store', [['apps', 'Apps'], ['agents', 'Agents']], mode), owned || kmap[view] ? '' : seg('kind', 'Kind', KINDS[mode], k)) + `<div class="pg-body" data-pg-results>${res}</div>` + foot(key, 'GET /api/marketplace/listings', 'listing'));
   }
@@ -430,13 +441,15 @@
       { const vr = window.XENO_VIS?.route(s.global, it); if (vr) return vr; }
       if (s.global === 'inbox') return null;
       if (s.global === 'projects') { if (!it) return projectsIndex(false); if (it === 'Archived projects' || it === 'archived') return projectsIndex(true); const k = window.XENO_PROJECT_ROUTE ? window.XENO_PROJECT_ROUTE.in(it) : it; if (k !== it) s.item = k; const j = k.indexOf('/'); return projectPage(j < 0 ? k : k.slice(0, j), j < 0 ? undefined : k.slice(j + 1)); }
-      if (s.global === 'library') { if (!it || LIBV[it]) return library(it || 'All files'); return itemPage(it); }
-      if (s.global === 'workspace') { if (it && window.XENO_MEMBER_ROUTE) { const k = window.XENO_MEMBER_ROUTE.in(it); if (k !== it) { s.item = k; return render(); } } const wf = mod('workspace:' + (it || ''), () => (window.XENO_WFP?.served ? window.XENO_WFP.route(it) : null) || window.XENO_COMPANY?.route(it) || (window.XENO_DIRECTORY?.served ? window.XENO_DIRECTORY.route(it) : null) || (window.XENO_AGENTS?.served ? window.XENO_AGENTS.route(it) : null) || (window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.route(it) : null) || (window.XENO_SERVICES?.served ? window.XENO_SERVICES.route(it) : null) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
+      if (s.global === 'library') { window.XENO_LIB?.ensureTrash?.(); if (!it || LIBV[it]) return library(it || 'All files'); return itemPage(it); }
+      if (s.global === 'workspace') { window.XENO_SKILLS?.ensure?.(); if (it && window.XENO_MEMBER_ROUTE) { const k = window.XENO_MEMBER_ROUTE.in(it); if (k !== it) { s.item = k; return render(); } } const wf = mod('workspace:' + (it || ''), () => (window.XENO_CORPUS?.served ? window.XENO_CORPUS.route(it) : null) || (window.XENO_TEAMS?.served ? window.XENO_TEAMS.route(it) : null) || (window.XENO_WFP?.served ? window.XENO_WFP.route(it) : null) || window.XENO_COMPANY?.route(it) || (window.XENO_DIRECTORY?.served ? window.XENO_DIRECTORY.route(it) : null) || (window.XENO_AGENTS?.served ? window.XENO_AGENTS.route(it) : null) || (window.XENO_SKILLS?.served ? window.XENO_SKILLS.route(it) : null) || (window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.route(it) : null) || (window.XENO_SERVICES?.served ? window.XENO_SERVICES.route(it) : null) || window.XENO_RES?.route(it) || window.XENO_WF?.route(it)); if (wf) return wf; if (it && it.startsWith('Members/')) return memberPage(it.slice(8)); if (it && it.startsWith('Knowledge/')) return knowledgePage(it.slice(10)); return workspace(it); }
       if (s.global === 'places') return mod('places:' + (it || ''), () => window.XENO_PLACES.route(it) || window.XENO_PLACES.route(null));
       if (s.global === 'anima') { const ar = mod('anima:' + (it || ''), () => window.XENO_ANIMA?.route(it)); if (ar) return ar; }
       if (s.global === 'anima') return it && /Memory|Skills|Plan|Summarise/.test(it) ? anima(null) : anima(it);
       if (s.global === 'community') { const cr = mod('community:' + (it || ''), () => window.XENO_COMM?.route(it)); if (cr) return cr; const th = it && window.XENO_PG_FORUM.find((t) => t.title === it); return th ? mod('community:' + it, () => threadPage(th)) : community(it); }
       if (s.global === 'tasks') { if (window.XENO_TASKS && window.XENO_TASKS.served) { window.XENO_TASKS.sync(); return mod('tasks:' + (it || ''), () => window.XENO_TASKS.route(it)); } return page(box('check', 'Tasks', 'Tasks are on the XENO platform: sign in at xenosystem.ai to use them.')); }
+      if (s.global === 'releases') { if (window.XENO_RELEASES && window.XENO_RELEASES.served) return mod('releases:' + (it || ''), () => window.XENO_RELEASES.route(it)); return page(box('check', 'What’s new', 'Release notes are on the XENO platform: sign in at xenosystem.ai to see them.')); }
+      if (s.global === 'shell') { if (window.XENO_SHELL && window.XENO_SHELL.served) return mod('shell:' + (it || ''), () => window.XENO_SHELL.route(it)); return page(box('terminal', 'Cloud Shell', 'Cloud Shell runs on the XENO platform: sign in at xenosystem.ai.')); }
       if (s.global === 'support') { if (window.XENO_SUPPORT && window.XENO_SUPPORT.served) return mod('support:' + (it || ''), () => window.XENO_SUPPORT.route(it)); return page(box('mail', 'Support', 'Support requests are on the XENO platform: sign in at xenosystem.ai to contact XENO.')); }
       if (s.global === 'market') return market(it);
       if (s.global === 'settings') return window.XENO_SETTINGS.render(it);
@@ -471,9 +484,11 @@
       // An object page with tabs (a project: Overview · Tasks · Conversations …) puts its TABS in the header, beside
       // the path — the tabs are where you are — and its facts (progress, status, next milestone, people) in the
       // status bar, so the header is one line and the body never starts with a second header.
-      const tabs = h.classList.contains('pg-head--obj') && t.content.querySelector('.pg > .pg-tabs');
+      // The same holds for a collection page with views (Support: My requests · Queue · Saved replies): the tabs are
+      // header content on EVERY page, never a row of their own in the body (owner, 2026-10-20).
+      const tabs = t.content.querySelector('.pg > .pg-tabs');
       let facts = '';
-      if (tabs) { tabs.classList.add('pg-top-tabs'); left = tabs.outerHTML; tabs.remove(); facts = sum; sum = ''; }
+      if (tabs) { tabs.classList.add('pg-top-tabs'); left = tabs.outerHTML + left; tabs.remove(); facts = sum; sum = ''; }
       h.remove();
       const f0 = t.content.querySelector('.pg-foot'); const foot0 = f0 ? statusBar(f0, t.content, facts) : ''; f0?.remove();
       if (f0) return { acts, sum, left, tools, body: t.innerHTML, foot: foot0 };
@@ -495,17 +510,17 @@
     const srch = hasSearchForBar || root.querySelector('[data-pg-q]'); hasSearchForBar = false;
     const keys = [srch && ['/', 'Search'], n && ['↑↓', 'Move'], n && ['↵', 'Open'], root.querySelector('.pg--lib') && ['I', 'Details'], srch && ['Esc', 'Clear']].filter(Boolean);
     return `<div class="sb-l">${fresh}${facts ? `<span class="sb-sep"></span><span class="sb-facts" data-sb-facts>${facts}</span>` : ''}${info ? `<span class="sb-sep"></span><span class="sb-info" data-sb-info>${info}</span>` : '<span class="sb-info" data-sb-info></span>'}</div>
-      <div class="sb-r"><span class="sb-keys">${keys.map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('')}</span><button class="sb-prev" data-pg-preview="${esc(fam)}" data-api="${esc(api)}" title="Prototype only — data in the shape of ${esc(api)}" aria-haspopup="listbox" aria-expanded="false">Preview <b>${STATE_L[st]}</b>${ic('chev')}</button></div>`;
+      <div class="sb-r"><span class="sb-keys">${keys.map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('')}</span>${window.XENO_PLATFORM?.served ? '' : `<button class="sb-prev" data-pg-preview="${esc(fam)}" data-api="${esc(api)}" title="Prototype only — data in the shape of ${esc(api)}" aria-haspopup="listbox" aria-expanded="false">Preview <b>${STATE_L[st]}</b>${ic('chev')}</button>`}</div>`;
   }
   // the body reserves its scrollbar strip (scrollbar-gutter: stable); measure it once so the body's right edge
   // lines up exactly with the header's and footer's instead of sitting a scrollbar-width inside them
-  function syncGutter() { const mv = document.querySelector('#main .mview'); if (mv) document.getElementById('main').style.setProperty('--sb', (mv.offsetWidth - mv.clientWidth) + 'px'); }
+  function syncGutter() { const mv = document.querySelector('#main .mview'); if (mv) document.getElementById('main').style.setProperty('--sb', (mv.offsetWidth - mv.clientWidth) + 'px'); document.querySelector('.pg-top-tabs [aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' }); }
   new MutationObserver(() => requestAnimationFrame(syncGutter)).observe(document.documentElement, { childList: true, subtree: false });
   addEventListener('load', () => { const m = document.getElementById('main'); if (m) new MutationObserver(() => requestAnimationFrame(syncGutter)).observe(m, { childList: true }); syncGutter(); });
   addEventListener('resize', syncGutter);
   window.XENO_PAGES = { render, framed, query: (key, q) => { ui(key).q = q || ''; }, repaint: () => repaint(),
     // the page parts, shared so every page — this file's or a module's — is built from the same pieces
-    h: { page, head, btn, box, table, tr, chip, avatar, foot, ago, plural, cap, esc, ic, projCard, seg, ui, threadPosts } };
+    h: { page, head, tabs, btn, box, table, tr, chip, avatar, foot, ago, plural, cap, esc, ic, projCard, seg, ui, threadPosts } };
 
   // ---------- repaint the main view in place (keeps scroll and focus) ----------
   function repaint(focusSel) {
@@ -567,7 +582,7 @@
     if (d.pgDd) return openDd(b);
     if (d.pgRetry) { const m = store.get('pgState', {}) || {}; m[d.pgRetry] = 'normal'; store.set('pgState', m); loaded.delete(d.pgRetry); return repaint(); }
     if (d.pgGoProject) return x.go('global', { global: 'projects', item: d.pgGoProject });
-    if (d.pgFile) { const u = ui('library'); if (s.global !== 'library') { const f = libItem(d.pgFile); return x.go('global', { global: 'library', item: f.name }); } if (e.detail > 1) return; if (e.ctrlKey || e.metaKey) return togglePick(d.pgFile); if (e.shiftKey) return rangePick(d.pgFile); return selectFile(d.pgFile); }
+    if (d.pgFile) { const u = ui('library'); if (s.global !== 'library') { const f = libItem(d.pgFile); return x.go('global', { global: 'library', item: 'f/' + f.id }); } if (e.detail > 1) return; if (e.ctrlKey || e.metaKey) return togglePick(d.pgFile); if (e.shiftKey) return rangePick(d.pgFile); return selectFile(d.pgFile); }
     if (d.pgUnsel !== undefined) return selectFile(null);
     if (d.pgStar && window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.star([libItem(d.pgStar)]);
     if (d.pgTrash && window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.trash([libItem(d.pgTrash)]); }
@@ -629,7 +644,7 @@
       <p class="pg-dim">${inTrash ? 'Right-click to restore them or delete them for good.' : 'Right-click to star, move, download or trash them together.'}</p></aside>`;
   }
   // double-click a file to open it (a single click selects it — Finder, Drive, Dropbox)
-  document.addEventListener('dblclick', (e) => { const c = e.target.closest('#main .pg--lib [data-pg-file]'); if (!c) return; const f = libItem(c.dataset.pgFile); if (f) X().go('global', { global: 'library', item: f.name }); });
+  document.addEventListener('dblclick', (e) => { const c = e.target.closest('#main .pg--lib [data-pg-file]'); if (!c) return; const f = libItem(c.dataset.pgFile); if (f) X().go('global', { global: 'library', item: 'f/' + f.id }); });
   function undo(msg, fn) { window.XENO_HIST.record(msg, fn); }
   // leaving the page forgets the Library's picks, including a single selected file: state only, so no address is written (F-02)
   window.XENO_SEL?.onLeave?.(() => { ui('library').sel = null; });
@@ -644,7 +659,7 @@
     else if (e.key === 'Escape' && ui('library').sel && S().global === 'library') selectFile(null);
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !typing && document.querySelector('#main .pg--lib [data-pg-file]')) { e.preventDefault(); pickAll(); }
     const row = document.activeElement?.closest?.('#main .pg [data-pg-go-project],#main .pg [data-pg-file],#main .pg [data-pg-item],#main .pg .pg-tr[tabindex],#main .pg .pg-card[tabindex]');
-    if (row && !typing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (e.key === 'Enter' && row.dataset.pgFile && S().global === 'library') { const f = libItem(row.dataset.pgFile); return X().go('global', { global: 'library', item: f.name }); } row.click(); }
+    if (row && !typing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); if (e.key === 'Enter' && row.dataset.pgFile && S().global === 'library') { const f = libItem(row.dataset.pgFile); return X().go('global', { global: 'library', item: 'f/' + f.id }); } row.click(); }
     if (row && !typing && /^Arrow(Down|Up|Left|Right)$/.test(e.key)) { const all = [...document.querySelectorAll('#main .pg [data-pg-results] [tabindex="0"]')]; const i = all.indexOf(row); if (i < 0) return; const grid = row.classList.contains('pg-card'); const cols = grid ? Math.max(1, Math.round(row.parentElement.clientWidth / row.offsetWidth)) : 1; const step = { ArrowDown: cols, ArrowUp: -cols, ArrowRight: grid ? 1 : 0, ArrowLeft: grid ? -1 : 0 }[e.key]; const n = all[i + step]; if (n) { e.preventDefault(); n.focus(); if (e.shiftKey && n.dataset.pgFile && row.dataset.pgFile) { const u = ui('library'); if (!u.anchor) u.anchor = u.picked.size ? u.anchor || u.sel : row.dataset.pgFile; rangePick(n.dataset.pgFile, true); } } }
   });
   // uploads: a real file picker and real drag-and-drop onto the Library page
@@ -665,7 +680,7 @@
   (function registerPageMenus() {
     const C = window.XCM; if (!C) return; const H = C.H;
     libBatch = (fs) => batchMenu(fs);
-    const libHash = (name) => `#/${X().inOv() ? 'overview' : S().mode}/g/library/${encodeURIComponent(name)}`;
+    const libHash = (name) => `#/${X().inOv() ? 'overview' : S().mode}/g/library/${encodeURIComponent(name)}`;   // name may be 'f/<id>'
     const sync = () => window.XENO_PG_SYNC_NAV?.();
     const onLib = () => !!document.querySelector('#main .pg--lib');
     async function renameFile(f) {
@@ -676,14 +691,14 @@
       undo(`Renamed to “${f.name}”`, () => { f.name = was; sync(); repaint(); });
     }
     function duplicateFile(f) {
-      if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('duplicate')) return;
+      if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.duplicate(f);
       const L = window.XENO_PG_LIBRARY.items, dot = f.name.lastIndexOf('.'), stem = dot > 0 ? f.name.slice(0, dot) : f.name, ext = dot > 0 ? f.name.slice(dot) : '';
       let n = 1, name = `${stem} copy${ext}`; while (L.some((o) => o.name === name)) name = `${stem} copy ${++n}${ext}`;
       const now = new Date().toISOString(), c = { ...f, id: 'lib_' + Date.now(), name, createdAt: now, updatedAt: now, starred: false, source: { ...f.source }, media: f.media && { ...f.media } };
       L.splice(L.indexOf(f) + 1, 0, c); sync(); repaint(); if (onLib()) selectFile(c.id);
       undo(`Duplicated as “${name}”`, () => { L.splice(L.indexOf(c), 1); sync(); repaint(); });
     }
-    function moveFile(f, project) { if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('move')) return; const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
+    function moveFile(f, project) { if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.moveToProject(f, project); const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
     function trashFile(f) { if (window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.trash([f]); } f.trashedAt = new Date().toISOString(); ui('library').sel = null; sync(); repaint(); undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; sync(); repaint(); }); }
     async function purgeFile(f) {
       if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.purge([f]);
@@ -733,9 +748,9 @@
       const f = libItem(n.dataset.pgFile); if (!f) return null;
       const many = onLib() ? picks() : [];
       if (many.length > 1 && many.includes(f.id)) return batchMenu(many.map(libItem));
-      if (window.XENO_LIB && window.XENO_LIB.served && f.live) { if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id); return window.XENO_LIB.fileMenu(f, { open: () => X().go('global', { global: 'library', item: f.name }), details: () => { store.set('pgLibInfo', true); repaint(); }, copy: H.copy }); }
+      if (window.XENO_LIB && window.XENO_LIB.served && f.live) { if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id); return window.XENO_LIB.fileMenu(f, { open: () => X().go('global', { global: 'library', item: 'f/' + f.id }), details: () => { store.set('pgLibInfo', true); repaint(); }, copy: H.copy }); }
       if (onLib() && (ui('library').sel !== f.id || ui('library').picked.size)) selectFile(f.id);   // right-click selects what it acts on (Finder, Drive)
-      const open = () => X().go('global', { global: 'library', item: f.name }), h = libHash(f.name);
+      const open = () => X().go('global', { global: 'library', item: 'f/' + f.id }), h = libHash(f.name);
       if (f.trashedAt) return [[{ label: 'Restore', icon: 'undo', run: () => { f.trashedAt = null; ui('library').sel = null; sync(); repaint(); X().toast(`Restored “${f.name}”`); } }],
         [{ label: 'Copy name', icon: 'copy', run: () => H.copy(f.name, 'Name copied') }],
         [{ label: 'Delete forever…', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => purgeFile(f) }]];

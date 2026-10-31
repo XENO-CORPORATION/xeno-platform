@@ -6,7 +6,7 @@
  * READERS, and only these three:
  *   - the reporter;
  *   - XENO staff (role admin or moderator);
- *   - that product's own dev agent: the agent account whose handle is "<product>-dev".
+ *   - that product's own dev agent, explicitly granted access by XENO staff.
  * Anyone else is told the ticket does not exist (404), never that it is private (403): a refusal that confirms a
  * ticket exists leaks that someone reported something.
  *
@@ -18,7 +18,9 @@
  */
 import { ForumError } from './forumError.js';
 import { newShortId } from './forumService.js';
+import * as inbox from './inbox.js';
 import { createThread, markThreadFixed } from './forumWrite.js';
+import { authorityTransaction } from './workspaceOperationReceipts.js';
 
 export const TICKET_KINDS = ['bug', 'feature', 'feedback'];
 export const TICKET_STATUSES = ['open', 'acknowledged', 'planned', 'fixed', 'wont_fix', 'closed'];
@@ -26,14 +28,12 @@ const PRODUCT = /^[a-z][a-z0-9-]{0,39}$/, VERSION = /^[a-z0-9][a-z0-9._-]{0,30}$
 const STATUS_WORDS = { open: 'Open', acknowledged: 'Acknowledged', planned: 'Planned', fixed: 'Fixed', wont_fix: 'Won’t fix', closed: 'Closed' };
 
 const kindOf = (user) => (user.kind === 'agent' ? 'agent' : user.kind === 'service' ? 'service' : 'human');
-const isStaff = (user) => ['admin', 'moderator'].includes(user.role);
-const isDevAgent = (user, product) => user.kind === 'agent' && String(user.username || '') === `${product}-dev`;
+const isStaff = (user) => user.kind === 'human' && ['admin', 'moderator'].includes(user.role);
 /** Who this caller is to this ticket: 'reporter', 'staff', 'agent', or null (cannot see it). */
 export function standing(user, ticket) {
   if (!user || !ticket) return null;
   if (ticket.reporter_id && String(ticket.reporter_id) === String(user.id)) return 'reporter';
   if (isStaff(user)) return 'staff';
-  if (isDevAgent(user, ticket.product)) return 'agent';
   return null;
 }
 const text = (v, field, max, { required = true } = {}) => {
@@ -56,17 +56,23 @@ async function load(db, shortId) {
   return (await db.query(`${SELECT} WHERE t.short_id = $1`, [s])).rows[0] || null;
 }
 async function readable(db, user, shortId) {
-  const t = await load(db, shortId), who = standing(user, t);
+  const t = await load(db, shortId);let who = standing(user, t);
+  if(!who&&t&&user?.kind==='agent'&&(await db.query('SELECT 1 FROM forum_report_product_grants WHERE agent_id=$1 AND product=$2',[user.id,t.product])).rows.length)who='agent';
   if (!who) throw new ForumError('Ticket not found', 'ticket_not_found', 404);
   return { t, who };
 }
 async function notifyReporter(db, t, user, kind) {
   if (!t.reporter_id || String(t.reporter_id) === String(user.id)) return;
-  await db.query('INSERT INTO forum_notifications (user_id, kind, ticket_id, actor_id, actor_kind) VALUES ($1, $2, $3, $4, $5)', [t.reporter_id, kind, t.id, user.id, kindOf(user)]);
+  const { rows } = await db.query('INSERT INTO forum_notifications (user_id, kind, ticket_id, actor_id, actor_kind) VALUES ($1, $2, $3, $4, $5) RETURNING id', [t.reporter_id, kind, t.id, user.id, kindOf(user)]);
+  await inbox.notify(db, { userId: t.reporter_id, source: 'forum', kind: 'reply', ref: `/workspace/community/My reports/${t.short_id}`, title: t.title, detail: 'Your report has news', actorId: user.id, actorKind: kindOf(user), dedupeKey: `forum:${rows[0].id}` });
 }
 
 export async function createTicket(db, user, { product, kind = 'bug', title, body, version, os } = {}) {
   if (user.kind === 'service') throw new ForumError('A service account cannot file a report', 'service_cannot_report', 403);
+  if(typeof db.release!=='function'&&typeof db.connect==='function')return authorityTransaction(db,tx=>createTicket(tx,user,{product,kind,title,body,version,os}));
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`forum-report:${user.id}`]);
+  const recent=Number((await db.query("SELECT count(*)::int AS count FROM forum_tickets WHERE reporter_id=$1 AND created_at>now()-interval '1 hour'",[user.id])).rows[0].count);
+  if(recent>=(user.kind==='agent'?3:10))throw new ForumError('Report limit reached. Try later.','report_rate_limit',429);
   const prod = String(product || '').trim().toLowerCase();
   if (!PRODUCT.test(prod)) throw new ForumError('A report must name the product it is about', 'product_required', 400);
   if (!TICKET_KINDS.includes(kind)) throw new ForumError("kind must be 'bug', 'feature' or 'feedback'", 'invalid_kind', 400);
@@ -86,7 +92,7 @@ export async function listMyTickets(db, user) {
 export async function listTicketQueue(db, user, { product, status } = {}) {
   const params = [], where = [];
   if (isStaff(user)) { if (product) { params.push(String(product)); where.push(`t.product = $${params.length}`); } }
-  else if (user.kind === 'agent' && /-dev$/.test(String(user.username || ''))) { params.push(String(user.username).slice(0, -4)); where.push(`t.product = $${params.length}`); }
+  else if (user.kind === 'agent') { params.push(user.id);where.push(`EXISTS(SELECT 1 FROM forum_report_product_grants g WHERE g.agent_id=$${params.length} AND g.product=t.product)`);if(product){params.push(String(product));where.push(`t.product=$${params.length}`);} }
   else throw new ForumError('Only XENO staff and a product’s dev agent can see the ticket queue', 'not_allowed', 403);
   if (status) { if (!TICKET_STATUSES.includes(status)) throw new ForumError('Unknown status', 'invalid_status', 400); params.push(status); where.push(`t.status = $${params.length}`); }
   return (await db.query(`${SELECT}${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY t.updated_at DESC LIMIT 200`, params)).rows.map((t) => shape(t));
@@ -98,7 +104,8 @@ export async function getTicket(db, user, shortId) {
     `SELECT p.*, COALESCE(u.display_name, u.username) AS author_name, (p.author_id IS NOT DISTINCT FROM $2::uuid) AS is_reporter
        FROM forum_ticket_posts p LEFT JOIN users u ON u.id = p.author_id WHERE p.ticket_id = $1 ORDER BY p.created_at, p.id`, [t.id, t.reporter_id],
   )).rows;
-  return shape(t, posts);
+  const evidence=(await db.query('SELECT id,name,content_type,size_bytes,sha256 FROM forum_report_evidence WHERE ticket_id=$1 ORDER BY created_at,id',[t.id])).rows;
+  return {...shape(t, posts),attachments:evidence.map(a=>({id:a.id,name:a.name,type:a.content_type,bytes:a.size_bytes,sha256:a.sha256,url:`/api/forum/report/evidence/${a.id}`}))};
 }
 
 export async function addTicketPost(db, user, shortId, { body } = {}) {

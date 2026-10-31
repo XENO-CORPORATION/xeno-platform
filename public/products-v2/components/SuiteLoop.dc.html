@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/products-v2/support.js"></script>
+</head>
+<body>
+<x-dc>
+<section data-screen-label="Works with" ref="{{ wrap }}" style="position:relative; height:520vh; border-top:1px solid #E2DDD5; background:#F6F4F0; color:#1D1B18; font-family:'Schibsted Grotesk',system-ui,sans-serif">
+  <div style="position:sticky; top:60px; height:calc(100vh - 60px); overflow:hidden; display:flex; flex-direction:column; justify-content:center; padding:clamp(12px,3vh,40px) 24px">
+    <div style="width:100%; max-width:1320px; margin:0 auto; display:grid; grid-template-columns:{{ cols }}; gap:clamp(16px,3vh,28px) 56px; align-items:center">
+      <div style="display:flex; flex-direction:column; gap:clamp(10px,2vh,18px); min-width:0; order:{{ textOrd }}">
+        <div style="display:{{ eyD }}; font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#5F5A52">One launch · four apps</div>
+        <h2 style="margin:0; font-size:clamp(22px,min(3.2vw,5vh),52px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance">Follow one project through the whole suite.</h2>
+        <div style="display:flex; flex-direction:column; border-top:1px solid #1D1B18; margin-top:4px">
+          <sc-for list="{{ chs }}" as="c" hint-placeholder-count="5">
+            <div style="border-bottom:1px solid #E2DDD5; display:{{ c.d }}">
+              <button onClick="{{ c.go }}" style="width:100%; display:grid; grid-template-columns:3px minmax(0,1fr) auto; gap:12px; align-items:center; padding:{{ c.pad }}; border:none; background:transparent; font:inherit; text-align:left; cursor:pointer">
+                <span style="align-self:stretch; border-radius:2px; background:{{ c.bar }}; transition:background .3s"></span>
+                <span style="display:flex; flex-direction:{{ c.dir }}; align-items:{{ c.ai }}; gap:3px 10px; min-width:0"><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:{{ c.tc }}; white-space:nowrap">{{ c.n }} · {{ c.app }}</span><span style="font-size:{{ c.fs }}; font-weight:600; letter-spacing:-.01em; color:{{ c.fg }}; transition:color .3s; white-space:{{ c.ws }}; overflow:hidden; text-overflow:ellipsis">{{ c.title }}</span></span>
+                <span style="display:{{ c.hereD }}; font-family:'IBM Plex Mono',monospace; font-size:10px; padding:2px 7px; border-radius:4px; background:#1D1B18; color:#FFFFFF; white-space:nowrap">you are here</span>
+              </button>
+              <div style="display:grid; grid-template-rows:{{ c.rows }}; transition:grid-template-rows .45s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><div style="padding:0 0 14px 15px; display:flex; flex-direction:column; gap:8px; opacity:{{ c.op }}; transition:opacity .35s"><p style="margin:0; font-size:{{ bodyFs }}; line-height:1.5; color:#5F5A52; text-wrap:pretty">{{ c.body }}</p><a href="{{ c.href }}" style="display:{{ c.linkD }}; font-size:13.5px; font-weight:600; color:{{ c.tc }}; text-decoration:none">Open {{ c.short }} →</a></div></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px; min-width:0; order:{{ stageOrd }}">
+        <div style="display:flex; gap:4px"><sc-for list="{{ rail }}" as="r" hint-placeholder-count="5"><span style="flex:1; height:4px; border-radius:2px; background:#E2DDD5; overflow:hidden"><span data-rail="{{ r.i }}" style="display:block; height:100%; width:0%; background:{{ r.c }}"></span></span></sc-for></div>
+        <div ref="{{ stage }}" style="position:relative; width:100%; aspect-ratio:16 / 10; border-radius:14px; overflow:hidden; background:#131215; box-shadow:0 0 0 1px rgba(29,27,24,.12), 0 40px 80px -40px rgba(29,27,24,.6)">
+          <div style="position:absolute; left:0; top:0; width:800px; height:500px; transform-origin:0 0; transform:{{ worldT }}; font-size:12px">
+            <div data-k="bg0" style="position:absolute; inset:0; background:#131215"></div>
+            <div data-k="bg1" style="position:absolute; inset:0; background-color:#EDEAE4; background-image:radial-gradient(#D6D1C8 1px, transparent 1px); background-size:18px 18px; opacity:0"></div>
+            <div data-k="bg2" style="position:absolute; inset:0; background:#0F0F12; opacity:0"></div>
+            <div data-k="bg3" style="position:absolute; inset:0; background:#141310; opacity:0"></div>
+            <div data-k="bg4" style="position:absolute; inset:0; background:#0B0B0E; opacity:0"></div>
+            <div data-k="ov1" style="position:absolute; left:230px; top:88px; width:470px; height:340px; background:#FFFFFF; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,.1); opacity:0">
+              <div style="position:absolute; left:0; right:0; top:0; height:44px; border-bottom:1px solid #EEEAE4"></div>
+              <span style="position:absolute; left:64px; top:18px; width:70px; height:9px; border-radius:4px; background:#1D1B18"></span>
+              <span style="position:absolute; right:24px; top:14px; width:74px; height:18px; border-radius:5px; background:#0B8F9A"></span>
+              <span style="position:absolute; left:28px; top:88px; width:150px; height:16px; border-radius:4px; background:#1D1B18"></span><span style="position:absolute; left:28px; top:112px; width:120px; height:16px; border-radius:4px; background:#1D1B18"></span>
+              <span style="position:absolute; left:28px; top:146px; width:150px; height:7px; border-radius:4px; background:#E2DDD5"></span><span style="position:absolute; left:28px; top:160px; width:130px; height:7px; border-radius:4px; background:#E2DDD5"></span>
+              <span style="position:absolute; left:28px; top:192px; width:96px; height:26px; border-radius:6px; background:#0B8F9A"></span>
+              <span style="position:absolute; left:190px; top:72px; width:0; height:0"></span>
+              <span style="position:absolute; left:28px; top:250px; right:28px; height:62px; display:flex; gap:10px"><span style="flex:1; border-radius:6px; background:#F4F2EE"></span><span style="flex:1; border-radius:6px; background:#F4F2EE"></span><span style="flex:1; border-radius:6px; background:#F4F2EE"></span></span>
+              <span style="position:absolute; left:18px; top:238px; right:18px; height:86px; border:1px dashed #D6409F; border-radius:8px"></span>
+              <span style="position:absolute; left:20px; top:223px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#D6409F">auto layout · gap 10 · padding 10</span>
+            </div>
+            <div data-k="poster" style="position:absolute; left:150px; top:72px; width:500px; height:312px; border-radius:6px; overflow:hidden; background:linear-gradient(180deg,#1E1B4B 0%,#7A3FD1 50%,#F07A62 80%,#FCC98A 100%)">
+              <span style="position:absolute; left:62%; top:56%; width:13%; aspect-ratio:1; border-radius:50%; background:#FFF1D6; box-shadow:0 0 50px 18px rgba(255,220,170,.55)"></span>
+              <span style="position:absolute; left:0; right:0; bottom:0; height:34%; background:#2C1F55; clip-path:polygon(0 40%, 16% 12%, 34% 46%, 54% 6%, 74% 42%, 100% 14%, 100% 100%, 0 100%)"></span>
+              <span style="position:absolute; left:0; right:0; bottom:0; height:16%; background:#171230"></span>
+              <span data-k="headline" style="position:absolute; left:6%; bottom:10%; color:#FFFFFF; font-weight:800; letter-spacing:-.04em; font-size:44px; line-height:1; opacity:0">Tidepool is live.</span>
+            </div>
+            <div data-k="logo" style="position:absolute; left:178px; top:98px; width:40px; height:40px">
+              <span style="position:absolute; inset:0; border-radius:50%; background:#FFFFFF"></span><span style="position:absolute; right:-10%; bottom:-10%; width:46%; height:46%; border-radius:18%; background:#F2C94C"></span>
+              <span data-k="logoSel" style="position:absolute; inset:-6px; border:1.5px solid #FFFFFF; border-radius:4px; box-shadow:0 0 0 1px rgba(0,0,0,.35)"></span>
+            </div>
+            <div data-k="ov0" style="position:absolute; inset:0; pointer-events:none">
+              <div style="position:absolute; right:16px; top:48px; width:118px; background:#1B1A1D; border-radius:8px; box-shadow:0 0 0 1px #2C2B30; padding:8px; display:flex; flex-direction:column; gap:5px; color:#E6E3DE; font-size:11px"><span style="font-weight:600; color:#8F8B95">Layers</span><span style="padding:4px 6px; border-radius:4px; background:#2E2A45">Logo · vector</span><span style="padding:4px 6px; border-radius:4px">Curves</span><span style="padding:4px 6px; border-radius:4px">Photo</span></div>
+              <span data-k="brush" style="position:absolute; left:300px; top:200px; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; border:1.5px solid #FFFFFF; box-shadow:0 0 0 1px rgba(0,0,0,.4)"></span>
+              <span style="position:absolute; left:150px; top:398px; display:flex; gap:6px"><span style="padding:4px 8px; border-radius:5px; background:#6A4DE0; color:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:11px">poster.png</span><span style="padding:4px 8px; border-radius:5px; background:#6A4DE0; color:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:11px">logo.svg</span></span>
+            </div>
+            <div data-k="ov2" style="position:absolute; inset:0; pointer-events:none; opacity:0">
+              <span style="position:absolute; left:194px; top:52px; width:412px; height:237px; border-radius:8px; box-shadow:0 0 0 1px #2A2A30"></span>
+              <span style="position:absolute; left:200px; top:36px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">Program · 00:00:02:14</span>
+              <div style="position:absolute; left:16px; right:16px; top:306px; bottom:16px; background:#16161A; border-radius:8px; box-shadow:0 0 0 1px #2A2A30; padding:10px 10px 10px 36px; display:flex; flex-direction:column; gap:6px; color:#E7E5EA; font-size:11px">
+                <span style="position:absolute; left:10px; top:18px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">V2</span><span style="position:absolute; left:10px; top:66px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">V1</span><span style="position:absolute; left:10px; top:114px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8A8792">A1</span>
+                <div style="position:relative; height:38px"><span style="position:absolute; left:4%; width:60%; top:0; bottom:0; border-radius:4px; background:#B8323F; padding:6px 8px; font-weight:600">logo.svg · scale keyframes</span><span style="position:absolute; left:14%; bottom:2px; width:7px; height:7px; background:#FFD9CF; transform:rotate(45deg)"></span><span style="position:absolute; left:30%; bottom:2px; width:7px; height:7px; background:#FFD9CF; transform:rotate(45deg)"></span><span style="position:absolute; left:52%; bottom:2px; width:7px; height:7px; background:#FFD9CF; transform:rotate(45deg)"></span></div>
+                <div style="position:relative; height:38px"><span style="position:absolute; left:0; width:46%; top:0; bottom:0; border-radius:4px; background:#4C63D9; padding:6px 8px; font-weight:600">poster.png</span><span style="position:absolute; left:46.5%; width:53.5%; top:0; bottom:0; border-radius:4px; background:#0B8F9A; padding:6px 8px; font-weight:600">screens.png</span></div>
+                <div style="position:relative; height:38px"><span data-k="a1" style="position:absolute; left:0; width:100%; top:0; bottom:0; border-radius:4px; background:#1F7A4F; padding:6px 8px; font-weight:600">dialogue.wav + music.wav → Sound</span></div>
+                <span data-k="ph" style="position:absolute; top:6px; bottom:6px; left:40%; width:2px; background:#FF5A3C"></span>
+              </div>
+            </div>
+            <div data-k="ov3" style="position:absolute; inset:0; pointer-events:none; opacity:0; color:#EFE9DD">
+              <div style="position:absolute; left:230px; top:56px; right:24px; height:108px; border-radius:8px; background:#1D1B18; padding:8px 10px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8F887C">DIALOGUE</span><svg viewBox="0 0 500 60" preserveAspectRatio="none" style="flex:1; width:100%"><path d="M0 30 L20 18 L40 40 L60 10 L80 44 L100 22 L120 36 L140 8 L160 50 L180 24 L200 38 L220 14 L240 46 L260 20 L280 34 L300 12 L320 42 L340 26 L360 36 L380 16 L400 44 L420 22 L440 38 L460 18 L480 32 L500 30" fill="none" stroke="#E8A317" stroke-width="2"></path></svg></div>
+              <div style="position:absolute; left:230px; top:176px; right:24px; height:88px; border-radius:8px; background:#1D1B18; padding:8px 10px; display:flex; flex-direction:column; gap:6px"><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8F887C">MUSIC</span><svg viewBox="0 0 500 40" preserveAspectRatio="none" style="flex:1; width:100%"><path d="M0 20 C 40 4, 80 36, 120 20 S 200 4, 240 20 S 320 36, 360 20 S 440 4, 500 20" fill="none" stroke="#8C96E8" stroke-width="2"></path></svg></div>
+              <div style="position:absolute; left:40px; top:190px; width:170px; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8F887C">Picture from Motion</div>
+              <div style="position:absolute; left:230px; top:280px; right:24px; bottom:22px; border-radius:8px; background:#1D1B18; padding:12px; display:flex; gap:12px; align-items:stretch">
+                <sc-for list="{{ meters }}" as="m"><div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:6px"><div style="position:relative; flex:1; width:12px; border-radius:3px; background:#2E2B26; overflow:hidden"><span data-mt="{{ m.i }}" style="position:absolute; left:0; right:0; bottom:0; height:30%; background:linear-gradient(0deg,#3E9C8A,#E8A317 78%,#D9573B)"></span></div><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#ADA597">{{ m.l }}</span></div></sc-for>
+                <div style="flex:2.4; display:flex; flex-direction:column; justify-content:center; gap:4px; padding-left:12px; border-left:1px solid #2E2B26"><span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#8F887C">MASTER · STREAMING TARGET −14</span><span data-k="lufs" style="font-family:'IBM Plex Mono',monospace; font-size:34px; color:#FFC24B">−19.2 LUFS</span><span style="font-family:'IBM Plex Mono',monospace; font-size:11px; padding:3px 8px; border-radius:4px; background:#E8A317; color:#1B1A17; align-self:flex-start">master.wav → Motion</span></div>
+              </div>
+            </div>
+            <div data-k="ov4" style="position:absolute; inset:0; pointer-events:none; opacity:0">
+              <div style="position:absolute; right:22px; bottom:22px; width:280px; background:#16161A; color:#E7E5EA; border-radius:10px; box-shadow:0 0 0 1px #2A2A30, 0 20px 40px -12px rgba(0,0,0,.6); padding:14px; display:flex; flex-direction:column; gap:8px"><span style="font-weight:600; font-size:13px">Export · Launch.mp4</span><span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8A8792">1920×1080 · H.264 · AAC · −14 LUFS</span><span style="height:6px; border-radius:3px; background:#2A2A30; overflow:hidden"><span data-k="exp" style="display:block; height:100%; width:0%; background:#E5483A"></span></span><span data-k="expL" style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#FF8A73">Rendering…</span></div>
+              <span style="position:absolute; left:22px; top:48px; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:4px 9px; border-radius:5px; background:rgba(14,14,17,.7); color:#FFFFFF">↺ Next cut: a frame goes back to Pixel</span>
+            </div>
+            <sc-for list="{{ bars }}" as="b"><div data-k="{{ b.k }}" style="position:absolute; left:0; right:0; top:0; height:34px; display:flex; align-items:center; gap:10px; padding:0 12px; background:{{ b.bg }}; color:{{ b.fg }}; border-bottom:1px solid {{ b.bd }}; opacity:{{ b.op }}"><span style="display:flex; gap:5px"><span style="width:9px; height:9px; border-radius:50%; background:#D9573B"></span><span style="width:9px; height:9px; border-radius:50%; background:#E8A317"></span><span style="width:9px; height:9px; border-radius:50%; background:#3E9C8A"></span></span><span style="width:9px; height:9px; border-radius:3px; background:{{ b.c }}"></span><span style="font-weight:600; font-size:12.5px">{{ b.doc }}</span><span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px; opacity:.7">{{ b.app }}</span></div></sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:820},&quot;current&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;canvas&quot;,&quot;pixel&quot;,&quot;motion&quot;,&quot;sound&quot;],&quot;default&quot;:&quot;canvas&quot;,&quot;tsType&quot;:&quot;'canvas'|'pixel'|'motion'|'sound'&quot;}}">
+class Component extends DCLogic {
+  state = { ch: 0, k: 0.8, w: 1200, vh: 900 };
+  wrap = React.createRef(); stage = React.createRef();
+  CH = [
+    ['pixel', 'XENO Pixel', 'Pixel', '#6A4DE0', '#5B3FD6', '/product/pixel', 'Retouch the key art', 'Grade the launch photo with an adjustment layer and rebuild the logo as vector paths. Export the poster as PNG and the logo as SVG.', 'Poster.xpixel'],
+    ['canvas', 'XENO Canvas', 'Canvas', '#0B8F9A', '#0B7F89', '/product/canvas', 'Build the page around it', 'Drop the SVG into Canvas as editable layers and lay out the launch page with auto-layout. Export the screens.', 'Landing.fig'],
+    ['motion', 'XENO Motion', 'Motion', '#E5483A', '#C8321F', '/product/motion', 'Animate the launch', 'The poster and screens become shots. Keyframe the logo, cut to the beat and send the audio tracks to Sound.', 'Launch.xmotion'],
+    ['sound', 'XENO Sound', 'Sound', '#E8A317', '#8A5A00', '/product/sound', 'Mix and master the audio', 'Balance voice against music, master to −14 LUFS for streaming and send the master back to the edit.', 'Launch mix.xsound'],
+    ['motion', 'XENO Motion', 'Motion', '#E5483A', '#C8321F', '/product/motion', 'Export and ship', 'Render the film with the mastered audio. Next time round, a frame goes back to Pixel for a retouch.', 'Export']];
+  KP = { poster: [[150, 72, 500, 312], [420, 158, 240, 150], [200, 58, 400, 225], [40, 60, 170, 106], [0, 34, 800, 466]], logo: [[178, 98, 40], [262, 101, 24], [232, 84, 36], [52, 72, 18], [370, 176, 64]] };
+  ss(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+  lerpK(K, cp) { const i = Math.min(K.length - 1, Math.floor(cp)), j = Math.min(K.length - 1, i + 1), f = cp - i; return K[i].map((v, n) => v + (K[j][n] - v) * f); }
+  tick = now => {
+    this.raf = requestAnimationFrame(this.tick);
+    const w = this.wrap.current; if (!w) return; const r = w.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) return;
+    const vh = window.innerHeight - 60, p = Math.min(0.9999, Math.max(0, (60 - r.top) / Math.max(1, w.offsetHeight - vh))), c = Math.floor(p * 5), u = p * 5 - c, cp = Math.min(4, c + this.ss(0.62, 1, u));
+    if (c !== this.state.ch) this.setState({ ch: c });
+    const q = k => w.querySelector('[data-k="' + k + '"]');
+    for (let i = 0; i < 5; i++) { const b = q('bg' + i); if (b) b.style.opacity = String(Math.max(0, 1 - Math.abs(cp - i))); const bar = q('bar' + i); if (bar) bar.style.opacity = String(Math.max(0, 1 - Math.abs(cp - i) * 1.4)); const rl = w.querySelector('[data-rail="' + i + '"]'); if (rl) rl.style.width = (i < c ? 100 : i === c ? u * 100 : 0) + '%'; }
+    ['ov0', 'ov1', 'ov2', 'ov3', 'ov4'].forEach((k, i) => { const e = q(k); if (!e) return; const o = Math.max(0, 1 - Math.abs(cp - i) * 1.8); e.style.opacity = o.toFixed(3); e.style.transform = 'translateY(' + ((cp - i) * -18).toFixed(1) + 'px)'; });
+    const P = this.lerpK(this.KP.poster, cp), po = q('poster'); if (po) { po.style.left = P[0] + 'px'; po.style.top = P[1] + 'px'; po.style.width = P[2] + 'px'; po.style.height = P[3] + 'px'; const sat = c === 0 ? 0.45 + 0.7 * this.ss(0.05, 0.55, u) : 1.15; po.style.filter = 'saturate(' + sat.toFixed(2) + ') contrast(' + (c === 0 ? 0.9 + 0.15 * this.ss(0.05, 0.55, u) : 1.05).toFixed(2) + ')'; po.style.borderRadius = cp > 3.5 ? '0px' : '6px'; }
+    const L = this.lerpK(this.KP.logo, cp), lo = q('logo'); if (lo) { const bounce = c === 2 ? 1 + 0.18 * Math.abs(Math.sin(u * Math.PI * 3)) : 1; lo.style.left = L[0] + 'px'; lo.style.top = L[1] + 'px'; lo.style.width = L[2] + 'px'; lo.style.height = L[2] + 'px'; lo.style.transform = 'scale(' + bounce.toFixed(3) + ')'; lo.style.opacity = String(cp > 2.6 && cp < 3.6 ? 0.5 : 1); }
+    const sel = q('logoSel'); if (sel) { sel.style.opacity = cp < 1.6 ? '1' : '0'; sel.style.borderColor = cp < 0.6 ? '#FFFFFF' : '#0B8F9A'; sel.style.borderStyle = cp < 0.6 ? 'dashed' : 'solid'; }
+    const br = q('brush'); if (br) { br.style.left = (220 + 300 * u) + 'px'; br.style.top = (150 + 120 * Math.sin(u * 6)) + 'px'; }
+    const ph = q('ph'); if (ph) ph.style.left = (4 + 90 * (c === 2 ? u : 0.4)) + '%';
+    const a1 = q('a1'); if (a1) a1.textContent = c >= 3 ? 'master.wav · mastered ✓' : 'dialogue.wav + music.wav → Sound';
+    const lu = q('lufs'); if (lu) lu.textContent = '−' + (c === 3 ? 19.2 - 5.2 * this.ss(0.05, 0.6, u) : c > 3 ? 14 : 19.2).toFixed(1) + ' LUFS';
+    const t = now / 1000; w.querySelectorAll('[data-mt]').forEach(el => { const i = +el.dataset.mt; el.style.height = (22 + 60 * Math.abs(Math.sin(t * (2.1 + i * 0.6) + i) * Math.sin(t * 1.2 + i * 1.7))) + '%'; });
+    const ex = q('exp'), exl = q('expL'); const ek = c === 4 ? this.ss(0.05, 0.8, u) : 0; if (ex) ex.style.width = (ek * 100) + '%'; if (exl) exl.textContent = ek >= 1 ? 'Done · Launch.mp4 · ready to ship' : 'Rendering… ' + Math.round(ek * 100) + '%';
+    const hl = q('headline'); if (hl) hl.style.opacity = String(this.ss(3.5, 4, cp));
+  };
+  go(i) { const w = this.wrap.current; if (!w) return; const vh = window.innerHeight - 60, top = window.scrollY + w.getBoundingClientRect().top - 60 + (w.offsetHeight - vh) * ((i + 0.3) / 5); window.scrollTo({ top, behavior: 'smooth' }); }
+  componentDidMount() {
+    this.raf = requestAnimationFrame(this.tick);
+    this.onRz = () => this.setState({ vh: window.innerHeight }); window.addEventListener('resize', this.onRz); this.setState({ vh: window.innerHeight });
+    this.ro = new ResizeObserver(() => { const s = this.stage.current, w = this.wrap.current; const k = s ? s.clientWidth / 800 : 0.8, ww = w ? w.clientWidth : 1200; if (Math.abs(k - this.state.k) > 0.002 || Math.abs(ww - this.state.w) > 2 || window.innerHeight !== this.state.vh) this.setState({ k, w: ww, vh: window.innerHeight }); });
+    if (this.stage.current) this.ro.observe(this.stage.current); if (this.wrap.current) this.ro.observe(this.wrap.current);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onRz); cancelAnimationFrame(this.raf); this.ro && this.ro.disconnect(); }
+  renderVals() {
+    const S = this.state, cur = this.props.current ?? 'canvas', wide = S.w >= 900, short = S.vh < 760;
+    const hereIdx = this.CH.findIndex(c => c[0] === cur);
+    return {
+      eyD: S.vh < 700 ? 'none' : 'block', bodyFs: short ? '14px' : '15px', wrap: this.wrap, stage: this.stage, worldT: 'scale(' + S.k.toFixed(4) + ')', cols: wide ? 'minmax(0,.78fr) minmax(0,1.22fr)' : 'minmax(0,1fr)', textOrd: wide ? '0' : '2', stageOrd: wide ? '0' : '1',
+      chs: this.CH.map((c, i) => { const on = i === S.ch; const compact = short && !on; return { pad: compact ? '7px 0' : short ? '9px 0' : '12px 0', dir: compact ? 'row' : 'column', ai: compact ? 'baseline' : 'flex-start', fs: compact ? '14px' : 'clamp(16px,1.6vw,20px)', ws: compact ? 'nowrap' : 'normal', n: '0' + (i + 1), app: c[1], title: c[6], body: c[7], short: c[2], href: c[5], tc: c[4], fg: on ? '#1D1B18' : '#9A948A', bar: on ? c[3] : 'transparent', rows: on ? '1fr' : '0fr', op: on ? 1 : 0, hereD: i === hereIdx ? 'inline' : 'none', linkD: c[0] === cur ? 'none' : 'inline', d: wide || on ? 'block' : 'none', go: () => this.go(i) }; }),
+      rail: this.CH.map((c, i) => ({ i, c: c[3] })),
+      bars: this.CH.map((c, i) => ({ k: 'bar' + i, doc: c[8] + ' — ' + c[1], app: c[2], c: c[3], op: i === 0 ? 1 : 0, bg: i === 1 ? '#FFFFFF' : i === 3 ? '#1D1B18' : '#16161A', fg: i === 1 ? '#1D1B18' : '#E7E5EA', bd: i === 1 ? '#E2DDD5' : '#2A2A30' })),
+      meters: ['Voice', 'Music', 'FX', 'L', 'R'].map((l, i) => ({ i, l }))
+    };
+  }
+}
+</script>
+</body>
+</html>

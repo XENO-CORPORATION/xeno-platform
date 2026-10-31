@@ -232,7 +232,9 @@ async function main() {
     assert.equal(exp.status, 'ready', JSON.stringify(exp));
     assert.deepEqual(exp.summary.errors, [], 'every section was read');
     assert.equal(exp.summary.conversations, 2, 'the chat in a project and the loose one'); assert.equal(exp.summary.messages, 3); assert.equal(exp.summary.files, 1);
-    const keepDays = (new Date(exp.expires_at) - Date.now()) / 86400000; assert.ok(keepDays > 6.9 && keepDays <= 7.01);
+    // EXPORT_KEEP_DAYS is calendar days (NOW() + make_interval(days => 7)): across a DST change in the database's time zone
+    // that is 7×24 h ± 1 h, so the upper bound allows exactly that hour and no more
+    const keepDays = (new Date(exp.expires_at) - Date.now()) / 86400000; assert.ok(keepDays > 6.9 && keepDays <= 7 + 1 / 24 + 0.01, `kept ${keepDays} days`);
     assert.equal((await call('GET', `/exports/${exp.id}/download`, M)).status, 404, 'nobody else can fetch it');
     assert.equal((await call('GET', `/exports/${exp.id}/download`, ANOSESSION)).status, 403, 'nor a caller with no browser session');
     assert.equal((await call('GET', '/exports', M)).body.exports.length, 0);
@@ -261,7 +263,10 @@ async function main() {
     for (const secret of ['password_hash', 'key_hash', 'token_hash', stored.key_hash, made.secret, 'mallory-secret-text', 'mallory-file-bytes', 'Mallory private plans', 'mallory@xeno.test']) {
       assert.equal(whole.includes(secret), false, `the copy must not contain ${secret.slice(0, 24)}`);
     }
-    assert.ok(/data_export_requested/.test(JSON.stringify(await events(ada))) && /data_export_downloaded/.test(JSON.stringify(await events(ada))));
+    // the download's audit event is written after the response (recordSecurityEvent is not awaited there): wait for it
+    let both = false;
+    for (let i = 0; i < 50 && !both; i++) { const ev = JSON.stringify(await events(ada)); both = /data_export_requested/.test(ev) && /data_export_downloaded/.test(ev); if (!both) await new Promise((r) => setTimeout(r, 40)); }
+    assert.ok(both, 'both export events are recorded');
 
     // a day's limit, removal, and the sweep
     await call('POST', '/exports', A);
@@ -281,6 +286,46 @@ async function main() {
     assert.deepEqual(await sweepExports(pool), { expired: 1, stale: 1 });
     assert.equal(existsSync(path.join(exportDir, `${other.id}.tar.gz`)), false, 'the sweep removes a copy past its time');
     assert.equal((await pool.query('SELECT status FROM account_exports WHERE id = $1', [stuck])).rows[0].status, 'failed', 'a build whose process died is not left "building" forever');
+
+    // ── deleting your own account: 30 days to change your mind, whoever you sign in with ──
+    const { sweep: sweepDeletions, GRACE_DAYS } = await import('../services/accountDeletion.js');
+    const dana = await user('dana', await bcrypt.hash('dana pw', 4)); const danaSid = await session(dana); const DA = headersFor(dana, 'dana', danaSid);
+    assert.equal((await call('POST', '/deletion', DA)).status, 403, 'asking to delete needs "confirm it\'s you" first');
+    assert.equal((await call('GET', '/deletion', DA)).body.deletion, null);
+    await call('POST', '/confirm', DA, { password: 'dana pw' });
+    const scheduled = await call('POST', '/deletion', DA);
+    assert.equal(scheduled.status, 200);
+    const days = (Date.parse(scheduled.body.deletion.eraseAt) - Date.parse(scheduled.body.deletion.requestedAt)) / 86400000;
+    assert.equal(days, GRACE_DAYS, 'it is held for 30 days');
+    assert.equal((await call('POST', '/deletion', DA)).body.deletion.eraseAt, scheduled.body.deletion.eraseAt, 'asking again changes no date');
+    assert.equal((await call('GET', '/deletion', M)).body.deletion, null, 'someone else\'s request is not yours');
+    assert.deepEqual(await sweepDeletions(pool), { erased: 0, held: 0 }, 'nothing is erased before its date');
+    assert.equal((await pool.query('SELECT is_active FROM users WHERE id = $1', [dana])).rows[0].is_active, true, 'and the account still works meanwhile');
+    await call('DELETE', '/deletion', DA);
+    assert.equal((await call('GET', '/deletion', DA)).body.deletion, null, 'changing your mind keeps it');
+    await pool.query(`INSERT INTO account_deletions (user_id, requested_at, erase_at) VALUES ($1, NOW() - INTERVAL '31 days', NOW() - INTERVAL '1 day')`, [dana]);
+    await call('DELETE', '/deletion', DA);
+    assert.deepEqual(await sweepDeletions(pool), { erased: 0, held: 0 }, 'a request taken back before the sweep is not erased, even past its date');
+
+    // what stands in the way refuses, and says what to do
+    const olga = await user('olga', await bcrypt.hash('olga pw', 4)); const olgaSid = await session(olga); const OL = headersFor(olga, 'olga', olgaSid);
+    await call('POST', '/confirm', OL, { password: 'olga pw' });
+    const shop = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Olga Co', $2) RETURNING id`, [olga, `olga-${process.pid}`])).rows[0].id;
+    await pool.query(`INSERT INTO relationship_tuples (object_type, object_id, relation, subject_type, subject_id) VALUES ('workspace', $1, 'owner', 'user', $2), ('workspace', $1, 'viewer', 'user', $3)`, [String(shop), String(olga), String(dana)]);
+    const refused = await call('POST', '/deletion', OL);
+    assert.equal(refused.status, 409); assert.equal(refused.body.code, 'owns_workspace'); assert.match(refused.body.error, /Olga Co/);
+    await pool.query(`DELETE FROM relationship_tuples WHERE object_id = $1 AND subject_id = $2`, [String(shop), String(dana)]);
+    assert.equal((await call('POST', '/deletion', OL)).status, 200, 'a workspace with only you in it does not stand in the way');
+    await pool.query(`INSERT INTO billing_subscriptions (user_id, plan_name, status) VALUES ($1, 'Team', 'active')`, [olga]);
+    await pool.query(`UPDATE account_deletions SET erase_at = NOW() - INTERVAL '1 minute', requested_at = NOW() - INTERVAL '31 days' WHERE user_id = $1`, [olga]);
+    assert.deepEqual(await sweepDeletions(pool), { erased: 0, held: 1 }, 'a subscription started since asking holds the erasure');
+    assert.equal((await pool.query('SELECT held_reason FROM account_deletions WHERE user_id = $1', [olga])).rows[0].held_reason, 'active_subscription', 'and it says why');
+    assert.equal((await call('POST', '/confirm', OL, { password: 'olga pw' })).status, 200);
+    await pool.query(`DELETE FROM billing_subscriptions WHERE user_id = $1`, [olga]);
+    assert.deepEqual((await Promise.all([sweepDeletions(pool), sweepDeletions(pool)])).reduce((n, r) => n + r.erased, 0), 1, 'two workers erase once');
+    const gone = (await pool.query('SELECT email, is_active FROM users WHERE id = $1', [olga])).rows[0];
+    assert.ok(gone.is_active === false && gone.email.endsWith('@erased.invalid'), 'past its date the person is erased');
+    assert.ok((await pool.query('SELECT erased_at FROM account_deletions WHERE user_id = $1', [olga])).rows[0].erased_at, 'and the record says when');
 
     // ── erasing an account removes all of this too ──
     const erin = await user('erin', await bcrypt.hash('erin pw', 4)); const erinSid = await session(erin); const E = headersFor(erin, 'erin', erinSid);

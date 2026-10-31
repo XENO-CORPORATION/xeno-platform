@@ -20,6 +20,7 @@
  */
 import crypto from 'node:crypto';
 import { check, writeTuples } from '../utils/authzReBAC.js';
+import * as inbox from './inbox.js';
 
 const isId = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const hash = (token) => crypto.createHash('sha256').update(token).digest('hex');
@@ -62,6 +63,18 @@ export async function reconcileShares(db, ownerUserId) {
          JOIN tasks t ON t.id = tf.task_id AND t.deleted_at IS NULL AND t.status NOT IN ('done', 'wont_do')
          CROSS JOIN LATERAL (VALUES (t.assignee_id), (t.delegate_id), (t.reviewer_id)) AS w(user_id)
         WHERE w.user_id IS NOT NULL AND w.user_id <> $1
+       UNION ALL
+       -- a personal project's own folder (project_folders, app 'projects'; services/chatProjectFolders.js): the people
+       -- the owner put on the project may open it, editors and admins to change files, viewers and reviewers to read.
+       -- Removing someone from the project, or deleting the project, takes it away on the next reconcile.
+       SELECT pf.folder_id, rt.subject_id::uuid, CASE WHEN rt.relation IN ('editor', 'admin') THEN 'editor' ELSE 'viewer' END, 0
+         FROM project_folders pf
+         JOIN storage_folders sf ON sf.id = pf.folder_id AND sf.owner_user_id = $1 AND sf.workspace_id IS NULL
+         JOIN chat_projects cp ON cp.id = pf.project_id AND cp.owner_user_id = $1
+         JOIN relationship_tuples rt ON rt.object_type = 'project' AND rt.object_id = cp.id::text AND rt.subject_type = 'user'
+          AND rt.relation IN ('viewer', 'reviewer', 'editor', 'admin')
+          AND rt.subject_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND rt.subject_id <> $1::text
+        WHERE pf.app = 'projects'
        UNION ALL SELECT c.id, tree.user_id, tree.role, tree.depth + 1 FROM storage_folders c JOIN tree ON c.parent_id = tree.id WHERE tree.depth < 64)
      SELECT id, user_id, MAX(CASE role WHEN 'editor' THEN 2 ELSE 1 END) AS rank FROM tree GROUP BY id, user_id`, [ownerUserId])).rows;
   const want = new Map();   // "kind|target|user" -> role
@@ -127,6 +140,11 @@ export async function shareWithPerson(db, userId, where, who, role = 'viewer') {
     ? (await db.query('UPDATE storage_shares SET role = $2 WHERE id = $1 RETURNING *', [existing.id, role])).rows[0]
     : (await db.query(`INSERT INTO storage_shares (${t.column}, owner_user_id, kind, grantee_user_id, role) VALUES ($1, $2, 'person', $3, $4) RETURNING *`, [t.id, userId, person.id, role])).rows[0];
   await reconcileShares(db, userId);
+  if (!existing) {
+    const by = (await db.query('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = $1', [userId])).rows[0];
+    const what = (await db.query(`SELECT ${t.column === 'file_id' ? 'original_name AS name FROM user_files' : 'name FROM storage_folders'} WHERE id = $1`, [t.id])).rows[0];
+    await inbox.tell(db, { userId: person.id, source: 'storage', kind: 'shared', ref: '/workspace/library', title: `${by ? by.name : 'Someone'} shared ${what ? what.name : 'something'} with you`, actorId: userId, actorKind: 'human', dedupeKey: `share:${row.id}` });
+  }
   return { ok: true, share: view({ ...row, username: person.username, display_name: person.display_name }) };
 }
 

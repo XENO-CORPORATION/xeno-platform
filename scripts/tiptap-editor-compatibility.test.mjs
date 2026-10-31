@@ -34,6 +34,10 @@ test('Tiptap 3 mounts production editors and preserves controlled video-prompt u
   const vite = await createServer({
     appType: 'custom',
     configFile: false,
+    // Its own dependency cache: every Vite server with a different config shares node_modules/.vite, so each one
+    // found "config has changed" and re-optimised, and this test's module loads ran past Vite's 60 s transport limit
+    // in the full gate chain (passing alone in ~150 s). A cache of its own is optimised once and then reused.
+    cacheDir: 'node_modules/.vite-tiptap-test',
     optimizeDeps: { noDiscovery: true },
     plugins: [react()],
     resolve: { alias: XENO_ALIASES, dedupe: ['react', 'react-dom'] },
@@ -63,11 +67,10 @@ test('Tiptap 3 mounts production editors and preserves controlled video-prompt u
     dom.window.close();
   });
 
-  const [{ default: TipTapEditor }, { default: PaginatedTipTapEditor }, { default: VideoPromptEditor }] = await Promise.all([
-    vite.ssrLoadModule('/src/components/playground/Office/TipTapEditor.tsx'),
-    vite.ssrLoadModule('/src/components/playground/Office/PaginatedTipTapEditor.tsx'),
-    vite.ssrLoadModule('/src/components/playground/Generation/components/VideoPromptEditor.tsx'),
-  ]);
+  // one after another: three heavy editor graphs transformed at once is what pushed a single load past 60 s
+  const { default: TipTapEditor } = await vite.ssrLoadModule('/src/components/playground/Office/TipTapEditor.tsx');
+  const { default: PaginatedTipTapEditor } = await vite.ssrLoadModule('/src/components/playground/Office/PaginatedTipTapEditor.tsx');
+  const { default: VideoPromptEditor } = await vite.ssrLoadModule('/src/components/playground/Generation/components/VideoPromptEditor.tsx');
 
   for (const EditorComponent of [TipTapEditor, PaginatedTipTapEditor]) {
     const host = document.createElement('div');

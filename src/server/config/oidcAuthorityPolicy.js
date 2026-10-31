@@ -68,10 +68,19 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // gateway on the user's behalf (which spends credits). Nothing more: no projects/sync,
   // no workforce, no billing, team or broker authority. Widen by a reviewed change only.
   'xeno-spawn': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
+  // XENO Corpus desktop: identity, plus gateway inference and the credits balance since 0.3.0 mounted the XENO Agent
+  // panel: an agent turn a person starts in Corpus runs on, and bills, that person's own account (surface-account seam,
+  // the same set as xeno-workshop's without its storage). The corpus itself stays the person's local files: no projects or team.
+  'xeno-corpus': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
   // XENO Workshop: identity, the credits balance, and gateway inference — an agent turn a person
   // starts in the workshop runs on, and bills, that person's own account (surface-account seam).
-  'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
-  'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
+  // storage:read/write (owner, 2026-10-23): a project's files live in the person's XENO Storage
+  // (/api/storage/projects/xeno-workshop/*, which checks both and reaches only the Workshop's own projects).
+  'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  // XENO Tools on its own host: identity only. The platform's host sign-in (authRoutes /api/auth/host/*) uses the code
+  // to learn WHO signed in and opens an ordinary browser session on tools.xenosystem.ai; it keeps no token.
+  'xeno-tools-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],

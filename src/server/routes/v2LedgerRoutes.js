@@ -20,6 +20,8 @@ import {
   usageSummary,
   addGrant,
   setSpendCap,
+  listSpendCaps,
+  clearSpendCap,
 } from '../utils/creditLedgerV2.js';
 import { check as authzCheck } from '../utils/authzReBAC.js';
 import { accountQuotaView, updateUsageCredits, prepareAccountQuota } from '../services/usageCreditsService.js';
@@ -76,6 +78,21 @@ router.put('/caps', async (req, res) => {
   } catch (err) {
     sendErr(res, err);
   }
+});
+
+// GET /api/v2/ledger/caps — your own limits, and what each still admits.
+router.get('/caps', async (req, res) => {
+  try { res.json({ caps: await listSpendCaps(req.db, req.user.id) }); }
+  catch (err) { sendErr(res, err); }
+});
+
+// DELETE /api/v2/ledger/caps/:windowSec — take one of your own limits off.
+router.delete('/caps/:windowSec', async (req, res) => {
+  try {
+    const windowSec = Number(req.params.windowSec);
+    if (!Number.isSafeInteger(windowSec) || windowSec <= 0) return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'windowSec required' } });
+    res.json(await clearSpendCap(req.db, req.user.id, windowSec));
+  } catch (err) { sendErr(res, err); }
 });
 
 // POST /api/v2/ledger/grants { userId?, amountMicro, kind?, priority?, expiresAt?, sourceRef }

@@ -35,10 +35,29 @@ export async function reserve(tx, agent, { kind, ref, amountMicro }) {
   if (b && b.spentMicro + BigInt(amountMicro) > b.limitMicro) {
     throw new BudgetError(`${agent.divisionName} has used its agent budget for this period (${b.view.spentCredits} of ${b.view.limitCredits} credits). A workspace admin can raise it on the division's page.`, 'division_budget_exhausted', 402);
   }
+  // the agent's own cap (agent page), checked under its own lock so two spends cannot both fit into its last credits
+  await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`agent-spend-cap:${agent.id}`]);
+  const cap = await capOf(tx, agent.id);
+  if (cap && cap.spentMicro + BigInt(amountMicro) > cap.limitMicro) {
+    throw new BudgetError(`This agent has reached the spending cap its owner set (${cap.view.spentCredits} of ${cap.view.limitCredits} credits in the last ${CAP_WINDOW_DAYS} days). Its owner can raise it on the agent's page.`, 'agent_cap_reached', 402);
+  }
   const id = (await tx.query(`INSERT INTO agent_spend_log (agent_user_id, division_id, payer_user_id, kind, ref, amount_micro)
     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, [agent.id, agent.divisionId, agent.ownerId, kind, ref ? String(ref).slice(0, 200) : null, String(amountMicro)])).rows[0].id;
   return { id, budget: b };
 }
+// ───────────────────────────── one agent's own cap (the agent page)
+
+export const CAP_WINDOW_DAYS = 30;
+/** What one agent spent through XENO tools in the last 30 days, against the cap its owner set (null when none). */
+export async function capOf(db, agentUserId) {
+  const c = (await db.query('SELECT limit_micro, updated_at FROM agent_spend_caps WHERE agent_user_id = $1', [agentUserId])).rows[0];
+  if (!c) return null;
+  const spent = (await db.query(`SELECT COALESCE(sum(amount_micro), 0)::text AS s FROM agent_spend_log
+    WHERE agent_user_id = $1 AND state = 'reserved' AND created_at > now() - make_interval(days => $2)`, [agentUserId, CAP_WINDOW_DAYS])).rows[0].s;
+  return { limitMicro: BigInt(c.limit_micro), spentMicro: BigInt(spent),
+    view: { limitCredits: credits(c.limit_micro), spentCredits: credits(spent), leftCredits: Math.max(0, credits(BigInt(c.limit_micro) - BigInt(spent))), windowDays: CAP_WINDOW_DAYS, updatedAt: c.updated_at } };
+}
+
 export async function release(db, spendId) {
   await db.query(`UPDATE agent_spend_log SET state = 'released' WHERE id = $1 AND state = 'reserved'`, [spendId]);
 }

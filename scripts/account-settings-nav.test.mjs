@@ -58,7 +58,7 @@ test('account navigation retains names when mobile labels are hidden and navigat
   await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: ['/overview/settings'] },
     React.createElement(Nav), React.createElement(Location))));
   const destinations = {
-    Profile: '/overview/profile', Preferences: '/overview/settings', Members: '/overview/team',
+    Profile: '/overview/profile', 'Spawn profiles': '/overview/spawn-profiles', Preferences: '/overview/settings', Members: '/overview/team',
     Teams: '/overview/teams', Security: '/overview/settings#security', Integrations: '/overview/integrations',
     Billing: '/overview/billing', Notifications: '/overview/notifications',
   };

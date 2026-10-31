@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "status": "generation-evidence-recorded-not-legal-signoff",
+  "scope": "The Home v21 hero background. Its origin is read from the C2PA content credential embedded in the file itself, signed by OpenAI; the prompt was not retained. Other assets are not cleared.",
+  "entries": [
+    {
+      "path": "public/home-v21/site/hero-bg.png",
+      "generator": "OpenAI gpt-image (pre-2.0), OpenAI Media Service API",
+      "generationDate": "2026-05-07",
+      "referenceImages": [],
+      "c2pa": {
+        "manifest": "urn:c2pa:91b79f26-1749-4a9b-b596-6b21f9813ba5",
+        "claimGenerator": "OpenAI Media Service API",
+        "actions": [
+          "c2pa.created",
+          "c2pa.converted"
+        ],
+        "softwareAgent": "gpt-image pre-2.0",
+        "digitalSourceType": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+        "signer": "OpenAI OpCo, LLC / OpenAI Media Service (Trufo C2PA Claim Signing CA 2025)",
+        "timestamp": "2026-05-07T14:43:01Z (OpenAI TSA)"
+      },
+      "prompt": null,
+      "promptNote": "Not retained. The owner confirmed on 2026-10-24 that it was generated with AI through the CLI; the embedded credential names the generator.",
+      "usage": "Decorative illustration; not a screenshot, customer work or output produced by a XENO model.",
+      "sha256": "ee7b3bbfc0efe0d401e141dca7ac262c28cd90a8ea77dab0a7cec7b793d28d02"
+    }
+  ]
+}

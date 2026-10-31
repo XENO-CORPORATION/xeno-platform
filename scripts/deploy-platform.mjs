@@ -48,6 +48,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { assertMainContained, readDirtyPaths } from './lib/deploy-source-guard.mjs';
+import { buildDeployRecord, prNumbersFromMerges, migrationsFromDiff } from './lib/deploy-record.mjs';
+import { collectNoteSources, ghPrText } from './lib/internal-note-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -63,7 +65,7 @@ const PATHS = {
   backend: ['src/server', 'Dockerfile.backend', 'Dockerfile.backend.dockerignore', '.dockerignore', 'docker-compose.yml'],
   'chat-workers': ['src/server', 'Dockerfile.backend', 'Dockerfile.backend.dockerignore', '.dockerignore', 'docker-compose.yml'],
   frontend: [
-    'src', 'packages', 'public', 'scripts', 'prototypes/xeno-workspace', 'index.html', 'Dockerfile.frontend', '.dockerignore', 'docker-compose.yml', 'nginx',
+    'src', 'packages', 'public', 'scripts', 'prototypes/xeno-workspace', 'index.html', 'tool-host.html', 'Dockerfile.frontend', '.dockerignore', 'docker-compose.yml', 'nginx',
     'package.json', 'package-lock.json',
     'vite.config.ts', 'vite.config.js',
     'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json',
@@ -230,7 +232,15 @@ try {
       `cd ${opts.root} && sudo bash ${REMOTE_TMP}/remote-deploy.sh ` +
       `--service ${s} --sha ${sha} --tar ${REMOTE_TMP}/deploy-${sha}.tar ` +
       `--mode ${mode} --root ${opts.root}${opts.noCache ? ' --no-cache' : ''}`;
-    run('ssh', [opts.host, remoteCmd]);
+    const previousSha = mode === 'swap' ? lastRecordedSha(s) : null;
+    const startedAt = Date.now();
+    try {
+      run('ssh', [opts.host, remoteCmd]);
+    } catch (err) {
+      recordDeploy({ service: s, previousSha, mode, ok: false, startedAt });
+      throw err;
+    }
+    recordDeploy({ service: s, previousSha, mode, ok: true, startedAt });
     ok(`${s}: ${mode} complete${opts.buildOnly ? ' (not swapped)' : ' + healthcheck passed'}`);
   }
 
@@ -254,6 +264,42 @@ try {
     else warn(`could not remove remote staging archive ${remoteTar}; reclaim it before the next deploy`);
   }
   try { rmSync(stage, { recursive: true, force: true }); } catch { /* noop */ }
+}
+
+// --- the release record ---------------------------------------------------
+// Every deploy, OK or failed, writes one row to release_deploys (services/releaseRecord.js) through the backend's own
+// code on the box: facts this run observed (time, sha, the PRs and migrations since the last OK swap, who ran it),
+// never typed from memory. A failure to record is loud but does not undo a deploy that already happened.
+function remoteRecord(args, input) {
+  return spawnSync('ssh', [opts.host, `cd ${opts.root} && sudo docker compose exec -T backend node /app/scripts/record-deploy.mjs ${args}`],
+    { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe', input, timeout: 60_000 });
+}
+function lastRecordedSha(service) {
+  const r = remoteRecord(`--last ${service}`);
+  const v = r.status === 0 ? String(r.stdout || '').trim() : '';
+  return /^[0-9a-f]{7,40}$/.test(v) ? v : null;
+}
+function rangeFacts(previousSha) {
+  if (!previousSha) return { prs: [], migrations: [] };
+  try {
+    const merges = git(['log', '--first-parent', '--format=%s', `${previousSha}..${fullSha}`]);
+    const added = git(['diff', '--name-only', '--diff-filter=A', previousSha, fullSha, '--', 'src/server/database/migrations']);
+    return { prs: prNumbersFromMerges(merges), migrations: migrationsFromDiff(added) };
+  } catch { return { prs: [], migrations: [] }; }
+}
+function recordDeploy({ service, previousSha, mode, ok: passed, startedAt }) {
+  let deployedBy = null;
+  try { deployedBy = git(['config', 'user.email']) || git(['config', 'user.name']) || null; } catch { /* unknown */ }
+  const facts = rangeFacts(previousSha);
+  const row = buildDeployRecord({ service, sha, previousSha, mode, ok: passed, startedAt, finishedAt: Date.now(), deployedBy, ...facts });
+  // the staff-only INTERNAL release note is drafted on the box from these facts; the box has no GitHub access, so the
+  // PR bodies are read here with `gh` (a PR gh cannot read keeps its merge subject and the note says it is incomplete)
+  let sources = null;
+  try { sources = collectNoteSources({ git, prText: ghPrText(spawnSync), previousSha, sha: fullSha, prs: facts.prs, migrations: facts.migrations }); }
+  catch (e) { warn(`internal note: could not collect PR text (${e.message}); the note is drafted from the deploy row alone`); }
+  const r = remoteRecord('', JSON.stringify({ ...row, ...(sources ? { sources } : {}) }));
+  if (r.status === 0) ok(`release record: ${String(r.stdout || '').trim()}`);
+  else console.error(`${C.red}✗ RELEASE RECORD NOT WRITTEN for ${service}@${sha}: ${String(r.stderr || r.error || '').trim().slice(0, 300)}${C.rst}`);
 }
 
 // POSIX single-quote shell-escape for the one place we interpolate into `sudo bash -c`.

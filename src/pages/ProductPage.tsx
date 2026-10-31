@@ -15,6 +15,8 @@ import {
 import { downloadClickHandler } from '../lib/startDownload';
 import { getProductContent } from '../content/products';
 import ProductLanding from './ProductLanding';
+import StaticDocRedirect from './StaticDocRedirect';
+import { PRODUCT_DESIGN_SLUGS } from '../lib/productDesigns';
 
 type OS = 'windows' | 'mac' | 'linux';
 function detectOS(): OS {
@@ -137,6 +139,7 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
                     <button onClick={copyInstall} className="shrink-0 text-[#827b71] transition-colors hover:text-white">{copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}</button>
                   </div>
                   {product.repo && product.repoPublic && <a href={`https://github.com/XENO-CORPORATION/${product.repo}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] text-[#827b71] transition-colors hover:text-white"><Github className="h-3.5 w-3.5" />View on GitHub</a>}
+                  {product.slug === 'spawn' && <Link to="/overview/spawn-profiles" className="mt-3 ml-4 inline-flex items-center gap-1.5 text-[12.5px] text-[#827b71] transition-colors hover:text-white"><Terminal className="h-3.5 w-3.5" />Manage Spawn profiles</Link>}
                 </div>
               )}
 
@@ -195,6 +198,10 @@ const LeanProductPage: React.FC<{ product: Product }> = ({ product }) => {
  * the full ProductLanding; everything else keeps the lean page (SPEC L3). */
 const ProductPage: React.FC = () => {
   const { slug } = useParams();
+  // Slugs with an owner v2 design are static documents at this address
+  // (served by nginx); hand in-app navigation to it. This runs before the
+  // catalog lookup: twelve designs are not catalog products at all.
+  if (slug && PRODUCT_DESIGN_SLUGS.has(slug)) return <StaticDocRedirect to={`/product/${slug}`} />;
   const product = getProduct(slug);
   if (!product) return <Navigate to="/" replace />;
   const content = getProductContent(slug);

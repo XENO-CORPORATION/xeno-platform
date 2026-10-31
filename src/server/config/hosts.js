@@ -107,6 +107,16 @@ export function siteOrigin() {
   return firstSet(process.env.XENO_SITE_ORIGIN, DEFAULT_SITE_ORIGIN);
 }
 
+/**
+ * The origin for links a PERSON opens: share links, invites, booking pages, tickets.
+ * Public pages already live on `xenosystem.ai` (see docs/CLI_AUTH_CONTRACT.md), while
+ * `siteOrigin()` stays the pinned OIDC issuer. Links minted on the old host keep
+ * resolving, since both hosts serve the same backend.
+ */
+export function publicSiteOrigin() {
+  return String(firstSet(process.env.SITE_URL, 'https://xenosystem.ai')).replace(/\/+$/, '');
+}
+
 /** Hostname only (no scheme), e.g. `xenostudio.ai`. */
 export function siteHost() {
   try {
@@ -150,6 +160,45 @@ export function mailDomain() {
  */
 export function issuer() {
   return firstSet(process.env.OIDC_ISSUER, siteOrigin());
+}
+
+/**
+ * The staged issuer move (owner, 2026-10-28; docs/decisions/2026-10-28-oidc-issuer-staged-move.md) does NOT make one
+ * provider answer with two issuers. With `XENO_ISSUER_PER_HOST=on`, each host in the closed list below is its OWN
+ * consistent provider (shared key, users, sessions): its discovery names that host and the tokens its token endpoint
+ * mints carry that host, so OIDC Core §3.1.3.7 and RFC 8414 §3.3 hold for every client. Off (the default): exactly
+ * today's single issuer everywhere.
+ */
+export function issuerPerHost() {
+  return String(process.env.XENO_ISSUER_PER_HOST || '').trim().toLowerCase() === 'on';
+}
+
+/** Every issuer the platform has ever minted under, accepted wherever it verifies its OWN tokens. */
+export function knownIssuers() {
+  return unique([issuer(), ...aliasSiteOrigins()]);
+}
+
+/**
+ * The issuer of the provider a request reached, from its Host header checked against `knownIssuers()` (never
+ * X-Forwarded-*, never a value outside the list). Falls back to `issuer()`, and is always `issuer()` while the
+ * staged move is off.
+ */
+export function issuerForHost(host) {
+  if (!issuerPerHost()) return issuer();
+  const h = String(host || '').trim().toLowerCase().replace(/:443$/, '');
+  if (!h || /[^a-z0-9.-]/.test(h)) return issuer();
+  const origin = `https://${h}`;
+  return knownIssuers().includes(origin) ? origin : issuer();
+}
+
+/** Human-facing account pages may move without changing the OIDC token issuer. */
+export function authFrontendOrigin() {
+  const value = firstSet(process.env.AUTH_FRONTEND_URL, siteOrigin());
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+    throw new Error('AUTH_FRONTEND_URL must be an HTTPS origin');
+  }
+  return url.origin;
 }
 
 // ── accepted (dual-home) origin sets ────────────────────────────────────────

@@ -12,10 +12,11 @@
 import { CONNECT_AUDIENCE, connectExchangeGrant } from '../services/connectAuthority.js';
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { issuer } from '../config/hosts.js';
+import { issuer, issuerForHost } from '../config/hosts.js';
 import { verifyDpopProof } from '../utils/dpop.js';
 import { requireSupportedTokenClient } from '../middleware/requireSupportedClient.js';
 import { bindClientAgent } from '../services/xenoTasks.js';
+import { countryFromRequest } from '../utils/signinCountry.js';
 import {
   jwks,
   discovery,
@@ -28,6 +29,7 @@ import {
   startDeviceAuthorization,
   inspectDeviceAuthorization,
   approveDevice,
+  denyDevice,
   deviceTokenGrant,
   revokeToken,
   endSession,
@@ -76,15 +78,17 @@ async function requireDpopIfBound(req, res, next) {
 
 // GET /oauth2/jwks — public keys
 router.get('/jwks', async (req, res) => {
-  try { res.json(await jwks(req.db)); } catch (e) { res.status(500).json({ error: 'server_error' }); }
+  try { res.set('Cache-Control', 'public, max-age=300'); res.json(await jwks(req.db)); } catch (e) { res.status(500).json({ error: 'server_error' }); }
 });
 
 // Discovery — served at both /api/oauth2/openid-configuration and the standard
 // /api/oauth2/.well-known/openid-configuration.
-router.get('/openid-configuration', (req, res) => res.json(discovery()));
-router.get('/.well-known/openid-configuration', (req, res) => res.json(discovery()));
+// Each host is its own provider during the staged issuer move (config/hosts.js issuerForHost): its discovery names it.
+const publicMeta = (req, res) => { res.set('Cache-Control', 'public, max-age=300'); res.json(discovery(issuerForHost(req.headers.host))); };
+router.get('/openid-configuration', publicMeta);
+router.get('/.well-known/openid-configuration', publicMeta);
 // RFC 8414 authorization-server metadata — what MCP clients read (also served at the site root by nginx)
-router.get('/.well-known/oauth-authorization-server', (req, res) => res.json(discovery()));
+router.get('/.well-known/oauth-authorization-server', publicMeta);
 
 // POST /oauth2/register — RFC 7591 dynamic client registration, for MCP clients. Public,
 // PKCE-only, tasks:read/tasks:write only, own token audience; see registerDynamicClient.
@@ -189,25 +193,54 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
 .as-o:hover{border-color:#4a4a52}.as-o[aria-checked="true"]{border-color:#ededed;background:#16161a}
 .as-o i{flex:none;width:14px;height:14px;margin-top:2px;border:1.5px solid #6a6a72;border-radius:50%}.as-o[aria-checked="true"] i{border-color:#ededed;box-shadow:inset 0 0 0 3px #0c0c0e;background:#ededed}
 .as-o span{display:flex;flex-direction:column;gap:2px;min-width:0}.as-o b{font-size:13.5px;font-weight:500}.as-o small{font-size:12px;color:#8a8a93}
+/* XENO account connection surface — DESIGN_SYSTEM.md: dark, monochrome, no colour accent. Same family as the
+   device approval step (@xenosystem/components/auth DeviceApproval). Colour only for status (error). */
+:root{color-scheme:dark;--bg:#060606;--panel:#101010;--inset:#151515;--border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.14);--muted:#948d83;--text:#ece7df;--accent:#ece7df;--accent2:#ffffff}
+body{padding:40px 20px;background:var(--bg);line-height:1.6}
+.card{width:min(480px,calc(100vw - 24px));box-sizing:border-box;padding:36px;border-radius:18px;background:var(--panel);border:1px solid var(--border);box-shadow:none}
+.logo{justify-content:center;gap:10px;margin-bottom:26px}.logo .name{font-size:12px;letter-spacing:.24em;color:var(--text)}
+.logo .dot{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;border:1px solid var(--border2);background:var(--inset);color:var(--accent2)}
+.logo .dot svg{width:18px;height:18px}
+h1,.consent h1{font-size:24px;line-height:1.25;letter-spacing:-.02em;text-align:center;margin-bottom:12px;font-weight:600;overflow-wrap:anywhere}
+.sub{font-size:14px;text-align:center;margin-bottom:22px;color:var(--muted)}
+.consent .can{background:var(--inset);border:1px solid var(--border);padding:16px 18px;border-radius:12px;gap:10px;font-size:14px;margin:20px 0}
+.consent .can li{padding-left:18px}.consent .can li:before{background:var(--muted);width:5px;height:5px;top:.62em}
+.consent .warn{line-height:1.6;font-size:12px;padding-top:16px;border-top-color:var(--border)}
+.consent .row{display:flex;flex-direction:column-reverse;gap:8px;margin-top:20px}
+.consent .row button{width:100%;min-height:44px;border-radius:10px;font-weight:600}
+.consent #cAllow,button{background:rgba(255,255,255,.9);color:#08080a;border:0}.consent #cAllow:hover{background:#fff;opacity:1}
+.consent .ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}.consent .ghost:hover{background:var(--inset);color:var(--text);opacity:1}
+input{background:var(--inset);border-color:var(--border);color:var(--text)}input:focus{outline:none;border-color:var(--border2)}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent2);outline-offset:3px}
+.as-o{border-color:var(--border)}.as-o[aria-checked="true"]{border-color:var(--border2);background:var(--inset)}.as-o small{color:var(--muted)}
+.as-o[aria-checked="true"] i{border-color:var(--accent2);background:var(--accent2);box-shadow:inset 0 0 0 3px var(--panel)}
+.loader{width:480px;max-width:100%;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:56px 24px}
+.loader .msg{color:var(--text)}.spin{border-color:var(--border2);border-bottom-color:var(--accent2);width:28px;height:28px}
+.foot{color:var(--muted);font-size:11px;letter-spacing:.03em}.err{color:#ff8a80}.account-switch{display:block;text-align:center;margin-top:16px;color:var(--muted);font-size:13px}
+@media(max-width:560px){body{padding:20px 12px}.card{padding:26px 20px;border-radius:16px}.consent h1,h1{font-size:21px}.consent .can{padding:14px}.loader{padding:40px 20px}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}*{transition:none!important}}
 </style></head>
 <body>
   <div id="loader" class="loader">
-    <div class="spin"></div>
-    <div class="msg" id="status">Checking your XENO session…</div>
+    <div class="logo"><div class="dot" aria-hidden="true"><svg viewBox="0 0 1082 1082" fill="currentColor" aria-hidden="true"><path d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z"/><path d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z"/><path d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z"/><path d="M220.763 592.907L40.7063 758.55L31.4588 980.358C29.3761 1030.31 68.5709 1042.46 88.4287 1042.28L311.735 1051.59L656.756 734.191L538.986 606.174L284.514 840.277C247.462 874.363 241.155 859.988 242.633 848.54L251.881 626.733L220.763 592.907Z"/></svg></div><div class="name">XENO</div></div>
+    <div class="spin" aria-hidden="true"></div>
+    <div class="msg" id="status" role="status" aria-live="polite">Checking your XENO session…</div>
     <div class="who">Continue to <b id="app">${app}</b></div>
   </div>
   <div id="consent" class="hide"><div class="card consent" role="dialog" aria-labelledby="cTitle">
-    <div class="logo"><div class="dot"></div><div class="name">XENO</div></div>
+    <div class="logo"><div class="dot" aria-hidden="true"><svg viewBox="0 0 1082 1082" fill="currentColor" aria-hidden="true"><path d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z"/><path d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z"/><path d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z"/><path d="M220.763 592.907L40.7063 758.55L31.4588 980.358C29.3761 1030.31 68.5709 1042.46 88.4287 1042.28L311.735 1051.59L656.756 734.191L538.986 606.174L284.514 840.277C247.462 874.363 241.155 859.988 242.633 848.54L251.881 626.733L220.763 592.907Z"/></svg></div><div class="name">XENO</div></div>
     <h1 id="cTitle"><span id="cName"></span> wants to work on your tasks</h1>
     <p class="sub">It will act as <b id="cWho">your agent</b> in XENO Tasks — everything it does is shown as the agent's, and you can disconnect it at any time.</p>
     <div id="cAs" class="as hide"><div class="as-h">Act as</div><div id="cAsList" class="as-list" role="radiogroup" aria-label="Which agent it acts as"></div></div>
     <ul class="can"><li>See the tasks you can see, and the projects they are in</li><li id="cWrite">Take tasks, comment, report what it is doing, and send work for review — never accept its own work</li><li class="no">Nothing else: no chats, files, billing or account settings</li></ul>
     <p class="warn">This app registered itself and has not been reviewed by XENO. Only continue if you started this sign-in from <span id="cApp"></span>. You will be sent back to <b id="cWhere"></b>.</p>
-    <div class="row"><button id="cDeny" type="button" class="ghost">Cancel</button><button id="cAllow" type="button">Allow</button></div>
+    <div class="row"><button id="cDeny" type="button" class="ghost">Decline connection</button><button id="cAllow" type="button">Authorize connection</button></div>
+    <p id="cAccount" class="account-switch"></p>
+    <a id="cSwitch" class="account-switch" href="#">Use a different account</a>
     <div class="foot">Secured by XENO</div>
   </div></div>
   <div id="cardWrap" class="hide"><div class="card">
-    <div class="logo"><div class="dot"></div><div class="name">XENO</div></div>
+    <div class="logo"><div class="dot" aria-hidden="true"><svg viewBox="0 0 1082 1082" fill="currentColor" aria-hidden="true"><path d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z"/><path d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z"/><path d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z"/><path d="M220.763 592.907L40.7063 758.55L31.4588 980.358C29.3761 1030.31 68.5709 1042.46 88.4287 1042.28L311.735 1051.59L656.756 734.191L538.986 606.174L284.514 840.277C247.462 874.363 241.155 859.988 242.633 848.54L251.881 626.733L220.763 592.907Z"/></svg></div><div class="name">XENO</div></div>
     <h1 id="title">Sign in to continue</h1>
     <p class="sub">Continue to <b id="app2">${app}</b> with your XENO account.</p>
     <form id="form" autocomplete="on">
@@ -218,7 +251,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
       <button id="submit" type="submit">Sign in &amp; continue</button>
       <p class="muted"><span id="toggleText">New to XENO?</span> <a id="toggle">Create an account</a></p>
     </form>
-    <div class="foot">Secured by XENO · xenostudio.ai</div>
+    <div class="foot">XENO Account · xenosystem.ai</div>
   </div></div>
 <script>
 (function(){
@@ -254,6 +287,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   function showConsent(c){
     var w=$('consent'); var tx=function(id,v){$(id).textContent=v};
     var ags=c.agents||[];
+    tx('cAccount',c.accountLabel?'Signed in as '+c.accountLabel:'Signed in to your XENO account');
     if(ags.length){
       var list=$('cAsList'); list.textContent='';
       var opts=[{id:'',name:'Its own agent',description:'A new agent named after '+c.name+', made for this app'}].concat(ags);
@@ -289,6 +323,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
   }
   $('cAllow').onclick=function(){ $('cAllow').disabled=true; continueWith({consent:true,actAs:actAs}); };
   $('cDeny').onclick=function(){ continueWith({deny:true}); };
+  $('cSwitch').onclick=function(event){event.preventDefault();var resume=new URL(location.href);resume.searchParams.set('prompt','login');resume.searchParams.delete('stepup_complete');location.href=resume.pathname+resume.search;};
   $('toggle').onclick=function(){
     mode=mode==='signin'?'signup':'signin';
     show($('nameRow'),mode==='signup');
@@ -311,6 +346,7 @@ button:hover{opacity:.92}button:disabled{opacity:.55;cursor:default}
     fetch(url,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-session-mode':'browser'},body:JSON.stringify(body)})
       .then(function(r){return r.json()}).then(function(d){
         if(d&&d.success){ continueWith(); }
+        else if(d&&d.code==='two_step_required'){ location.href='/login?two_step=1&returnUrl='+encodeURIComponent(location.pathname+location.search); }
         else { fail((d&&d.error)||'Sign-in failed. Check your details and try again.'); }
       }).catch(function(e){ fail('Network error: '+(e&&e.message||e)); });
   };
@@ -382,6 +418,8 @@ router.post('/authorize', authMiddleware, async (req, res) => {
 // identity of their own.
 router.post('/token', requireSupportedTokenClient, async (req, res) => {
   const b = req.body || {};
+  // The provider this token endpoint belongs to: the tokens it mints carry its issuer (config/hosts.js).
+  const iss = issuerForHost(req.headers.host);
   try {
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {
       const auth = /^DPoP\s+(.+)$/i.exec(String(req.headers.authorization || ''));
@@ -390,7 +428,7 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
       }
       const subjectPayload = await verifyAccessToken(req.db, b.subject_token);
       const hubProof = await verifyDpopProof(req.db, {
-        proof: String(req.headers.dpop || ''), method: 'POST', url: `${issuer()}/api/oauth2/token`,
+        proof: String(req.headers.dpop || ''), method: 'POST', url: `${iss}/api/oauth2/token`,
         accessToken: b.subject_token, requiredJkt: subjectPayload.cnf?.jkt,
       });
       // XENO Connect: the client's own key, not the Hub broker — see services/connectAuthority.js.
@@ -411,33 +449,40 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
     }
     const dpop = req.headers.dpop
       ? await verifyDpopProof(req.db, {
-        proof: String(req.headers.dpop), method: 'POST', url: `${issuer()}/api/oauth2/token`,
+        proof: String(req.headers.dpop), method: 'POST', url: `${iss}/api/oauth2/token`,
       })
       : null;
     if (b.grant_type === 'authorization_code') {
       return res.json(await exchangeAuthorizationCode(req.db, {
         code: b.code, clientId: b.client_id, redirectUri: b.redirect_uri, codeVerifier: b.code_verifier,
-        dpopJkt: dpop?.jkt || null,
+        dpopJkt: dpop?.jkt || null, iss,
       }));
     }
     if (b.grant_type === 'refresh_token') {
       return res.json(await refreshTokenGrant(req.db, {
         refreshToken: b.refresh_token, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
+        rotationId: b.rotation_id, iss, host: req.headers.host,
       }));
     }
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:device_code') {
       return res.json(await deviceTokenGrant(req.db, {
-        deviceCode: b.device_code, clientId: b.client_id, dpopJkt: dpop?.jkt || null,
+        deviceCode: b.device_code, clientId: b.client_id, dpopJkt: dpop?.jkt || null, iss,
       }));
     }
     return res.status(400).json({ error: 'unsupported_grant_type' });
-  } catch (e) { sendOauthError(res, e); }
+  } catch (e) {
+    // WHY a token request was refused, in the log (a Spawn sign-in failed with invalid_grant and the log said only 400).
+    // The reasons are fixed strings; the code appears as its first 8 characters only, the prefix an operator queries by.
+    const b = req.body || {};
+    console.warn(`[oauth2] token refused grant=${String(b.grant_type || '').slice(0, 60)} client=${String(b.client_id || '').slice(0, 64)} error=${e.oauthError || 'invalid_request'} reason=${JSON.stringify(String(e.message || '').slice(0, 120))}${typeof b.code === 'string' ? ` code=${b.code.slice(0, 8)}…` : ''}`);
+    sendOauthError(res, e);
+  }
 });
 
 // POST /oauth2/device_authorization — public; start the device grant.
 router.post('/device_authorization', async (req, res) => {
   try {
-    res.json(await startDeviceAuthorization(req.db, { clientId: (req.body || {}).client_id, scope: (req.body || {}).scope }));
+    res.json(await startDeviceAuthorization(req.db, { clientId: (req.body || {}).client_id, scope: (req.body || {}).scope, requestCountry: countryFromRequest(req) }));
   } catch (e) { sendOauthError(res, e); }
 });
 
@@ -498,13 +543,20 @@ router.post(
 // POST /oauth2/device/approve — authenticated; the activate UI calls this.
 router.post('/device/inspect', authMiddleware, async (req, res) => {
   try {
-    res.json(await inspectDeviceAuthorization(req.db, { userCode: (req.body || {}).user_code }));
+    // viewer_country: where THIS browser is, so the page can warn when the request started elsewhere
+    res.json({ ...(await inspectDeviceAuthorization(req.db, { userCode: (req.body || {}).user_code })), viewer_country: countryFromRequest(req) });
   } catch (e) { sendOauthError(res, e); }
 });
 
 router.post('/device/approve', authMiddleware, async (req, res) => {
   try {
     res.json(await approveDevice(req.db, { userCode: (req.body || {}).user_code, userId: req.user.id }));
+  } catch (e) { sendOauthError(res, e); }
+});
+
+router.post('/device/deny', authMiddleware, async (req, res) => {
+  try {
+    res.json(await denyDevice(req.db, { userCode: (req.body || {}).user_code }));
   } catch (e) { sendOauthError(res, e); }
 });
 

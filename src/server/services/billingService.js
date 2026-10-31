@@ -97,6 +97,13 @@ const CATALOG = [
 
   { id: 'studio_monthly', kind: 'subscription', label: 'Studio', plan: 'studio', credits: 0, price: 99, interval: 'month', priceEnv: 'STRIPE_PRICE_STUDIO_MONTHLY' },
 
+  /* Extra XENO Storage space, monthly, on top of any plan (owner, 2026-10-27: the Google One prices). Its own `kind`,
+   * not 'subscription': every page that lists plans filters on kind 'subscription', and a pack is not a plan. While
+   * its subscription is paid it is a storage_grants row (reconcileStoragePack). Sold as GB, granted as GiB, so a
+   * buyer always gets at least what the label says. */
+  { id: 'storage_100gb_monthly', kind: 'storage', label: '+100 GB', credits: 0, storageBytes: 100 * 1024 ** 3, price: 1.99, interval: 'month', priceEnv: 'STRIPE_PRICE_STORAGE_100GB_MONTHLY' },
+  { id: 'storage_2tb_monthly',   kind: 'storage', label: '+2 TB',   credits: 0, storageBytes: 2 * 1024 ** 4,  price: 9.99, interval: 'month', priceEnv: 'STRIPE_PRICE_STORAGE_2TB_MONTHLY' },
+
   // Legacy flat-rate Team - kept readable for any pre-existing subscription, NOT offered
   // publicly (unconfigured priceEnv -> available:false; the UI points Team -> team_seat).
   { id: 'team_monthly', kind: 'subscription', label: 'Team (legacy flat)', plan: 'team', credits: 0, price: 60, interval: 'month', priceEnv: 'STRIPE_PRICE_TEAM_MONTHLY', legacy: true },
@@ -491,8 +498,9 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
 
   const customer = await getOrCreateCustomer(pool, user);
 
+  const recurring = item.kind === 'subscription' || item.kind === 'storage';
   const session = await stripe.checkout.sessions.create({
-    mode: item.kind === 'subscription' ? 'subscription' : 'payment',
+    mode: recurring ? 'subscription' : 'payment',
     customer,
     client_reference_id: String(user.id),
     line_items: [{ price: item.priceId, quantity: 1 }],
@@ -500,7 +508,7 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
     cancel_url: cancelUrl,
     allow_promotion_codes: true,
     ...taxCheckoutFields(),
-    ...(item.kind === 'subscription' ? { subscription_data: { metadata: {
+    ...(recurring ? { subscription_data: { metadata: {
       xenoUserId: String(user.id), itemId: item.id,
     } } } : {}),
     // Metadata rides on the session (and, for one-time, is what the webhook reads
@@ -521,7 +529,7 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
      * Stripe derives from the account name, which is exactly the unrecognisable
      * case this exists to prevent. Stripe caps it at 22 characters and rejects
      * < > \ ' " * — so it is truncated and stripped rather than trusted. */
-    ...(item.kind === 'subscription' ? {} : {
+    ...(recurring ? {} : {
       payment_intent_data: { statement_descriptor_suffix: statementDescriptor() },
     }),
 
@@ -535,7 +543,7 @@ export async function createCheckout(pool, user, itemId, { origin, downloadInten
      * ⚠️ Numbering and retention are configured in the Stripe DASHBOARD, not
      * here. Turning this on produces invoices; it does not by itself make them
      * compliant, and the runbook says so rather than implying otherwise. */
-    ...(item.kind === 'subscription' ? {} : {
+    ...(recurring ? {} : {
       invoice_creation: { enabled: true },
     }),
 
@@ -712,6 +720,13 @@ async function reconcileSubscription(pool, provider, subscriptionId, customerId,
     if (!owner) throw new Error('Subscription billing owner is not mapped yet');
     const metadata = { ...fallbackMetadata, ...sub.metadata };
     if (metadata.xenoUserId && metadata.xenoUserId !== String(owner)) throw new Error('Subscription owner metadata mismatch');
+    // A storage pack is extra space, not a plan: it never touches the plan row (its subscription is not the plan's).
+    const pack = storagePackFor(sub.items?.data?.[0]?.price?.id, metadata.itemId);
+    if (pack) {
+      const result = await reconcileStoragePack(client, owner, pack, sub);
+      await client.query('COMMIT');
+      return result;
+    }
     const workspaceId = metadata.xenoWorkspaceId;
     const current = workspaceId
       ? (await client.query("SELECT metadata->'billing'->>'stripe_subscription_id' AS sub_id FROM workspaces WHERE id=$1 FOR UPDATE", [workspaceId])).rows[0]
@@ -747,6 +762,23 @@ async function reconcileSubscription(pool, provider, subscriptionId, customerId,
     await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally { client.release(); }
+}
+
+const storagePackFor = (priceId, itemId) => CATALOG.map(resolveItem)
+  .find((i) => i.kind === 'storage' && ((priceId && i.priceId === priceId) || (itemId && i.id === itemId))) || null;
+// Paid, or paid and being retried by Stripe (past_due): the space stays while Stripe retries, as Google One does.
+const PACK_ACTIVE = new Set(['active', 'trialing', 'past_due']);
+/** One storage_grants row per pack subscription: active while it is paid, revoked when it ends. Never deletes. */
+async function reconcileStoragePack(client, owner, pack, sub) {
+  const active = PACK_ACTIVE.has(sub.status);
+  await client.query(
+    `INSERT INTO storage_grants (user_id, bytes, reason, stripe_subscription_id, item_id, revoked_at)
+     VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN NULL ELSE now() END)
+     ON CONFLICT (stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL
+     DO UPDATE SET bytes = EXCLUDED.bytes, item_id = EXCLUDED.item_id,
+                   revoked_at = CASE WHEN $6 THEN NULL ELSE COALESCE(storage_grants.revoked_at, now()) END`,
+    [String(owner), pack.storageBytes, `storage pack ${pack.id}`, sub.id, pack.id, active]);
+  return { handled: true, storagePack: pack.id, active };
 }
 
 export async function getCheckoutStatus(pool, user, sessionId) {
@@ -993,7 +1025,7 @@ export async function handleEvent(pool, event, { provider = stripe } = {}) {
 
       if (session.mode === 'subscription') {
         const result = await reconcileSubscription(pool, provider, session.subscription, session.customer, session.metadata);
-        if (!result.reason) await attributeDownloadIntent(pool, session, result.plan);
+        if (!result.reason && result.plan) await attributeDownloadIntent(pool, session, result.plan);
       } else if (session.mode === 'payment') {
         // One-time top-up pack → GRANT credits (atomic claim+grant, idempotent).
         // Grant on any SETTLED session: 'paid' (card / async-settled) or

@@ -16,6 +16,7 @@
  *   - A credential is an xtk_ token for ONE agent, 1 hour by default, shown once.
  *   - Only the person who owns the agent manages it. An agent never manages agents.
  */
+import { resolvePins, SkillError } from './skills.js';
 import { randomUUID } from 'node:crypto';
 import { createAgent, SYSTEM_AGENT_ORIGINS, resolvePrincipal } from './agentIdentity.js';
 import { createWorkforceResource } from './workforceResources.js';
@@ -84,14 +85,14 @@ async function versions(db, resourceId) {
   if (!resourceId) return [];
   return (await db.query(`SELECT v.version, v.content, v.content_hash, v.created_at, COALESCE(u.display_name, u.username) AS by_name
     FROM workforce_agent_versions v LEFT JOIN users u ON u.id = v.created_by_user_id WHERE v.resource_id = $1 ORDER BY v.version DESC LIMIT 50`, [resourceId])).rows
-    .map((v) => ({ version: v.version, hash: v.content_hash, instructions: (v.content && v.content.instructions) || '', runtime: (v.content && v.content.runtime) || {}, createdAt: v.created_at, by: v.by_name || null }));
+    .map((v) => ({ version: v.version, hash: v.content_hash, instructions: (v.content && v.content.instructions) || '', persona: (v.content && v.content.persona) || null, skills: (v.content && v.content.skills) || [], runtime: (v.content && v.content.runtime) || {}, createdAt: v.created_at, by: v.by_name || null }));
 }
 
 async function full(db, r, me = null) {
   const projects = (await tasks.listTaskProjects(db, { id: r.id })).map((p) => ({ id: p.id, name: p.name, access: p.canEdit ? 'editor' : 'viewer' }));
   for (const p of projects) p.division = await divisions.projectDivision(db, p.id);
-  const connections = (await db.query(`SELECT id, client_name, created_at, last_used_at FROM mcp_connections WHERE agent_user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`, [r.id])).rows
-    .map((c) => ({ id: String(c.id), client: c.client_name, createdAt: c.created_at, lastUsedAt: c.last_used_at }));
+  const connections = (await db.query(`SELECT id, client_name, created_at, last_used_at, paused_at FROM mcp_connections WHERE agent_user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`, [r.id])).rows
+    .map((c) => ({ id: String(c.id), client: c.client_name, createdAt: c.created_at, lastUsedAt: c.last_used_at, pausedAt: c.paused_at || null }));
   const vs = await versions(db, r.workforce_resource_id);
   const ws = r.owner_workspace_id || (r.r_owner_user ? await divisions.personalWorkspace(db, r.r_owner_user) : null);
   const w = ws ? (await db.query('SELECT id, name, workspace_type FROM workspaces WHERE id = $1', [ws])).rows[0] : null;
@@ -100,7 +101,7 @@ async function full(db, r, me = null) {
     name: r.name, username: r.username, description: r.description || '', createdAt: r.created_at, status: r.status || 'active',
     workspace: w ? { id: String(w.id), name: w.name, personal: w.workspace_type === 'personal' } : null,
     division: r.division_id ? { id: String(r.division_id), name: r.division_name, archived: r.division_lifecycle !== 'active' } : null,
-    instructions: vs[0] ? vs[0].instructions : '', runtime: vs[0] ? vs[0].runtime : {}, version: vs[0] ? vs[0].version : null, versions: vs,
+    instructions: vs[0] ? vs[0].instructions : '', persona: vs[0] ? vs[0].persona : null, skills: vs[0] ? vs[0].skills : [], runtime: vs[0] ? vs[0].runtime : {}, version: vs[0] ? vs[0].version : null, versions: vs,
     projects, credentials: await credentials(db, r.id), connections,
     webhook: ((await db.query('SELECT url FROM task_agent_webhooks WHERE agent_user_id = $1', [r.id])).rows[0] || {}).url || null,
     lentTo: r.workforce_resource_id ? await lending.lendsOf(db, r.workforce_resource_id) : [],
@@ -217,7 +218,18 @@ export async function create(db, me, { name, description, instructions, runtime,
   return get(db, me, pid);
 }
 
-export async function update(db, me, publicId, { name, description, instructions, runtime } = {}) {
+/** A persona from the page or a Mind import: { role, body } with the body's sections (# Voice …). null clears it. */
+function personaOf(p) {
+  if (p === null) return null;
+  if (!p || typeof p !== 'object') throw new AgentError('The persona is a role and a body', 'invalid_persona');
+  const role = String(p.role || '').trim(), body = String(p.body || '').trim();
+  return role || body ? { role, body } : null;
+}
+
+// jsonb stores keys in its own order, so compare the fields, never the serialised text
+const samePersona = (x, y) => (!x && !y) || (!!x && !!y && (x.role || '') === (y.role || '') && (x.body || '') === (y.body || ''));
+
+export async function update(db, me, publicId, { name, description, instructions, runtime, persona, skills: skillChoices } = {}) {
   const r = await owned(db, me, publicId, 'editor');
   if (name !== undefined) {
     const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
@@ -231,17 +243,22 @@ export async function update(db, me, publicId, { name, description, instructions
     await db.query('UPDATE agent_identities SET description = $2 WHERE user_id = $1', [r.id, desc]);
     await db.query('UPDATE workforce_resources SET description = $2, revision = revision + 1 WHERE id = $1', [r.workforce_resource_id, desc]);
   }
-  if (instructions !== undefined || runtime !== undefined) {
+  // skills: [{ id, version? }] → pinned {id, version, hash}, each one the person may read (skills.js)
+  const pins = skillChoices !== undefined ? await resolvePins(db, me, skillChoices) : undefined;
+  if (instructions !== undefined || runtime !== undefined || persona !== undefined || pins !== undefined) {
     const cur = (await db.query('SELECT max(version)::int AS v FROM workforce_agent_versions WHERE resource_id = $1', [r.workforce_resource_id])).rows[0].v;
     if (String(instructions || '').length > 32768) throw new AgentError('The instructions are longer than 32,768 characters', 'instructions_too_long');
     const last = (await db.query('SELECT content FROM workforce_agent_versions WHERE resource_id = $1 AND version = $2', [r.workforce_resource_id, cur])).rows[0];
     const nextInstr = instructions !== undefined ? String(instructions || '') : (last ? last.content.instructions || '' : '');
     const nextRt = runtime !== undefined ? (runtime || {}) : (last ? last.content.runtime || {} : {});
-    if (!last || (last.content.instructions || '') !== nextInstr || JSON.stringify(last.content.runtime || {}) !== JSON.stringify(nextRt)) {
+    const nextPersona = persona !== undefined ? personaOf(persona) : (last ? last.content.persona || null : null);
+    const nextSkills = pins !== undefined ? pins : (last ? last.content.skills || [] : []);
+    const sameSkills = (x, y) => x.length === y.length && x.every((p, i) => p.id === y[i].id && p.version === y[i].version && p.hash === y[i].hash && (p.bundleDigest || null) === (y[i].bundleDigest || null));
+    if (!last || (last.content.instructions || '') !== nextInstr || JSON.stringify(last.content.runtime || {}) !== JSON.stringify(nextRt) || !samePersona(last.content.persona || null, nextPersona) || !sameSkills(last.content.skills || [], nextSkills)) {
       try {
         await reviseAgentDefinition(db, ctx(me), { operationId: randomUUID(), resourceId: String(r.workforce_resource_id), baseVersion: cur,
-          definition: { schemaVersion: 1, instructions: nextInstr, ...(Object.keys(nextRt).length ? { runtime: nextRt } : {}), secretReferences: last ? last.content.secretReferences || [] : [], skills: last ? last.content.skills || [] : [], requestedCapabilities: last ? last.content.requestedCapabilities || [] : [] } });
-      } catch (e) { if (e && e.details && /effort|identifier|runtime|list/.test(e.details.reason || '')) throw new AgentError('The runtime config is not valid (model and tools are identifiers; effort is minimal, low, medium, high or max)', 'invalid_runtime'); throw asAgentError(e, 'The instructions could not be saved'); }
+          definition: { schemaVersion: 1, instructions: nextInstr, ...(nextPersona ? { persona: nextPersona } : {}), ...(Object.keys(nextRt).length ? { runtime: nextRt } : {}), secretReferences: last ? last.content.secretReferences || [] : [], skills: nextSkills, requestedCapabilities: last ? last.content.requestedCapabilities || [] : [] } });
+      } catch (e) { if (e && e.details && /persona/.test(e.details.reason || '')) throw new AgentError('The persona is not valid (a role of up to 200 characters and a body of up to 32,768)', 'invalid_persona'); if (e && e.details && /effort|identifier|runtime|list/.test(e.details.reason || '')) throw new AgentError('The runtime config is not valid (model and tools are identifiers; effort is minimal, low, medium, high or max)', 'invalid_runtime'); throw asAgentError(e, 'The instructions could not be saved'); }
     }
   }
   return get(db, me, publicId);

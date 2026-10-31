@@ -20,7 +20,7 @@
  */
 import { check } from '../utils/authzReBAC.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
-import { workspaceUsedBytes, workspaceStorageAllowance, storageUsage } from './storageAllowance.js';
+import { workspaceUsedBytes, workspaceStorageAllowance, storageUsage, workspaceMachineKind } from './storageAllowance.js';
 
 export class AnalyticsError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'AnalyticsError'; this.code = code; this.status = status; }
@@ -120,13 +120,16 @@ async function storageUsageMetric(db, s) {
     const u = await storageUsage(db, s.ownerUserId);
     return { usedBytes: u.usedBytes, allowanceBytes: u.allowanceBytes, files: u.files, byKind: u.byKind };
   }
-  const [used, allowance, kinds] = await Promise.all([
+  const [used, allowance, kinds, machines] = await Promise.all([
     workspaceUsedBytes(db, s.workspaceId), workspaceStorageAllowance(db, s.workspaceId),
     db.query(`SELECT CASE WHEN mime_type LIKE 'image/%' THEN 'image' WHEN mime_type LIKE 'video/%' THEN 'video' WHEN mime_type LIKE 'audio/%' THEN 'audio' ELSE 'document' END AS kind,
                      COALESCE(SUM(file_size), 0)::bigint AS bytes, COUNT(*)::int AS files
                 FROM user_files WHERE workspace_id = $1 AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC`, [s.workspaceId]),
+    workspaceMachineKind(db, s.workspaceId),
   ]);
-  return { usedBytes: used, allowanceBytes: allowance, files: kinds.rows.reduce((n, r) => n + r.files, 0), byKind: kinds.rows.map((r) => ({ kind: r.kind, bytes: Number(r.bytes), files: r.files })) };
+  const byKind = kinds.rows.map((r) => ({ kind: r.kind, bytes: Number(r.bytes), files: r.files }));
+  if (machines) byKind.push(machines); // a stopped machine's saved disk counts in the pool (xeno-compute SPEC §2a)
+  return { usedBytes: used, allowanceBytes: allowance, files: kinds.rows.reduce((n, r) => n + r.files, 0), byKind: byKind.sort((a, b) => b.bytes - a.bytes) };
 }
 
 async function supportTickets(db, s, days) {

@@ -18,24 +18,33 @@ import * as forumMcp from '../services/forumMcp.js';
 import * as placesMcp from '../services/placesMcp.js';
 import * as modesMcp from '../services/modesMcp.js';
 import * as corpusMcp from '../services/corpusMcp.js';
+import * as researchMcp from '../services/researchMcp.js';
 import { MODES_ROWS } from './modes.js';
 import { PEOPLE_ROWS } from './people.js';
 import * as peopleMcp from '../services/peopleMcp.js';
 import * as storageMcp from '../services/storageMcp.js';
 import * as supportMcp from '../services/supportMcp.js';
+import * as releasesMcp from '../services/releasesMcp.js';
 import * as customersMcp from '../services/customersMcp.js';
+import * as computeMcp from '../services/computeMcp.js';
+import * as automateMcp from '../services/automateMcp.js';
 import * as publishMcp from '../services/publishMcp.js';
+import * as messageMcp from '../services/messageMcp.js';
+import * as mailMcp from '../services/mailMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
+import * as toolsMcp from '../services/toolsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
+import * as inboxMcp from '../services/inboxMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as formsMcp from '../services/formsMcp.js';
+import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
-  tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
+  inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, customers: customersMcp.TOOLS, publish: publishMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, forms: formsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, workforce: workforceMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -53,6 +62,15 @@ const ROWS = [
   ...MODES_ROWS,
   // ── people (employee profiles, org chart, directory, time off; rows in ./people.js)
   ...PEOPLE_ROWS,
+  // ── research (xeno-research/SPEC.md §8 item 4; services/xenoResearch.js). No new scope name (scopes are one-way):
+  // reading is workspace:read; a run executes in XENO Box under the caller's authority, so it needs agents:write.
+  ['research.home.get', 'research', 'home', 'safe', { scope: 'workspace:read', reply: obj({ notebooks: { type: 'array', description: 'Recent notebooks: id, title, projectId, projectName, locked, updatedAt.' }, attention: { type: 'array', description: 'Runs needing attention: id, kind, status, verdict, reason.' }, claims: { type: 'array', description: 'Claims not holding: id, key, state (lapsed|unobserved), notebookId, cell.' } }, ['notebooks', 'attention', 'claims']) }],
+  ['research.notebook.list', 'research', 'notebooks', 'safe', { scope: 'workspace:read', reply: obj({ project: { type: 'object' }, notebooks: { type: 'array', description: 'id, title, locked, image, lastRun, updatedAt.' } }, ['notebooks']) }],
+  ['research.notebook.get', 'research', 'notebook', 'safe', { scope: 'workspace:read', provenance: 'untrusted', reply: obj({ notebook: { type: 'object', description: 'id, title, cells (index, type, source, outputs), locked, lockStale, canEdit.' }, runs: { type: 'array', description: 'Newest first.' } }, ['notebook', 'runs']) }],
+  ['research.run.create', 'research', 'run', 'irreversible', { scope: 'agents:write', idempotency: NONE('no request key yet: a retried call queues a second run (each is recorded and signed)'), reply: obj({ run: { type: 'object', description: 'id (rr_…), status (queued, or refused with reasonCode and reason).' } }, ['run']) }],
+  ['research.run.verify', 'research', 'verify', 'irreversible', { scope: 'agents:write', idempotency: NONE('no request key yet: a retried call queues a second verification'), reply: obj({ run: { type: 'object', description: 'The verify run: id, status; its verdict arrives when it is done.' } }, ['run']) }],
+  ['research.run.get', 'research', 'run_get', 'safe', { scope: 'workspace:read', reply: obj({ run: { type: 'object', description: 'id, kind, status, cells, verdict, comparison, reasonCode, reason.' }, notebook: { type: 'object' }, signature: { type: 'object', description: 'state (valid|invalid|unsigned|none), keyId, reason.' } }, ['run', 'signature']) }],
+  ['research.claim.list', 'research', 'claims', 'safe', { scope: 'workspace:read', reply: obj({ claims: { type: 'array', description: 'id, key, claim, notebookId, runId, cell, state (held|lapsed|unobserved), latest.' } }, ['claims']) }],
   // ── corpus (XENO CORPUS - SPEC.md; services/xenoCorpus.js). No new scope name (scopes are one-way): reading is
   // workspace:read; proposing writes a record, so it needs the workspace area's write scope (workspace:admin); recording
   // a verdict is an admitted run's act, so it needs agents:write.
@@ -85,9 +103,24 @@ const ROWS = [
   // ── places (the building of each workspace; a projection of workforce records, scope-filtered on the server)
   ['places.place.list', 'places', 'list', 'safe', { reply: obj({ items: { type: 'array', description: 'id, name, workspace, city (plot), floors (closed floors carry no name), counts and your access of each building you can enter.' } }, ['items']) }],
   ['places.place.get', 'places', 'get', 'safe', { provenance: 'untrusted', reply: obj({ place: { type: 'object', description: 'The building summary and your access.' }, spec: { type: 'object', description: 'snap (divisions, teams, memberships, principals, runs, closedDivisionIds) and record (the saved layout).' }, access: { type: 'object', description: 'role, permissions (watch talk handoff edit host), scope.' } }, ['place', 'spec', 'access']) }],
+  ['places.place.explore', 'places', 'explore', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'Public buildings with your visitor access (watch only).' } }, ['items']) }],
+  ['places.session.list', 'places', 'sessions', 'safe', { reply: obj({ items: { type: 'array', description: 'Live sessions: place, host, title, audience, permissions, floors shown, guests, endsAt; code only when you host.' } }, ['items']) }],
+  ['places.session.resolve', 'places', 'resolve_session', 'safe', { reply: obj({ session: { type: 'object', description: 'The session the code opens.' } }, ['session']) }],
+  ['places.session.join', 'places', 'join_session', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ placeId: { type: 'string' }, sessionId: { type: 'string' }, permissions: { type: 'array', description: 'What the pass grants: a subset of watch, talk, handoff.' } }, ['placeId', 'sessionId']) }],
+  ['places.invite.list', 'places', 'invites', 'safe', { reply: obj({ items: { type: 'array', description: 'Pending workspace invitations addressed to you.' } }, ['items']) }],
+  ['places.receipt.list', 'places', 'receipts', 'safe', { reply: obj({ items: { type: 'array', description: 'Receipts of your last Places changes.' } }, ['items']) }],
+  ['places.needs.list', 'places', 'needs', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'Tasks waiting on you, with the Tasks command for each action.' } }, ['items']) }],
+  ['places.workforce.list', 'places', 'workforce', 'safe', { reply: obj({ items: { type: 'array', description: 'Your agents: id, name, owner, version, skills, desks.' }, pending: { type: 'array', description: 'Desk offers waiting for your decision.' } }, ['items', 'pending']) }],
+  ['places.marketplace.list', 'places', 'marketplace', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'Rentable listings: id, name, kind, seller, priceMicro, unit, rented.' } }, ['items']) }],
+  ['places.funding.get', 'places', 'funding', 'safe', { reply: obj({ balanceMicro: { type: 'integer', description: 'Available micro-credits.' }, ledger: { type: 'array', description: 'Recent account history.' }, allocations: { type: 'array', description: 'Monthly budget per building you administer.' } }, ['balanceMicro', 'ledger', 'allocations']) }],
+  ['places.city.get', 'places', 'city', 'safe', { provenance: 'untrusted', reply: obj({ cityId: { type: 'string' }, lots: { type: 'array', description: 'Every lot: id, district, position, priceMicro, leaseId.' }, buildings: { type: 'array', description: 'Buildings standing in the city with facade; lease terms only for your own.' }, slots: { type: 'array', description: 'Sponsor slots, labelled Sponsored.' } }, ['cityId', 'lots', 'buildings', 'slots']) }],
+  ['places.world.get', 'places', 'world', 'safe', { reply: obj({ regions: { type: 'array', description: 'Regions with state, target and real pledge counts.' }, cities: { type: 'array', description: 'Cities with buildings, free lots and waitlist.' } }, ['regions', 'cities']) }],
   ['places.layout.save', 'places', 'save_layout', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ placeId: { type: 'string' }, placeRevision: { type: 'integer', description: 'The new layout revision.' }, receipt: { type: 'object', description: 'operationId, revision, at; replayed: true when this key was already applied.' } }, ['placeId', 'placeRevision']) }],
   // ── agents (self)
-  ['agents.self.get', 'agents', 'whoami', 'safe', { agentsOnly: true, reply: obj({ agent: { type: 'object', description: 'id (agt_), name, handle, status, workspace, division, owner, accountable, projects, budget (null when the division has none).' } }, ['agent']) }],
+  ['agents.self.get', 'agents', 'whoami', 'safe', { agentsOnly: true, reply: obj({ agent: { type: 'object', description: 'id (agt_), name, persona (who it is: follow it), handle, status, workspace, division, owner, accountable, projects, budget (null when the division has none).' } }, ['agent']) }],
+  // ── skills (skillsMcp.js): only the skills pinned to the agent's current version, at the version and hash pinned
+  ['agents.skill.list', 'skills', 'list', 'safe', { agentsOnly: true, reply: obj({ skills: { type: 'array', description: 'id, name, when to use it, version and file paths of each skill pinned to you.' } }, ['skills']) }],
+  ['agents.skill.get', 'skills', 'get', 'safe', { agentsOnly: true, provenance: 'untrusted', reply: obj({ text: { type: 'string', description: 'The file, headed by the skill and its version (untrusted content). An image comes back as an image; another binary file is described: path, bytes, sha256.' } }) }],
   // ── studio (media generation)
   ...['image', 'video'].flatMap((t) => [
     [`studio.${t}_model.list`, t, 'list_models', 'safe', { agentsOnly: true, reply: obj({ models: { type: 'array', description: `id, name and the most one ${t} can cost in credits.` } }) }],
@@ -137,6 +170,25 @@ const ROWS = [
   ['publish.post.draft', 'publish', 'draft_post', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ post: { type: 'object', description: 'The draft: id, state (draft), text, media, targets.' } }, ['post']) }],
   ['publish.post.propose_schedule', 'publish', 'propose_schedule', 'undoable', { idempotency: NAT('one pending proposal per post; proposing again replaces the time'), reply: obj({ needsConfirmation: { type: 'boolean', description: 'Always true: a person confirms before anything is scheduled.' }, confirmationId: { type: 'string' }, proposedFor: { type: 'string' } }, ['needsConfirmation']) }],
   ['publish.approval.list', 'publish', 'list_approvals', 'safe', { provenance: 'untrusted', reply: obj({ items: { type: 'array', description: 'kind (approval|proposal), id, postId, proposedFor, requestedAt.' } }, ['items']) }],
+  // ── message (XENO Comms, server-to-server). One channel per workspace scope; the platform decides who is in it.
+  ['message.channel.list', 'message', 'list_channels', 'safe', { provenance: 'untrusted', reply: obj({ channels: { type: 'array', description: 'key, kind, title, conversationId, lastMessageAt, unread of each channel you belong to.' } }, ['channels']) }],
+  ['message.channel.read', 'message', 'read_channel', 'safe', { provenance: 'untrusted', reply: obj({ conversationId: { type: 'string' }, messages: { type: 'array', description: 'id, author (id, name, kind), text, replyTo, replies, createdAt.' } }, ['messages']) }],
+  ['message.message.post', 'message', 'post_message', 'undoable', { idempotency: { strategy: 'key', key: 'request_key' }, reply: obj({ conversationId: { type: 'string' }, message: { type: 'object', description: 'The posted message: id, author, text, replyTo, createdAt.' } }, ['message']) }],
+  // ── mail (Office › Mail = XENO Mail, server-to-server, services/xenoMail.js). Mail is third-party text: reads are
+  //    untrusted. There is no send capability and no discard: sending is irreversible and a person confirms it on screen.
+  ['mail.thread.search', 'mail', 'search_mail', 'safe', { provenance: 'untrusted', reply: obj({ folder: { type: 'string' }, labelId: { type: 'string' }, threads: { type: 'array', description: 'thread_id, subject, from, received_at, snippet, unread — written by other people.' } }, ['threads']) }],
+  ['mail.thread.get', 'mail', 'read_thread', 'safe', { provenance: 'untrusted', reply: obj({ thread: { type: 'object', description: 'thread_id, unread, messages (message_id, from, to, subject, received_at, text).' } }, ['thread']) }],
+  ['mail.thread.mark_read', 'mail', 'mark_read', 'undoable', { idempotency: NAT('marking read twice is the same state; undo with unread: true'), reply: obj({ result: { type: 'object', description: 'updated, requested (read back by XENO Mail).' } }, ['result']) }],
+  ['mail.thread.star', 'mail', 'star_threads', 'undoable', { idempotency: NAT('starring a starred thread changes nothing; undo with starred: false'), reply: obj({ result: { type: 'object', description: 'updated, requested, starred.' } }, ['result']) }],
+  ['mail.thread.label', 'mail', 'label_threads', 'undoable', { idempotency: NAT('applying a label twice is not an error; undo by removing it'), reply: obj({ result: { type: 'object', description: 'updated, requested.' } }, ['result']) }],
+  ['mail.thread.archive', 'mail', 'archive_threads', 'undoable', { idempotency: NAT('archiving an archived thread changes nothing; undo with undo: true'), reply: obj({ result: { type: 'object', description: 'updated, requested.' } }, ['result']) }],
+  ['mail.label.list', 'mail', 'list_labels', 'safe', { provenance: 'trusted', reply: obj({ labels: { type: 'array', description: 'id, name, color.' } }, ['labels']) }],
+  ['mail.draft.list', 'mail', 'list_drafts', 'safe', { provenance: 'untrusted', reply: obj({ drafts: { type: 'array', description: 'draft_id, to, cc, subject, updated_at, byAgent (set when an agent wrote it).' } }, ['drafts']) }],
+  ['mail.draft.get', 'mail', 'read_draft', 'safe', { provenance: 'untrusted', reply: obj({ draft: { type: 'object', description: 'draft_id, to, cc, bcc, subject, body, byAgent.' } }, ['draft']) }],
+  ['mail.draft.save', 'mail', 'draft_mail', 'undoable', { idempotency: NONE('without draft_id each call writes a new draft; pass draft_id to update one. Nothing is sent'), reply: obj({ sent: { type: 'boolean', description: 'Always false: a person sends.' }, draft: { type: 'object', description: 'draft_id.' } }, ['sent']) }],
+  ['mail.thread.to_task', 'mail', 'thread_to_task', 'undoable', { idempotency: NONE('no request key yet: each call creates one task; undo by closing it as won’t do'), reply: obj({ task: TASK }, ['task']) }],
+  ['mail.thread.to_ticket', 'mail', 'thread_to_ticket', 'undoable', { idempotency: NONE('no request key yet: each call opens one support request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, url.' } }, ['ticket']) }],
+  ['mail.thread.to_contact', 'mail', 'thread_to_contact', 'undoable', { idempotency: NAT('one contact per address per workspace: saving again reuses it and adds a timeline entry'), reply: obj({ contact: { type: 'object', description: 'id, name, email, url (XENO Customers).' }, created: { type: 'boolean' }, activity: { type: 'object', description: 'The timeline entry (a draft when an agent made it).' } }, ['contact']) }],
   // ── support (Help ▸ Contact support). Sending a reply to a customer is a person's act: there is no capability for it.
   ['support.ticket.create', 'support', 'create_ticket', 'undoable', { provenance: 'trusted', idempotency: NONE('no request key yet: a retried call raises a second request (rate-limited per hour)'), reply: obj({ ticket: { type: 'object', description: 'key (T-n), kind, title, status, priority, sla, url.' } }, ['ticket']) }],
   ['support.ticket.list', 'support', 'list_tickets', 'safe', { reply: obj({ tickets: { type: 'array', description: 'key, title, kind, status, priority, sla, updatedAt of each request.' } }, ['tickets']) }],
@@ -151,18 +203,48 @@ const ROWS = [
   ['customers.note.draft', 'customers', 'draft_note', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft a person discards'), reply: obj({ activity: { type: 'object', description: 'id, kind, state ("draft" from an agent until a person keeps it).' } }, ['activity']) }],
   ['customers.deal.draft', 'customers', 'draft_deal', 'undoable', { idempotency: NONE('no request key yet: a retried call proposes a second draft deal'), reply: obj({ deal: { type: 'object', description: 'id, title, amountCents, currency, stageName, state ("draft" until a person confirms).' } }, ['deal']) }],
   ['customers.import.preview', 'customers', 'preview_import', 'safe', { reply: obj({ report: { type: 'object', description: 'rows, created, merged, skipped, invalid [{row, reason}] — what an import would do; nothing is written.' } }, ['report']) }],
+  // ── compute (XENO Compute, services/compute.js). Agents run machines billed to their owner; caps and prices are a person's.
+  ['compute.size.list', 'compute', 'sizes', 'safe', { reply: obj({ sizes: { type: 'array', description: 'size, vcpus, memoryGb, diskGb, priced, creditsPerHour (null until XENO sets a price).' } }, ['sizes']) }],
+  ['compute.machine.list', 'compute', 'list_machines', 'safe', { provenance: 'untrusted', reply: obj({ machines: { type: 'array', description: 'id, name, size, state, agent, costSoFarCredits, unfundedSince, url — names are written by people.' } }, ['machines']) }],
+  ['compute.machine.get', 'compute', 'get_machine', 'safe', { provenance: 'untrusted', reply: obj({ machine: { type: 'object', description: 'The machine and its timeline: created, started, billed, unfunded, stopped (with reason), deleted.' } }, ['machine']) }],
+  ['compute.machine.create', 'compute', 'create_machine', 'undoable', { idempotency: { strategy: 'key', key: 'idempotencyKey' }, reply: obj({ machine: { type: 'object', description: 'id (mch_…), state ("stopped" once created, "failed" with the reason), url.' } }, ['machine']) }],
+  ['compute.machine.start', 'compute', 'start_machine', 'irreversible', { cost: { model: 'metered', note: 'credits per hour of the machine’s size, billed to the owner by the second; an hour is reserved at a time' }, idempotency: NAT('starting a running machine changes nothing'), reply: obj({ machine: { type: 'object', description: 'state "running", costSoFarCredits.' } }, ['machine']) }],
+  ['compute.machine.stop', 'compute', 'stop_machine', 'undoable', { idempotency: NAT('stopping a stopped machine changes nothing'), reply: obj({ machine: { type: 'object', description: 'state "stopped"; billing ended at the second; the home folder (/home/xeno) is saved for the next start (its timeline says if saving failed), nothing outside it is kept.' } }, ['machine']) }],
+  ['compute.agent.run', 'compute', 'run_agent_task', 'irreversible', { provenance: 'untrusted', idempotency: NONE('a task runs again when called again'), reply: obj({ result: { type: 'object', description: 'status (ok, permission_denied, error, timed_out), answer (the agent’s own words, untrusted), access, folder, tokens, tools, seconds.' } }, ['result']) }],
+  ['compute.machine.idle_set', 'compute', 'set_idle_stop', 'undoable', { idempotency: NAT('setting the same limit again changes nothing'), reply: obj({ machine: { type: 'object', description: 'the machine with idleStopMinutes (null = never) and lastActiveAt.' } }, ['machine']) }],
+  ['compute.machine.delete', 'compute', 'delete_machine', 'irreversible', { idempotency: NAT('deleting a deleted machine changes nothing'), reply: obj({ machine: { type: 'object', description: 'state "deleted" — the machine and its disk are gone.' } }, ['machine']) }],
+  ['compute.machine.exec', 'compute', 'exec', 'irreversible', { provenance: 'untrusted', idempotency: NONE('a command runs again when called again; make it safe to repeat yourself'), reply: obj({ result: { type: 'object', description: 'exitCode, signal, timedOut, truncated, stdout, stderr — output is whatever the program printed (untrusted).' } }, ['result']) }],
+  ['compute.file.read', 'compute', 'read_file', 'safe', { provenance: 'untrusted', reply: obj({ path: { type: 'string' }, bytes: { type: 'integer' }, content: { type: 'string', description: 'The file as text, when it is valid UTF-8.' }, contentBase64: { type: 'string', description: 'The file as base64, when it is not text.' } }, ['path', 'bytes']) }],
+  ['compute.file.write', 'compute', 'write_file', 'irreversible', { idempotency: NAT('writing the same bytes again leaves the same file'), reply: obj({ file: { type: 'object', description: 'path written on the machine and bytes.' } }, ['file']) }],
+  ['compute.usage.get', 'compute', 'usage', 'safe', { reply: obj({ usage: { type: 'object', description: 'machineCredits, byMachine [{id, name, size, credits, hours}], byAgent [{agent, credits}] for the period.' } }, ['usage']) }],
+  ['compute.budget.list', 'compute', 'budgets', 'safe', { reply: obj({ caps: { type: 'array', description: 'scope (workspace|division|agent), scopeId, maxMachines, maxSize, monthlyCredits.' } }, ['caps']) }],
+  // ── automate (Dev › Automate = XENO Workflow, services/xenoWorkflow.js). Agents read and DRAFT; a person turns a workflow on.
+  ['automate.workflow.list', 'automate', 'list_workflows', 'safe', { provenance: 'untrusted', reply: obj({ workflows: { type: 'array', description: 'id, name, trigger, state, steps, capabilities, lastRun — names are written by people.' } }, ['workflows']) }],
+  ['automate.workflow.get', 'automate', 'get_workflow', 'safe', { provenance: 'untrusted', reply: obj({ workflow: { type: 'object', description: 'The workflow with its xeno-workflow graph, trigger, capabilities, state and revision.' } }, ['workflow']) }],
+  ['automate.run.list', 'automate', 'list_runs', 'safe', { provenance: 'untrusted', reply: obj({ runs: { type: 'array', description: 'id, workflowId, trigger, state, attempt, steps [{nodeId, status, error, outputs}] — outputs are workflow data (untrusted).' } }, ['runs']) }],
+  ['automate.workflow.draft', 'automate', 'draft_workflow', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft (nothing runs until a person turns one on)'), reply: obj({ workflow: { type: 'object', description: 'The new workflow, state "draft".' } }, ['workflow']) }],
+  ['automate.workflow.edit', 'automate', 'edit_workflow', 'undoable', { idempotency: NAT('a repeat carries a revision that is no longer current and is refused as a conflict'), reply: obj({ workflow: { type: 'object', description: 'The workflow after the change; an agent’s change to a running workflow leaves it a draft.' } }, ['workflow']) }],
+  ['automate.workflow.disable', 'automate', 'disable_workflow', 'undoable', { idempotency: NAT('turning off a workflow that is off changes nothing'), reply: obj({ workflow: { type: 'object', description: 'The workflow, state "disabled".' } }, ['workflow']) }],
   // ── docs (Office › Write and Notes, services/workspaceDocs.js). A document is a Storage file; writes are reversible.
   ['docs.doc.list', 'docs', 'list_docs', 'safe', { provenance: 'untrusted', reply: obj({ docs: { type: 'array', description: 'id, versionId, kind, title, excerpt, updatedAt — written by people.' } }, ['docs']) }],
-  ['docs.doc.get', 'docs', 'get_doc', 'safe', { provenance: 'untrusted', reply: obj({ doc: { type: 'object', description: 'id, versionId, kind, title, markdown, canEdit, links.' }, backlinks: { type: 'array', description: 'Documents that link to this one.' } }, ['doc']) }],
+  ['docs.doc.get', 'docs', 'get_doc', 'safe', { provenance: 'untrusted', reply: obj({ doc: { type: 'object', description: 'id, versionId, kind, title, format (xdoc, or markdown for a document saved before the shared format), xdoc (the XENO Docs file), content (its ProseMirror document), text, markdown (a rendering), canEdit, links.' }, backlinks: { type: 'array', description: 'Documents that link to this one.' } }, ['doc']) }],
   ['docs.doc.create', 'docs', 'create_doc', 'undoable', { idempotency: NAT('each call creates one document; undo with docs.doc.trash'), reply: obj({ doc: { type: 'object' } }, ['doc']) }],
   ['docs.doc.save', 'docs', 'save_doc', 'undoable', { idempotency: { strategy: 'key', key: 'expected_version' }, reply: obj({ doc: { type: 'object' }, previousVersion: { type: 'string', description: 'Restore it to undo this save.' } }, ['doc']) }],
   ['docs.version.list', 'docs', 'list_versions', 'safe', { provenance: 'trusted', reply: obj({ versions: { type: 'array', description: 'id, sizeBytes, createdAt, current.' } }, ['versions']) }],
   ['docs.version.restore', 'docs', 'restore_version', 'undoable', { idempotency: NAT('restoring adds a new newest version; restoring the previous one undoes it'), reply: obj({ doc: { type: 'object' }, previousVersion: { type: 'string' } }, ['doc']) }],
   ['docs.doc.trash', 'docs', 'trash_doc', 'undoable', { idempotency: NAT('a document already in the trash is refused with already_in_trash'), reply: obj({ trashed: { type: 'boolean' }, id: { type: 'string' } }, ['trashed']) }],
   ['docs.doc.untrash', 'docs', 'untrash_doc', 'undoable', { idempotency: NAT('a document not in the trash is refused with not_in_trash'), reply: obj({ doc: { type: 'object' } }, ['doc']) }],
+  // ── tools (services/toolsMcp.js). Find a tool; it runs on the person's side.
+  ['tools.tool.list', 'tools', 'list', 'safe', { provenance: 'trusted', reply: obj({ tools: { type: 'array', description: 'id, name, description, category, version, open (the address), runsInBrowser, needsHubFor of each tool.' } }, ['tools']) }],
+  ['tools.tool.suggest', 'tools', 'suggest', 'safe', { provenance: 'trusted', reply: obj({ tools: { type: 'array', description: 'The same fields, best fit first.' } }, ['tools']) }],
   // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
   ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
   ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],
+  // ── inbox (services/inbox.js). An agent's own inbox; its owner's is not reachable.
+  ['inbox.notification.list', 'inbox', 'list_notifications', 'safe', { scope: 'inbox:read', provenance: 'untrusted', reply: obj({ unread: { type: 'integer' }, items: { type: 'array', description: 'id, source, kind, ref, title, detail, read, archived, snoozedUntil, asks, actor, at — titles and details are written by people.' } }, ['unread', 'items']) }],
+  ['inbox.notification.mark_read', 'inbox', 'mark_read', 'undoable', { scope: 'inbox:write', idempotency: NAT('marking twice changes nothing'), reply: obj({ unread: { type: 'integer' } }, ['unread']) }],
+  ['inbox.notification.archive', 'inbox', 'archive', 'undoable', { scope: 'inbox:write', idempotency: NAT('archiving twice changes nothing'), reply: obj({ unread: { type: 'integer' } }, ['unread']) }],
+  ['inbox.notification.snooze', 'inbox', 'snooze', 'undoable', { scope: 'inbox:write', idempotency: NAT('the same time again changes nothing'), reply: obj({ unread: { type: 'integer' } }, ['unread']) }],
   // ── scheduling (Corpo › Scheduling, services/scheduling.js). Read-only for agents: a public booking link is a person's act.
   ['scheduling.availability.get', 'scheduling', 'get_availability', 'safe', { provenance: 'trusted', reply: obj({ timezone: { type: 'string' }, weekly: { type: 'object', description: 'ISO weekday (1–7) → [["HH:MM","HH:MM"]] local intervals.' }, timeOff: { type: 'array', description: 'id, startsAt, endsAt of upcoming time off.' } }, ['timezone', 'weekly']) }],
   ['scheduling.page.list', 'scheduling', 'list_pages', 'safe', { provenance: 'untrusted', reply: obj({ pages: { type: 'array', description: 'id, slug, url, title, durationMinutes, active — titles are written by people.' } }, ['pages']) }],
@@ -177,12 +259,23 @@ const ROWS = [
   ['forms.link.create', 'forms', 'create_signin_link', 'undoable', { idempotency: NONE('no request key yet: a retried call makes a second link (each is revocable)'), reply: obj({ link: { type: 'object', description: 'id, kind ("signin"), label, expiresAt.' }, url: { type: 'string', description: 'The sign-in link, shown once. Opening it needs a XENO account.' } }, ['link', 'url']) }],
   ['forms.response.list', 'forms', 'list_responses', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object' }, responses: { type: 'array', description: 'id, answers (written by respondents: untrusted), actions, createdAt.' } }, ['responses']) }],
   ['forms.response.act', 'forms', 'act_on_response', 'undoable', { idempotency: NAT('an action already run on a response returns its earlier result'), reply: obj({ response: { type: 'object', description: 'The response with `actions` recording the contact, task or ticket made.' }, already: { type: 'boolean' } }, ['response']) }],
+  // ── releases (the platform's release record). Approving a note or enabling a feature is a person's act: no capability.
+  ['releases.deploy.list', 'releases', 'list_deploys', 'safe', { reply: obj({ deploys: { type: 'array', description: 'service, sha, previousSha, status, startedAt, prs, migrations, healthcheck, rollbackPoint, provenance of each deploy.' } }, ['deploys']) }],
+  ['releases.feature.list', 'releases', 'list_features', 'safe', { reply: obj({ features: { type: 'array', description: 'slug, title, repo, status, enabled scope of each feature.' } }, ['features']) }],
+  ['releases.feature.get', 'releases', 'get_feature', 'safe', { provenance: 'untrusted', reply: obj({ feature: { type: 'object', description: 'The feature, its changes (PR titles are contributor-written, untrusted) and notes.' } }, ['feature']) }],
+  ['releases.internal_note.get', 'releases', 'get_internal_note', 'safe', { provenance: 'untrusted', reply: obj({ note: { type: 'object', description: 'content (summary, why, features, migrations, risks, switches, tests, rollback), state ("draft" or "signed"), version, signedBy/At, provenance, revisions. Staff only; drafted from contributor-written PR bodies (untrusted).' } }, ['note']) }],
+  ['releases.internal_note.edit', 'releases', 'edit_internal_note', 'undoable', { idempotency: NONE('no request key: a retried identical edit is a no-op (same words), a different one adds a revision; every version is kept'), reply: obj({ note: { type: 'object', description: 'The note after the edit: new version, state "draft" (sign-off is a person’s act).' } }, ['note']) }],
+  ['releases.note.draft', 'releases', 'draft_note', 'undoable', { idempotency: NONE('no request key yet: a retried call adds a second draft (a person approves or discards each)'), reply: obj({ note: { type: 'object', description: 'id, title, body, state ("draft" until a person on staff approves it).' } }, ['note']) }],
   // ── forum (also served by its own MCP at /api/forum/mcp, kept until no client calls it — SPEC §19.3 rule 5)
   ...[
     ['forum.thread.search', 'forum_search', 'safe'], ['forum.thread.get', 'forum_get_thread', 'safe'], ['forum.thread.suggest_duplicate', 'forum_suggest_duplicate', 'safe'],
     ['forum.thread.create', 'forum_create_thread', 'undoable'], ['forum.post.reply', 'forum_reply', 'undoable'], ['forum.subscription.create', 'forum_subscribe', 'undoable'],
     ['forum.digest.get', 'forum_digest', 'safe'], ['forum.post.flag', 'forum_flag', 'undoable'], ['forum.thread.mark_fixed', 'forum_mark_fixed', 'undoable'],
   ].map(([name, tool, cls]) => [name, 'forum', tool.replace(/^forum_/, ''), cls, { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: cls === 'safe' ? 'untrusted' : 'trusted', reply: obj({ result: { type: 'object', description: 'The forum record the tool returns, with its citable url.' } }), ...(cls === 'safe' ? {} : { idempotency: NONE('no request key yet') }) }]),
+  // reviewed reports (services/reportIntake.js): the submission UUID is the request key, so a lost reply is recovered, not resent
+  ['forum.report.submit', 'forum', 'submit_report', 'undoable', { surfaces: ['mcp', 'rest', 'forum-mcp'], idempotency: { strategy: 'key', key: 'submissionId' }, reply: obj({ result: { type: 'object', description: 'The receipt: public thread or private ticket, with its url.' } }) }],
+  ['forum.report.get', 'forum', 'get_report_submission', 'safe', { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: 'trusted', reply: obj({ result: { type: 'object', description: 'The receipt for your own submission UUID.' } }) }],
+  ['forum.evidence.get', 'forum', 'get_report_evidence', 'safe', { surfaces: ['mcp', 'rest', 'forum-mcp'], provenance: 'untrusted', reply: obj({ result: { type: 'object', description: 'Evidence metadata under the post/ticket authorization; bytes stay at the scoped URL.' } }) }],
 ];
 
 function build([name, category, tool, cls, extra = {}]) {

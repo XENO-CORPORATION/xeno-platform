@@ -17,7 +17,7 @@ import { registrationDecision } from '../middleware/registrationGate.js';
 import { mintShareInvite, shareInviteValid } from '../utils/shareInvite.js';
 import { registerManagedLibraryFile } from '../services/libraryAssets.js';
 import { runAllMigrations } from '../services/migrationRunner.js';
-import { storageUsage, storageAllowance, StorageFullError } from '../services/storageAllowance.js';
+import { storageUsage, storageAllowance, StorageFullError, workspaceUsedBytes, workspaceMachineKind } from '../services/storageAllowance.js';
 import { syncFileObjects, fileObjectKey, evictLocalCopies, sweepOrphanObjects, localLibraryPath } from '../services/storageObjects.js';
 import { addVersion, latestFor, revisionFor } from '../services/storageVersions.js';
 import { setFileStorageForTests } from '../services/artifactStorage.js';
@@ -607,6 +607,62 @@ async function main() {
     assert.equal(shareInviteValid(inv, { JWT_SECRET: 'k' }), true); assert.equal(shareInviteValid(inv, { JWT_SECRET: 'other' }), false);
     assert.equal(shareInviteValid(inv, { JWT_SECRET: 'k' }, Date.now() + 25 * 3600 * 1000), false, 'the invitation expires');
     assert.equal(registrationDecision('a@b.test', { shareInvite: true }).allowed, true, 'a link holder can create an account');
+
+    // XENO Compute: a machine's saved home folder counts in its workspace's pool until the machine is deleted
+    // (xeno-compute SPEC §2a).
+    const { ensurePersonalWorkspace: ensurePW } = await import('../services/personalWorkspace.js');
+    const mOwner = await user('sto_machine');
+    const mPersonal = (await ensurePW(pool, mOwner)).id;
+    const mTeam = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Sto Machines', 'sto-machines') RETURNING id`, [mOwner])).rows[0].id;
+    const machine = async (ws, state, bytes) => {
+      const id = `mch_${crypto.randomUUID().replace(/-/g, '')}`;
+      await pool.query(`INSERT INTO compute_machines (id, workspace_id, created_by_user_id, name, size, state, deleted_at, home_bytes) VALUES ($1, $2, $3, 'box', 'small', $4, CASE WHEN $4 = 'deleted' THEN now() END, $5)`, [id, ws, mOwner, state, bytes]);
+      return id;
+    };
+    const mAllowance = await storageAllowance(pool, mOwner);
+    await machine(mPersonal, 'stopped', mAllowance - 10);
+    await machine(mPersonal, 'deleted', 7 * GB);            // deleted: its copy is gone, never counted
+    await machine(mPersonal, 'running', null);              // never saved: nothing to count
+    await machine(mTeam, 'stopped', 3 * GB);                // another pool
+    const mUse = await storageUsage(pool, mOwner);
+    assert.equal(mUse.usedBytes, mAllowance - 10, 'the stopped machine counts; the deleted and the unsaved do not');
+    assert.deepEqual(mUse.byKind.find((k) => k.kind === 'machine'), { kind: 'machine', bytes: mAllowance - 10, files: 1 }, 'shown as its own kind');
+    assert.equal(await workspaceUsedBytes(pool, mTeam), 3 * GB, 'a team machine counts in the team pool');
+    assert.deepEqual(await workspaceMachineKind(pool, mTeam), { kind: 'machine', bytes: 3 * GB, files: 1 }, 'and is reported as its own kind');
+    await assert.rejects(add(mOwner, 'after-machine.txt', 'x'.repeat(100), { workspaceId: mPersonal, enforceAllowance: true }), StorageFullError, 'a pool full of machine disk refuses new files');
+    await pool.query("UPDATE compute_machines SET state = 'deleted', deleted_at = now() WHERE workspace_id = $1 AND state = 'stopped'", [mPersonal]);
+    assert.equal((await storageUsage(pool, mOwner)).usedBytes, 0, 'deleting the machine frees its space');
+
+    // ── the desktop drive's change feed: which folders changed since a cursor (services/storageChanges.js) ──
+    const cu = await user('sto_changes'), CU = J(cu, 'sto_changes');
+    const feed = async (since) => (await call('GET', `/changes${since ? `?since=${encodeURIComponent(since)}` : ''}`, CU)).body;
+    const c0 = await feed();
+    assert.ok(c0.cursor && c0.rescan === false && c0.folders.length === 0, 'the first read only hands out a cursor');
+    const inbox = (await call('POST', '/folders', CU, { name: 'Inbox' })).body.folder;
+    const note = await add(cu, 'note.txt', 'a note');
+    const c1 = await feed(c0.cursor);
+    assert.ok(c1.folders.includes('root'), 'a new folder and a new file change the top level');
+    // A change is reported again for 5 s after it (the look-back that keeps a late commit from being missed), so a
+    // cursor taken once that has passed, with nothing done since, sees nothing.
+    const quiet = async () => { await new Promise((r) => setTimeout(r, 6000)); return (await feed()).cursor; };
+    assert.deepEqual((await feed(await quiet())).folders, [], 'nothing changed since: nothing to relist');
+    let at = await quiet();
+    assert.equal((await call('PUT', `/assets/file/${note.id}/folder`, CU, { folder: inbox.id })).status, 200);
+    const moved = await feed(at);
+    assert.deepEqual([...moved.folders].sort(), [inbox.id, 'root'].sort(), 'a move changes both places, and nothing else');
+    at = await quiet();
+    assert.equal((await call('PATCH', `/assets/file/${note.id}`, CU, { name: 'renamed.txt' })).status, 200);
+    assert.deepEqual((await feed(at)).folders, [inbox.id], 'a rename changes only the folder it is in');
+    at = await quiet();
+    await call('POST', `/assets/file/${note.id}/trash`, CU);
+    assert.deepEqual((await feed(at)).folders, [inbox.id], 'trashing it changes that folder');
+    assert.ok(!(await call('GET', `/changes?since=${encodeURIComponent(c0.cursor)}`, O)).body.folders.includes(inbox.id), 'another account never sees my folders change');
+    assert.equal((await feed('not a time')).rescan, true, 'an unreadable cursor asks for a full relist');
+    assert.equal((await feed(new Date(Date.now() - 8 * 86_400_000).toISOString())).rescan, true, 'so does one older than the log keeps');
+    // The log never blocks the write it records: with the log table gone, a file is still added.
+    await pool.query('ALTER TABLE storage_changes RENAME TO storage_changes_away');
+    try { assert.ok((await add(cu, 'still.txt', 'saved anyway')).id, 'a file is saved even when the change log cannot be written'); }
+    finally { await pool.query('ALTER TABLE storage_changes_away RENAME TO storage_changes'); }
 
     console.log('storage-allowance: all checks passed');
   } finally {

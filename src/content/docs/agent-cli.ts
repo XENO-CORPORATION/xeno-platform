@@ -11,8 +11,8 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.43',
-  updated: '2026-08-31',
+  version: '0.5.128',
+  updated: '2026-10-22',
   seo: {
     title: 'XENO Agent CLI documentation',
     description:
@@ -22,6 +22,42 @@ const agentCli: ProductDocs = {
     {
       title: 'Getting started',
       pages: [
+        {
+          slug: 'self-review',
+          title: 'Review changed work',
+          description: 'Understand the automatic end-of-run review and its output.',
+          body: `# Review changed work
+
+CLI 0.5.123 uses SDK 0.10.75 to review a top-level run once after it records a mutation. The host collects changed-file diffs, commands and their exit codes, and verification results. The agent checks task completion, unsupported claims, leftovers, obvious bugs, and work still unverified. It may fix problems under the run's existing permissions.
+
+Chat, read-only work, delegated subagents, and edits under 10 changed lines with no shell command are skipped. Arrow functions in read-only commands do not count as output redirects. Review fixes never trigger another review. The default limits are 8 model iterations, 60,000 tokens, and 180 seconds.
+
+## Understand response progress
+
+From CLI 0.5.128, fullscreen chat shows **Waiting for model output** after the gateway connects, because a keepalive is not model output. The activity row separates **request** elapsed time from **turn** elapsed time; **turn tokens** sum input and output across the turn's calls. Tool argument fragments show **Receiving tool call**.
+
+Partial reply paragraphs appear as they stream, before the next newline. The preview becomes formatted Markdown when the line completes, without duplicate text. This removes client display buffering; it does not eliminate upstream model queueing or generation time.
+
+## Read code blocks
+
+From CLI 0.5.127, long fenced code lines wrap inside the block. Each continuation row repeats the left border and indentation, so code stays visually separated from surrounding text.
+
+## Read shell calls
+
+From CLI 0.5.126, shell calls show the tool or PowerShell label above an indented command block. Long lines wrap to the terminal width. Long scripts open with a bounded preview; press **Ctrl+O** to see the full command. Tool results remain separately expandable.
+
+## Read the result
+
+From CLI 0.5.126, chat shows one **Self-review:** line below the **Worked for** turn divider. Repeated provider labels are removed; review limitations remain visible. Press **Ctrl+O** to expand findings, fixes, and unverified items. Failed and timed-out reviews say so explicitly. A review is a model assessment, not proof that every requirement is satisfied.
+
+In automation, \`xeno run --json\` adds an optional \`selfReview\` object containing \`status\`, \`summary\`, \`findings\`, \`fixes\`, \`unverified\`, \`fixToolCalls\`, \`verificationsRerun\`, \`changedFiles\`, and \`durationMs\`. Status is \`completed\`, \`failed\`, or \`timed_out\`. NDJSON emits a \`self_review\` event; text mode writes the review to stderr. An absent result means no review was emitted, not that a review passed.
+
+## Disable automatic review
+
+Set \`selfReview: false\` in your existing [configuration](/docs/agent-cli/configuration), or set \`XENO_SELF_REVIEW=0\` in the process environment. No permission mode bypasses the review by itself.
+
+For a failed or timed-out review, inspect its unverified items, run the relevant checks, and request a focused follow-up. See [release history](/product/agent-cli/releases) for version changes.`,
+        },
         {
           slug: 'introduction',
           title: 'Introduction',
@@ -59,7 +95,7 @@ The CLI is **Layer 3 (Agent & Automation)** of the XENO ecosystem. It consumes t
           description: 'Install XENO Agent CLI with npm, the install scripts, or from source.',
           body: `# Installation
 
-XENO Agent CLI requires **Node.js 20 or newer**. npm is the only distribution channel.
+XENO Agent CLI requires **Node.js 22 or newer**. npm is the only distribution channel.
 
 ## npm
 
@@ -106,6 +142,16 @@ xeno update
 \`\`\`
 
 \`xeno update\` reports the resolved install command, how to roll back, the active release channel, and the native checksum URL.
+
+Linux and macOS npm installs use a command symlink. From 0.5.125, the updater resolves that symlink and updates the npm install in place. If an older npm install incorrectly reports a native install, repair it once with:
+
+\`\`\`bash
+npm install -g @xenosystem/agent-cli@latest
+xeno --version
+xeno update
+\`\`\`
+
+Genuine standalone native binaries still require their matching release asset; they are not converted into npm installs.
 
 > **Not yet available:** Homebrew and WinGet packages are planned but not shipping today — use npm.
 
@@ -168,10 +214,10 @@ Use \`xeno --interface --resume <session-id>\` when you want an exact session ra
         {
           slug: 'authentication',
           title: 'Authentication & API keys',
-          description: 'Sign in, or bring your own API key, and point the CLI at a base URL.',
+          description: 'Sign in to chat, authorize a remote terminal, and configure unattended model credentials.',
           body: `# Authentication & API keys
 
-XENO Agent CLI routes model calls through the **XENO API** (\`api.xenostudio.ai\`) by default. You can sign in interactively or supply an API key directly.
+XENO Agent CLI routes model calls through the **XENO API** (\`api.xenostudio.ai\`) by default. From **0.5.124**, chat requires a XENO account session even with a model API key or local model. An existing valid account session is reused without prompting. Signed-out piped chat exits with sign-in guidance; use \`xeno run\` for unattended API-key execution.
 
 ## Sign in
 
@@ -181,16 +227,20 @@ xeno auth      # inspect the current auth state
 xeno logout    # clear stored credentials
 \`\`\`
 
+On SSH, starting \`xeno\` automatically starts device-code sign-in in that running process. Open [xenosystem.ai/device](https://xenosystem.ai/device) on your own device, enter the code, check the registered client and requested access, then approve or decline. Login, signup and email activation return to the original device authorization. Never approve a code you did not start.
+
+On Linux without a Secret Service keyring, account sign-in lasts only for the running process. Sign in inside \`xeno\`; a separate \`xeno login --device\` cannot persist that account session without a keyring. Configure an OS keyring to retain account sign-in between launches.
+
 ## Bring your own key
 
-Set your key in the environment (recommended) or pass it per‑invocation:
+Set your model key in the environment. It supplies model authority, not account identity:
 
 \`\`\`bash
 export XENO_API_KEY="xeno_..."
-xeno chat
+xeno chat  # also requires an account session
 
-# or per run
-xeno chat --api-key "xeno_..."
+# unattended execution
+xeno run "Inspect this repository"
 \`\`\`
 
 Create and rotate keys on the XENO API portal at [api.xenosystem.ai](https://api.xenosystem.ai/dashboard/keys). Sign in with your XENO account.

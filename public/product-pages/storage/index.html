@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XENO Storage — XENOsystem</title>
+<link rel="icon" type="image/svg+xml" href="/favicon-v2.svg">
+<script src="/products-v2/support.js"></script>
+<link rel="stylesheet" href="/site/marketing-header.css?v=509ac571111cde01">
+<script src="/site/marketing-header.js?v=2265e21bf649c804" defer></script>
+<script src="/site/report-loader.js?v=cc972c12f78a6fd9" defer></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#F6F4F0;color:#1D1B18;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#1D1B18;text-decoration:none}
+a:hover{color:#2449B8}
+@keyframes xsIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes xsPulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes xsSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="font-family:'Schibsted Grotesk',system-ui,sans-serif; background:#F6F4F0; color:#1D1B18; min-height:100vh; overflow-x:clip">
+<div style="position:sticky; top:0; z-index:60">
+<header class="marketing-header" data-home-header="1" data-marketing-header="1">
+    <div class="marketing-topbar"><a class="marketing-brand" href="/" aria-label="XENOsystem home"><img src="/products-v2/assets/xeno-mark.svg" alt=""><span><b>XENO</b>Storage</span></a><nav aria-label="Main navigation"><button type="button" data-nav-trigger="products" data-product-trigger="1" aria-controls="home-products-menu" aria-expanded="false">Products<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button><button type="button" data-nav-trigger="marketplace" aria-controls="home-marketplace-menu" aria-expanded="false">Marketplace<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button><button type="button" data-nav-trigger="solutions" aria-controls="home-solutions-menu" aria-expanded="false">Solutions<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/forum">Forum</a></nav><div class="marketing-actions"><a class="marketing-workspace" href="/auth">Open workspace</a><a class="marketing-download" href="/download">Download ↓</a><button type="button" class="marketing-mobile-toggle" data-nav-trigger="mobile" aria-controls="home-mobile-menu" aria-expanded="false" aria-label="Open navigation">Menu <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button></div></div>
+    <div id="home-products-menu" data-nav-menu="products" data-product-menu="1" inert aria-label="Products"><div class="home-products-card"><div class="home-products-list"><div class="home-products-highlight" aria-hidden="true"></div><div class="home-products-category"><span>Generate</span><a class="home-product-row" href="/product/image"><span><span class="home-product-prefix">XENO </span>Image<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Text to image</span></a><a class="home-product-row" href="/product/video"><span><span class="home-product-prefix">XENO </span>Video<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Text to video</span></a><a class="home-product-row" href="/product/audio"><span><span class="home-product-prefix">XENO </span>Audio<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Voice &amp; music</span></a><a class="home-product-row" href="/product/3d"><span><span class="home-product-prefix">XENO </span>3D Gen<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Text to 3D</span></a></div><div class="home-products-category"><span>Create &amp; edit</span><a class="home-product-row" href="/product/pixel"><span><span class="home-product-prefix">XENO </span>Pixel<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Image editing</span></a><a class="home-product-row" href="/product/photo"><span><span class="home-product-prefix">XENO </span>Photo<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Photo catalog</span></a><a class="home-product-row" href="/product/motion"><span><span class="home-product-prefix">XENO </span>Motion<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Video editing</span></a><a class="home-product-row" href="/product/sound"><span><span class="home-product-prefix">XENO </span>Sound<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Audio editing</span></a></div><div class="home-products-category"><span>Design</span><a class="home-product-row" href="/product/canvas"><span><span class="home-product-prefix">XENO </span>Canvas<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>UI &amp; product design</span></a><a class="home-product-row" href="/product/layout"><span><span class="home-product-prefix">XENO </span>Layout<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Print &amp; publishing</span></a><a class="home-product-row" href="/product/form"><span><span class="home-product-prefix">XENO </span>3D<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>3D &amp; rendering</span></a><a class="home-product-row" href="/product/architect"><span><span class="home-product-prefix">XENO </span>Architect<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>CAD &amp; BIM</span></a></div><div class="home-products-category"><span>Office</span><a class="home-product-row" href="/product/docs"><span><span class="home-product-prefix">XENO </span>Docs<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Documents</span></a><a class="home-product-row" href="/product/sheets"><span><span class="home-product-prefix">XENO </span>Sheets<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Spreadsheets</span></a><a class="home-product-row" href="/product/slides"><span><span class="home-product-prefix">XENO </span>Slides<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Presentations</span></a><a class="home-product-row" href="/product/pdf"><span><span class="home-product-prefix">XENO </span>PDF<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>PDF tools</span></a></div><div class="home-products-category"><span>Library</span><a class="home-product-row" href="/product/stock"><span><span class="home-product-prefix">XENO </span>Stock<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Asset library</span></a><a class="home-product-row" href="/product/fonts"><span><span class="home-product-prefix">XENO </span>Fonts<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Typography</span></a><a class="home-product-row" href="/product/assets"><span><span class="home-product-prefix">XENO </span>Assets<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Asset manager</span></a><a class="home-product-row" href="/product/notes"><span><span class="home-product-prefix">XENO </span>Notes<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Knowledge base</span></a></div><div class="home-products-category"><span>Connect</span><a class="home-product-row" href="/product/comms"><span><span class="home-product-prefix">XENO </span>Comms<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Messaging</span></a><a class="home-product-row" href="/product/post"><span><span class="home-product-prefix">XENO </span>Post<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Social media</span></a><a class="home-product-row" href="/product/browser"><span><span class="home-product-prefix">XENO </span>Browser<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>AI browser</span></a><a class="home-product-row" href="/product/extension"><span><span class="home-product-prefix">XENO </span>Extension<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>For Chrome &amp; Edge</span></a></div><div class="home-products-category"><span>Build</span><a class="home-product-row" href="/product/engine"><span><span class="home-product-prefix">XENO </span>Engine<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Game engine</span></a><a class="home-product-row" href="/product/workflow"><span><span class="home-product-prefix">XENO </span>Workflow<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Automation</span></a><a class="home-product-row" href="/product/use"><span><span class="home-product-prefix">XENO </span>Use<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Device actions</span></a><a class="home-product-row" href="/product/apps"><span><span class="home-product-prefix">XENO </span>Apps<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>App builder</span></a></div><div class="home-products-category"><span>Agents &amp; dev</span><a class="home-product-row" href="/product/agent-cli"><span><span class="home-product-prefix">XENO </span>Agent CLI<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Terminal agent</span></a><a class="home-product-row" href="/product/sdk"><span><span class="home-product-prefix">XENO </span>SDK<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Agent SDK</span></a><a class="home-product-row" href="/product/rt"><span><span class="home-product-prefix">XENO </span>RT<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Local runtime</span></a><a class="home-product-row" href="/product/shell"><span><span class="home-product-prefix">XENO </span>Shell<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Desktop shell</span></a><a class="home-product-row" href="/product/anima"><span><span class="home-product-prefix">XENO </span>Anima<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Personal agent</span></a><a class="home-product-row" href="/product/acp"><span><span class="home-product-prefix">XENO </span>ACP<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Agent protocol</span></a></div></div><div class="home-products-featured"><a href="/product/hub"><img src="/products-v2/assets/xeno-mark.svg" alt=""><span><strong>XENO Hub <small>ALL-IN-ONE</small></strong><span>The desktop app that brings every XENO tool together</span></span><b>Explore Hub ↗</b></a></div><div class="home-products-footer"><a href="/products">View all products ↗</a><span>Explore the tools. Find your next workspace.</span></div></div></div>
+    <div id="home-marketplace-menu" data-nav-menu="marketplace" inert aria-label="Marketplace"><div class="home-products-card"><div class="home-resource-list"><a class="home-product-row" href="/marketplace"><span>Browse Marketplace<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Discover apps, models and agents</span></a><a class="home-product-row" href="/marketplace?kind=app-native"><span>Apps<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Native and sandboxed apps</span></a><a class="home-product-row" href="/marketplace?kind=panel"><span>Panels<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Composable UI panels</span></a><a class="home-product-row" href="/marketplace?kind=plugin"><span>Plugins &amp; MCP<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Extend agents and apps</span></a><a class="home-product-row" href="/marketplace?kind=model"><span>Models<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>GGUF and ONNX models</span></a><a class="home-product-row" href="/marketplace?kind=mind"><span>Minds &amp; Swarms<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Buy, subscribe or rent agents</span></a><a class="home-product-row" href="/marketplace?tab=sell"><span>Become a creator<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Publish and earn</span></a></div></div></div><div id="home-solutions-menu" data-nav-menu="solutions" inert aria-label="Solutions"><div class="home-products-card"><div class="home-resource-list"><a class="home-product-row" href="/#uses"><span>Explore solutions<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Find tools for the work you do</span></a><a class="home-product-row" href="/#uses"><span>Marketing &amp; content<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Campaigns, video and creative work</span></a><a class="home-product-row" href="/#uses"><span>Design &amp; architecture<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Products, spaces and 3D</span></a><a class="home-product-row" href="/product/gamedev"><span>Game development<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Build interactive worlds</span></a><a class="home-product-row" href="/product/developers"><span>Developers<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Build with the SDK and CLI</span></a><a class="home-product-row" href="/#uses"><span>Business &amp; teams<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Work together across the suite</span></a></div></div></div>
+    <div id="home-mobile-menu" data-nav-menu="mobile" inert aria-label="Navigation"><div class="home-products-card"><div class="home-resource-list"><a class="home-product-row" href="/products"><span>Products<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Explore every app</span></a><a class="home-product-row" href="/marketplace"><span>Marketplace<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Apps, models and agents</span></a><a class="home-product-row" href="/#uses"><span>Solutions<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Find your workflow</span></a><a class="home-product-row" href="/docs"><span>Docs<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Guides and reference</span></a><a class="home-product-row" href="/pricing"><span>Pricing<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Compare plans</span></a><a class="home-product-row" href="/blog"><span>Blog<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>News and articles</span></a><a class="home-product-row" href="/forum"><span>Forum<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Join the community</span></a><a class="home-product-row" href="/auth"><span>Open workspace<span class="home-product-arrow" aria-hidden="true">↗</span></span><span>Sign in to your workspace</span></a></div></div></div>
+  </header>
+</div>
+
+<!-- HERO: a working File Explorer next to the XENO Storage app. Every state in it is a state 0.1.0 has. -->
+<section id="product-overview" data-screen-label="Hero" style="padding:clamp(40px,7vh,80px) 24px 96px">
+  <div style="max-width:1320px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:20px 56px; align-items:flex-end; justify-content:space-between">
+      <div style="flex:1 1 560px; display:flex; flex-direction:column; gap:18px; min-width:0">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2449B8">Cloud drives for Windows</div>
+        <h1 style="margin:0; font-size:clamp(46px,6.8vw,104px); line-height:.95; letter-spacing:-.05em; font-weight:700">Your cloud files.<br><span style="color:#2D5BD7">On a drive letter.</span></h1>
+      </div>
+      <div style="flex:0 1 410px; display:flex; flex-direction:column; gap:16px; padding-bottom:10px">
+        <p style="margin:0; font-size:17px; line-height:1.55; color:#5F5A52; text-wrap:pretty">XENO Storage puts your XENO Storage and each Google Drive account you connect in File Explorer, each under its own letter, with that account’s own name and space. Files download when you open them.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <a href="/product/storage/download/win" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:12px 18px; border-radius:8px">Download for Windows</a>
+          <a href="#files" style="border:1px solid #D6D0C7; font-size:15px; font-weight:500; padding:11px 17px; border-radius:8px">See how it works ↓</a>
+        </div>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6A655D">v0.1.0 · Windows 10 &amp; 11 x64 · Experimental, unsigned</span>
+      </div>
+    </div>
+
+    <div ref="{{ demoRef }}" onPointerDown="{{ takeOver }}" style="position:relative; margin-top:44px; display:grid; grid-template-columns:{{ heroCols }}; gap:16px; align-items:start">
+
+      <!-- the XENO Storage app -->
+      <div style="background:#FFFFFF; border-radius:14px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 30px 60px -30px rgba(29,27,24,.25); overflow:hidden; position:relative">
+        <div style="height:40px; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid #EEEAE4">
+          <span style="width:16px; height:16px; border-radius:4px; background:#2D5BD7; display:grid; place-items:center"><svg width="9" height="9" viewBox="0 0 10 10"><rect x="1" y="2" width="8" height="6" rx="1.2" fill="none" stroke="#FFFFFF" stroke-width="1.3"></rect><path d="M1 5.4h8" stroke="#FFFFFF" stroke-width="1.1"></path></svg></span>
+          <span style="font-weight:600; font-size:13px">XENO Storage</span>
+          <span style="font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.04em; padding:2px 6px; border-radius:4px; background:#FBF3E2; color:#8A6A1F">UNSIGNED BUILD</span>
+          <span style="margin-left:auto; width:22px; height:22px; border-radius:50%; background:#1D1B18; color:#F6F4F0; font-size:10px; font-weight:600; display:grid; place-items:center">AK</span>
+        </div>
+
+        <div style="padding:14px; display:flex; flex-direction:column; gap:14px">
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Your storage</div>
+          <div style="border:1px solid {{ xs.bd }}; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; transition:border-color .3s, background .3s; background:{{ xs.bg }}">
+            <div style="display:flex; align-items:center; gap:10px">
+              <span style="width:30px; height:30px; border-radius:8px; background:#E7EDFB; display:grid; place-items:center"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="2" fill="none" stroke="#2D5BD7" stroke-width="1.4"></rect><path d="M2 9h12" stroke="#2D5BD7" stroke-width="1.2"></path><circle cx="11.3" cy="10.8" r=".9" fill="#2D5BD7"></circle></svg></span>
+              <div style="flex:1; min-width:0"><div style="font-weight:600; font-size:13.5px">XENO Storage</div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6A655D">18.4 GB of 100 GB used</div></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font-size:12px; color:#6A655D">Drive letter</span>
+              <button onClick="{{ xs.cycle }}" title="{{ xs.letterTitle }}" style="height:28px; min-width:52px; padding:0 8px; border:1px solid #DDD8D0; border-radius:6px; background:#F6F4F0; font:inherit; font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:#1D1B18; cursor:{{ xs.letterCursor }}; display:flex; align-items:center; justify-content:space-between; gap:6px">{{ xs.letterColon }}<svg width="9" height="9" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="#8C867C" stroke-width="1.4"></path></svg></button>
+              <button ref="{{ xsBtn }}" onClick="{{ xs.toggle }}" style="margin-left:auto; height:30px; padding:0 14px; border:none; border-radius:7px; background:{{ xs.btnBg }}; color:{{ xs.btnFg }}; font:inherit; font-size:13px; font-weight:600; cursor:pointer; box-shadow:{{ xs.btnRing }}; transition:background .25s, color .25s, box-shadow .2s">{{ xs.btn }}</button>
+            </div>
+          </div>
+
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Connected clouds</div>
+          <sc-if value="{{ gNone }}" hint-placeholder-val="{{ true }}">
+            <button ref="{{ addBtn }}" onClick="{{ addGoogle }}" style="height:44px; border:1px dashed #C9C3B9; border-radius:10px; background:{{ addBg }}; font:inherit; font-size:13.5px; font-weight:600; color:#1D1B18; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:{{ addRing }}; transition:background .2s, box-shadow .2s" style-hover="background:#F4F2EE"><span style="font-size:16px; line-height:1">+</span> Add a Google account</button>
+          </sc-if>
+          <sc-if value="{{ gHas }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid {{ g.bd }}; border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; animation:xsIn .45s cubic-bezier(.2,.8,.2,1); background:{{ g.bg }}; transition:border-color .3s, background .3s">
+              <div style="display:flex; align-items:center; gap:10px">
+                <span style="width:30px; height:30px; border-radius:8px; background:#F1F3F4; display:grid; place-items:center"><svg width="17" height="15" viewBox="0 0 87 78"><path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066DA"></path><path d="M43.65 25L29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L1.2 48.5A9.06 9.06 0 000 53h27.5z" fill="#00AC47"></path><path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#EA4335"></path><path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832D"></path><path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684FC"></path><path d="M73.4 26.5L60.7 4.5c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#FFBA00"></path></svg></span>
+                <div style="flex:1; min-width:0"><div style="font-weight:600; font-size:13.5px">Northwind Studio</div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6A655D">My Drive + 2 shared drives</div></div>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:#1F6A3A; background:#E6F2EA; padding:2px 6px; border-radius:4px">via XENO Connect</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px">
+                <span style="font-size:12px; color:#6A655D">Drive letter</span>
+                <button onClick="{{ g.cycle }}" title="{{ g.letterTitle }}" style="height:28px; min-width:52px; padding:0 8px; border:1px solid #DDD8D0; border-radius:6px; background:#F6F4F0; font:inherit; font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:#1D1B18; cursor:{{ g.letterCursor }}; display:flex; align-items:center; justify-content:space-between; gap:6px">{{ g.letterColon }}<svg width="9" height="9" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="#8C867C" stroke-width="1.4"></path></svg></button>
+                <button ref="{{ gBtn }}" onClick="{{ g.toggle }}" style="margin-left:auto; height:30px; padding:0 14px; border:none; border-radius:7px; background:{{ g.btnBg }}; color:{{ g.btnFg }}; font:inherit; font-size:13px; font-weight:600; cursor:pointer; box-shadow:{{ g.btnRing }}; transition:background .25s, color .25s, box-shadow .2s">{{ g.btn }}</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex; align-items:flex-start; gap:10px; padding-top:12px; border-top:1px solid #EEEAE4">
+            <button ref="{{ dokBtn }}" onClick="{{ toggleDokany }}" role="switch" aria-checked="{{ dokany }}" aria-label="Show each drive's own name and size" style="flex:none; width:36px; height:21px; border:none; border-radius:11px; padding:0; background:{{ dokBg }}; position:relative; cursor:pointer; transition:background .25s; box-shadow:{{ dokRing }}"><span style="position:absolute; top:2.5px; left:{{ dokX }}; width:16px; height:16px; border-radius:50%; background:#FFFFFF; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:left .25s cubic-bezier(.2,.8,.2,1)"></span></button>
+            <div style="font-size:12.5px; line-height:1.45"><div style="font-weight:600">Show each drive’s own name and size</div><div style="color:#6A655D">{{ dokNote }}</div></div>
+          </div>
+        </div>
+
+        <!-- Google's own consent screen, in the browser: the app never sees the password -->
+        <div style="position:absolute; inset:0; background:rgba(246,244,240,.72); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); display:{{ approveD }}; align-items:center; justify-content:center; padding:16px; animation:xsIn .3s ease">
+          <div style="width:100%; max-width:290px; background:#FFFFFF; border-radius:12px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 24px 50px -16px rgba(29,27,24,.35); overflow:hidden">
+            <div style="height:30px; display:flex; align-items:center; gap:6px; padding:0 10px; background:#F1F3F4; border-bottom:1px solid #E3E3E3"><span style="width:8px; height:8px; border-radius:50%; background:#C4C7C5"></span><span style="flex:1; height:18px; border-radius:9px; background:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:10px; color:#5F6368; display:flex; align-items:center; padding:0 8px">🔒 accounts.google.com</span></div>
+            <div style="padding:16px; display:flex; flex-direction:column; gap:10px">
+              <div style="font-size:11.5px; color:#5F6368">Your browser</div>
+              <div style="font-weight:600; font-size:15px; line-height:1.3">XENO Connect wants access to your Google Drive</div>
+              <div style="font-size:12px; line-height:1.45; color:#5F6368">You approve this in your browser. XENO Storage never sees your Google password.</div>
+              <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px">
+                <button onClick="{{ cancelGoogle }}" style="height:30px; padding:0 12px; border:none; border-radius:15px; background:transparent; font:inherit; font-size:12.5px; font-weight:600; color:#1A73E8; cursor:pointer">Cancel</button>
+                <button ref="{{ allowBtn }}" onClick="{{ allowGoogle }}" style="height:30px; padding:0 16px; border:none; border-radius:15px; background:#1A73E8; color:#FFFFFF; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; box-shadow:{{ allowRing }}">Allow</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- File Explorer, This PC -->
+      <div style="background:#FFFFFF; border-radius:14px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 30px 60px -30px rgba(29,27,24,.25); overflow:hidden; display:flex; flex-direction:column; min-height:{{ exMinH }}">
+        <div style="height:40px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid #EEEAE4">
+          <svg width="16" height="14" viewBox="0 0 16 14"><path d="M1 3a1.5 1.5 0 011.5-1.5h3.6l1.6 1.6h5.8A1.5 1.5 0 0115 4.6V11a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 11z" fill="#F4C55B"></path></svg>
+          <span style="font-weight:600; font-size:13px">This PC</span>
+          <span style="margin-left:auto; display:flex; gap:14px; color:#8C867C; font-size:13px"><span>—</span><span>☐</span><span>✕</span></span>
+        </div>
+        <div style="height:36px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid #EEEAE4; font-size:12.5px; color:#5F5A52">
+          <span style="color:#B5AFA5">←</span><span style="color:#B5AFA5">→</span><span style="color:#B5AFA5">↑</span>
+          <span style="flex:1; height:24px; border-radius:5px; background:#F6F4F0; display:flex; align-items:center; padding:0 10px; gap:6px">🖥️ <span>›</span> This PC</span>
+        </div>
+        <div style="flex:1; display:grid; grid-template-columns:{{ exCols }}">
+          <div style="display:{{ exNavD }}; border-right:1px solid #EEEAE4; padding:12px 8px; flex-direction:column; gap:2px; font-size:12.5px">
+            <span style="padding:5px 8px; color:#5F5A52">⭐ Quick access</span>
+            <span style="padding:5px 8px; border-radius:5px; background:#E7EDFB; font-weight:600">🖥️ This PC</span>
+            <sc-for list="{{ drives }}" as="d"><span style="padding:5px 8px 5px 22px; color:#5F5A52; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ d.navLabel }}</span></sc-for>
+          </div>
+          <div style="padding:16px; display:flex; flex-direction:column; gap:12px; min-width:0">
+            <div style="font-size:12px; font-weight:600; color:#6A655D">Devices and drives ({{ driveCount }})</div>
+            <div style="display:grid; grid-template-columns:{{ tileCols }}; gap:10px">
+              <sc-for list="{{ drives }}" as="d">
+                <button onClick="{{ d.open }}" title="{{ d.title }}" style="text-align:left; font:inherit; color:#1D1B18; cursor:{{ d.cursor }}; display:flex; gap:12px; align-items:center; padding:12px; border-radius:10px; border:1px solid {{ d.bd }}; background:{{ d.bg }}; animation:{{ d.anim }}; transition:border-color .3s, background .3s" style-hover="background:#F6F4F0">
+                  <span style="width:38px; height:38px; flex:none; border-radius:9px; background:{{ d.iconBg }}; display:grid; place-items:center; transition:background .3s">
+                    <sc-if value="{{ d.isCloud }}"><svg width="20" height="14" viewBox="0 0 20 14"><path d="M5 13a4 4 0 01-.6-7.95A5.5 5.5 0 0115 4.2 4.4 4.4 0 0115.4 13z" fill="none" stroke="{{ d.iconFg }}" stroke-width="1.6" stroke-linejoin="round"></path></svg></sc-if>
+                    <sc-if value="{{ d.isDisk }}"><svg width="20" height="16" viewBox="0 0 20 16"><rect x="1.5" y="3" width="17" height="10" rx="2" fill="none" stroke="{{ d.iconFg }}" stroke-width="1.6"></rect><path d="M1.5 9h17" stroke="{{ d.iconFg }}" stroke-width="1.3"></path><circle cx="15" cy="11" r="1" fill="{{ d.iconFg }}"></circle></svg></sc-if>
+                  </span>
+                  <span style="flex:1; min-width:0; display:flex; flex-direction:column; gap:5px">
+                    <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ d.label }}</span>
+                    <span style="height:6px; border-radius:3px; background:#ECE8E2; overflow:hidden"><span style="display:block; height:100%; width:{{ d.barW }}; background:{{ d.barC }}; transition:width 1.1s cubic-bezier(.2,.7,.2,1), background .3s"></span></span>
+                    <span style="font-size:11.5px; color:#6A655D">{{ d.free }}</span>
+                  </span>
+                </button>
+              </sc-for>
+            </div>
+            <div style="margin-top:auto; font-family:'IBM Plex Mono',monospace; font-size:11px; line-height:1.6; color:{{ exHintC }}">{{ exHint }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- guide cursor for the opening walkthrough; it stops the moment you touch anything -->
+      <div style="position:absolute; left:0; top:0; z-index:20; pointer-events:none; transform:{{ curT }}; opacity:{{ curOp }}; transition:transform .75s cubic-bezier(.45,.05,.2,1), opacity .3s; filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))">
+        <svg width="22" height="24" viewBox="0 0 16 18" style="transform:{{ curPress }}; transition:transform .12s"><path d="M1 1l13 7.5-6 1.3L5 16z" fill="#2D5BD7" stroke="#FFFFFF" stroke-width="1.2" stroke-linejoin="round"></path></svg>
+      </div>
+    </div>
+    <div style="margin-top:14px; display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; font-size:13px; color:#6A655D">
+      <span>{{ demoNote }}</span>
+      <button onClick="{{ replay }}" style="border:none; background:transparent; padding:0; font:inherit; font-weight:600; color:#2449B8; cursor:pointer">↺ Replay</button>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Specs" style="border-top:1px solid #E2DDD5"><div style="max-width:1280px; margin:0 auto; padding:22px 24px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px 32px">
+  <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Clouds</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">XENO Storage · Google Drive</div></div>
+  <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Shows up as</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">A drive letter per account</div></div>
+  <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Runs on</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Windows 10 &amp; 11, x64</div></div>
+  <div><div style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8C867C">Replaces</div><div style="margin-top:5px; font-size:14.5px; font-weight:500">Google Drive for desktop</div></div>
+</div></section>
+
+<!-- FILES ON DEMAND -->
+<section id="files" data-screen-label="On demand" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1240px; margin:0 auto; display:grid; grid-template-columns:{{ splitCols }}; gap:48px 64px; align-items:center">
+    <div>
+      <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2449B8">Files on demand</div>
+      <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance">See everything. Download only what you open.</h2>
+      <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:480px; text-wrap:pretty">Every file in the account appears at once and takes no space until you open it. Choose the folders that should always be on this PC, and free up space when you are done, straight from File Explorer.</p>
+      <div data-reveal="" style="margin-top:26px; display:flex; flex-direction:column; gap:10px; font-size:14px">
+        <div style="display:flex; gap:10px; align-items:center"><span style="width:18px; display:grid; place-items:center"><svg width="16" height="11" viewBox="0 0 20 14"><path d="M5 13a4 4 0 01-.6-7.95A5.5 5.5 0 0115 4.2 4.4 4.4 0 0115.4 13z" fill="none" stroke="#2D5BD7" stroke-width="1.8" stroke-linejoin="round"></path></svg></span>In the cloud. Takes no space here.</div>
+        <div style="display:flex; gap:10px; align-items:center"><span style="width:18px; display:grid; place-items:center"><span style="width:14px; height:14px; border-radius:50%; border:1.8px solid #1F8A4C; display:grid; place-items:center"><svg width="7" height="6" viewBox="0 0 8 6"><path d="M1 3l2 2 4-4" fill="none" stroke="#1F8A4C" stroke-width="1.5"></path></svg></span></span>On this PC, because you opened it.</div>
+        <div style="display:flex; gap:10px; align-items:center"><span style="width:18px; display:grid; place-items:center"><span style="width:14px; height:14px; border-radius:50%; background:#1F8A4C; display:grid; place-items:center"><svg width="7" height="6" viewBox="0 0 8 6"><path d="M1 3l2 2 4-4" fill="none" stroke="#FFFFFF" stroke-width="1.5"></path></svg></span></span>Always kept on this PC.</div>
+      </div>
+    </div>
+
+    <div data-reveal="" style="background:#FFFFFF; border-radius:14px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 30px 60px -30px rgba(29,27,24,.25); overflow:visible; position:relative">
+      <div style="height:40px; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid #EEEAE4; font-size:12.5px; color:#5F5A52">
+        <span style="font-weight:600; color:#1D1B18">{{ gDriveShort }}</span><span>›</span><span>My Drive</span><span>›</span><span style="color:#1D1B18">Launch</span>
+        <button onClick="{{ keepAll }}" style="margin-left:auto; height:26px; padding:0 10px; border:1px solid #DDD8D0; border-radius:6px; background:#F6F4F0; font:inherit; font-size:12px; font-weight:600; color:#1D1B18; cursor:pointer" style-hover="background:#EFECE6">{{ keepAllLabel }}</button>
+      </div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) 72px 92px 30px; gap:10px; padding:8px 14px; font-size:11px; font-weight:600; color:#8C867C; border-bottom:1px solid #F0EDE8"><span>Name</span><span style="text-align:right">Size</span><span>Status</span><span></span></div>
+      <sc-for list="{{ files }}" as="f">
+        <div onDoubleClick="{{ f.open }}" onContextMenu="{{ f.menu }}" style="position:relative; display:grid; grid-template-columns:minmax(0,1fr) 72px 92px 30px; gap:10px; align-items:center; padding:9px 14px; font-size:13px; background:{{ f.rowBg }}; transition:background .2s; cursor:default" style-hover="background:#F6F4F0">
+          <span style="display:flex; gap:10px; align-items:center; min-width:0"><span style="width:22px; height:26px; flex:none; border-radius:4px; background:{{ f.c }}; color:#FFFFFF; font-family:'IBM Plex Mono',monospace; font-size:7.5px; font-weight:500; display:grid; place-items:end center; padding-bottom:3px">{{ f.ext }}</span><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ f.n }}</span></span>
+          <span style="text-align:right; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#6A655D">{{ f.size }}</span>
+          <span style="display:flex; align-items:center; gap:7px; font-size:11.5px; color:#6A655D">
+            <sc-if value="{{ f.isCloud }}"><svg width="16" height="11" viewBox="0 0 20 14"><path d="M5 13a4 4 0 01-.6-7.95A5.5 5.5 0 0115 4.2 4.4 4.4 0 0115.4 13z" fill="none" stroke="#2D5BD7" stroke-width="1.8" stroke-linejoin="round"></path></svg></sc-if>
+            <sc-if value="{{ f.isLocal }}"><span style="width:14px; height:14px; border-radius:50%; border:1.8px solid #1F8A4C; display:grid; place-items:center"><svg width="7" height="6" viewBox="0 0 8 6"><path d="M1 3l2 2 4-4" fill="none" stroke="#1F8A4C" stroke-width="1.5"></path></svg></span></sc-if>
+            <sc-if value="{{ f.isPinned }}"><span style="width:14px; height:14px; border-radius:50%; background:#1F8A4C; display:grid; place-items:center"><svg width="7" height="6" viewBox="0 0 8 6"><path d="M1 3l2 2 4-4" fill="none" stroke="#FFFFFF" stroke-width="1.5"></path></svg></span></sc-if>
+            <sc-if value="{{ f.isBusy }}"><span style="flex:1; height:5px; border-radius:3px; background:#E7EDFB; overflow:hidden"><span style="display:block; height:100%; width:{{ f.progW }}; background:#2D5BD7; transition:width .12s linear"></span></span></sc-if>
+            <span>{{ f.stLabel }}</span>
+          </span>
+          <button onClick="{{ f.menu }}" aria-label="More options" style="width:26px; height:26px; border:none; border-radius:6px; background:transparent; font:inherit; font-size:16px; line-height:1; color:#6A655D; cursor:pointer" style-hover="background:#ECE8E2">⋯</button>
+          <sc-if value="{{ f.menuOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute; right:14px; top:calc(100% - 4px); z-index:10; width:232px; background:#FFFFFF; border-radius:9px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 16px 32px -10px rgba(29,27,24,.3); padding:4px; animation:xsIn .18s ease">
+              <button onClick="{{ f.doOpen }}" style="width:100%; text-align:left; height:32px; padding:0 10px; border:none; border-radius:6px; background:transparent; font:inherit; font-size:13px; color:#1D1B18; cursor:pointer" style-hover="background:#F4F2EE">Open</button>
+              <button onClick="{{ f.doKeep }}" style="width:100%; text-align:left; height:32px; padding:0 10px; border:none; border-radius:6px; background:transparent; font:inherit; font-size:13px; color:#1D1B18; cursor:pointer; display:flex; align-items:center; justify-content:space-between" style-hover="background:#F4F2EE">Always keep on this device<span style="font-size:12px">{{ f.keepCheck }}</span></button>
+              <button onClick="{{ f.doFree }}" style="width:100%; text-align:left; height:32px; padding:0 10px; border:none; border-radius:6px; background:transparent; font:inherit; font-size:13px; color:{{ f.freeC }}; cursor:pointer" style-hover="background:#F4F2EE">Free up space</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+      <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; border-top:1px solid #EEEAE4; font-size:12px; color:#6A655D; border-radius:0 0 14px 14px">
+        <span>On this PC: <b style="color:#1D1B18; font-family:'IBM Plex Mono',monospace; font-weight:500">{{ localSize }}</b> of {{ totalSize }}</span>
+        <span style="margin-left:auto">Double-click to open · right-click for options</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- UPLOADS -->
+<section id="uploads" data-screen-label="Uploads" style="background:#FBFAF8; border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1240px; margin:0 auto; display:grid; grid-template-columns:{{ splitColsRev }}; gap:48px 64px; align-items:center">
+    <div data-reveal="" style="order:{{ upDemoOrder }}; background:#FFFFFF; border-radius:14px; box-shadow:0 0 0 1px rgba(29,27,24,.1), 0 30px 60px -30px rgba(29,27,24,.25); overflow:hidden">
+      <div style="height:40px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid #EEEAE4">
+        <span style="width:8px; height:8px; border-radius:50%; background:{{ upDot }}; animation:{{ upDotAnim }}"></span>
+        <span style="font-weight:600; font-size:13px">{{ upTitle }}</span>
+        <span style="margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#6A655D">{{ upCount }}</span>
+      </div>
+      <div style="min-height:208px; padding:6px 0">
+        <sc-if value="{{ upEmpty }}"><div style="padding:56px 20px; text-align:center; font-size:13.5px; color:#8C867C">Everything is uploaded.</div></sc-if>
+        <sc-for list="{{ ups }}" as="u">
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) 120px 60px; gap:12px; align-items:center; padding:10px 14px; font-size:13px; animation:xsIn .35s ease">
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ u.n }}</span>
+            <span style="height:5px; border-radius:3px; background:#ECE8E2; overflow:hidden"><span style="display:block; height:100%; width:{{ u.w }}; background:{{ u.c }}; transition:width .15s linear, background .3s"></span></span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; text-align:right; color:{{ u.lc }}">{{ u.l }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; padding:12px 14px; border-top:1px solid #EEEAE4">
+        <button onClick="{{ saveFile }}" style="height:32px; padding:0 12px; border:1px solid #DDD8D0; border-radius:7px; background:#F6F4F0; font:inherit; font-size:13px; font-weight:600; color:#1D1B18; cursor:pointer" style-hover="background:#EFECE6">Save a file to {{ gLetterColon }}</button>
+        <button onClick="{{ quitToggle }}" style="height:32px; padding:0 12px; border:none; border-radius:7px; background:{{ quitBg }}; color:{{ quitFg }}; font:inherit; font-size:13px; font-weight:600; cursor:pointer; transition:background .25s">{{ quitLabel }}</button>
+      </div>
+    </div>
+    <div style="order:{{ upTextOrder }}">
+      <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2449B8">Background uploads</div>
+      <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance">Save and move on. Quitting never loses a change.</h2>
+      <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:480px; text-wrap:pretty">What you save to a drive uploads in the background. Anything still waiting is kept on disk when the app closes, and picks up where it stopped the next time the drive mounts. Try it: save a few files, then quit halfway.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CONNECT -->
+<section id="connect" data-screen-label="Connect" style="background:#171614; color:#E8E4DC; padding:110px 24px">
+  <div style="max-width:1180px; margin:0 auto">
+    <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8FA9F2">XENO Connect</div>
+    <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; max-width:820px; text-wrap:balance; color:#F3F0EA">Your Google credentials never land on this PC.</h2>
+    <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#A9A398; max-width:640px; text-wrap:pretty">XENO Connect holds the access you approved in your browser. For each thing the drive does, XENO Storage asks Connect for short-lived access to do just that, and keeps nothing it could reuse. Pick an action to watch the trip.</p>
+
+    <div data-reveal="" style="margin-top:44px; display:grid; grid-template-columns:{{ connCols }}; gap:24px; align-items:stretch">
+      <div style="background:#201F1C; border:1px solid #33312D; border-radius:14px; padding:24px; display:flex; flex-direction:column; gap:22px">
+        <div style="display:flex; flex-wrap:wrap; gap:8px">
+          <sc-for list="{{ connOps }}" as="o"><button onClick="{{ o.on }}" style="height:34px; padding:0 14px; border-radius:8px; border:1px solid {{ o.bd }}; background:{{ o.bg }}; color:{{ o.fg }}; font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; transition:background .2s, color .2s">{{ o.l }}</button></sc-for>
+        </div>
+        <div style="position:relative; height:{{ connH }}">
+          <svg viewBox="0 0 600 200" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; overflow:visible">
+            <path d="M100 150 L300 50" stroke="#3A3835" stroke-width="2" fill="none" stroke-dasharray="4 6"></path>
+            <path d="M100 150 L500 150" stroke="#3A3835" stroke-width="2" fill="none" stroke-dasharray="4 6"></path>
+          </svg>
+          <sc-for list="{{ connNodes }}" as="n">
+            <div style="position:absolute; left:{{ n.x }}; top:{{ n.y }}; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:8px; width:150px; text-align:center">
+              <span style="width:56px; height:56px; border-radius:14px; background:{{ n.bg }}; border:1px solid {{ n.bd }}; display:grid; place-items:center; font-size:22px; box-shadow:{{ n.glow }}; transition:box-shadow .3s, border-color .3s">{{ n.icon }}</span>
+              <span style="font-size:13px; font-weight:600; color:#F3F0EA">{{ n.t }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#8C867C">{{ n.s }}</span>
+            </div>
+          </sc-for>
+          <div style="position:absolute; left:{{ pkt.x }}; top:{{ pkt.y }}; transform:translate(-50%,-50%); opacity:{{ pkt.op }}; transition:left .8s cubic-bezier(.45,.05,.2,1), top .8s cubic-bezier(.45,.05,.2,1), opacity .25s; pointer-events:none">
+            <span style="display:inline-block; white-space:nowrap; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:4px 8px; border-radius:6px; background:{{ pkt.bg }}; color:{{ pkt.fg }}; box-shadow:0 6px 18px rgba(0,0,0,.4)">{{ pkt.l }}</span>
+          </div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#A9A398; min-height:20px">{{ connStep }}</div>
+      </div>
+      <div style="background:#201F1C; border:1px solid #33312D; border-radius:14px; padding:24px; display:flex; flex-direction:column; gap:4px">
+        <div style="font-weight:600; font-size:15px; color:#F3F0EA; margin-bottom:10px">Kept on this PC</div>
+        <sc-for list="{{ keptRows }}" as="k">
+          <div style="display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-top:1px solid #33312D; font-size:14px"><span style="color:#D6D1C8">{{ k.l }}</span><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ k.c }}; white-space:nowrap">{{ k.v }}</span></div>
+        </sc-for>
+        <div style="margin-top:auto; padding-top:16px; font-size:13px; line-height:1.5; color:#8C867C">Remove a Google account in the app and its drive goes with it; the files stay in Google Drive.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SPEED: measured, both directions -->
+<section id="speed" data-screen-label="Speed" style="border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1180px; margin:0 auto">
+    <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2449B8">Measured on Windows 11</div>
+    <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; max-width:860px; text-wrap:balance">Made for your files. Not for running builds.</h2>
+    <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:640px; text-wrap:pretty">When a drive shows its own name and size, every file request goes through XENO Storage’s drive engine. For documents, photos and video you will not notice. For work that touches thousands of small files, you will, so keep that on a local disk.</p>
+    <div data-reveal="" style="margin-top:40px; display:grid; grid-template-columns:{{ speedCols }}; gap:24px; align-items:start">
+      <div style="display:flex; flex-direction:column; gap:6px">
+        <sc-for list="{{ speedRows }}" as="s"><button onClick="{{ s.on }}" style="text-align:left; height:46px; padding:0 14px; border-radius:9px; border:1px solid {{ s.bd }}; background:{{ s.bg }}; color:{{ s.fg }}; font:inherit; font-size:14.5px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:space-between; transition:background .2s, color .2s">{{ s.l }}<span style="width:8px; height:8px; border-radius:50%; background:{{ s.dot }}"></span></button></sc-for>
+      </div>
+      <div style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:14px; padding:26px; display:flex; flex-direction:column; gap:20px">
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="display:flex; justify-content:space-between; font-size:13px"><span style="font-weight:600">Local disk</span><span style="font-family:'IBM Plex Mono',monospace; color:#6A655D">baseline</span></div>
+          <div style="height:12px; border-radius:6px; background:#ECE8E2; overflow:hidden"><span style="display:block; height:100%; width:100%; background:#1D1B18"></span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="display:flex; justify-content:space-between; font-size:13px"><span style="font-weight:600">From the drive</span><span style="font-family:'IBM Plex Mono',monospace; color:#6A655D">{{ sp.range }}</span></div>
+          <div style="position:relative; height:12px; border-radius:6px; background:#ECE8E2; overflow:hidden">
+            <span style="position:absolute; left:0; top:0; bottom:0; width:{{ sp.hi }}; background:{{ sp.band }}; transition:width .7s cubic-bezier(.2,.7,.2,1)"></span>
+            <span style="position:absolute; left:0; top:0; bottom:0; width:{{ sp.lo }}; background:{{ sp.c }}; transition:width .7s cubic-bezier(.2,.7,.2,1)"></span>
+          </div>
+        </div>
+        <div style="display:flex; gap:12px; align-items:flex-start; padding-top:16px; border-top:1px solid #F0EDE8">
+          <span style="flex:none; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:4px 8px; border-radius:5px; background:{{ sp.vBg }}; color:{{ sp.vFg }}">{{ sp.verdict }}</span>
+          <span style="font-size:14.5px; line-height:1.5; color:#3F3B35; text-wrap:pretty">{{ sp.note }}</span>
+        </div>
+        <div style="font-size:12px; color:#8C867C">Bars are relative speed; the shaded part is the measured range.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="status" data-screen-label="Status" style="border-top:1px solid #E2DDD5; padding:110px 24px"><div style="max-width:1180px; margin:0 auto">
+  <div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2449B8">Where it stands</div>
+  <h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4.2vw,58px); line-height:1; letter-spacing:-.035em; font-weight:700; text-wrap:balance; max-width:780px">The first release, with the gaps in plain view.</h2>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-top:40px">
+    <sc-for list="{{ statusCols }}" as="c" hint-placeholder-count="2"><div data-reveal="" style="background:#FFFFFF; border:1px solid #E6E1D9; border-radius:12px; padding:22px 22px 24px; display:flex; flex-direction:column; gap:12px"><div style="display:flex; align-items:center; gap:8px"><span style="width:8px; height:8px; border-radius:50%; background:{{ c.dot }}"></span><span style="font-weight:600; font-size:16px">{{ c.title }}</span></div><sc-for list="{{ c.items }}" as="i"><div style="font-size:14.5px; line-height:1.45; color:#3F3B35; padding-top:10px; border-top:1px solid #F0EDE8">{{ i }}</div></sc-for></div></sc-for>
+  </div>
+</div></section>
+
+<section id="download" data-screen-label="Download" style="background:#FFFFFF; border-top:1px solid #E2DDD5; padding:110px 24px">
+  <div style="max-width:1100px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:40px 64px; align-items:start">
+    <div>
+      <h2 data-reveal="" style="margin:0; font-size:clamp(36px,4.6vw,64px); line-height:.98; letter-spacing:-.04em; font-weight:700; text-wrap:balance">Get XENO Storage.</h2>
+      <p data-reveal="" style="margin:18px 0 0; font-size:17px; line-height:1.55; color:#5F5A52; max-width:440px; text-wrap:pretty">Version 0.1.0, released 23 October 2026. Sign in with your XENO account.</p>
+      <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:22px; font-size:14px; font-weight:600">
+        <a href="/product/storage/releases" style="color:#2449B8">All versions →</a>
+        <a href="/docs/storage" style="color:#2449B8">Documentation →</a>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px">
+      <div data-reveal="" style="border:1px solid #1D1B18; border-radius:10px; padding:20px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between">
+        <div><div style="font-weight:600; font-size:17px">Windows x64</div><div style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5F5A52; margin-top:3px">XENO Storage Setup 0.1.0.exe</div></div>
+        <a href="/product/storage/download/win" style="background:#1D1B18; color:#F6F4F0; font-size:15px; font-weight:500; padding:11px 16px; border-radius:7px">Download</a>
+      </div>
+      <div data-reveal="" style="border:1px solid #E2DDD5; border-radius:10px; padding:20px; display:flex; justify-content:space-between; gap:14px; align-items:center; color:#5F5A52"><div style="font-weight:600; font-size:17px; color:#1D1B18">macOS · Linux</div><span style="font-family:'IBM Plex Mono',monospace; font-size:12px">not yet</span></div>
+      <div data-reveal="" style="background:#FBF3E2; border-radius:10px; padding:16px; font-size:14px; line-height:1.55; color:#5C4414">
+        <div style="font-weight:600">The installer is not code-signed yet</div>
+        <div style="margin-top:4px">Windows SmartScreen warns you once before it runs. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. The app shows an Unsigned build badge too.</div>
+      </div>
+      <div data-reveal="" style="background:#F4F2EE; border-radius:10px; padding:16px; font-size:14px; line-height:1.55; color:#3F3B35">
+        <div style="font-weight:600">One administrator prompt, and only if you want it</div>
+        <div style="margin-top:4px">XENO Storage installs for your user. The installer also offers Dokany, a signed open-source driver that lets each drive show its own name and size. Decline it and your drives still work. There is no in-app updater yet: download new versions from this page.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="releases" data-screen-label="Releases" style="border-top:1px solid #E2DDD5; padding:100px 24px">
+  <div style="max-width:1100px; margin:0 auto">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap">
+      <h2 data-reveal="" style="margin:0; font-size:clamp(30px,3.6vw,44px); line-height:1.05; letter-spacing:-.03em; font-weight:700">Latest releases</h2>
+      <a href="/product/storage/releases" style="font-size:14px; font-weight:600; color:#2449B8">View all →</a>
+    </div>
+    <div style="margin-top:28px; border-top:1px solid #1D1B18">
+      <a data-reveal="" href="/product/storage/releases" style="display:grid; grid-template-columns:120px minmax(0,1fr) auto; gap:8px 24px; align-items:baseline; padding:20px 0; border-bottom:1px solid #E2DDD5; color:#1D1B18">
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:13px; display:flex; gap:8px; align-items:center">v0.1.0<span style="font-size:10.5px; padding:2px 6px; border-radius:4px; background:#E7EDFB; color:#2449B8">Latest</span></span>
+        <span style="display:flex; flex-direction:column; gap:6px"><span style="font-size:16px; font-weight:600">First release</span><span style="font-size:14.5px; line-height:1.55; color:#5F5A52; text-wrap:pretty">Your XENO Storage and each connected Google Drive account in File Explorer, each under its own letter with its own name and space. Files download when opened; folders you choose stay on this PC.</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:#8C867C">2026-10-23</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" data-screen-label="FAQ" style="border-top:1px solid #E2DDD5; padding:110px 24px 120px"><div style="max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 72px; align-items:flex-start"><div style="flex:1 1 280px"><div data-reveal="" style="font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#2449B8">FAQ</div><h2 data-reveal="" style="margin:12px 0 0; font-size:clamp(34px,4vw,52px); line-height:1; letter-spacing:-.035em; font-weight:700">Good to know</h2></div><div style="flex:2 1 520px; min-width:0; border-top:1px solid #1D1B18"><sc-for list="{{ faqs }}" as="q" hint-placeholder-count="6"><div data-reveal="" style="border-bottom:1px solid #E2DDD5"><button onClick="{{ q.on }}" style="width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) 28px; gap:12px; align-items:center; padding:22px 12px; margin:0 -12px; border:none; border-radius:10px; background:transparent; font:inherit; text-align:left; cursor:pointer" style-hover="background:#EFECE6"><span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:{{ q.nC }}">{{ q.n }}</span><span style="font-size:18px; font-weight:600; letter-spacing:-.01em; text-wrap:balance">{{ q.q }}</span><span style="width:28px; height:28px; border-radius:50%; border:1px solid {{ q.bd }}; background:{{ q.bg }}; display:grid; place-items:center; transform:{{ q.rot }}; transition:transform .35s cubic-bezier(.2,.8,.2,1), background .25s"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1.5v9M1.5 6h9" stroke="{{ q.ic }}" stroke-width="1.6" stroke-linecap="round"></path></svg></span></button><div style="display:grid; grid-template-rows:{{ q.rows }}; transition:grid-template-rows .4s cubic-bezier(.2,.8,.2,1)"><div style="overflow:hidden; min-height:0"><p style="margin:0; padding:0 0 26px 56px; font-size:16px; line-height:1.6; color:#5F5A52; max-width:680px; text-wrap:pretty; opacity:{{ q.op }}; transition:opacity .35s">{{ q.a }}</p></div></div></div></sc-for></div></div></section>
+
+<footer data-screen-label="Footer" style="background:#1D1B18; color:#E8E4DC; padding:72px 24px 32px">
+  <div style="max-width:1280px; margin:0 auto">
+    <div style="display:flex; flex-wrap:wrap; gap:40px 48px">
+      <div style="flex:2 1 300px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:10px"><img src="/products-v2/assets/xeno-mark.svg" alt="" style="width:20px; height:20px; display:block; filter:invert(1)"><span style="font-size:15px; color:#F3F0EA"><span style="font-weight:700; letter-spacing:.04em">XENO</span>system</span></div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#A9A398; max-width:320px">The complete AI workspace for creation, code, media, workflows and intelligent agents.</p>
+        <div style="font-size:13px; font-weight:600; color:#F3F0EA; margin-top:8px">Get product updates</div>
+        <sc-if value="{{ nlNotSent }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ nlSubmit }}" style="display:flex; gap:8px; flex-wrap:wrap">
+            <input type="email" value="{{ nlEmail }}" onChange="{{ nlSet }}" placeholder="you@studio.co" style="height:40px; flex:1; min-width:180px; padding:0 12px; border:1px solid #3A3835; border-radius:6px; background:#26241F; font:inherit; font-size:14px; color:#F3F0EA; outline:none">
+            <button type="submit" style="height:40px; padding:0 14px; border:none; border-radius:6px; background:#F3F0EA; color:#1D1B18; font:inherit; font-size:14px; font-weight:600; cursor:pointer">Subscribe</button>
+          </form>
+        </sc-if>
+        <sc-if value="{{ nlSent }}" hint-placeholder-val="{{ false }}"><div style="font-size:13.5px; color:#BFD0F7">Subscribed. Watch {{ nlEmail }} for updates.</div></sc-if>
+      </div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Product</div><a href="#product-overview" style="color:#A9A398; font-size:13.5px">Features</a><a href="/pricing" style="color:#A9A398; font-size:13.5px">Pricing</a><a href="/download" style="color:#A9A398; font-size:13.5px">Download</a><a href="/blog" style="color:#A9A398; font-size:13.5px">What’s new</a><a href="/roadmap" style="color:#A9A398; font-size:13.5px">Roadmap</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Resources</div><a href="/docs" style="color:#A9A398; font-size:13.5px">Documentation</a><a href="/learn" style="color:#A9A398; font-size:13.5px">Tutorials</a><a href="/templates" style="color:#A9A398; font-size:13.5px">Templates</a><a href="/api-reference" style="color:#A9A398; font-size:13.5px">API</a><a href="/blog" style="color:#A9A398; font-size:13.5px">Blog</a><a href="/forum" style="color:#A9A398; font-size:13.5px">Forum</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Company</div><a href="/about" style="color:#A9A398; font-size:13.5px">About</a><a href="/careers" style="color:#A9A398; font-size:13.5px">Careers</a><a href="/press" style="color:#A9A398; font-size:13.5px">Press</a><a href="/partners" style="color:#A9A398; font-size:13.5px">Partners</a><a href="/contact" style="color:#A9A398; font-size:13.5px">Contact</a></div>
+      <div style="flex:1 1 130px; display:flex; flex-direction:column; gap:10px"><div style="font-size:13px; font-weight:600; color:#F3F0EA">Legal</div><a href="/impressum" style="color:#A9A398; font-size:13.5px">Impressum</a><a href="/privacy" style="color:#A9A398; font-size:13.5px">Privacy</a><a href="/terms" style="color:#A9A398; font-size:13.5px">Terms</a><a href="/security" style="color:#A9A398; font-size:13.5px">Security</a><a href="/refunds" style="color:#A9A398; font-size:13.5px">Refunds</a><a href="/cookies" style="color:#A9A398; font-size:13.5px">Cookies</a></div>
+    </div>
+    <div style="margin-top:56px; padding-top:22px; border-top:1px solid #33312D; display:flex; flex-wrap:wrap; gap:12px 24px; justify-content:space-between; font-size:13px; color:#A9A398">
+      <span>© 2026 XENO Corporation. All rights reserved.</span>
+      <span  style="display:flex; align-items:center; gap:8px; color:#A9A398"><span style="width:7px; height:7px; border-radius:50%; background:#6FC58A"></span>All systems operational</span>
+    </div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;product&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Storage&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Header&quot;}}">
+class Component extends DCLogic {
+  state = Object.assign({ vw: 1400, vh: 900, faq: 0, nlEmail: "", nlSent: false }, {});
+  // Every claim below is true of XENO Storage 0.1.0 (xeno-storage release commit; SPEC §10.3 for the speeds).
+  STAT = [["In 0.1.0","#1F8A4C",["Your XENO Storage and each Google account as its own drive letter","Several Google accounts, with My Drive and shared drives","Files download when opened; keep folders on this PC or free up space","Uploads continue in the background and survive quitting the app","Each drive shows its account’s name and space (through Dokany)"]],["Not yet","#8C867C",["macOS and Linux","OneDrive and Dropbox","Updates from inside the app","A code-signed installer"]]];
+  FAQ = [["Can I use it today?","Yes. Version 0.1.0 is an experimental release for Windows 10 and 11 (x64). Sign in with your XENO account, then mount XENO Storage or connect a Google account."],["Why does the installer ask for administrator rights?","Only to install Dokany, a signed open-source file-system driver that lets a drive show its own account’s name and space. XENO Storage itself installs for your user. Decline it and your drives still work, showing the disk’s name and size instead."],["Is the drive as fast as a local disk?","For documents, photos and video it feels the same, because opening a file is limited by the download. Work that touches thousands of small files, such as builds, package installs or games, runs much slower from a drive that shows its own name and size. Keep that kind of work on a local disk."],["Where are my Google credentials kept?","In XENO Connect, never on your PC. You approve access in your browser, and XENO Storage asks Connect for each operation."],["What happens when I uninstall it?","Your files stay where they are, in XENO Storage and Google Drive. Dokany stays installed because other software may use it; remove it separately if you no longer need it."],["OneDrive, Dropbox, macOS or Linux?","Not yet. This release covers XENO Storage and Google Drive on Windows x64."],["How do I update?","Download the new version from this page and run it. There is no in-app updater in 0.1.0."]];
+  SPEED = [["Open documents and photos","fine","no noticeable difference","Opening a file is limited by the download, so it feels like any cloud drive.",1,1],["Play video","fine","no noticeable difference","Opening a video is limited by the download, not by the drive engine.",1,1],["Copy large files","fine","2–6x slower","Large files measured 2–6x slower than a local disk, still well over 1 GB/s on a fast SSD.",1/6,1/2],["npm install and builds","local","5–40x slower","Thousands of small files measured 5–40x slower. Run these on a local disk.",1/40,1/5],["Run games","local","5–40x slower","Games read many small files. Install them on a local disk.",1/40,1/5]];
+  LET_XS = ['Y','X','W','V']; LET_G = ['Z','G','R','T'];
+  FILES = [["Launch film final.mp4","MP4","#B4483A",2400],["Brand guide.pdf","PDF","#C2410C",18],["Pitch deck.xslides","XS","#0EA5E9",42],["Product shots","ZIP","#6A4DE0",860],["Budget 2027.xlsx","XLS","#1F8A4C",1],["Interview notes.docx","DOC","#2D5BD7",1],["Poster.xpixel","XP","#6A4DE0",310]];
+  demoRef = React.createRef(); xsBtn = React.createRef(); addBtn = React.createRef(); allowBtn = React.createRef(); gBtn = React.createRef(); dokBtn = React.createRef();
+
+  mountX() {
+    this.setState({ xsOn: false, xsL: 0, gState: 'none', gOn: false, gL: 0, dokany: true, cur: { x: 40, y: 40, op: 0, press: false }, auto: true, target: '', barsOn: {},
+      files: this.FILES.map(() => ({ st: 'cloud', p: 0 })), menu: -1,
+      ups: [{ n: 'Storyboard v4.xcanvas', size: 120, done: 0.2 }, { n: 'Mix final.wav', size: 380, done: 0.05 }, { n: 'Cut v4.mp4', size: 900, done: 0 }], quit: false, upSeq: 0,
+      connOp: -1, connPhase: 0, speed: 0 });
+    this._tick = setInterval(() => this.tick(), 120);
+    this.runAuto();
+  }
+  unmountX() { clearInterval(this._tick); clearTimeout(this._bars); this._stop = true; clearTimeout(this._connT); }
+  sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // ── hero walkthrough: real buttons, real state, a cursor that hands over the moment you touch anything
+  aim(ref) { const box = this.demoRef.current, el = ref && ref.current; if (!box || !el) return; const b = box.getBoundingClientRect(), r = el.getBoundingClientRect(); this.setState({ cur: { x: r.left - b.left + r.width * 0.55, y: r.top - b.top + r.height * 0.55, op: 1, press: false } }); }
+  async press() { this.setState(s => ({ cur: Object.assign({}, s.cur, { press: true }) })); await this.sleep(140); this.setState(s => ({ cur: Object.assign({}, s.cur, { press: false }) })); }
+  async runAuto() {
+    const run = (this._run = (this._run || 0) + 1);
+    const live = () => !this._stop && this.state.auto && this._run === run;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { this.mountXs(); this.setState({ gState: 'connected' }); this.mountG(); this.setState({ auto: false }); return; }
+    await this.sleep(1300); if (!live()) return;
+    this.setState({ target: 'xs' }); this.aim(this.xsBtn); await this.sleep(900); if (!live()) return;
+    await this.press(); this.mountXs(); await this.sleep(1400); if (!live()) return;
+    this.setState({ target: 'add' }); this.aim(this.addBtn); await this.sleep(900); if (!live()) return;
+    await this.press(); this.setState({ gState: 'approving' }); await this.sleep(700); if (!live()) return;
+    this.setState({ target: 'allow' }); this.aim(this.allowBtn); await this.sleep(1000); if (!live()) return;
+    await this.press(); this.setState({ gState: 'connected' }); await this.sleep(900); if (!live()) return;
+    this.setState({ target: 'g' }); this.aim(this.gBtn); await this.sleep(900); if (!live()) return;
+    await this.press(); this.mountG(); await this.sleep(1600); if (!live()) return;
+    this.setState({ target: 'dok' }); this.aim(this.dokBtn); await this.sleep(900); if (!live()) return;
+    await this.press(); this.setState({ dokany: false }); await this.sleep(2200); if (!live()) return;
+    await this.press(); this.setState({ dokany: true }); await this.sleep(900); if (!live()) return;
+    this.setState(s => ({ auto: false, target: '', cur: Object.assign({}, s.cur, { op: 0 }) }));
+  }
+  takeOver = () => { if (this.state.auto) this.setState(s => ({ auto: false, target: '', cur: Object.assign({}, s.cur, { op: 0 }) })); };
+  replay = () => { this.setState({ xsOn: false, gOn: false, gState: 'none', dokany: true, barsOn: {}, auto: true, target: '' }); setTimeout(() => this.runAuto(), 50); };
+  growBar(k) { clearTimeout(this._bars); this._bars = setTimeout(() => this.setState(s => ({ barsOn: Object.assign({}, s.barsOn, { [k]: true }) })), 80); }
+  mountXs() { this.setState(s => ({ xsOn: true, barsOn: Object.assign({}, s.barsOn, { xs: false }) })); this.growBar('xs'); }
+  mountG() { this.setState(s => ({ gOn: true, barsOn: Object.assign({}, s.barsOn, { g: false }) })); this.growBar('g'); }
+
+  // ── one clock for downloads, uploads and the Connect trip
+  tick() {
+    const S = this.state; if (!S.files) return; let ch = {};
+    if (S.files.some(f => f.st === 'busy')) ch.files = S.files.map((f, i) => { if (f.st !== 'busy') return f; const p = f.p + Math.max(0.04, 26 / Math.max(this.FILES[i][3], 26)); return p >= 1 ? { st: f.keep ? 'pinned' : 'local', p: 1 } : Object.assign({}, f, { p }); });
+    if (!this._upSeen) { const el = document.getElementById('uploads'); this._upSeen = !!el && el.getBoundingClientRect().top < window.innerHeight * 0.8; }
+    if (this._upSeen && !S.quit && S.ups.length) {
+      // a finished upload lingers 1.8 s as "done", then leaves the queue
+      const now = Date.now();
+      ch.ups = S.ups.map(u => { if (u.done >= 1) return u.until ? u : Object.assign({}, u, { until: now + 1800 }); const done = Math.min(1, u.done + 9 / u.size); return done >= 1 ? Object.assign({}, u, { done, until: now + 1800 }) : Object.assign({}, u, { done }); }).filter(u => !(u.until && u.until < now));
+    }
+    if (Object.keys(ch).length) this.setState(ch);
+  }
+  openFile(i) { const f = this.state.files[i]; if (f.st !== 'cloud') { this.setState({ menu: -1 }); return; } this.setFile(i, { st: 'busy', p: 0, keep: false }); }
+  setFile(i, v) { this.setState(s => ({ menu: -1, files: s.files.map((f, k) => k === i ? Object.assign({}, f, v) : f) })); }
+
+  connGo(i) {
+    clearTimeout(this._connT); this.setState({ connOp: i, connPhase: 1 });
+    const step = (ph, ms) => { this._connT = setTimeout(() => { this.setState({ connPhase: ph }); if (ph < 5) step(ph + 1, ph === 4 ? 1400 : 950); }, ms); };
+    step(2, 950);
+  }
+
+  valsX(S) {
+    const wide = S.vw >= 1000, mid = S.vw >= 720;
+    const xsL = this.LET_XS[S.xsL || 0], gL = this.LET_G[S.gL || 0];
+    const ring = k => S.auto && S.target === k ? '0 0 0 3px rgba(45,91,215,.28)' : 'none';
+    const unit = (on, k) => ({ bd: on ? '#2D5BD7' : '#E6E1D9', bg: on ? '#F7F9FE' : '#FFFFFF', btn: on ? 'Unmount' : 'Mount', btnBg: on ? '#FFFFFF' : '#2D5BD7', btnFg: on ? '#1D1B18' : '#FFFFFF', btnRing: on ? '0 0 0 1px #DDD8D0' : ring(k), letterCursor: on ? 'not-allowed' : 'pointer', letterTitle: on ? 'Unmount to change the letter' : 'Choose a drive letter' });
+    const xs = Object.assign(unit(S.xsOn, 'xs'), { letter: xsL, letterColon: xsL + ':', cycle: () => { if (!S.xsOn) this.setState({ xsL: ((S.xsL || 0) + 1) % 4 }); }, toggle: () => { if (S.xsOn) this.setState({ xsOn: false }); else this.mountXs(); } });
+    const g = Object.assign(unit(S.gOn, 'g'), { letter: gL, letterColon: gL + ':', cycle: () => { if (!S.gOn) this.setState({ gL: ((S.gL || 0) + 1) % 4 }); }, toggle: () => { if (S.gOn) this.setState({ gOn: false }); else this.mountG(); } });
+    if (S.gOn) g.btnRing = '0 0 0 1px #DDD8D0';
+    const dok = S.dokany !== false;
+    const C = { key: 'c', label: 'Local Disk (C:)', navLabel: 'Local Disk (C:)', used: 0.62, free: '354 GB free of 931 GB', cloud: false, ours: false };
+    const plain = L => ({ label: 'Local Disk (' + L + ':)', used: 0.62, free: '354 GB free of 931 GB', cloud: false });
+    const list = [C];
+    if (S.xsOn) list.push(Object.assign({ key: 'xs', ours: true }, dok ? { label: 'XENO Storage (' + xsL + ':)', used: 0.184, free: '81.6 GB free of 100 GB', cloud: true } : plain(xsL)));
+    if (S.gOn) list.push(Object.assign({ key: 'g', ours: true }, dok ? { label: 'Northwind Studio - Google Drive (' + gL + ':)', used: 0.004, free: '4.98 TB free of 5.00 TB', cloud: true } : plain(gL)));
+    const drives = list.map(d => { const grown = d.key === 'c' || (S.barsOn || {})[d.key]; return { label: d.label, navLabel: d.label, free: d.free, isCloud: d.cloud, isDisk: !d.cloud,
+      barW: grown ? Math.max(1.2, d.used * 100) + '%' : '0%', barC: d.used > 0.9 ? '#C2410C' : (d.ours && d.cloud ? '#2D5BD7' : '#26A0DA'),
+      iconBg: d.ours ? (d.cloud ? '#E7EDFB' : '#F1EFEB') : '#F1EFEB', iconFg: d.ours && d.cloud ? '#2D5BD7' : '#6A655D',
+      bd: d.ours ? (d.cloud ? '#BFD0F7' : '#E6E1D9') : '#EEEAE4', bg: d.ours && d.cloud ? '#F7F9FE' : '#FFFFFF', anim: d.ours ? 'xsIn .5s cubic-bezier(.2,.8,.2,1)' : 'none',
+      cursor: d.ours ? 'pointer' : 'default', title: d.ours ? 'Open — see files on demand below' : '', open: () => { if (d.ours) { const el = document.getElementById('files'); el && el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } }; });
+    const ourCount = list.length - 1;
+    const exHint = ourCount === 0 ? 'Mount a drive in XENO Storage and it appears here.' : dok ? 'Each XENO Storage drive shows its account’s own name and space.' : 'Without Dokany, a drive is a plain letter: it shows the name and size of the disk its folder is on.';
+    const filesV = (S.files || []).map((f, i) => { const sz = this.FILES[i][3]; return { n: this.FILES[i][0], ext: this.FILES[i][1], c: this.FILES[i][2], size: sz >= 1000 ? (sz / 1000).toFixed(1) + ' GB' : sz + ' MB',
+      isCloud: f.st === 'cloud', isLocal: f.st === 'local', isPinned: f.st === 'pinned', isBusy: f.st === 'busy', progW: Math.round((f.p || 0) * 100) + '%',
+      stLabel: f.st === 'busy' ? Math.round(f.p * 100) + '%' : f.st === 'cloud' ? 'Online' : f.st === 'pinned' ? 'Always here' : 'On this PC',
+      rowBg: S.menu === i ? '#F4F2EE' : 'transparent', menuOpen: S.menu === i, keepCheck: f.st === 'pinned' || f.keep ? '✓' : '', freeC: f.st === 'cloud' ? '#B5AFA5' : '#1D1B18',
+      open: () => this.openFile(i), doOpen: () => this.openFile(i),
+      menu: e => { e && e.preventDefault && e.preventDefault(); this.setState({ menu: S.menu === i ? -1 : i }); },
+      doKeep: () => { if (f.st === 'pinned') this.setFile(i, { st: 'local' }); else if (f.st === 'local') this.setFile(i, { st: 'pinned' }); else this.setFile(i, { st: 'busy', p: f.p || 0, keep: true }); },
+      doFree: () => { if (f.st !== 'cloud') this.setFile(i, { st: 'cloud', p: 0, keep: false }); else this.setState({ menu: -1 }); } }; });
+    const localMb = (S.files || []).reduce((a, f, i) => a + (f.st === 'local' || f.st === 'pinned' ? this.FILES[i][3] : f.st === 'busy' ? this.FILES[i][3] * f.p : 0), 0);
+    const allPinned = (S.files || []).every(f => f.st === 'pinned' || (f.st === 'busy' && f.keep));
+    const ups = (S.ups || []).map(u => ({ n: u.n, w: Math.round(u.done * 100) + '%', c: S.quit && u.done < 1 ? '#C9962E' : u.done >= 1 ? '#1F8A4C' : '#2D5BD7', l: u.done >= 1 ? 'done' : S.quit ? 'kept' : Math.round(u.done * 100) + '%', lc: u.done >= 1 ? '#1F8A4C' : S.quit ? '#8A6A1F' : '#6A655D' }));
+    const waiting = (S.ups || []).filter(u => u.done < 1);
+    const waitMb = Math.round(waiting.reduce((a, u) => a + u.size * (1 - u.done), 0));
+    const NODES = [{ t: 'XENO Storage', s: 'on this PC', icon: '🖥️', x: '16.6%', y: '75%' }, { t: 'XENO Connect', s: 'holds your approval', icon: '🔐', x: '50%', y: '25%' }, { t: 'Google Drive', s: 'your files', icon: '☁️', x: '83.3%', y: '75%' }];
+    const OPS = [['Open a folder', 'list My Drive/Launch', 'folder listing'], ['Open a file', 'read Brand guide.pdf', '18 MB of file'], ['Save a change', 'upload Poster.xpixel', 'saved']];
+    const ph = S.connPhase || 0, op = OPS[S.connOp] || OPS[0];
+    const P = [null, { at: 0, to: 1, l: 'ask: ' + op[1], bg: '#2D5BD7', fg: '#FFFFFF' }, { at: 1, to: 0, l: 'short-lived access', bg: '#F3F0EA', fg: '#1D1B18' }, { at: 0, to: 2, l: op[1], bg: '#2D5BD7', fg: '#FFFFFF' }, { at: 2, to: 0, l: op[2], bg: '#1F8A4C', fg: '#FFFFFF' }, null][ph];
+    const pkt = P ? { x: NODES[P.to].x, y: NODES[P.to].y, op: 1, l: P.l, bg: P.bg, fg: P.fg } : { x: NODES[0].x, y: NODES[0].y, op: 0, l: '', bg: 'transparent', fg: 'transparent' };
+    const STEP = ['Pick an action.', '1 · XENO Storage asks Connect for access to do this one thing.', '2 · Connect answers with short-lived access for that operation.', '3 · XENO Storage does the operation with Google Drive.', '4 · The result comes back to File Explorer.', '✓ Done. No Google credential was stored on this PC.'];
+    const sp = this.SPEED[S.speed || 0], fine = sp[1] === 'fine';
+    return {
+      heroCols: wide ? '360px minmax(0,1fr)' : 'minmax(0,1fr)', exCols: mid ? '190px minmax(0,1fr)' : 'minmax(0,1fr)', exNavD: mid ? 'flex' : 'none', exMinH: wide ? '420px' : '0', tileCols: S.vw >= 1180 ? 'repeat(2, minmax(0,1fr))' : 'minmax(0,1fr)',
+      xs, g, gNone: S.gState === 'none' || S.gState === 'approving', gHas: S.gState === 'connected',
+      addBg: '#FFFFFF', addRing: ring('add'), allowRing: ring('allow'),
+      addGoogle: () => this.setState({ gState: 'approving' }), cancelGoogle: () => this.setState({ gState: 'none' }), allowGoogle: () => this.setState({ gState: 'connected' }),
+      approveD: S.gState === 'approving' ? 'flex' : 'none',
+      dokany: dok ? 'true' : 'false', dokBg: dok ? '#2D5BD7' : '#C9C3B9', dokX: dok ? '17.5px' : '2.5px', dokRing: ring('dok'), toggleDokany: () => this.setState({ dokany: !dok }),
+      dokNote: dok ? 'On, through Dokany. This PC lists each account’s name and space.' : 'Off. Drives still work, but show your disk’s name and size.',
+      drives, driveCount: drives.length, exHint, exHintC: ourCount && !dok ? '#8A6A1F' : '#6A655D',
+      curT: 'translate(' + (S.cur ? S.cur.x : 0) + 'px,' + (S.cur ? S.cur.y : 0) + 'px)', curOp: S.cur && S.auto ? S.cur.op : 0, curPress: S.cur && S.cur.press ? 'scale(.82)' : 'scale(1)',
+      demoNote: S.auto ? 'Playing a walkthrough. Click anything to take over.' : 'It’s yours: mount, connect, switch letters, flip the toggle.',
+      splitCols: wide ? 'minmax(0,.9fr) minmax(0,1.1fr)' : 'minmax(0,1fr)', splitColsRev: wide ? 'minmax(0,1.1fr) minmax(0,.9fr)' : 'minmax(0,1fr)', upDemoOrder: wide ? 0 : 1, upTextOrder: wide ? 1 : 0,
+      gDriveShort: 'Northwind Studio (' + gL + ':)', gLetterColon: gL + ':', files: filesV, localSize: localMb >= 1000 ? (localMb / 1000).toFixed(2) + ' GB' : Math.round(localMb) + ' MB', totalSize: '5.00 TB',
+      keepAllLabel: allPinned ? 'Free up space' : 'Always keep this folder',
+      keepAll: () => this.setState(s => ({ menu: -1, files: s.files.map(f => allPinned ? { st: 'cloud', p: 0 } : f.st === 'pinned' ? f : f.st === 'local' ? { st: 'pinned', p: 1 } : { st: 'busy', p: f.p || 0, keep: true }) })),
+      ups, upEmpty: ups.length === 0, upCount: waiting.length ? waiting.length + ' waiting · ' + waitMb + ' MB' : 'all uploaded',
+      upTitle: S.quit ? 'XENO Storage is closed' : waiting.length ? 'Uploading in the background' : 'Up to date', upDot: S.quit ? '#C9962E' : waiting.length ? '#2D5BD7' : '#1F8A4C', upDotAnim: !S.quit && waiting.length ? 'xsPulse 1.2s ease-in-out infinite' : 'none',
+      saveFile: () => { const names = ['Cut v' + (5 + (S.upSeq || 0)) + '.mp4', 'Notes ' + (S.upSeq || 0) + '.docx', 'Render ' + (S.upSeq || 0) + '.png']; const n = names[(S.upSeq || 0) % 3]; this.setState(s => ({ upSeq: (s.upSeq || 0) + 1, ups: s.ups.concat([{ n, size: [520, 4, 46][(s.upSeq || 0) % 3], done: 0 }]) })); },
+      quitToggle: () => this.setState({ quit: !S.quit }), quitLabel: S.quit ? 'Open XENO Storage again' : 'Quit XENO Storage', quitBg: S.quit ? '#2D5BD7' : '#1D1B18', quitFg: '#FFFFFF',
+      connCols: wide ? 'minmax(0,1.5fr) minmax(0,1fr)' : 'minmax(0,1fr)', connH: mid ? '220px' : '260px',
+      connOps: OPS.map((o, i) => ({ l: o[0], on: () => this.connGo(i), bd: S.connOp === i ? '#8FA9F2' : '#3A3835', bg: S.connOp === i ? '#2D5BD7' : 'transparent', fg: S.connOp === i ? '#FFFFFF' : '#E8E4DC' })),
+      connNodes: NODES.map((n, i) => { const lit = P && (P.at === i || P.to === i); return Object.assign({}, n, { bg: i === 1 ? '#22304F' : '#2A2825', bd: lit ? '#8FA9F2' : '#3A3835', glow: lit ? '0 0 0 4px rgba(143,169,242,.18)' : 'none' }); }),
+      pkt, connStep: STEP[ph],
+      keptRows: [{ l: 'Your Google password', v: 'never', c: '#6FC58A' }, { l: 'Google tokens', v: 'never — Connect holds them', c: '#6FC58A' }, { l: 'Your XENO sign-in', v: 'this PC, for this app', c: '#D6D1C8' }, { l: 'Files you opened or kept', v: 'on the disk you choose', c: '#D6D1C8' }],
+      speedCols: wide ? '320px minmax(0,1fr)' : 'minmax(0,1fr)',
+      speedRows: this.SPEED.map((s, i) => ({ l: s[0], on: () => this.setState({ speed: i }), bd: (S.speed || 0) === i ? '#1D1B18' : '#E2DDD5', bg: (S.speed || 0) === i ? '#1D1B18' : '#FFFFFF', fg: (S.speed || 0) === i ? '#F6F4F0' : '#1D1B18', dot: s[1] === 'fine' ? '#1F8A4C' : '#C9962E' })),
+      sp: { range: sp[2], lo: (sp[4] * 100).toFixed(1) + '%', hi: (sp[5] * 100).toFixed(1) + '%', c: fine ? '#2D5BD7' : '#C9962E', band: fine ? 'rgba(45,91,215,.3)' : 'rgba(201,150,46,.32)', verdict: fine ? 'fine from the drive' : 'use a local disk', vBg: fine ? '#E6F2EA' : '#FBF3E2', vFg: fine ? '#1F6A3A' : '#8A6A1F', note: sp[3] }
+    };
+  }
+
+  revealCheck() { if (!this._rev || !this._rev.length) return; const vh = window.innerHeight; this._rev = this._rev.filter(el => { const r = el.getBoundingClientRect(); if (r.top < vh * 0.92 && r.bottom > 0) { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'translateY(0px)'; return false; } return true; }); }
+  onScroll = () => { this.revealCheck(); };
+  onDocClick = e => { if (this.state.menu >= 0 && !(e.target.closest && e.target.closest('button'))) this.setState({ menu: -1 }); };
+  syncVw = () => { if (Math.abs(window.innerWidth - this.state.vw) > 1 || window.innerHeight !== this.state.vh) this.setState({ vw: window.innerWidth, vh: window.innerHeight }); };
+  componentDidMount() {
+    this.reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.addEventListener('scroll', this.onScroll, { passive: true }); window.addEventListener('resize', this.syncVw); document.addEventListener('click', this.onDocClick);
+    this.ro = new ResizeObserver(() => this.syncVw()); this.ro.observe(document.documentElement);
+    this._rev = []; if (!this.reduce) document.querySelectorAll('[data-reveal]').forEach((el, k) => { if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return; el.style.opacity = '0'; el.style.filter = 'blur(8px)'; el.style.transform = 'translateY(18px)'; el.style.transition = 'opacity .8s cubic-bezier(.2,.7,.2,1), filter .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)'; el.style.transitionDelay = ((k % 4) * 60) + 'ms'; this._rev.push(el); });
+    this._revSafe = setTimeout(() => { (this._rev || []).forEach(el => { el.style.opacity = '1'; el.style.filter = 'blur(0px)'; el.style.transform = 'none'; }); this._rev = []; }, 12000);
+    this.setState({ vw: window.innerWidth, vh: window.innerHeight }); this.mountX();
+  }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.syncVw); document.removeEventListener('click', this.onDocClick); this.ro && this.ro.disconnect(); clearTimeout(this._revSafe); this.unmountX(); }
+  renderVals() {
+    const S = this.state;
+    const base = {
+      statusCols: this.STAT.map(c => ({ title: c[0], dot: c[1], items: c[2] })),
+      faqs: this.FAQ.map((q, i) => { const on = S.faq === i; return { n: '0' + (i + 1), q: q[0], a: q[1], on: () => this.setState({ faq: on ? -1 : i }), nC: on ? '#2449B8' : '#9A948A', bd: on ? '#1D1B18' : '#D6D0C7', bg: on ? '#1D1B18' : 'transparent', ic: on ? '#FFFFFF' : '#1D1B18', rot: on ? 'rotate(45deg)' : 'rotate(0deg)', rows: on ? '1fr' : '0fr', op: on ? 1 : 0 }; }),
+      nlEmail: S.nlEmail, nlSent: S.nlSent, nlNotSent: !S.nlSent, nlSet: e => this.setState({ nlEmail: e.target.value }), nlSubmit: e => { e.preventDefault(); if (/\S+@\S+\.\S+/.test(S.nlEmail)) this.setState({ nlSent: true }); },
+      takeOver: this.takeOver, replay: this.replay, demoRef: this.demoRef, xsBtn: this.xsBtn, addBtn: this.addBtn, allowBtn: this.allowBtn, gBtn: this.gBtn, dokBtn: this.dokBtn };
+    return Object.assign(base, S.files ? this.valsX(S) : {});
+  }
+}
+</script>
+</body>
+</html>

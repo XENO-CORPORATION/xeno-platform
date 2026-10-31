@@ -53,11 +53,16 @@ export const EVENTS = Object.freeze({
   SESSIONS_REVOKED_ALL: 'sessions_revoked_all',         // sign out everywhere
   DATA_EXPORT_REQUESTED: 'data_export_requested',
   DATA_EXPORT_DOWNLOADED: 'data_export_downloaded',
+  // Deleting an account (services/accountDeletion.js)
+  TWO_STEP_CHANGED: 'two_step_changed',
+  ACCOUNT_DELETION_REQUESTED: 'account_deletion_requested',
+  ACCOUNT_DELETION_CANCELLED: 'account_deletion_cancelled',
   // OIDC / token lifecycle
   TOKEN_ISSUED: 'token_issued',         // an authorization_code or device grant completed
   TOKEN_REFRESHED: 'token_refreshed',
   TOKEN_REVOKED: 'token_revoked',
   TOKEN_REUSE_DETECTED: 'token_reuse_detected', // RFC 9700 family revocation fired
+  TOKEN_REFRESH_RECOVERED: 'token_refresh_recovered', // an unconsumed rotation was replayed with its rotation_id (idempotent recovery)
   OIDC_CLIENT_REGISTERED: 'oidc_client_registered',
   // BYOK credential lifecycle (INFERENCE ROUTING spec; Vault's rule: no secret
   // op without an audit record). Metadata carries ids, provider and the key
@@ -76,6 +81,7 @@ export const EVENTS = Object.freeze({
   // claude_artifact_* (code.claude.com/docs/en/artifacts, "Review the audit log").
   ARTIFACT_PUBLISHED: 'artifact_published',
   ARTIFACT_SHARED: 'artifact_shared',
+  ARTIFACT_KEPT_AS_TOOL: 'artifact_kept_as_tool',
   ARTIFACT_DELETED: 'artifact_deleted',
   // XENO Extension browser relay — a browser connected to the account, or was disconnected. Metadata:
   // the installation id and the browser/os the extension reported. NEVER the DPoP thumbprint or a token:

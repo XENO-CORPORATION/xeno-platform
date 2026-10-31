@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, CreditCard, Plug, Settings, ShieldCheck, User, Users, type LucideIcon } from 'lucide-react';
+import { Bell, CreditCard, Plug, Settings, ShieldCheck, TerminalSquare, User, Users, type LucideIcon } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 interface AccountSection {
@@ -11,6 +11,7 @@ interface AccountSection {
 
 const sections: AccountSection[] = [
   { label: 'Profile', path: '/overview/profile', icon: User },
+  { label: 'Spawn profiles', path: '/overview/spawn-profiles', icon: TerminalSquare },
   { label: 'Preferences', path: '/overview/settings', icon: Settings },
   { label: 'Members', path: '/overview/team', icon: Users },
   { label: 'Teams', path: '/overview/teams', icon: Users },

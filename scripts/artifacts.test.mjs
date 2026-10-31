@@ -46,8 +46,10 @@ test('nginx proxies /a/<id> (and only the artifact id shape) to the backend, and
 
 test('the user-content host serves ONLY raw revision files, and the backend refuses raw on any other host', () => {
   const conf = read('nginx', 'default.conf').replace(/#[^\n]*/g, '');
-  const server = /server \{\s*listen 80;\s*server_name usercontent\.xenostudio\.ai;([\s\S]*?)\n\}/.exec(conf);
-  assert.ok(server, 'a server block for usercontent.xenostudio.ai exists');
+  const server = /server \{\s*listen 80;\s*server_name usercontent\.xenostudio\.ai usercontent\.xenosystem\.ai;([\s\S]*?)\n\}/.exec(conf);
+  // The xenosystem.ai twin is routed by the same tunnel; left out of this block it would fall to the default server and
+  // serve the app shell on the one host that must never carry our UI or see a credential.
+  assert.ok(server, 'one server block holds usercontent.xenostudio.ai AND its xenosystem.ai twin');
   assert.match(server[1], /set \$backend_upstream backend:8080;/, 'the variable is per-server and must be set here too');
   assert.match(server[1], /location ~ "\^\/a\/a_\[A-Za-z0-9\]\{22\}\/v\/\[\^\/\]\+\/r\/\[0-9\]\+\/\.\+\$" \{/, 'only the raw path shape is proxied');
   assert.match(server[1], /location \/ \{\s*return 404;/, 'everything else on that host is 404');

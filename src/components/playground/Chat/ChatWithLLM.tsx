@@ -84,7 +84,7 @@ import {
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
 import { normalizeChatMath, remarkChatMath, rehypeChatKatex } from '@/lib/chatMath';
 import { ThreadScrubber, firstLineOf, type ScrubberTurn } from '@xenosystem/agent-conversation/components/agent/transcript/ThreadScrubber';
-import { activePath as branchActivePath, branchInfo } from './chatBranches';
+import { activePath as branchActivePath, branchInfo, heldGenerationIds } from './chatBranches';
 import { readGenerateResponse, readStreamedTurn, endpointForTask, streamRequestBody, CHAT_STREAM_ENDPOINT } from './chatStream';
 import { reasoningCapabilityForModel, reasoningTraceForModel } from '@/server/lib/chatModelCapabilities.js';
 import CodeBlockWithHeader from './CodeBlockWithHeader';
@@ -8070,10 +8070,16 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
    * written), the generation still belongs to this chat: it is shown as an AI reply at the moment it
    * was made, never as a panel on the composer. Display only; nothing is written.
    */
+  // Every generation any message has held this session — a reply just sent may not be a saved row yet.
+  const heldThisSessionRef = useRef<Set<string>>(new Set());
   const threadMessages = useMemo(() => {
     if (studioType || !durableGenerations.length) return messages;
-    const placed = new Set(messages.flatMap(m => (m.turn?.steps || []).flatMap(step => step.kind === 'generation' ? [step.generationId] : [])));
-    const orphans = durableGenerations.filter(g => !placed.has(g.id));
+    const placed = heldGenerationIds(messages);
+    for (const id of placed) heldThisSessionRef.current.add(id);
+    // Held by a message on ANOTHER branch (every saved row, every message shown this session): that generation is
+    // part of that version of the reply. A regenerate takes it off screen with its reply; it is never re-added by time.
+    const heldElsewhere = heldGenerationIds(branchRows);
+    const orphans = durableGenerations.filter(g => !placed.has(g.id) && !heldElsewhere.has(g.id) && !heldThisSessionRef.current.has(g.id));
     if (!orphans.length) return messages;
     const out = [...messages];
     for (const g of [...orphans].sort((a, b) => (Date.parse(a.createdAt || '') || 0) - (Date.parse(b.createdAt || '') || 0))) {
@@ -8084,7 +8090,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       out.splice(index, 0, reply);
     }
     return out;
-  }, [messages, durableGenerations, studioType]);
+  }, [messages, durableGenerations, studioType, branchRows]);
   // Enhance is a Studio page of its own: it fills the pane and brings its own console, so the prompt box stays out of it.
   const studioEnhance = (studioType as string | null) === 'enhance';
   const studioEnhanceKind = ((['image', 'video', 'audio', '3d'] as const).find(k => k === new URLSearchParams(location.search).get('enhanceType')) ?? 'image') as GenType;
@@ -17655,7 +17661,11 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               files of each run the turn made, in order — drawn under the head
                                               like generated images, live and on reload from the turn record. */}
                                           {message.turn?.steps.map(step => step.kind === 'handoff' ? <ChatHandoffCard key={step.id} taskKey={step.taskKey} agentName={step.agentName} /> : null)}
-                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} /> : null)}
+                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} onOpenAsset={(opened, all) => {
+                                              // the conversation's own images, then this generation's results, so the viewer's arrows walk both
+                                              const results: LibraryViewerItem[] = all.map((assetId, index) => ({ id: `generation:${assetId}`, name: `XENO image${all.length > 1 ? ` ${index + 1}` : ''}`, asset: { assetId, name: 'XENO image', mimeType: assetId === opened.assetId ? opened.mime : 'image/png', contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content` }, context: 'Chat' }));
+                                              setLibraryViewerSelection({ items: [...conversationLibraryViewerItems.filter(item => !results.some(r => r.asset?.assetId === item.asset?.assetId)), ...results], activeId: `generation:${opened.assetId}` });
+                                          }} /> : null)}
                                           <ChatCodeExecution
                                               steps={turnCodeSteps(message.turn)}
                                               live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import { aliasSiteOrigins } from '../config/hosts.js';
 
 const PROOF_TTL_SEC = 120;
 const CLOCK_SKEW_SEC = 60;
@@ -46,6 +47,21 @@ export function accessTokenHash(accessToken) {
   return crypto.createHash('sha256').update(String(accessToken)).digest('base64url');
 }
 
+/**
+ * RFC 9449 §4.3: htu must be the URI of the request. This provider answers on its issuer origin AND on each
+ * configured alias site origin (XENO_ALIAS_SITE_ORIGINS — the same backend behind both hosts, rebrand plan
+ * §3.1), while callers build the expected URI from the issuer. A proof made for the same path on an alias
+ * origin is therefore the URI of the request and is accepted; any other origin or path is still refused.
+ * Without this no client can move to xenosystem.ai before the issuer flips (owner, 2026-10-24).
+ * @param {string} claimed normalized htu from the proof @param {string} expected normalized URI built from the issuer
+ */
+export function htuMatches(claimed, expected) {
+  if (claimed === expected) return true;
+  const want = new URL(expected), got = new URL(claimed);
+  if (got.pathname !== want.pathname) return false;
+  return aliasSiteOrigins().some((origin) => { try { return new URL(origin).origin === got.origin; } catch { return false; } });
+}
+
 /** Validate and atomically consume one RFC 9449 proof. */
 export async function verifyDpopProof(db, {
   proof,
@@ -79,7 +95,7 @@ export async function verifyDpopProof(db, {
   const htm = String(method || '').toUpperCase();
   if (claims.htm !== htm) throw invalid('DPoP htm mismatch');
   const htu = normalizeHtu(url);
-  if (normalizeHtu(claims.htu) !== htu) throw invalid('DPoP htu mismatch');
+  if (!htuMatches(normalizeHtu(claims.htu), htu)) throw invalid('DPoP htu mismatch');
   if (accessToken && claims.ath !== accessTokenHash(accessToken)) throw invalid('DPoP ath mismatch');
   if (!accessToken && claims.ath !== undefined) throw invalid('unexpected DPoP ath');
   if (nonce !== null && claims.nonce !== nonce) throw invalid('DPoP nonce mismatch');

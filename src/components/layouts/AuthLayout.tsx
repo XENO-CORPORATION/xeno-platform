@@ -17,7 +17,7 @@ const AuthLayout = () => {
        content region below scrolls INSIDE itself when it has to. That
        distinction matters because /help and /contact live in this layout and
        are genuinely long — locking the whole thing would truncate them. */
-    <div className="h-screen h-[100dvh] overflow-hidden bg-[#000000] text-white font-['Inter',sans-serif] antialiased flex flex-col">
+    <div className="h-screen h-[100dvh] overflow-hidden bg-[#060606] text-white font-['Inter',sans-serif] antialiased flex flex-col">
 
       {/* ── CENTRED, NO HERO PANEL ────────────────────────────────────────────
           Was a 55/60% split with an autoplaying /hero-bg.mp4 and a stats strip.

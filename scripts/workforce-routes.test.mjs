@@ -77,7 +77,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let authorityResult;
   let pinResult;
   let capacityResult;
-  let evaluationResult;
+  let evaluationResult, rosterResult;
   let deliveryResult;
   let revisionResult;
   const revisedAgent = '88888888-8888-4888-8888-888888888888';
@@ -154,7 +154,14 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
         steps: { privilegedCalls: 1, providerDispatches: 2 }, handoffs: null,
         decisions: { byRelation: { about: { 'division.assign': 1 } }, withEvidence: 0 },
         records: { admissions: [operationId], handoffs: [], decisions: [], truncated: false },
-        notRecorded: ['contributions', 'reviewerDecisions', 'settlements'], score: 97 }; },
+        actingPrincipal: null, tasks: null, spend: null,
+        notRecorded: ['contributions', 'tasks', 'spend'], score: 97 }; },
+    readWorkforceRoster: async (pool, context, value) => { calls.push({ method: 'roster', context, body: value });
+      return rosterResult ?? { schemaVersion: 1, owner: value.owner, group: value.group, window: value.window, derivedAt: '2026-09-27T12:00:00.000Z',
+        members: [{ principalId: value.group.id, name: 'Ada', kind: 'human', tasksCreated: 2, delegatedToAgents: 1, reviewDecisions: 1, decidedWithinAMinute: 0,
+          done: 1, neverReviewed: 0, closedByAgent: 0, runs: 1, spentMicro: '1200', asAgentMicro: '0', email: 'leak@example.test' }],
+        total: { tasksCreated: 2, delegatedToAgents: 1, reviewDecisions: 1, decidedWithinAMinute: 0, done: 1, neverReviewed: 0, closedByAgent: 0, runs: 1, spentMicro: '1200', asAgentMicro: '0' },
+        truncated: false }; },
     readRunnablePin: async (pool, context, value) => { calls.push({ method: 'pin', context, body: value }); if (admitFailure) throw admitFailure;
       return pinResult ?? { schemaVersion: 1, agent: { resourceId: value.agent.resourceId, version: 3, contentHash: 'b'.repeat(64) },
         target: value.target, team: null, terms: { definition: ['files.read'], target: ['files.read'] }, internalRow: 'hidden' }; },
@@ -648,12 +655,49 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       const base = () => ({ schemaVersion: 1, owner: ask.owner, subject: ask.subject, window: ask.window, derivedAt: '2026-09-27T12:00:00.000Z',
         settledBefore: '2026-09-27T11:55:00.000Z', closed: true, runs: { admitted: 0, children: 0, activeAtEnd: 0, stopped: { stopped_by_actor: 0, stopped_by_target: 0, authority_lost: 0 } },
         steps: { privilegedCalls: 0, providerDispatches: 0 }, handoffs: null, decisions: { byRelation: {}, withEvidence: 0 },
-        records: { admissions: [], handoffs: [], decisions: [], truncated: false }, notRecorded: [] });
+        records: { admissions: [], handoffs: [], decisions: [], truncated: false }, actingPrincipal: null, tasks: null, spend: null, notRecorded: [] });
       for (const bad of [{ window: { since: '2026-08-01T00:00:00.000Z', until: '2026-09-02T00:00:00.000Z' } },
         { subject: { kind: 'agent', resourceId: human } }, { runs: { admitted: -1, children: 0, activeAtEnd: 0, stopped: {} } }]) {
         evaluationResult = { ...base(), ...bad };
         assert.equal((await request({ path: '/evaluation', body: ask })).status, 500, 'an evaluation of another window is never reported');
       }
+      // A person's evaluation carries XENO Tasks; its shape is checked like the rest, and nothing extra crosses.
+      const person = { ...ask, subject: { kind: 'principal', userId: human } };
+      const tasks = () => ({ mine: { created: 2, delegatedToAgents: 1, assignedToOthers: 0, started: 1, submittedForReview: 1, closedWithoutReview: 0, comments: 3 },
+        reviews: { accepted: 1, changesRequested: 0, decidedWithinAMinute: 1, medianSeconds: 12 },
+        outcomes: { done: 1, viaAgent: 1, acceptedByHuman: 1, closedByAgent: 0, neverReviewed: 0 } });
+      const spend = () => ({ paid: { micro: '3500', requests: 2, viaAgentsMicro: '2500' }, byAgent: [{ agentUserId: operationId, micro: '2500', requests: 1 }],
+        asAgent: { micro: '0', requests: 0 }, agentMediaMicro: '0', runs: { settledMicro: '0', reservedMicro: '100000' }, usage: 'counted' });
+      const personal = (over = {}) => ({ ...base(), actingPrincipal: undefined, spend: spend(), subject: person.subject, handoffs: { sent: { offered: 0, accepted: 0, declined: 0, expired: 0 }, received: { offered: 0, accepted: 0, declined: 0, expired: 0 } },
+        records: { admissions: [], handoffs: [], decisions: [], tasks: [operationId], truncated: false }, tasks: tasks(), ...over });
+      evaluationResult = personal();
+      const mine = await request({ path: '/evaluation', body: person });
+      assert.equal(mine.status, 200);
+      assert.deepEqual(mine.body.tasks, tasks(), 'a person\'s task figures are reported as derived');
+      assert.deepEqual(mine.body.records.tasks, [operationId], 'with the tasks behind them');
+      assert.deepEqual(mine.body.spend, spend(), 'and the credits as charged');
+      for (const bad of [{ tasks: null }, { tasks: { ...tasks(), reviews: { ...tasks().reviews, score: 9 } } },
+        { tasks: { ...tasks(), outcomes: { ...tasks().outcomes, done: -1 } } }, { spend: null }, { spend: { ...spend(), paid: { ...spend().paid, micro: 3500 } } },
+        { spend: { ...spend(), usage: 'estimated' } }, { spend: { ...spend(), score: 1 } }]) {
+        evaluationResult = personal(bad);
+        assert.equal((await request({ path: '/evaluation', body: person })).status, 500, 'a malformed or scored task section is never reported');
+      }
+      evaluationResult = { ...base(), tasks: tasks() };
+      assert.equal((await request({ path: '/evaluation', body: ask })).status, 500, 'an agent definition with no account never carries tasks');
+      evaluationResult = { ...base(), actingPrincipal: human, tasks: tasks(), spend: { ...spend(), usage: 'not-tied-to-workspace' },
+        records: { admissions: [], handoffs: [], decisions: [], tasks: [], truncated: false } };
+      const def = await request({ path: '/evaluation', body: ask });
+      assert.equal(def.status, 200, 'an agent definition with an account carries its tasks and spend');
+      assert.equal(def.body.actingPrincipal, human);
+      // a roster: rows of counts and credits for the group asked about, and nothing else crosses
+      const rask = { owner: ask.owner, group: { kind: 'reports', id: human }, window: ask.window, expectedActorAccountId: human };
+      const ro = await request({ path: '/evaluation/roster', body: rask });
+      assert.equal(ro.status, 200);
+      assert.equal(Object.hasOwn(ro.body.members[0], 'email'), false, 'a field outside the row shape never crosses');
+      assert.equal(ro.body.members[0].spentMicro, '1200');
+      rosterResult = { ...(await (async () => ro.body)()), group: { kind: 'team', id: human } };
+      assert.equal((await request({ path: '/evaluation/roster', body: rask })).status, 500, 'a roster of another group is never reported');
+      rosterResult = undefined;
       evaluationResult = undefined;
       assert.equal((await request({ path: '/evaluation', body: ask, token: mint({ scope: 'workforce:manage' }) })).status, 403,
         'an evaluation needs workforce:read');

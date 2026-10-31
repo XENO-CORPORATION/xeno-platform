@@ -152,10 +152,10 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=xenostudio
-      - DB_USER=postgres
-      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      - DB_USER=xeno_app
+      - DB_PASSWORD=${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+      - DATABASE_URL=postgresql://xeno_app:${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}@postgres:5432/xenostudio
       # Docker socket mounted below for container provisioning
       - STORAGE_LIMIT_GB=5
       - CONVERSION_RETENTION_DAYS=7
@@ -259,16 +259,45 @@ services:
       # is a separate, one-way decision (config/hosts.js: an issuer is not
       # dual-homeable — OIDC Core §3.1.3.7 requires exact `iss` equality).
       - XENO_ALIAS_SITE_ORIGINS=${XENO_ALIAS_SITE_ORIGINS:-}
+      # Staged OIDC issuer move (docs/decisions/2026-10-28-oidc-issuer-staged-move.md): 'on' makes each host in
+      # XENO_ALIAS_SITE_ORIGINS its own provider. Unset = today's single issuer.
+      - XENO_ISSUER_PER_HOST=${XENO_ISSUER_PER_HOST:-}
+      # Cloud Shell (services/cloudShell.js): comma list of emails and @domains, or "all". Unset = closed (fail closed).
+      - SHELL_ENABLED=${SHELL_ENABLED:-}
       - SALES_OPEN=${SALES_OPEN:-}
+      # XENO Compute machines run on Cloudflare Containers (owner, 2026-10-27). Unset URL = every machine call
+      # refuses compute_unavailable, so nothing is started or billed (services/computeBackend.js).
+      - XENO_COMPUTE_API_URL=${XENO_COMPUTE_API_URL:-}
+      - XENO_COMPUTE_API_TOKEN=${XENO_COMPUTE_API_TOKEN:-}
+      # XENO Research (services/xenoResearch.js): notebooks run in XENO Box over its HTTP API with the platform's
+      # own tenant token. Box's TLS is issued by a private CA: XENO_BOX_CA_FILE is a PEM path INSIDE this container
+      # (mount it), used for Box calls only. Unset URL/token = every run refused box_not_configured (fail closed).
+      # XENO_INTERNAL_WORKSPACE_ID = the XENO workspace, the only one that may run while Box is unqualified.
+      - XENO_BOX_URL=${XENO_BOX_URL:-}
+      - XENO_BOX_TOKEN=${XENO_BOX_TOKEN:-}
+      - XENO_BOX_CA_FILE=${XENO_BOX_CA_FILE:-}
+      - XENO_RESEARCH_SIGNING_KEY=${XENO_RESEARCH_SIGNING_KEY:-}
+      - XENO_INTERNAL_WORKSPACE_ID=${XENO_INTERNAL_WORKSPACE_ID:-}
       # XENO Publish (services/xenoPost.js): xeno-post API base, https://post.xenosystem.ai/api/v1.
       # Unset = every Publish route answers publish_not_configured (fail closed).
       - XENO_POST_API_URL=${XENO_POST_API_URL:-}
+      # Dev › Automate = XENO Workflow (services/xenoWorkflow.js): the headless runner's base URL, e.g.
+      # http://xeno-workflow-runner:8790 on the backend's private network. Unset = runs stay queued (fail closed).
+      - XENO_WORKFLOW_RUNNER_URL=${XENO_WORKFLOW_RUNNER_URL:-}
+      # XENO Message (services/xenoComms.js): the XENO Comms API base (no /v1) and its realtime gateway socket.
+      # Unset API = every Message route answers message_not_configured (fail closed); unset gateway = no live updates.
+      - XENO_COMMS_API_URL=${XENO_COMMS_API_URL:-}
+      - XENO_COMMS_GATEWAY_URL=${XENO_COMMS_GATEWAY_URL:-}
+      # XENO Mail (services/xenoMail.js): mail-core base, e.g. https://mail-api.xenostudio.ai.
+      # Unset = every Mail route answers mail_not_configured (fail closed).
+      - XENO_MAIL_API_URL=${XENO_MAIL_API_URL:-}
       - REGISTRATION_OPEN=${REGISTRATION_OPEN:-}
       - REGISTRATION_OPEN_UNTIL=${REGISTRATION_OPEN_UNTIL:-}
       - REGISTRATION_ALLOWLIST=${REGISTRATION_ALLOWLIST:-}
       - FORUM_NOTIFICATION_EMAILS=${FORUM_NOTIFICATION_EMAILS:-}
       - SUPPORT_EMAILS=${SUPPORT_EMAILS:-}
       - SCHEDULING_EMAILS=${SCHEDULING_EMAILS:-}
+      - INBOX_DIGEST_EMAILS=${INBOX_DIGEST_EMAILS:-}
       - XENO_EXTENSION_ORIGINS=${XENO_EXTENSION_ORIGINS:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       # Svix signing secret of the Resend webhook that posts delivery events to
@@ -326,6 +355,11 @@ services:
       # Per-account cap on download-grant minting (default 60/hour).
       - GRANT_HOURLY_CAP=${GRANT_HOURLY_CAP:-}
       # ── XENO Artifacts (routes/artifactRoutes.js, /a/<id>) ───────────
+      # The ledger chain's outside anchor (docs/LEDGER-OPERATIONS.md). Unset: nothing is anchored, and the audit says so.
+      - LEDGER_ANCHOR_R2_BUCKET=${LEDGER_ANCHOR_R2_BUCKET:-}
+      - LEDGER_ANCHOR_PRIVATE_KEY=${LEDGER_ANCHOR_PRIVATE_KEY:-}
+      - LEDGER_ANCHOR_R2_ACCESS_KEY_ID=${LEDGER_ANCHOR_R2_ACCESS_KEY_ID:-}
+      - LEDGER_ANCHOR_R2_SECRET_ACCESS_KEY=${LEDGER_ANCHOR_R2_SECRET_ACCESS_KEY:-}
       # Storage: ARTIFACTS_R2_BUCKET + the three R2 creds selects R2 (private
       # bucket `xeno-artifacts`, created 2026-09-18); unset, pages land in
       # ARTIFACTS_DIR — a bind mount below, so they survive a redeploy. The
@@ -409,6 +443,19 @@ services:
       options:
         max-size: "100m"
         max-file: "10"
+
+  # Schema changes, and nothing else. A job, not a server: scripts/remote-deploy.sh runs it before swapping the
+  # backend (`run --rm`), and the `jobs` profile keeps `up` from starting it. This is the ONE holder of the database
+  # superuser credential (src/server/database/run-startup-migrations.mjs, docs/DATABASE-ROLES.md).
+  migrate:
+    profiles: ["jobs"]
+    image: xeno-platform-backend:latest
+    command: ["node", "database/run-startup-migrations.mjs"]
+    environment:
+      - NODE_ENV=production
+      - MIGRATION_DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+    networks:
+      - xenostudio-network
 
   # Untrusted document extraction has no network namespace. Requests and
   # bounded results cross a filesystem queue; source bytes are mounted read-only.
@@ -499,9 +546,9 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=xenostudio
-      - DB_USER=postgres
-      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/xenostudio
+      - DB_USER=xeno_app
+      - DB_PASSWORD=${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}
+      - DATABASE_URL=postgresql://xeno_app:${XENO_APP_DB_PASSWORD:?XENO_APP_DB_PASSWORD required}@postgres:5432/xenostudio
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379
       # XENO Storage: the object store is the home of a file's bytes. A worker reads a file whose cached
       # copy is gone from it (services/storageObjects.js localLibraryPath).
@@ -669,6 +716,32 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Dev › Automate engine: the XENO Workflow headless runner (docs/AUTOMATE-XENO-WORKFLOW.md).
+  # The image is built on the box from xeno-workflow's own repo (origin/main):
+  #   docker build -f docker/headless/Dockerfile -t xeno-workflow-runner:<sha> -t xeno-workflow-runner:latest .
+  # 🔴 NO `ports:` — it must never be reachable from outside the private network. The backend reaches it as
+  # http://xeno-workflow-runner:8790 (XENO_WORKFLOW_RUNNER_URL) and it reaches the backend at http://backend:8080.
+  # ⚠️ XENO_PLATFORM_ISSUER must be the issuer the backend SIGNS with (config/hosts.js issuer(), published at
+  # /api/oauth2/.well-known/openid-configuration — https://xenostudio.ai, measured 2026-10-24), not the site host.
+  xeno-workflow-runner:
+    image: xeno-workflow-runner:latest
+    container_name: xeno-workflow-runner
+    environment:
+      - XENO_PLATFORM_URL=http://backend:8080
+      - XENO_WORKFLOW_ALLOW_HTTP_PLATFORM=1
+      - XENO_PLATFORM_ISSUER=${XENO_WORKFLOW_PLATFORM_ISSUER:-https://xenostudio.ai}
+      - XENO_WORKFLOW_RUNNER_DATA=/data
+    volumes:
+      - xeno_workflow_runner_data:/data
+    networks:
+      - xenostudio-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
 
   # LaTeX Compilation Service (Full TeX Live)
   latex:
@@ -864,6 +937,8 @@ volumes:
   chat_extractor_jobs:
     driver: local
   clamav_db:
+    driver: local
+  xeno_workflow_runner_data:
     driver: local
 
 networks:

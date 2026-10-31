@@ -25,7 +25,8 @@
 import { createThread } from './forumWrite.js';
 import * as xenoTasks from './xenoTasks.js';
 import { sendEmail } from './emailService.js';
-import { siteOrigin } from '../config/hosts.js';
+import * as inbox from './inbox.js';
+import { publicSiteOrigin } from '../config/hosts.js';
 
 export class SupportError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'SupportError'; this.code = code; this.statusCode = status; }
@@ -53,7 +54,7 @@ const kindOf = (u) => (u.kind === 'agent' ? 'agent' : u.kind === 'service' ? 'se
 /** Staff is a HUMAN with an effective role of moderator or admin. An agent is never staff, whatever its role says. */
 export const isStaff = (u) => !!u && kindOf(u) === 'human' && ['admin', 'moderator'].includes(u.role);
 const keyOf = (t) => `T-${t.number}`;
-const urlOf = (t) => `${siteOrigin()}/workspace/support/${keyOf(t)}`;
+const urlOf = (t) => `${publicSiteOrigin()}/workspace/support/${keyOf(t)}`;
 const text = (v, field, max, required = true) => {
   const s = String(v ?? '').trim();
   if (required && !s) throw new SupportError(`${field} is required`, `${field}_required`);
@@ -137,8 +138,7 @@ function shape(t, who, extra = {}) {
 
 async function notify(db, t, actor, kind, detail) {
   if (!t.requester_id || String(t.requester_id) === String(actor && actor.id)) return;
-  await db.query(`INSERT INTO user_notifications (user_id, source, kind, ref, title, detail, actor_id, actor_kind) VALUES ($1, 'support', $2, $3, $4, $5, $6, $7)`,
-    [t.requester_id, kind, `support/${keyOf(t)}`, `${keyOf(t)} · ${t.title}`.slice(0, 400), String(detail || '').slice(0, 1000), actor && actor.id ? actor.id : null, actor && actor.id ? kindOf(actor) : null]);
+  await inbox.notify(db, { userId: t.requester_id, source: 'support', kind, ref: `support/${keyOf(t)}`, title: `${keyOf(t)} · ${t.title}`, detail, actorId: actor && actor.id ? actor.id : null, actorKind: actor && actor.id ? kindOf(actor) : null });
   await mail(db, t, kind, detail);
 }
 
@@ -181,6 +181,7 @@ export async function createTicket(db, user, { kind, title, body, workspaceId, a
      VALUES ($1, $2, $3, $4, $5, now() + make_interval(hours => $6), now() + make_interval(hours => $7)) RETURNING *`,
     [requester, workspaceId && UUID.test(String(workspaceId)) ? workspaceId : null, k, text(title, 'title', 200), text(body, 'body', 20000, false), fr, rs])).rows[0];
   if (attachments && [].concat(attachments).length) await attach(db, { id: requester }, t, null, attachments, false);
+  await (await import('./xenoWorkflow.js')).onSupportTicket(db, t, { actorId: user.id });   // Dev › Automate (never throws)
   if (kindOf(user) === 'agent') await db.query(`INSERT INTO support_messages (ticket_id, author_id, author_kind, kind, visibility, body) VALUES ($1,$2,'agent','system','internal',$3)`, [t.id, user.id, 'Raised by an agent on its owner’s behalf']);
   return getTicket(db, user, keyOf(t));
 }

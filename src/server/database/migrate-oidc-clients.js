@@ -49,6 +49,9 @@ export const FIRST_PARTY_CLIENTS = [
   // uses the same /api/library routes as the web Storage page. Its version floor and door are operator rows
   // (client_version_policy, product_access_policy for 'storage'), set when it ships, never by this seed.
   { id: 'xeno-storage', name: 'XENO Storage', loopback: true },
+  // XENO Corpus desktop (xeno-corpus/desktop): loopback PKCE like every desktop app. Its door asks only
+  // "who is this, and may they use Corpus"; the corpus itself is local files, so it needs no product scopes.
+  { id: 'xeno-corpus', name: 'XENO Corpus', loopback: true },
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
   { id: 'xeno-anima', name: 'XENO Anima', loopback: true },
@@ -75,6 +78,9 @@ export const FIRST_PARTY_CLIENTS = [
   // and holds the tokens; the browser only ever has an httpOnly session cookie. A separate
   // client_id from the local one so each deployment can be revoked on its own.
   { id: 'xeno-workshop', name: 'XENO Workshop', loopback: false, redirects: ['https://workshop.xenosystem.ai/auth/callback'] },
+  // XENO Tools on its own host — a backend-for-frontend on the platform itself (authRoutes /api/auth/host/*): the
+  // code is exchanged in-process and becomes an ordinary browser session on tools.xenosystem.ai; no token is kept.
+  { id: 'xeno-tools-web', name: 'XENO Tools', loopback: false, redirects: ['https://tools.xenosystem.ai/api/auth/host/callback'] },
   // XENO Places — a public browser SPA (no backend): authorization code + PKCE-S256 in the browser, access token in
   // memory only. One exact-match redirect; no localhost redirect (no other web client registers one).
   { id: 'xeno-places', name: 'XENO Places', loopback: false, redirects: ['https://places.xenosystem.ai/auth/callback'] },

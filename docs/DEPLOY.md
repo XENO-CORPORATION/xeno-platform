@@ -43,9 +43,11 @@ to run it for real.
    the fix for the whole class of "I edited a file but the old version deployed" bugs.
 2. **Build-before-swap.** `docker compose build` runs while the old container keeps serving. A failed
    build swaps nothing.
+   **The backend's schema moves here too:** the `migrate` job runs with the new image before the swap (the one holder of
+   the database superuser credential, `docs/DATABASE-ROLES.md`). A failed job swaps nothing.
 3. **Real healthcheck gate.** After the swap it polls the true readiness signal from the box —
-   **`/api/ready` for the backend** (which returns 200 only *after* startup migrations succeed; 503
-   until), **`/health` for the frontend**. It does not declare success until that endpoint returns 200.
+   **`/api/ready` for the backend** (which returns 200 only *after* the app has confirmed the migrate job applied every
+   migration; 503 until), **`/health` for the frontend**. It does not declare success until that endpoint returns 200.
 4. **Auto-rollback.** If the healthcheck fails, it retags the pre-build `:rollback` image back to
    `:latest`, recreates, and re-checks — then exits non-zero. The previous image is always preserved
    as `xeno-platform-<svc>:rollback` before each build.
@@ -91,8 +93,8 @@ On failure it restores the quiesced backup into a separate retained old-image
 volume. Qualification volumes and backups are not deleted by the script.
 
 - **Image rollback ≠ schema rollback.** Auto-rollback restores the previous *image*, not the database.
-  Startup migrations are **forward-only, additive, and idempotent** by design (`runStartupMigrations`
-  in `src/server/index.js`; the versioned runner in `services/migrationRunner.js`), so the previous
+  Migrations are **forward-only, additive, and idempotent** by design (`database/run-startup-migrations.mjs`;
+  the versioned runner in `services/migrationRunner.js`), so the previous
   image tolerates a schema that a newer migration already advanced. If a deploy's migration is *not*
   additive-safe, do not rely on image rollback — plan a data migration.
 - **Swaps use `--no-deps`.** `up -d --no-deps --force-recreate <svc>` recreates ONLY the targeted

@@ -883,6 +883,19 @@ export async function threadReplyRecipients(db, threadId, { exceptUserId, thread
  * One query rather than resolving the id first: a toggle is not worth two round
  * trips, and the join is on an indexed unique column.
  */
+export async function followedThreadShortIds(db, userId) {
+  const { rows } = await db.query(
+    `SELECT t.short_id
+       FROM forum_subscriptions s
+       JOIN forum_threads t ON t.id = s.thread_id
+      WHERE s.user_id = $1 AND NOT COALESCE(s.muted, false)
+      ORDER BY t.last_activity_at DESC NULLS LAST
+      LIMIT 500`,
+    [userId],
+  );
+  return rows.map((r) => r.short_id);
+}
+
 export async function threadSubscriptionByShortId(db, userId, shortId) {
   if (!userId || !shortId) return { subscribed: false };
   const { rows } = await db.query(
@@ -1182,7 +1195,32 @@ export async function eraseForumContent(client, userId) {
     [userId],
   );
 
-  return { postsErased: posts.rowCount, threadsErased: threads.rowCount };
+  // ── Private reports (XENO REPORT R2, R4) ──────────────────────────────────
+  // A private report is a TICKET, not a thread, so none of the above reached it — and a report carries more personal
+  // data than a post: a free-text body, the OS string, recent diagnostics folded into the body, and evidence bytes
+  // (screenshots, screen recordings). The `ON DELETE` rules on these tables never fire, because erasure tombstones the
+  // users row rather than deleting it.
+  //
+  // Same rule as posts: the subject's own words and bytes go; other people's replies on their ticket stay (staff and
+  // the product's dev agent wrote them), so a ticket becomes a shell that keeps its product, status and replies.
+  const evidence = await client.query('DELETE FROM forum_report_evidence WHERE reporter_id = $1', [userId]);
+  // The idempotency receipts hold the submitted request's hash and a copy of its receipt: theirs, and nothing else needs them.
+  const submissions = await client.query('DELETE FROM forum_report_submissions WHERE reporter_id = $1', [userId]);
+  const tickets = await client.query(
+    `UPDATE forum_tickets
+        SET title = '[removed]', body = '', os = NULL, updated_at = NOW()
+      WHERE reporter_id = $1 AND (title <> '[removed]' OR body <> '' OR os IS NOT NULL)`,
+    [userId],
+  );
+  // A reply must hold at least one character (CHECK), so the subject's replies keep a marker, never their words.
+  const ticketPosts = await client.query(
+    `UPDATE forum_ticket_posts SET body = '[removed]' WHERE author_id = $1 AND body <> '[removed]'`,
+    [userId],
+  );
+
+  return { postsErased: posts.rowCount, threadsErased: threads.rowCount,
+    ticketsErased: tickets.rowCount, ticketPostsErased: ticketPosts.rowCount,
+    reportEvidenceErased: evidence.rowCount, reportSubmissionsErased: submissions.rowCount };
 }
 
 /**

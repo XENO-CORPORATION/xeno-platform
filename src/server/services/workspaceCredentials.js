@@ -163,6 +163,37 @@ export async function revokeKey(db, ownerId, id) {
   return { id: String(row.id), revoked: true };
 }
 
+/**
+ * A key for ONE automation run (services/xenoWorkflow.js): the same xwk_ key and the same gates, minted for an agent
+ * that ALREADY holds its grants (the workflow's own agent, granted when a person enabled it), living minutes rather
+ * than days, and revoked when the run ends. It grants nothing itself, so revoking it takes nothing away from the
+ * workflow. A headless key cannot step up, so an irreversible capability or spend above the threshold is refused.
+ */
+export async function createRunKey(db, { ownerId, agentId, workspaceId, scopes, label, minutes = 15 }) {
+  const sc = [...new Set([].concat(scopes || []).map(String))];
+  if (!sc.length || sc.some((s) => !WORKSPACE_SCOPES.includes(s))) throw new WorkspaceCredentialError('A run key needs at least one workspace scope', 'invalid_scope');
+  const m = Number(minutes);
+  if (!Number.isInteger(m) || m < 1 || m > 60) throw new WorkspaceCredentialError('A run key lives 1 to 60 minutes', 'invalid_expiry');
+  const key = `xwk_${crypto.randomBytes(30).toString('base64url')}`;
+  const row = (await db.query(`INSERT INTO workspace_agent_keys (key_sha256, key_prefix, name, owner_user_id, agent_user_id, workspace_id, scopes, expires_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(mins => $8)) RETURNING id`, [sha(key), key.slice(0, 12), String(label || 'Automation run').slice(0, 80), ownerId, agentId, workspaceId, sc, m])).rows[0];
+  return { key, id: String(row.id) };
+}
+
+/** Keep a live run key alive: its expiry moves to `minutes` from now (1..60). Never revives a revoked or lapsed key.
+ *  Returns false when the key is gone, so its holder can stop. (Cloud Shell renews while its connection is open.) */
+export async function renewRunKey(db, id, minutes = 60) {
+  const m = Number(minutes);
+  if (!Number.isInteger(m) || m < 1 || m > 60) throw new WorkspaceCredentialError('A run key lives 1 to 60 minutes', 'invalid_expiry');
+  return (await db.query(`UPDATE workspace_agent_keys SET expires_at = now() + make_interval(mins => $2)
+    WHERE id = $1 AND revoked_at IS NULL AND expires_at > now() RETURNING id`, [id, m])).rows.length > 0;
+}
+
+/** End a run key: refused on its next call. Grants stay with the workflow's agent. */
+export async function revokeRunKey(db, id) {
+  await db.query('UPDATE workspace_agent_keys SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [id]);
+}
+
 /** The live key behind a raw xwk_ string, or null (unknown, expired or revoked). */
 export async function resolveKey(db, raw) {
   if (!/^xwk_[A-Za-z0-9_-]{30,60}$/.test(String(raw || ''))) return null;

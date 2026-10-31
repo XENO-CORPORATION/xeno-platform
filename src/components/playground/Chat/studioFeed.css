@@ -424,6 +424,16 @@
 .sgf-chat { width: 100%; margin: 12px 0; } /* a generation in a reply takes the reply's full width, like its text; the stage keeps its own height cap */
 .sgf-chat[role="status"] { color: var(--chat-text); padding: 12px 0; }
 .sgf-chat .sgf-card { animation: none; }
+/* One image in a reply: the frame IS the picture — its real shape, measured when it loads (the requested ratio until
+   then) — so there are no letterbox bars, and it sits at a reading size instead of the reply's whole width: at most
+   440px tall and 560px wide, the card exactly as wide as the picture. A click opens it in the Library viewer. */
+.sgf-chat[data-single] .sgf-card { width: min(100%, 560px, calc(440px * var(--sgf-ar, 1))); }
+.sgf-chat[data-single] .sgf-set { padding: 0; background: transparent; }
+.sgf-chat[data-single] .sgf-tile { aspect-ratio: var(--sgf-ar, 1); min-height: 0; max-height: none; width: 100%; border-radius: 0; background: color-mix(in srgb, var(--chat-text) 3%, var(--chat-surface)); }
+.sgf-chat[data-single] .sgf-tile img { max-height: none; object-fit: cover; }
+/* a portrait picture makes a narrow card: its details wrap rather than being cut to "· 1" */
+.sgf-chat[data-single] .sgf-foot { column-gap: 12px; }
+.sgf-chat[data-single] .sgf-foot-meta { flex-wrap: wrap; row-gap: 2px; }
 
 /* The XENO mark while the gallery or the stage loads, in the text colour. */
 .sgf-empty[role="status"], .sms[role="status"] { color: var(--chat-text); }

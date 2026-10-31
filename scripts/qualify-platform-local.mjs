@@ -160,7 +160,7 @@ try {
 // creates databases — running it IS the side effect — so the reachability gate
 // reads this array out of the source text instead of importing it.
 const BACKEND_SUITES = [
-  'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness', 'project-insights',
+  'spawn-skills', 'ledger-v2', 'ledger-chain', 'ledger-billing', 'ledger-correctness', 'project-insights',
   'media-metering', 'wallet-service', 'authz-v2', 'oidc-v2', 'connect-authority', 'erasure',
   'account-recovery', 'auth-token-confusion', 'api-key-auth', 'browser-bff-session',
   'credit-mirror-drift', 'dpop-token-exchange', 'fresh-db-boot',
@@ -183,6 +183,8 @@ const BACKEND_SUITES = [
   'workspace-agent-surface',
   // On disk and run by NOTHING until 2026-10-20 (the gates-reachable gate was red on main): register them here
   'marketplace-seller-workspace', 'ownership-contract', 'ownership-principles', 'plan-on-workspace', 'service-account-grants',
+  // XENO Compute (2026-10-26): machine time on the ledger — hourly holds, settles, caps, the meter
+  'compute',
 ];
 
 const BACKEND_EVIDENCE = {

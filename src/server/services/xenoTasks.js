@@ -18,10 +18,12 @@
  * claim, move and comment, never accept their own work.
  */
 import crypto from 'node:crypto';
+import * as inbox from './inbox.js';
 import { assertAvailableOrOverridden, workspaceOfProject, AwayError } from './workforceAvailability.js';
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createAgent, DEFAULT_AGENT_CAP } from './agentIdentity.js';
 import * as agentAccess from './agentAccess.js';
+import { readinessOf, closesLoop } from './orchestratorEngine.js';
 // agent-identity errors carry statusCode; Tasks errors carry status
 const asTaskError = (e) => (e && e.code && (e.status || e.statusCode) ? new TaskError(e.message, e.code, e.status || e.statusCode) : e);
 // MCP sign-in agents (one per app name, reused) may go past the general cap by this much, so a person who
@@ -35,7 +37,7 @@ export class TaskError extends Error {
 export const STATUSES = ['raised', 'todo', 'in_progress', 'blocked', 'in_review', 'done', 'wont_do'];
 export const KINDS = ['task', 'bug', 'feature', 'question'];
 export const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'];
-const SOURCES = ['manual', 'chat', 'forum_ticket', 'forum_thread', 'agent'];
+const SOURCES = ['manual', 'chat', 'forum_ticket', 'forum_thread', 'agent', 'mail'];
 const AREA = /^[a-z][a-z0-9_-]{0,39}$/, UUID = /^[0-9a-f-]{36}$/i;
 const MOVES = {
   raised: ['todo', 'in_progress', 'wont_do'],
@@ -84,6 +86,27 @@ async function standing(db, me, t) {
   return { view: involved, edit: own, admin: own, creator: own, manage: own };
 }
 
+/**
+ * WHO MAY INTERACT WITH A TASK (owner, 2026-10-23): "when somebody enters a task he should be able to interact with
+ * it — comment, copy for agent and what not — only when he took the task or it was assigned to him; otherwise he
+ * should not be able to interact with the task."
+ *   read     anyone who can see it (standing().view)
+ *   take     anyone who can see it, while it is open and nobody holds it (claimTask)
+ *   work     the assignee (taking it makes you the assignee), the agent it is delegated to (acting for that
+ *            assignee), and whoever manages it — its creator, or a project admin standing in so a task is never
+ *            orphaned. Comment, images, sub-tasks, links, folders, working moves, copy for agent / hand to an agent.
+ *   review   the named reviewer: the review moves (accept / ask for changes, movesFor) and review comments
+ * Everyone else reads it and may take it, or ask to be assigned (requestAssignment). The same check answers REST,
+ * MCP and the screens, and `can` tells a screen exactly what the server will accept.
+ */
+export const NOT_YOURS = 'Take this task or ask to be assigned to work on it.';
+const isMe = (me, id) => !!id && String(id) === String(me.id);
+const worksOn = (me, t) => isMe(me, t.assignee_id) || isMe(me, t.delegate_id);
+const mayWork = (me, t, s) => !!(s && (s.manage || worksOn(me, t)));
+const mayComment = (me, t, s) => mayWork(me, t, s) || isMe(me, t.reviewer_id);
+const mayTake = (me, t) => !['done', 'wont_do'].includes(t.status) && (kindOf(me) === 'agent' ? !t.delegate_id : !t.assignee_id);
+const canFor = (me, t, s) => ({ ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s), work: mayWork(me, t, s), comment: mayComment(me, t, s), take: mayTake(me, t), review: isMe(me, t.reviewer_id) && t.status === 'in_review' });
+
 const SELECT = `SELECT t.*, COALESCE(t.area, (SELECT p.area FROM chat_projects p WHERE p.id = t.project_id)) AS effective_area,
   (SELECT p.name FROM chat_projects p WHERE p.id = t.project_id) AS project_name,
   COALESCE(ru.display_name, ru.username) AS reporter_name, COALESCE(au.display_name, au.username) AS assignee_name, COALESCE(vu.display_name, vu.username) AS reviewer_name,
@@ -109,7 +132,7 @@ function shape(t, s, events, files, extra) {
     createdAt: t.created_at, updatedAt: t.updated_at, closedAt: t.closed_at,
     parent: t.parent_key ? { key: t.parent_key, title: t.parent_title } : null, subtasks: { total: Number(t.child_count || 0), done: Number(t.child_done || 0) },
     ...(extra || {}),
-    ...(s ? { can: { edit: !!s.manage, creator: !!s.creator, triage: !!s.edit, moves: s.moves || [], attach: !!s.attach, delete: !!s.del } } : {}),
+    ...(s ? { can: { edit: !!s.manage, creator: !!s.creator, triage: !!s.edit, moves: s.moves || [], attach: !!s.attach, delete: !!s.del, work: !!s.work, comment: !!s.comment, take: !!s.take, review: !!s.review } } : {}),
     ...(files ? { attachments: files.map((a) => ({ id: a.id, filename: a.filename, mime: a.mime, size: a.size_bytes, at: a.created_at, uploader: person(a.uploader_id, a.uploader_name) })) } : {}),
     ...(events ? { events: events.map((e) => ({ id: e.id, kind: e.kind, field: e.field || null, from: e.from_value, to: e.to_value, fromName: e.from_name || null, toName: e.to_name || null, note: e.removed_at ? null : e.note, ...(e.data ? { data: e.data } : {}), at: e.created_at, editedAt: e.edited_at || null, removed: !!e.removed_at, actor: person(e.actor_id, e.actor_name, e.actor_kind === 'agent') })) } : {}),
   };
@@ -214,7 +237,7 @@ export async function getTask(db, me, key) {
   // access to them is Storage's check, which the link grants to whoever works the task
   const folders = (await db.query(`SELECT tf.folder_id, tf.role, f.name FROM task_folders tf JOIN storage_folders f ON f.id = tf.folder_id WHERE tf.task_id = $1 ORDER BY tf.created_at`, [t.id]).catch(() => ({ rows: [] }))).rows
     .map((r) => ({ id: String(r.folder_id), name: r.name, role: r.role, url: `/workspace/storage/f/${r.folder_id}` }));
-  return { ...shape(t, { ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s) }, events, files, await extrasFor(db, me, t, s)), folders };
+  return { ...shape(t, canFor(me, t, s), events, files, await extrasFor(db, me, t, s)), folders };
 }
 
 /** Tasks the caller can see. Filters: area (id | 'none'), projectId, status (one or a comma list), assignee ('me' | 'none' | id), q. */
@@ -241,9 +264,12 @@ export async function listTasks(db, me, f = {}) {
   const out = [], byProject = new Map();
   for (const t of rows) {
     let s;
-    if (t.project_id && String(t.delegate_id || '') !== String(me.id)) { if (!byProject.has(t.project_id)) byProject.set(t.project_id, await standing(db, me, t)); s = byProject.get(t.project_id); if (!s.view) continue; }
+    if (t.project_id && String(t.delegate_id || '') !== String(me.id)) { if (!byProject.has(t.project_id)) byProject.set(t.project_id, await standing(db, me, t)); const p = byProject.get(t.project_id); if (!p.view) continue;
+      // the project's part is shared; who CREATED this task is not (a cached creator made every row of a project carry
+      // the first row's edit rights)
+      const creator = (await creatorOf(db, t)) === String(me.id); s = { ...p, creator, manage: creator || p.admin }; }
     else s = await standing(db, me, t);
-    out.push(shape(t, { ...s, moves: movesFor(me, t, s), attach: mayAttach(me, t, s), del: mayDelete(me, t, s) }));
+    out.push(shape(t, canFor(me, t, s)));
   }
   return out;
 }
@@ -253,7 +279,7 @@ export async function updateTask(db, me, key, input = {}) { // eslint-disable-li
   const mine = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
   // the worker may hand it back (unassign themselves) and nothing else; every other change is the creator's
   const handBack = mine && Object.keys(input).every((k) => k === 'assigneeId') && input.assigneeId === null;
-  if (!s.manage && !handBack) throw new TaskError('Only the person who created this task can change it. You can comment, or work on it and send it for review.', 'not_allowed', 403);
+  if (!s.manage && !handBack) throw mine ? new TaskError('Only the person who created this task can change it. You can comment, or work on it and send it for review.', 'not_allowed', 403) : new TaskError(NOT_YOURS, 'not_your_task', 403);
   const set = [], vals = [], changes = [];
   const put = (col, val, label, from) => { vals.push(val); set.push(`${col} = $${vals.length}`); changes.push([label, from, val]); };
   if (input.title !== undefined) put('title', text(input.title, 'title', 300), 'title', t.title);
@@ -311,7 +337,8 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   if (!allowedMoves(t.status).includes(to)) throw new TaskError(`A task cannot go from ${t.status} to ${to}`, 'invalid_transition', 409);
   if (!movesFor(me, t, s).includes(to)) {
     const worker = String(t.assignee_id) === String(me.id) || String(t.delegate_id || '') === String(me.id);
-    const why = to === 'done' && worker && !s.creator ? 'Send it for review: the person who created this task accepts it.'
+    const why = !worker && !s.manage && !s.edit && !isMe(me, t.reviewer_id) ? NOT_YOURS
+      : to === 'done' && worker && !s.creator ? 'Send it for review: the person who created this task accepts it.'
       : to === 'done' && t.review_required ? 'This task needs review: move it to In review.'
       : (to === 'wont_do' || t.status === 'done' || t.status === 'wont_do') && !s.manage ? 'Only the person who created this task can close or reopen it.'
       : 'You are not allowed to make that move on this task.';
@@ -322,7 +349,9 @@ export async function transitionTask(db, me, key, { to, note, from } = {}) {
   const backTo = to === 'in_review' && !t.reviewer_id ? await creatorOf(db, t) : null;
   const done = (await db.query(`UPDATE tasks SET status = $2, updated_at = now(), closed_at = CASE WHEN $2 IN ('done', 'wont_do') THEN now() ELSE NULL END, reviewer_id = COALESCE(reviewer_id, $4::uuid) WHERE id = $1 AND status = $3 RETURNING id`, [t.id, to, t.status, backTo])).rowCount;
   if (!done) throw new TaskError('Someone moved this task first. Reload it and try again.', 'conflict', 409);
-  await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null);
+  const moved = (await event(db, t, me, 'status', t.status, to, note ? text(note, 'note', 20000, false) : null)).rows[0];
+  // Dev › Automate: workspace workflows listening for task moves hear it (idempotent by this event's id; never throws)
+  await (await import('./xenoWorkflow.js')).onTaskStatus(db, { task: t, from: t.status, to, eventId: moved && moved.id, actorId: me.id });
   if (backTo) await event(db, t, me, 'edited', null, backTo, null, 'reviewer');
   const fresh = await loadByKey(db, key), label = { raised: 'Triage', todo: 'To do', in_progress: 'In progress', blocked: 'Blocked', in_review: 'In review', done: 'Done', wont_do: 'Won’t do' };
   const told = new Set();
@@ -385,8 +414,27 @@ export async function claimTask(db, me, key, { runId } = {}) {
   return getTask(db, me, key);
 }
 
+/** "Ask to be assigned": someone who can see a task another person holds tells whoever may assign it (its creator;
+ *  failing that, the project's admins). Asking again within a day tells nobody twice. Nothing on the task changes. */
+export async function requestAssignment(db, me, key) {
+  const { t, s } = await readable(db, me, key);
+  if (kindOf(me) !== 'human') throw new TaskError('Only a person asks to be assigned', 'not_allowed', 403);
+  if (['done', 'wont_do'].includes(t.status)) throw new TaskError('This task is closed', 'task_closed', 409);
+  if (worksOn(me, t)) throw new TaskError('You already hold this task', 'already_yours', 409);
+  if (!t.assignee_id) throw new TaskError('Nobody holds this task: take it', 'take_it', 409);
+  const to = [await creatorOf(db, t)].filter((id) => id && !isMe(me, id));
+  if (t.project_id && !to.length) {
+    const admins = (await db.query(`SELECT DISTINCT subject_id FROM relationship_tuples WHERE object_type = 'project' AND object_id = $1 AND relation = 'admin' AND subject_type = 'user'`, [String(t.project_id)])).rows;
+    for (const a of admins) if (!isMe(me, a.subject_id)) to.push(String(a.subject_id));
+  }
+  const asked = (await db.query(`SELECT 1 FROM user_notifications WHERE source = 'tasks' AND kind = 'assignment_requested' AND ref = $1 AND actor_id = $2 AND created_at > now() - interval '1 day' LIMIT 1`, [`T-${t.number}`, me.id])).rows.length > 0;
+  if (!asked) await notifyUsers(db, t, me, to, 'assignment_requested', `${actorName(me)} asks to be assigned`);
+  return { asked: true, repeated: asked, task: shape(t, canFor(me, t, s)) };
+}
+
 export async function commentTask(db, me, key, { body } = {}) {
-  const { t } = await readable(db, me, key);
+  const { t, s } = await readable(db, me, key);
+  if (!mayComment(me, t, s)) throw new TaskError(NOT_YOURS, 'not_your_task', 403);
   const note = text(body, 'body', 20000);
   await event(db, t, me, 'comment', null, null, note);
   await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
@@ -399,9 +447,8 @@ export async function commentTask(db, me, key, { body } = {}) {
 
 // ───────────────────────────── images, deleting, who can be assigned
 
-const mine = (me, t, col) => String(t[col]) === String(me.id);
-/** Anyone working on the task may add images to it: whoever manages it, the assignee, the reviewer, the reporter. */
-const mayAttach = (me, t, s) => !!(s.manage || mine(me, t, 'assignee_id') || mine(me, t, 'delegate_id') || mine(me, t, 'reviewer_id') || mine(me, t, 'reporter_id'));
+/** Whoever works the task may add images to it: whoever manages it, the assignee, the delegate (owner, 2026-10-23). */
+const mayAttach = (me, t, s) => mayWork(me, t, s);
 /** Deleting is for whoever owns the place the task lives (project admin, or the owner of a personal task), and for the
  *  reporter while it is still waiting in triage — a task raised by mistake can be withdrawn, accepted work cannot. */
 const mayDelete = (me, t, s) => !!s.manage;   // the creator's (or an admin's); a delete is restorable for 30 days
@@ -426,7 +473,7 @@ function cleanName(name, mime) {
 
 export async function addAttachment(db, me, key, { filename, data } = {}) {
   const { t, s } = await readable(db, me, key);
-  if (!mayAttach(me, t, s)) throw new TaskError('Only the people working on this task can add images to it', 'not_allowed', 403);
+  if (!mayAttach(me, t, s)) throw new TaskError(NOT_YOURS, 'not_your_task', 403);
   if (!Buffer.isBuffer(data) || !data.length) throw new TaskError('Send the image as the request body', 'image_required');
   if (data.length > ATTACH_MAX_BYTES) throw new TaskError('Images can be at most 8 MB', 'image_too_large', 413);
   const mime = sniffImage(data);
@@ -494,6 +541,8 @@ async function parentFor(db, me, ref) {
   const row = /^T-\d+$/i.test(s) ? await loadByKey(db, s) : UUID.test(s) ? (await db.query(`${SELECT} WHERE t.id = $1 AND t.deleted_at IS NULL`, [s])).rows[0] : null;
   const st = row ? await standing(db, me, row) : null;
   if (!st || !st.view) throw new TaskError('Parent task not found', 'parent_not_found', 404);
+  // adding a sub-task (or moving one under it) is working on the parent (owner, 2026-10-23)
+  if (!mayWork(me, row, st)) throw new TaskError(NOT_YOURS, 'not_your_task', 403);
   return row;
 }
 
@@ -519,8 +568,7 @@ async function notifyUsers(db, t, me, userIds, kind, detail) {
   for (const id of ids) {
     const s = await standing(db, { id }, t);
     if (!s.view) continue;
-    await db.query(`INSERT INTO user_notifications (user_id, source, kind, ref, title, detail, area, actor_id, actor_kind) VALUES ($1, 'tasks', $2, $3, $4, $5, $6, $7, $8)`,
-      [id, kind, `T-${t.number}`, title, String(detail || '').slice(0, 1000), area, me && me.id ? me.id : null, me && me.id ? kindOf(me) : null]);
+    await inbox.notify(db, { userId: id, source: 'tasks', kind, ref: `T-${t.number}`, title, detail, area, actorId: me && me.id ? me.id : null, actorKind: me && me.id ? kindOf(me) : null });
   }
 }
 const MENTION = /(^|[^\w@.-])@([A-Za-z0-9][A-Za-z0-9_.-]{0,48}[A-Za-z0-9_])/g;
@@ -553,13 +601,15 @@ async function extrasFor(db, me, t, s) {
   }
   const w = (await db.query(`SELECT w.user_id, w.muted, COALESCE(u.display_name, u.username) AS name FROM task_watchers w JOIN users u ON u.id = w.user_id WHERE w.task_id = $1`, [t.id])).rows;
   const me_ = w.find((x) => String(x.user_id) === String(me.id));
-  // the Orchestrator's readiness rule (workforceOrchestrator.taskReadiness): ready when every blocker is done. Counted over
-  // ALL blockers, including ones the caller cannot see — the count reveals no task, only that something is unfinished.
-  const open = (await db.query(`SELECT (SELECT count(*) FROM task_links l JOIN tasks f ON f.id = l.from_task WHERE l.to_task = $1 AND l.kind = 'blocks' AND f.status NOT IN ('done','wont_do'))::int
-      + (SELECT count(*) FROM orchestrator_edges e LEFT JOIN project_goals g ON e.from_kind = 'goal' AND g.id = e.from_id LEFT JOIN project_objectives o ON e.from_kind = 'objective' AND o.id = e.from_id
-         WHERE e.to_kind = 'task' AND e.to_id = $1 AND COALESCE(g.status, o.status, 'completed') <> 'completed')::int AS n`, [t.id]).catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n;
-  return { children, links, watching: !!(me_ && !me_.muted), watchers: w.filter((x) => !x.muted).map((x) => ({ id: String(x.user_id), name: x.name })), canLink: !!(s.manage || String(t.assignee_id) === String(me.id)),
-    readiness: { openBlockers: open, ready: open === 0 && !['done', 'wont_do'].includes(t.status) } };
+  // readiness is the Orchestrator ENGINE's decision (orchestratorEngine.readinessOf): Tasks only reads its blockers' done
+  // flags. Over ALL blockers, including ones the caller cannot see — the count reveals no task, only that something is
+  // unfinished.
+  const blockers = (await db.query(`SELECT f.status IN ('done','wont_do') AS done FROM task_links l JOIN tasks f ON f.id = l.from_task WHERE l.to_task = $1 AND l.kind = 'blocks'
+      UNION ALL SELECT COALESCE(g.status, o.status, 'completed') = 'completed' FROM orchestrator_edges e LEFT JOIN project_goals g ON e.from_kind = 'goal' AND g.id = e.from_id
+        LEFT JOIN project_objectives o ON e.from_kind = 'objective' AND o.id = e.from_id WHERE e.to_kind = 'task' AND e.to_id = $1`, [t.id]).catch(() => ({ rows: [] }))).rows;
+  const readiness = readinessOf({ done: ['done', 'wont_do'].includes(t.status), blockers });
+  return { children, links, watching: !!(me_ && !me_.muted), watchers: w.filter((x) => !x.muted).map((x) => ({ id: String(x.user_id), name: x.name })), canLink: mayWork(me, t, s),
+    readiness };
 }
 
 export async function editComment(db, me, key, eventId, { body } = {}) {
@@ -586,12 +636,16 @@ export async function removeComment(db, me, key, eventId) {
 const LINK_KINDS = { blocks: ['blocks', false], blocked_by: ['blocks', true], relates: ['relates', false], duplicates: ['duplicates', false], duplicated_by: ['duplicates', true] };
 export async function addLink(db, me, key, { kind, to } = {}) {
   const { t, s } = await readable(db, me, key);
-  if (!s.manage && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the person who created this task, or whoever is working on it, can link it', 'not_allowed', 403);
+  if (!mayWork(me, t, s)) throw new TaskError(NOT_YOURS, 'not_your_task', 403);
   const k = LINK_KINDS[kind]; if (!k) throw new TaskError('Unknown link type', 'invalid_link');
   const { t: o } = await readable(db, me, to).catch(() => { throw new TaskError('That task was not found', 'link_target_not_found', 404); });
   if (String(o.id) === String(t.id)) throw new TaskError('A task cannot link to itself', 'link_self', 409);
   const [from, dest] = k[1] ? [o, t] : [t, o];
-  // a `blocks` link is a dependency edge of the Orchestrator graph: the database refuses one that closes a loop
+  // a `blocks` link is a dependency edge of the Orchestrator graph: the ENGINE refuses one that closes a loop, and the
+  // database refuses it again under a lock (a concurrent writer)
+  if (k[0] === 'blocks' && await closesLoop(db, { kind: 'task', id: from.id }, { kind: 'task', id: dest.id })) {
+    throw new TaskError(`That would make a loop: T-${dest.number} already blocks T-${from.number}, directly or through other tasks`, 'link_cycle', 409);
+  }
   const ins = await db.query('INSERT INTO task_links (from_task, to_task, kind, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id', [from.id, dest.id, k[0], me.id])
     .catch((e) => { if (e && e.code === '23514' && /orchestrator_cycle/.test(String(e.message))) throw new TaskError(`That would make a loop: T-${dest.number} already blocks T-${from.number}, directly or through other tasks`, 'link_cycle', 409); throw e; });
   if (ins.rowCount) { await event(db, t, me, 'linked', kind, `T-${o.number}`, null); await db.query('UPDATE tasks SET updated_at = now() WHERE id = ANY($1::uuid[])', [[t.id, o.id]]); }
@@ -599,7 +653,7 @@ export async function addLink(db, me, key, { kind, to } = {}) {
 }
 export async function removeLink(db, me, key, linkId) {
   const { t, s } = await readable(db, me, key);
-  if (!s.manage && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the person who created this task, or whoever is working on it, can unlink it', 'not_allowed', 403);
+  if (!mayWork(me, t, s)) throw new TaskError(NOT_YOURS, 'not_your_task', 403);
   if (!UUID.test(String(linkId))) throw new TaskError('Link not found', 'link_not_found', 404);
   const l = (await db.query('DELETE FROM task_links WHERE id = $1 AND (from_task = $2 OR to_task = $2) RETURNING kind, from_task, to_task', [linkId, t.id])).rows[0];
   if (!l) throw new TaskError('Link not found', 'link_not_found', 404);
@@ -651,20 +705,8 @@ export async function deleteView(db, me, id) {
   return listViews(db, me);
 }
 
-// the inbox: everything written to user_notifications, newest first
-export async function listNotifications(db, userId, { unread = false, limit = 50 } = {}) {
-  const n = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
-  const rows = (await db.query(`SELECT n.id, n.source, n.kind, n.ref, n.title, n.detail, n.area, n.read_at, n.created_at, n.actor_kind,
-      COALESCE(u.display_name, u.username) AS actor_name FROM user_notifications n LEFT JOIN users u ON u.id = n.actor_id
-     WHERE n.user_id = $1 ${unread ? 'AND n.read_at IS NULL' : ''} ORDER BY n.created_at DESC LIMIT ${n}`, [userId])).rows;
-  const unreadCount = (await db.query('SELECT count(*)::int AS n FROM user_notifications WHERE user_id = $1 AND read_at IS NULL', [userId])).rows[0].n;
-  return { unread: unreadCount, items: rows.map((r) => ({ id: r.id, source: r.source, kind: r.kind, ref: r.ref, title: r.title, detail: r.detail, area: r.area, read: !!r.read_at, at: r.created_at, actor: r.actor_name ? { name: r.actor_name, kind: r.actor_kind || 'human' } : null })) };
-}
-export async function markNotificationsRead(db, userId, ids) {
-  if (ids === 'all') { await db.query('UPDATE user_notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL', [userId]); return; }
-  const list = (Array.isArray(ids) ? ids : []).filter((x) => UUID.test(String(x))).slice(0, 500);
-  if (list.length) await db.query('UPDATE user_notifications SET read_at = now() WHERE user_id = $1 AND id = ANY($2::uuid[]) AND read_at IS NULL', [userId, list]);
-}
+// the inbox moved to inbox.js; these names stay for the callers that import them from here
+export { listNotifications, markNotificationsRead } from './inbox.js';
 
 /** Due reminders, once per due date: a day before to the assignee (or owner), and once overdue to them and the reporter. */
 export async function sweepDueReminders(db) {
@@ -962,7 +1004,7 @@ export async function deliverAgentEvents(db, { send = safeRequest, batch = 50 } 
 export async function handoffTask(db, me, key) {
   const { t, s } = await readable(db, me, key);
   if (kindOf(me) !== 'human') throw new TaskError('Only a person hands a task off', 'not_allowed', 403);
-  if (!s.manage && String(t.assignee_id) !== String(me.id)) throw new TaskError('Only the person who created this task, or whoever is working on it, can hand it to an agent', 'not_allowed', 403);
+  if (!mayWork(me, t, s)) throw new TaskError(NOT_YOURS, 'not_your_task', 403);
   let agent = (await db.query(`SELECT u.id, u.username, COALESCE(u.display_name, u.username) AS name FROM agent_identities ai JOIN users u ON u.id = ai.user_id
     WHERE ai.owner_user_id = $1 AND ai.agent_origin = 'handoff' ORDER BY ai.created_at LIMIT 1`, [me.id])).rows[0];
   if (!agent) {

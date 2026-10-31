@@ -5,6 +5,8 @@ import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-do
 import { isEmbeddedChatPath, isWorkspaceEmbed, leaveEmbed } from './lib/workspaceEmbed';
 
 import Home3 from "./pages/Home3";
+import HomeV21Redirect from "./pages/HomeV21Redirect";
+import StaticDocRedirect from "./pages/StaticDocRedirect";
 import { lazyRoute } from './components/platform/lazyRoute';
 
 const ProductPage = lazyRoute(() => import('./pages/ProductPage'));
@@ -228,12 +230,12 @@ function App() {
       <CollaborationProvider>
         <OSStateProvider>
           <Routes>
-            {/* Landing Page — the v3 redesign is now the default homepage */}
-            <Route path="/" element={<Home3 />} />
+            {/* Landing: nginx serves the static Home v21 document at `/`; this hands in-app navigation to it. /v3 keeps the previous React homepage. */}
+            <Route path="/" element={<HomeV21Redirect />} />
             <Route path="/v3" element={<Home3 />} />{/* alias — keep existing links working */}
             <Route path="/marketplace" element={<Marketplace />} />
             {/* Product pages — registry-driven, one template for all products */}
-            <Route path="/products" element={<ProductsIndex />} />
+            <Route path="/products" element={<StaticDocRedirect to="/products" />} />
             <Route path="/product/:slug" element={<ProductPage />} />
             <Route path="/product/:slug/download" element={<ProductDownload />} />
             <Route path="/product/:slug/releases" element={<ProductReleases />} />
@@ -301,9 +303,10 @@ function App() {
                 redirect away the one page that knows how to finish the job. */}
             <Route path="/download/resume" element={<DownloadResume />} />
 
-            {/* RFC 8628 verification URI. The provider emits /activate, so it
-                must be a real route rather than falling through to home. */}
+            {/* RFC 8628 verification URI. The provider emits /device (short, like
+                google.com/device); /activate is kept for clients that already printed it. */}
             <Route element={<AuthLayout />}>
+              <Route path="/device" element={<DeviceAuthContent protocol="oidc" />} />
               <Route path="/activate" element={<DeviceAuthContent protocol="oidc" />} />
             </Route>
 

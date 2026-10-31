@@ -69,3 +69,9 @@ export const workforceProofUnavailable = () =>
     ? false
     : 'WORKFORCE_TEST_DATABASE_URL is not set: these suites prove migrations against real ' +
       'PostgreSQL. Run scripts/qualify-platform-local.mjs, or point it at a disposable database.';
+
+/* A foreign key refusing a write or delete. PostgreSQL reports `ON DELETE RESTRICT` as 23503
+ * (foreign_key_violation) up to 17 and as 23001 (restrict_violation, "violates RESTRICT setting") from 18 on; both
+ * mean the referenced row cannot go. CI runs postgres:15, local proofs run an embedded 18. */
+export const FOREIGN_KEY_REFUSED = Object.freeze(['23503', '23001']);
+export const errorMatches = (error, code) => (code === '23503' ? FOREIGN_KEY_REFUSED.includes(error.code) : error.code === code);

@@ -1,3 +1,4 @@
+import { shot } from './shot.mjs';
 // Areas are honest, and Publish is XENO Post for real.
 //   1. Every area whose rows come from nav.js (not from a platform-*.js module registered in XENO_ZONE_LIVE) shows
 //      "Preview — sample data" on its page and in its sidebar; its made-up rail count is not shown. The list is
@@ -41,7 +42,7 @@ async function open(hash) {
     if (u.pathname === '/api/library/assets') return json({ success: true, items: [{ id: 'f-1', source_id: 'asset-1', name: 'Hero.png', mime_type: 'image/png' }] });
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
     return json({ success: false, error: 'not found' }, 404); });
-  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800);
+  await p.goto(base + '/workspace/' + hash, { waitUntil: 'domcontentloaded' }); await wait(1800); await shot(p, 'publish');
   return { p, errs };
 }
 const nav = async (p, hash) => { await p.evaluate((h) => { location.hash = h; }, hash); await wait(450); };
@@ -55,7 +56,10 @@ try {
       for (const [k, A] of Object.entries(window.XENO_PG_AREAS || {})) out.set(k, [...(out.get(k) || []), ...A.rows.map((r) => r[0])]);
       return [...out].map(([k, rows]) => ({ m: k.split('.')[0], id: k.split('.').slice(1).join('.'), live: !!live[k], rows })); });
     const sample = zones.filter((z) => !z.live);
-    ok(sample.length >= 3 && zones.some((z) => z.m === 'social' && z.id === 'publish' && z.live), `derived from code: ${zones.length} areas with sample rows in the source, ${sample.length} not yet live (${sample.map((z) => z.m + '.' + z.id).join(', ')}); Publish is live`);
+    // The derivation must find the areas (>= 3 with sample rows in the source) and at least one still on sample data for the
+    // honesty loop below. Areas leave the sample list as they go live (Automate, Customers…), so the count of SAMPLE areas
+    // is not a requirement: when the last one goes live this check and the loop below should be retired together.
+    ok(zones.length >= 3 && sample.length >= 1 && zones.some((z) => z.m === 'social' && z.id === 'publish' && z.live), `derived from code: ${zones.length} areas with sample rows in the source, ${sample.length} not yet live (${sample.map((z) => z.m + '.' + z.id).join(', ')}); Publish is live`);
     let unmarked = [], shown = 0;
     for (const z of sample) {
       await nav(p, `#/${z.m}/z/${z.id}`);
@@ -78,14 +82,17 @@ try {
   // ── 2. Publish: compose → schedule → approve
   { db.calls.length = 0;
     const { p, errs } = await open('#/social/z/publish');
-    const s0 = await p.evaluate(() => ({ page: document.querySelector('[data-pub-page]')?.dataset.pubPage, mark: !!document.querySelector('#main [data-sample-badge]'), sampleRow: document.body.textContent.includes('Launch week thread'), channels: document.querySelectorAll('[data-pub-pick]').length, inbox: document.querySelector('[data-pub-inbox]')?.textContent || '', badge: [...document.querySelectorAll('#rail [data-zone="publish"] .cnt')].map((x) => x.textContent).join('') }));
+    const s0 = await p.evaluate(() => ({ page: document.querySelector('[data-pub-page]')?.dataset.pubPage, mark: !!document.querySelector('#main [data-sample-badge]'), sampleRow: document.body.textContent.includes('Launch week thread'), channels: document.querySelectorAll('[data-pub-ch]').length, inbox: document.querySelector('[data-pub-inbox]')?.textContent || '', badge: [...document.querySelectorAll('#rail [data-zone="publish"] .cnt')].map((x) => x.textContent).join('') }));
     ok(s0.page === 'ready' && !s0.mark && !s0.sampleRow, `Publish is the real thing: no sample rows, no sample mark (${JSON.stringify(s0)})`);
     ok(s0.channels === 1 && /Ada/.test(s0.inbox), 'channels and the inbox come from XENO Post');
     ok(s0.badge === '1', `the rail count is the real number waiting for approval (${s0.badge})`);
     // compose a draft with a Storage image
-    await p.type('[data-pub-text]', 'Launch day — it is live');
-    await p.click('[data-pub-pick="ch1"]'); await p.evaluate(() => { document.querySelector('.pub-media').open = true; }); await p.click('[data-pub-media="asset-1"]');
-    await p.click('[data-pub-draft]'); await wait(600);
+    ok(await p.$('#main .topbar .pg-top-acts [data-pub-new]') !== null && await p.$('#main .mview textarea') === null, 'New post sits right in the header bar; no compose form is stacked in the body');
+    await p.click('#main .topbar [data-pub-new]'); await wait(300);
+    ok(await p.$('.xd-sh[role="dialog"] #xdf-text') !== null, 'New post composes in the workspace dialog');
+    await p.type('.xd-sh #xdf-text', 'Launch day — it is live');
+    await p.click('.xd-sh [data-f="channels"] [data-v="ch1"]'); await p.click('.xd-sh [data-f="media"] [data-v="asset-1"]');
+    await p.click('.xd-sh [data-xd-submit]'); await wait(900);
     const draft = db.calls.find((c) => c[0] === 'POST' && c[1] === '/api/publish/posts');
     ok(draft && draft[2].text === 'Launch day — it is live' && draft[2].channelIds.join() === 'ch1' && draft[2].media.join() === 'asset-1' && /^ws-/.test(draft[2].requestKey), `the draft is sent with its channel, Storage file and a request key (${JSON.stringify(draft && draft[2])})`);
     ok(!('scheduledFor' in (draft ? draft[2] : {})), 'saving a draft sends no time');
