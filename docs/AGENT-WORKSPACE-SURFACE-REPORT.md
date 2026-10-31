@@ -19,7 +19,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | workspace-ui | 179 | 4 | 101 | 74 | 68 | 110 | 1 | 0 | `workspace:admin` 101 |
 | account | 117 | 4 | 58 | 55 | 33 | 75 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
-| browser-shell | 28 | 0 | 28 | 0 | 11 | 15 | 2 | 0 | `workspace:admin` 17, `workspace:read` 11 |
+| browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
 | forms | 40 | 14 | 19 | 7 | 15 | 21 | 4 | 0 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 1 |
 | canvas | 22 | 6 | 16 | 0 | 5 | 13 | 4 | 0 | `tasks:write` 13, `tasks:read` 3 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
@@ -35,4 +35,4 @@ Per division: how many actions a person can take, how many an agent can take tod
 | compute | 32 | 18 | 1 | 13 | 16 | 9 | 7 | 0 | `compute:read` 1 |
 | docs | 11 | 11 | 0 | 0 | 5 | 6 | 0 | 0 | — |
 
-Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `inbox:read`, `inbox:write`, `publish:read`, `publish:write`, `forms:read`, `forms:write`, `brand:read`, `brand:write`, `fonts:read`, `fonts:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.
+Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `inbox:read`, `inbox:write`, `publish:read`, `publish:write`, `forms:read`, `forms:write`, `brand:read`, `brand:write`, `fonts:read`, `fonts:write`, `corpus_local:read`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.

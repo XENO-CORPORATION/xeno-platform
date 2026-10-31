@@ -23,6 +23,7 @@ import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
 import * as peopleMcp from './peopleMcp.js';
 import * as corpusMcp from './corpusMcp.js';
+import * as corpusLocalMcp from './corpusLocalMcp.js';
 import * as skillsMcp from './skillsMcp.js';
 import * as researchMcp from './researchMcp.js';
 import * as canvases from './canvases.js';
@@ -102,6 +103,15 @@ export const SERVICES = Object.freeze([
     tools: () => peopleMcp.TOOLS,
     call: (db, actor, name, args) => peopleMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof peopleMcp.PeopleMcpError,
+  },
+  // XENO Corpus on a person's PC (corpusLocalMcp.js): read-only, through the desktop app. 🔴 Must stay ABOVE `corpus`: route() takes the
+  // first category a name starts with, and `corpus_local_lapsed` starts with `corpus_` too.
+  {
+    category: 'corpus_local', title: 'Corpus on your PC', version: '1.0.0', timeoutMs: 65_000,
+    description: 'Corpus on your PC: read the projects a person turned on for agents in XENO Corpus on their own computer. Read-only, and only while that PC is connected.',
+    tools: () => corpusLocalMcp.TOOLS,
+    call: (db, actor, name, args) => corpusLocalMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof corpusLocalMcp.CorpusLocalError,
   },
   // XENO Corpus (corpusMcp.js): read a scope's verified truth, assess it, propose a change a PERSON ratifies.
   {

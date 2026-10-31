@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2009 actions · 232 agent capability · 1364 planned (debt) · 413 excluded · **coverage 14.5%** of the 1596 owed.
+**Total:** 2012 actions · 232 agent capability · 1367 planned (debt) · 413 excluded · **coverage 14.5%** of the 1599 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -20,7 +20,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | account | 117 | 4 | 58 | 55 | 6.5% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 75 | 0 | 37 | 38 | 0% |
-| browser-shell | 28 | 0 | 28 | 0 | 0% |
+| browser-shell | 31 | 0 | 31 | 0 | 0% |
 | forms | 40 | 14 | 19 | 7 | 42.4% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
@@ -255,15 +255,18 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:automateRoutes.js:GET /catalogue`
 - `route:automateRoutes.js:GET /status`
 
-## browser-shell — 28 planned
+## browser-shell — 31 planned
 
 - `route:browserRelayRoutes.js:DELETE /:id (accountBrowserRouter)`
+- `route:browserRelayRoutes.js:DELETE /:id (accountCorpusRouter)`
 - `route:browserRelayRoutes.js:DELETE /installations/:id`
 - `route:browserRelayRoutes.js:GET / (accountBrowserRouter)`
+- `route:browserRelayRoutes.js:GET / (accountCorpusRouter)`
 - `route:browserRelayRoutes.js:GET /calls/:callId`
 - `route:browserRelayRoutes.js:GET /installations`
 - `route:browserRelayRoutes.js:GET /installations/:id`
 - `route:browserRelayRoutes.js:PATCH /:id (accountBrowserRouter)`
+- `route:browserRelayRoutes.js:PATCH /:id (accountCorpusRouter)`
 - `route:browserRelayRoutes.js:PATCH /installations/:id`
 - `route:browserRelayRoutes.js:POST /installations`
 - `route:browserRoutes.js:GET /browserless-status`

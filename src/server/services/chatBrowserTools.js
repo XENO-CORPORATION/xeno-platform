@@ -31,7 +31,7 @@ export const extensionToolName = (name) => name.slice(BROWSER_TOOL_PREFIX.length
 export async function resolveChatBrowser(db, userId, requestedId = null) {
   const { rows } = await db.query(
     `SELECT id, label, tools, last_seen_at FROM browser_installations
-      WHERE user_id = $1 AND revoked_at IS NULL AND enabled = true
+      WHERE user_id = $1 AND surface = 'browser' AND revoked_at IS NULL AND enabled = true
         AND last_seen_at > now() - ($2::int * interval '1 millisecond')
         AND jsonb_typeof(tools) = 'array' AND jsonb_array_length(tools) > 0
       ORDER BY last_seen_at DESC`, [userId, CONNECTED_WITHIN_MS]);

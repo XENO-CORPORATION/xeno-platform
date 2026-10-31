@@ -369,6 +369,17 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🖥️ XENO Corpus on a person's PC, through the relay (owner, 2026-10-31)
+
+`services/corpusLocalMcp.js` is XENO MCP's `corpus_local_*` (scope `corpus_local:read`, off per connection until turned on). The desktop app holds the socket: `corpus` surface of `browserRelay.js`, `browserRelaySocket.js` (`/api/v2/corpus/connect`, scope `corpus:connect`), `browserInstallations.js`, `routes/browserRelayRoutes.js`. Settings: `/api/account/corpus-pcs`, section `pcs`.
+- **A PC is never a browser.** Its row keeps `tools` empty, so `resolveChatBrowser` can't offer it even without the `surface` filter, which is what a rollback relies on. Keep what it offers in `offered_tools`.
+- **The tool list is fixed here.** `hello.tools` only says which of them a version supports. Only arguments a tool names reach the PC.
+- **An answer is forgotten once read** (`forgetCall`, plus `sweepForgottenCalls` on the leader). The row keeps status and size. Never log or store one.
+- **`corpus_local` must stay above `corpus` in `SERVICES`:** `route()` takes the first category a name starts with.
+- **A PC's address on the wire is the id it generated**, looked up within the person holding the token. A browser's is the row id. A removed PC's id stays refused: the app mints a new one when the person asks to connect again.
+- **Offline refuses at once.** A socket close marks the PC gone, and a PC silent for 60 s is hung up on: the server's own stamp otherwise says a dead PC is there.
+Proofs: `npm run test:corpus-relay` (real socket, real Postgres, mutation-checked), `test:corpus-pcs-ui`, and it has been run against Corpus's real `agentLink.cjs`.
+
 ## 🔤 XENO Fonts lives HERE: Studio › Libraries › Fonts (2026-10-31)
 
 `services/fonts.js` is the one service (screen `platform-fonts.js`, routes `fontRoutes.js` plus `POST /api/fonts/uploads` in `index.js`, agents `fontsMcp.js`). Owner decision 2026-10-31: an open catalogue plus private uploads.

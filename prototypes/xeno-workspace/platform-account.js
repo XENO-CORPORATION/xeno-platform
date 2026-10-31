@@ -46,10 +46,11 @@
   async function load() {
     if (S.status !== 'ready') { S.status = 'loading'; paint(); } // a refresh after a save keeps what is on screen
     const all = full, none = { ok: false, status: 0, d: {} };
-    const urls = all ? ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers', '/api/account/two-step'] : ['/api/account/overview', '/api/user-data/settings'];
+    const urls = all ? ['/api/account/overview', '/api/account/sessions', '/api/auth/linked-accounts', '/api/billing/overview', '/api/dashboard/stats', '/api/user-data/settings', '/api/account/security', '/api/account/exports', '/api/account/browsers', '/api/account/two-step', '/api/account/corpus-pcs'] : ['/api/account/overview', '/api/user-data/settings'];
     const got = await Promise.all(urls.map((u) => api('GET', u).catch(() => none)));
-    const [ov, ses, link, bill, dash, set, sec, exps, brs, two] = all ? got : [got[0], none, none, none, none, got[1], none, none, none, none];
+    const [ov, ses, link, bill, dash, set, sec, exps, brs, two, pcs] = all ? got : [got[0], none, none, none, none, got[1], none, none, none, none, none];
     S.browsers = brs.ok && Array.isArray(brs.d.browsers) ? brs.d.browsers : null;
+    S.pcs = pcs.ok && Array.isArray(pcs.d.pcs) ? pcs.d.pcs : null;
     S.security = sec.ok && sec.d.security ? sec.d.security : null;
     S.exports = exps.ok && Array.isArray(exps.d.exports) ? exps.d.exports : null;
     // a copy being built is checked again until it is ready; nothing is polled otherwise
@@ -99,6 +100,7 @@
     if (id === 'gifts') return giftsSection(h);
     if (!S.full) { if (!full) { full = true; setTimeout(load, 0); } return h.card('', '<p class="pg-dim set-p" role="status">Loading your account</p>'); }
     if (id === 'browsers') return browsersSection(h);
+    if (id === 'pcs') return pcsSection(h);
     if (id === 'data') return dataSection(h);
     if (id === 'security' && !S.twoStepKnown) return h.card('Sign-in & security', '<p class="set-p">XENO couldn’t load your sign-in settings. Nothing was changed.</p>', retry);
     if (id === 'sessions' && !S.parts.sessions) return h.card('Signed-in devices', '<p class="set-p">XENO couldn’t load your devices.</p>', retry);
@@ -314,6 +316,35 @@
       { id: 'n', label: 'Credits', type: 'number', required: true, value: '100', validate: (x) => (!/^\d+$/.test(x) || +x <= 0 ? 'Enter a whole number above zero.' : +x > balance ? 'That’s more than you have.' : null) }],
       onSubmit: async (vals) => { const r = await placesOp('funding.gift', { recipient: vals.to.trim(), amount: +vals.n, confirmed: true, requestId }); return r.ok && r.d.ok ? null : (r.d?.error?.message || 'That gift couldn’t be sent. No credits moved.'); } });
     if (v) { X()?.toast?.('Gift sent'); again('gifts'); }
+  }
+
+  // ---------- Corpus on your PCs (XENO Corpus desktop) ----------
+  // Rows come from /api/account/corpus-pcs. The projects are turned on in XENO Corpus on that PC; this is the off switch from anywhere.
+  function pcsSection(h) {
+    if (!S.pcs) return h.card('Corpus on your PCs', '<p class="set-p">XENO couldn’t load your PCs.</p>', retry);
+    const rule = '<p class="pg-rule">Agents you connect to XENO MCP can read the projects you turned on, read-only, while that PC is connected. Answers aren’t kept on XENO’s servers.</p>';
+    if (!S.pcs.length) return h.card('Corpus on your PCs', '<p class="pg-dim set-p">No PC is connected. In XENO Corpus on your PC, turn a project on for agents.</p>') + rule;
+    const rows = S.pcs.map((p) => {
+      const seen = !p.enabled ? 'Turned off' : p.connected ? 'Connected now' : p.lastSeenAt ? `Last seen ${h.ago(ms(p.lastSeenAt))}` : 'Not connected yet';
+      const names = (p.projects || []).map((x) => esc(x.name)).join(', ');
+      const sub = `${esc(seen)}${names ? ` · ${names}` : ''}`;
+      const toggle = btn(p.enabled ? 'Turn off' : 'Turn on', 'pcEnable', `${p.id}|${p.enabled ? 'off' : 'on'}`, 'ghost');
+      return h.row(esc(p.label), sub, `${toggle} ${btn('Remove', 'pcRemove', p.id)}`);
+    }).join('');
+    return h.card('Corpus on your PCs', rows) + rule;
+  }
+  async function pcEnable(arg) {
+    const [id, to] = String(arg || '').split('|');
+    const r = await api('PATCH', '/api/account/corpus-pcs/' + encodeURIComponent(id), { enabled: to === 'on' }).catch(() => ({ ok: false, status: 0, d: {} }));
+    if (!r.ok) X()?.toast?.('That PC couldn’t be changed.');
+    return load();
+  }
+  async function pcRemove(id) {
+    const yes = await window.XD?.confirm?.({ title: 'Remove this PC?', body: 'It stops connecting, and XENO forgets its list of projects. To connect it again, turn a project on in XENO Corpus on that PC.', action: 'Remove PC', danger: true });
+    if (!yes) return;
+    const r = await api('DELETE', '/api/account/corpus-pcs/' + encodeURIComponent(id)).catch(() => ({ ok: false, status: 0, d: {} }));
+    if (!r.ok && r.status !== 404) X()?.toast?.('That PC couldn’t be removed.');
+    return load();
   }
 
   // ---------- connected browsers (XENO Extension) ----------
@@ -560,6 +591,8 @@
     if (act === 'plans') return window.open('/pricing', '_blank', 'noopener');
     if (act === 'export') return requestExport();
     if (act === 'removeExport') return removeExport(t.dataset.arg);
+    if (act === 'pcEnable') return pcEnable(t.dataset.arg);
+    if (act === 'pcRemove') return pcRemove(t.dataset.arg);
     if (act === 'browserEnable') return browserEnable(t.dataset.arg);
     if (act === 'browserRemove') return browserRemove(t.dataset.arg);
     if (act === 'portal') {

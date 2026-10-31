@@ -23,8 +23,7 @@ import * as installations from '../services/browserInstallations.js';
 import * as relay from '../services/browserRelay.js';
 import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import { recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
-
-const router = express.Router();
+import { RELAY_SURFACES } from '../utils/browserRelayProtocol.js';
 
 const mutateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false, validate: { ip: false },
@@ -40,21 +39,19 @@ function sendError(res, e) {
   return res.status(500).json({ error: { code: 'PLATFORM_ERROR', message: 'The browser request failed.' } });
 }
 
-/** A token bound to a key, carrying `browser:connect`. Anything else is refused BEFORE any row is read. */
-function requireBoundProof(req, res, next) {
+/** A token bound to a key, carrying this surface's scope. Anything else is refused BEFORE any row is read. */
+const boundProof = (spec) => (req, res, next) => {
   const jkt = req.auth?.dpopJkt;
   if (!jkt) {
-    return res.status(403).json({
-      error: { code: 'dpop_bound_required', message: 'Connecting a browser needs a sign-in bound to this browser’s key. Sign in from the extension.' },
-    });
+    return res.status(403).json({ error: { code: 'dpop_bound_required', message: spec.signIn } });
   }
   const scope = String(req.auth?.scope || '').split(/\s+/);
-  if (!scope.includes('browser:connect')) {
-    return res.status(403).json({ error: { code: 'INSUFFICIENT_SCOPE', message: 'This sign-in was not granted browser:connect.' } });
+  if (!scope.includes(spec.scope)) {
+    return res.status(403).json({ error: { code: 'INSUFFICIENT_SCOPE', message: `This sign-in was not granted ${spec.scope}.` } });
   }
   req.browserJkt = jkt;
   return next();
-}
+};
 
 /** The proof that accompanies a registration must be the SAME key the token is bound to — otherwise a
  *  token could register an installation for a key it does not hold, and the binding would be decoration. */
@@ -67,52 +64,69 @@ function requireMatchingProof(req, res, next) {
   });
 }
 
-router.get('/installations', requireBoundProof, async (req, res) => {
-  try { res.json({ ...(await installations.list(req.db, req.user.id)), live: relay.liveInstallationIds() }); }
-  catch (e) { sendError(res, e); }
-});
+/** The routes every surface shares. A device on one surface reads as absent on another. */
+export function installationRoutes(spec) {
+  const router = express.Router();
+  const requireBoundProof = boundProof(spec);
 
-router.post('/installations', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
-  try {
-    const out = await installations.register(req.db, req.user.id, req.body, req.browserJkt);
-    if (out.created) {
-      await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REGISTERED, {
-        userId: req.user.id, req, metadata: { installationId: out.installation.id, browser: out.installation.browser || null },
-      }).catch(() => {});
+  router.get('/installations', requireBoundProof, async (req, res) => {
+    try {
+      const out = await installations.list(req.db, req.user.id, spec.surface);
+      // which of the caller's own are connected here, never anyone else's
+      res.json({ ...out, live: out.installations.map((i) => String(i.id)).filter((id) => relay.isLive(id)) });
     }
-    res.status(out.created ? 201 : 200).json({ installation: out.installation, created: out.created });
-  } catch (e) { sendError(res, e); }
-});
+    catch (e) { sendError(res, e); }
+  });
 
-router.get('/installations/:id', requireBoundProof, async (req, res) => {
-  try { res.json({ installation: await installations.get(req.db, req.user.id, req.params.id) }); }
-  catch (e) { sendError(res, e); }
-});
+  router.post('/installations', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
+    try {
+      const out = await installations.register(req.db, req.user.id, req.body, req.browserJkt, spec.surface);
+      if (out.created) {
+        await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REGISTERED, {
+          userId: req.user.id, req, metadata: { installationId: out.installation.id, browser: out.installation.browser || null, surface: spec.surface },
+        }).catch(() => {});
+      }
+      res.status(out.created ? 201 : 200).json({ installation: out.installation, created: out.created });
+    } catch (e) { sendError(res, e); }
+  });
 
-router.patch('/installations/:id', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
-  try {
-    const { installation } = await installations.patch(req.db, req.user.id, req.params.id, req.body);
-    // Turning the switch OFF must take effect now, not at the next reconnect: the socket is closed and
-    // queued calls fail, so a browser the person just disabled cannot act on a step already in flight.
-    if (installation.enabled === false) await relay.disconnect(req.db, req.params.id, 'revoked').catch(() => {});
-    res.json({ installation });
-  } catch (e) { sendError(res, e); }
-});
+  router.get('/installations/:id', requireBoundProof, async (req, res) => {
+    try { res.json({ installation: await installations.get(req.db, req.user.id, req.params.id, spec.surface) }); }
+    catch (e) { sendError(res, e); }
+  });
 
-router.delete('/installations/:id', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
-  try {
-    const out = await installations.remove(req.db, req.user.id, req.params.id);
-    await relay.revoke(req.db, req.params.id).catch(() => {});
-    await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REVOKED, {
-      userId: req.user.id, req, metadata: { installationId: out.id },
-    }).catch(() => {});
-    res.json(out);
-  } catch (e) { sendError(res, e); }
-});
+  router.patch('/installations/:id', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
+    try {
+      const { installation } = await installations.patch(req.db, req.user.id, req.params.id, req.body, spec.surface);
+      // Turning the switch OFF must take effect now, not at the next reconnect: the socket is closed and
+      // queued calls fail, so a browser the person just disabled cannot act on a step already in flight.
+      if (installation.enabled === false) await (spec.surface === 'corpus' ? relay.disconnect(req.db, req.params.id, 'turned_off', spec.off, spec.off) : relay.disconnect(req.db, req.params.id, 'revoked')).catch(() => {});
+      res.json({ installation });
+    } catch (e) { sendError(res, e); }
+  });
+
+  router.delete('/installations/:id', requireBoundProof, requireMatchingProof, mutateLimiter, async (req, res) => {
+    try {
+      const out = await installations.remove(req.db, req.user.id, req.params.id, spec.surface);
+      await relay.revoke(req.db, req.params.id).catch(() => {});
+      await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REVOKED, {
+        userId: req.user.id, req, metadata: { installationId: out.id, surface: spec.surface },
+      }).catch(() => {});
+      res.json(out);
+    } catch (e) { sendError(res, e); }
+  });
+
+  return router;
+}
+
+const router = installationRoutes(RELAY_SURFACES.browser);
+
+/** XENO Corpus on a person's PC (services/corpusLocalMcp.js): the same routes on its own scope and rows. */
+export const corpusRelayRoutes = installationRoutes(RELAY_SURFACES.corpus);
 
 /** §12.1 rule 2 — a mutating verb needs a reading verb. This is how a caller (or the account page)
  *  answers "what is that step doing?" without polling the socket. */
-router.get('/calls/:callId', requireBoundProof, async (req, res) => {
+router.get('/calls/:callId', boundProof(RELAY_SURFACES.browser), async (req, res) => {
   try {
     const { rows } = await req.db.query(
       `SELECT call_id AS "callId", installation, tool, state, ok, error_code AS "errorCode",
@@ -156,6 +170,42 @@ accountBrowserRouter.delete('/:id', mutateLimiter, async (req, res) => {
     await relay.revoke(req.db, req.params.id).catch(() => {});
     await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REVOKED, {
       userId: req.user.id, req, metadata: { installationId: out.id, via: 'account' },
+    }).catch(() => {});
+    res.json(out);
+  } catch (e) { sendError(res, e); }
+});
+
+/**
+ * The account page's view of a person's Corpus PCs: `/api/account/corpus-pcs`, on the web session like the browsers above. Turning one off takes
+ * effect now and survives its restart. Removing it wipes the names of its projects and refuses the same installation from then on.
+ */
+export const accountCorpusRouter = express.Router();
+
+accountCorpusRouter.get('/', async (req, res) => {
+  try {
+    const { installations: rows } = await installations.list(req.db, req.user.id, 'corpus');
+    const cutoff = Date.now() - 60_000;
+    res.json({ pcs: rows.map((p) => ({
+      id: p.id, label: p.label, os: p.os, enabled: p.enabled, appVersion: p.extensionVersion, projects: p.projects,
+      lastSeenAt: p.lastSeenAt, connected: Boolean(p.lastSeenAt && Date.parse(p.lastSeenAt) > cutoff), createdAt: p.createdAt,
+    })) });
+  } catch (e) { sendError(res, e); }
+});
+
+accountCorpusRouter.patch('/:id', mutateLimiter, async (req, res) => {
+  try {
+    const { installation } = await installations.patch(req.db, req.user.id, req.params.id, { enabled: req.body?.enabled }, 'corpus');
+    if (installation.enabled === false) await relay.disconnect(req.db, req.params.id, 'turned_off', RELAY_SURFACES.corpus.off, RELAY_SURFACES.corpus.off).catch(() => {});
+    res.json({ pc: { id: installation.id, label: installation.label, enabled: installation.enabled } });
+  } catch (e) { sendError(res, e); }
+});
+
+accountCorpusRouter.delete('/:id', mutateLimiter, async (req, res) => {
+  try {
+    const out = await installations.remove(req.db, req.user.id, req.params.id, 'corpus');
+    await relay.revoke(req.db, req.params.id).catch(() => {});
+    await recordSecurityEventTransactional(req.db, EVENTS.BROWSER_INSTALLATION_REVOKED, {
+      userId: req.user.id, req, metadata: { installationId: out.id, via: 'account', surface: 'corpus' },
     }).catch(() => {});
     res.json(out);
   } catch (e) { sendError(res, e); }

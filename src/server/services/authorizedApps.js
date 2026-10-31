@@ -16,7 +16,7 @@ const WORDS = {
   'tasks:read': 'read your tasks', 'tasks:write': 'change your tasks', 'team:read': 'see your teams', 'team:manage': 'manage your teams',
   'workforce:read': 'see your agents', 'workforce:manage': 'manage your agents', 'billing:read': 'see your billing', 'billing:manage': 'manage your billing',
   'connect:read': 'see your connected services', 'connect:use': 'use your connected services', 'connect:manage': 'manage your connected services',
-  'browser:connect': 'connect your browser', 'marketplace:payout': 'manage your seller payouts', 'collaboration:use': 'join shared sessions', 'sync:use': 'sync your work',
+  'browser:connect': 'connect your browser', 'corpus:connect': 'let agents read projects you turn on, on this PC', 'corpus_local:read': 'read projects you turned on in XENO Corpus on your PC', 'marketplace:payout': 'manage your seller payouts', 'collaboration:use': 'join shared sessions', 'sync:use': 'sync your work',
 };
 
 export function scopeWords(scopes) {
