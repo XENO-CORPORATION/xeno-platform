@@ -7,6 +7,7 @@ import { createFolderLink, folderLinkActivity, listFolderLinks, revokeFolderLink
 import { createLink, fileForLink, foldersSharedWith, listShares, revokeShare, shareWithPerson } from '../services/storageShares.js';
 import { allFolders, createFolder, listFolders, moveItemToFolder, removeFolder, updateFolder } from '../services/storageFolders.js';
 import { localLibraryPath } from '../services/storageObjects.js';
+import { duplicateFile, moveToProject } from '../services/libraryCopies.js';
 import { storageUsage } from '../services/storageAllowance.js';
 import express from 'express';
 import fs from 'fs';
@@ -346,6 +347,19 @@ router.get('/operations/:key', folders(async (req, res) => {
 router.put('/assets/:source/:id/folder', organise('move', async (req, res, principal, source, id) => {
   const result = await moveItemToFolder(req.db, principal, source, id, folderId(req.body?.folder));
   sendOrganised(res, result, { folder: result.folderId ?? null });
+}));
+router.post('/assets/file/:id/duplicate', folders(async (req, res) => {
+  const r = await duplicateFile(req.db, req.user.id, req.params.id);
+  if (r.full) return res.status(507).json({ success: false, code: 'storage_full', error: 'Your storage is full. Nothing was copied.' });
+  if (r.conflict) return res.status(409).json({ success: false, code: r.code, error: 'This file could not be read just now. Nothing was copied.' });
+  sendOrganised(res, r, { file: r.file });
+}));
+/** PUT /assets/:source/:id/project { project: id | null } -- file it in the project's own folder, or take it out. */
+router.put('/assets/:source/:id/project', organise('move to project', async (req, res, principal, source, id) => {
+  const r = await moveToProject(req.db, principal.id, source, id, req.body?.project ?? null);
+  if (r.full) return res.status(507).json({ success: false, code: 'storage_full', error: 'That project’s storage is full.' });
+  if (r.conflict && r.code === 'folder_other_place') return res.status(409).json({ success: false, code: r.code, error: 'A personal file can’t go into a workspace’s project. Copy it into the workspace first.' });
+  sendOrganised(res, r, { folder: r.folderId ?? null });
 }));
 router.put('/assets/:source/:id/star', organise('star', async (req, res, principal, source, id) => {
   sendOrganised(res, await starLibraryItem(req.db, principal, source, id, true), { starred: true });

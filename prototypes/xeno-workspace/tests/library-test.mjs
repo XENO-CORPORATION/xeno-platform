@@ -40,6 +40,15 @@ function answer(q) {
     const items = all.slice(offset, offset + limit);
     return json(200, { success: true, items, tab: 'all', sort: 'updated', limit, offset, view, place: '', total: all.length, has_more: offset + items.length < all.length });
   }
+  if (p === '/api/compute/cloud-shell') return json(200, { success: true, available: false });
+  if (p === '/api/compute/machines') return json(200, { success: true, machines: [] });
+  if (p === '/api/compute/sizes') return json(200, { success: true, sizes: [] });
+  if (p === '/api/tools') return json(200, { success: true, tools: [] });
+  if (p === '/api/skills') return json(200, { success: true, skills: [] });
+  const dup = p.match(/^\/api\/library\/assets\/file\/([^/]+)\/duplicate$/);
+  if (dup && m === 'POST') { db.writes = db.writes || []; db.writes.push(['duplicate', dup[1]]); if (db.fullStorage) return json(507, { success: false, code: 'storage_full', error: 'Your storage is full. Nothing was copied.' }); const src = db.items.find((x) => x.source_id === dup[1]); db.items.push({ ...src, id: 'file:' + fid(77), source_id: fid(77), name: src.name + ' copy' }); return json(200, { success: true, file: { id: fid(77), name: src.name + ' copy' } }); }
+  const toProject = p.match(/^\/api\/library\/assets\/([^/]+)\/([^/]+)\/project$/);
+  if (toProject && m === 'PUT') { const b = JSON.parse(q.postData() || '{}'); db.writes = db.writes || []; db.writes.push(['project', toProject[2], b.project]); if (b.project === 'refuse') return json(409, { success: false, code: 'folder_other_place', error: 'A personal file can’t go into a workspace’s project. Copy it into the workspace first.' }); const it = db.items.find((x) => x.source_id === toProject[2]); it.project_name = b.project ? 'Launch' : null; return json(200, { success: true, folder: 'f1' }); }
   const content = p.match(/^\/api\/library\/assets\/([^/]+)\/content$/);
   if (content && m === 'GET') { const it = db.items.find((x) => x.asset_id === content[1] && !x.trashed_at); if (!it) return json(404, { success: false, error: 'Library asset not found' }); if (/\.md$/.test(it.name)) return { status: 200, contentType: 'application/octet-stream', body: Buffer.from('# Session history\n\n- **Started:** today\n- see [docs](https://example.test/d)\n\n<script>window.__pwned=1</script>\n\n```\ncode block\n```\n') }; if (/\.json$/.test(it.name)) return { status: 200, contentType: 'application/octet-stream', body: Buffer.from('{"a": 1, "b": "<i>x</i>"}') }; return /^image/.test(it.mime_type) ? { status: 200, contentType: 'image/png', body: PNG } : { status: 200, contentType: it.mime_type, body: Buffer.from('%PDF-1.4 the stored bytes of ' + it.name) }; }
   if (p === '/api/library/trash' && m === 'DELETE') { const mine = db.items.filter((x) => x.trashed_at && !db.notOwner.has(x.source_id)); db.items = db.items.filter((x) => !mine.includes(x)); return json(200, { success: true, purged: mine.length }); }
@@ -103,11 +112,26 @@ try {
   // ---- menus offer what works ----
   const menuOf = (name) => p.evaluate((n) => window.XENO_LIB.fileMenu(window.XENO_PG_LIBRARY.items.find((x) => x.name === n), { open() {}, details() {}, copy() {} }).flat().map((i) => i.label), name);
   let menu = await menuOf('Notes on the engine.pdf');
-  ok(JSON.stringify(menu) === JSON.stringify(['Open', 'Details', 'Star', 'Rename…', 'Download', 'Copy name', 'Move to area', 'Move to Trash']), 'the file menu offers what works (' + menu.join(', ') + ')');
+  ok(JSON.stringify(menu) === JSON.stringify(['Open', 'Details', 'Star', 'Rename…', 'Download', 'Copy name', 'Duplicate', 'Move to project', 'Move to area', 'Move to Trash']), 'the file menu offers what works (' + menu.join(', ') + ')');
   ok(!(await menuOf('a difference engine, brass')).includes('Rename…'), 'a generated picture, named by its prompt, is not offered Rename');
-  await p.evaluate(() => window.XENO_LIB.refuse('duplicate')); await wait(200);
-  ok(/Duplicating a file isn’t available on XENO yet/.test(await toastText()), 'an action the platform still lacks says so');
-  await goLib('Shared with me'); ok(/Shared with me isn’t available yet/.test(await main()), 'Shared with me says it is not available, and why');
+  const named = (n) => `window.XENO_PG_LIBRARY.items.find((x) => x.name === ${JSON.stringify(n)})`;
+  ok(!(await menuOf('a difference engine, brass')).includes('Duplicate'), 'a generated picture is not offered Duplicate');
+  await p.evaluate(`window.XENO_LIB.duplicate(${named('Notes on the engine.pdf')})`); await wait(500);
+  ok(db.writes?.some((w) => w[0] === 'duplicate' && w[1] === fid(2)) && /Copied as/.test(await toastText()), 'Duplicate goes to the server and says the new name');
+  ok(await p.evaluate(() => window.XENO_PG_LIBRARY.items.some((x) => x.name === 'Notes on the engine.pdf copy')), 'the copy is in the Library');
+  db.fullStorage = true; await p.evaluate(`window.XENO_LIB.duplicate(${named('Notes on the engine.pdf')})`); await wait(400); db.fullStorage = false;
+  ok(/Your storage is full/.test(await toastText()), 'full storage is said');
+  await p.evaluate(() => { window.XENO_PROJECTS = { Launch: { id: 'pj1' }, Team: { id: 'refuse' } }; });
+  await p.evaluate(`window.XENO_LIB.moveToProject(${named('Notes on the engine.pdf')}, 'Launch')`); await wait(500);
+  ok(db.writes.some((w) => w[0] === 'project' && w[1] === fid(2) && w[2] === 'pj1') && /Moved to Launch/.test(await toastText()), 'Move to project goes to the server');
+  ok(await p.evaluate(`${named('Notes on the engine.pdf')}.project === 'Launch'`), 'and the file says which project');
+  await p.evaluate(`window.XENO_LIB.moveToProject(${named('Notes on the engine.pdf')}, 'Team')`); await wait(400);
+  ok(/can’t go into a workspace’s project/.test(await toastText()), 'a refusal says why');
+  await goLib('Shared with me'); ok(!/isn’t available/.test(await main()) && !/Notes on the engine/.test(await main()), 'Shared with me leaves out your own files');
+  db.items.push(file(88, 'From a friend.pdf', 'application/pdf', 100, { mine: false, shared_by: 'Grace' }));
+  await p.evaluate(() => window.XENO_LIB.load()); await wait(500);
+  ok(/From a friend/.test(await main()), 'and lists what someone shared with you');
+  db.items = db.items.filter((x) => ![fid(77), fid(88)].includes(x.source_id)); await p.evaluate(() => window.XENO_LIB.load()); await wait(400);   // what follows counts the files
 
   // ---- star ----
   await goLib(); db.calls.length = 0;

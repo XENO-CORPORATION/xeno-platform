@@ -5,7 +5,7 @@
  *      not the first 200;
  *   2. shows the real picture for an image, and a plain type icon for anything else (never invented artwork);
  *   3. uploads, downloads, renames, stars, trashes, restores and deletes for real;
- *   4. refuses, in words, what the platform cannot do yet: duplicate, and moving a file to a project.
+ *   4. duplicates a file, and files it in a project's own folder (services/libraryCopies.js);
  *
  * SCOPE. GET /api/library/assets is the global view: what the person may see through their own files, their
  * projects and their workspaces. Each item says where it lives (personal, or which workspace), shown in Details
@@ -13,8 +13,8 @@
  * the person narrow it.
  *
  * TRASH. A trashed item leaves the Library at once and is kept for 30 days. Restore brings it back. Delete
- * forever is only offered inside the trash, and asks first. Sharing a file with one person has no route yet, so
- * "Shared with me" says so.
+ * forever is only offered inside the trash, and asks first. "Shared with me" is what other people shared with this
+ * person; a shared folder's files are listed with them.
  *
  * Routes: GET /api/library/assets (view, place, limit, offset) · GET /api/library/assets/:id/content
  *   · PATCH /api/library/assets/:source/:id · PUT|DELETE …/star · POST …/trash · POST …/restore
@@ -44,7 +44,7 @@
   function shape(it) {
     const created = it.created_at || it.updated_at || new Date().toISOString(), kind = kindOf(it);
     return { id: String(it.id), name: String(it.name || 'Untitled'), kind, bytes: Number(it.size_bytes) || 0, createdAt: created, updatedAt: it.updated_at || created,
-      source: { product: productOf(it), mode: it.area || 'overview', chat: it.conversation_title || null }, area: it.area || null, areaName: it.area ? areaName(it.area) : '', project: null, starred: it.starred === true, sharedBy: null, media: null, duration: null,
+      source: { product: productOf(it), mode: it.area || 'overview', chat: it.conversation_title || null }, area: it.area || null, areaName: it.area ? areaName(it.area) : '', project: it.project_name || null, projectId: it.project_id || null, starred: it.starred === true, sharedBy: it.mine === false ? (it.shared_by || 'Someone') : null, media: null, duration: null,
       trashedAt: it.trashed_at || null, purgeAfter: it.purge_after || null,
       // the Storage folder it is filed in, if any (the Library stays flat; this only points at the folder)
       folderId: it.folder_id || null, folderName: it.folder_id ? String(it.folder_name || 'Folder') : null,
@@ -81,9 +81,8 @@
   const preview = (f, icon) => (f.live.preview && !f.trashedAt ? img(f, 'contain') : `<span class="pg-state-ic">${icon}</span>`);
 
   // ---------- what the platform cannot do yet ----------
-  const NOT_YET = { duplicate: 'Duplicating a file', move: 'Moving a file to a project' };
-  function refuse(action) { if (!NOT_YET[action]) return false; toast(`${NOT_YET[action]} isn’t available on XENO yet`); return true; }
-  const VIEW_NOT_YET = { 'Shared with me': ['share', 'Shared with me isn’t available yet', 'A file can’t be shared with one person on XENO yet. Files of a workspace you belong to are in your Library, marked with the workspace they live in.'] };
+  const refuse = () => false;
+  const VIEW_NOT_YET = {};
   // ---------- a TEXT file opened in the Library is shown as its text (owner, 2026-10-25) ----------
   // Markdown is rendered (the Tasks page's renderer: everything escaped first, links http(s) only); any other text file
   // is shown as it is, in a monospace block. The bytes are read from the file's own content route, never guessed from
@@ -245,12 +244,13 @@
   // ---------- menus: only what works ----------
   // where a file lives: every area, and none; the one it is in is ticked
   const areaMenu = (fs, label = 'Move to area') => ({ label, icon: 'grid', sub: () => [areas().map(([id, name]) => ({ label: name, icon: 'grid', checked: fs.every((f) => f.area === id), run: () => place(fs, id) })), [{ label: 'No area', hint: 'Overview only', icon: 'minus', checked: fs.every((f) => !f.area), run: () => place(fs, null) }]] });
+  const projectMenu = (f) => ({ label: 'Move to project', icon: 'folder', sub: () => [Object.keys(window.XENO_PROJECTS || {}).map((name) => ({ label: name, icon: 'folder', checked: f.project === name, run: () => moveToProject(f, name) })), [{ label: 'No project', icon: 'minus', checked: !f.project, run: () => moveToProject(f, null) }]] });
   const fileMenu = (f, h) => (f.trashedAt
     ? [[{ label: 'Restore', icon: 'undo', run: () => restore([f]) }], [{ label: 'Copy name', icon: 'copy', run: () => h.copy(f.name, 'Name copied') }],
       [{ label: 'Delete forever…', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => purge([f]) }]]
     : [[{ label: 'Open', icon: 'open', key: 'Enter', kbd: '↵', run: h.open }, { label: 'Details', icon: 'info', kbd: 'I', run: h.details }],
       [{ label: f.starred ? 'Remove star' : 'Star', icon: 'star', key: 's', kbd: 'S', run: () => star([f]) }, ...(f.live.source === 'generation' ? [] : [{ label: 'Rename…', icon: 'edit', key: 'F2', kbd: 'F2', run: () => rename(f) }])],
-      [{ label: 'Download', icon: 'download', run: () => download([f]) }, { label: 'Copy name', icon: 'copy', run: () => h.copy(f.name, 'Name copied') }],
+      [{ label: 'Download', icon: 'download', run: () => download([f]) }, { label: 'Copy name', icon: 'copy', run: () => h.copy(f.name, 'Name copied') }, ...(f.live.source === 'file' ? [{ label: 'Duplicate', icon: 'duplicate', key: 'Ctrl+d', kbd: 'Ctrl D', run: () => duplicate(f) }] : []), projectMenu(f)],
       [areaMenu([f])],
       [{ label: 'Move to Trash', icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => trash([f]) }]]);
   const batchMenu = (fs, h) => { const N = `${fs.length} files`; return fs.every((f) => f.trashedAt)
@@ -263,6 +263,19 @@
       [{ label: `Move ${N} to Trash`, icon: 'trash', danger: true, key: 'Delete', kbd: 'Del', run: () => trash(fs) }]]; };
 
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-pg-retry="library"]'); if (t && L.status === 'error') { pstate('loading'); paint(); load(); } }, true);
-  window.XENO_LIB = { served: true, textPreview, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
+  async function duplicate(f) {
+    if (f.live.source !== 'file') return toast('Only uploaded files can be duplicated.');
+    const r = await api('POST', '/api/library/assets/file/' + encodeURIComponent(f.live.sourceId) + '/duplicate', {}).catch(() => null);
+    if (!r || !r.ok) return toast((r && r.d && r.d.error) || 'That file couldn’t be copied. Nothing changed.');
+    toast('Copied as “' + r.d.file.name + '”'); await load();
+  }
+  async function moveToProject(f, name) {
+    const id = name ? window.XENO_PROJECTS?.[name]?.id : null;
+    if (name && !id) return toast('That project can’t be reached just now.');
+    const r = await api('PUT', '/api/library/assets/' + encodeURIComponent(f.live.source) + '/' + encodeURIComponent(f.live.sourceId) + '/project', { project: id }).catch(() => null);
+    if (!r || !r.ok) return toast((r && r.d && r.d.error) || 'That couldn’t be moved. It is where it was.');
+    toast(name ? 'Moved to ' + name : 'Removed from its project'); await load();
+  }
+  window.XENO_LIB = { served: true, duplicate, moveToProject, textPreview, place, sync, areas, areaName, area, load, refuse, star, rename, trash, restore, purge, emptyTrash, upload, download, thumb, preview, viewNotYet, fileMenu, batchMenu, state: () => ({ status: L.status, total: L.total, capped: L.capped }) };
   Promise.resolve(P.ready).then((user) => { if (user) P.first(load()); });   // the page waits for this first load before it shows
 })();

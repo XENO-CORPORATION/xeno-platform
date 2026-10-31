@@ -545,7 +545,11 @@ export async function listLibraryItems(db, userId, params = {}) {
           OR (uf.workspace_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM workspaces upw WHERE upw.id = uf.workspace_id AND upw.workspace_type = 'personal'))))) AS mine,
         (p.source = 'file' AND EXISTS (SELECT 1 FROM storage_shares ss WHERE ss.file_id = p.source_id AND ss.revoked_at IS NULL AND (ss.expires_at IS NULL OR ss.expires_at > now()))) AS shared,
         -- what a share lets the caller do with someone else's file: 'viewer', 'editor', or NULL for their own
-        (SELECT sa.role FROM storage_access sa WHERE sa.kind = 'file' AND sa.target_id = p.source_id AND sa.user_id = $1::uuid) AS shared_role
+        (SELECT sa.role FROM storage_access sa WHERE sa.kind = 'file' AND sa.target_id = p.source_id AND sa.user_id = $1::uuid) AS shared_role,
+        (SELECT COALESCE(NULLIF(ou.display_name, ''), ou.username) FROM user_files uf JOIN users ou ON ou.id = COALESCE(uf.owner_user_id, uf.user_id) WHERE p.source = 'file' AND uf.id = p.source_id AND ou.id <> $1::uuid
+           AND (uf.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces upw WHERE upw.id = uf.workspace_id AND upw.workspace_type = 'personal'))) AS shared_by,
+        (SELECT pr.name FROM project_folders pf JOIN chat_projects pr ON pr.id = pf.project_id WHERE pf.app = 'projects' AND pf.folder_id = sf.id) AS project_name,
+        (SELECT pf.project_id FROM project_folders pf WHERE pf.app = 'projects' AND pf.folder_id = sf.id) AS project_id
       FROM placed p
       LEFT JOIN storage_item_folders sif ON sif.source = p.source AND sif.source_id = p.source_id
       -- the caller's own folder, or a team folder (the item is only listed at all if the caller may see it)
