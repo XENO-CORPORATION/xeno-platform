@@ -152,7 +152,7 @@
     if (r0.view === 'list') return wrap(listView(plain));
     const f = S.form;
     const acts = `<span class="fm-saved" data-fm-saved>${esc(S.save)}</span>` + (f.status === 'open' ? h.btn('Close the form', 'data-fm-status="closed"', true) : h.btn(f.status === 'closed' ? 'Reopen the form' : 'Open the form', 'data-fm-status="open"')) + h.btn('Delete', 'data-fm-delete', true);
-    const head = h.head({ title: f.title, sub: LINE[f.status], acts }) + h.tabs([['form', 'Questions'], ['share', 'Share'], ['responses', `Responses${f.responses ? ' ' + f.responses : ''}`]], r0.view, 'data-fm-tab');
+    const head = h.head({ title: f.title, acts }) + h.tabs([['form', 'Questions'], ['share', 'Share'], ['responses', `Responses${f.responses ? ' ' + f.responses : ''}`]], r0.view, 'data-fm-tab') + `<p class="pg-dim" data-fm-line>${esc(LINE[f.status])}</p>`;
     return wrap(head + (r0.view === 'share' ? shareView(f) : r0.view === 'responses' ? responsesView(f) : questionsView(f)));
   }
 

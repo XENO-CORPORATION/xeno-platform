@@ -38,6 +38,7 @@ import * as messageMcp from './messageMcp.js';
 import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as formsMcp from './formsMcp.js';
+import * as brandKitsMcp from './brandKitsMcp.js';
 import * as toolsMcp from './toolsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
@@ -212,6 +213,14 @@ export const SERVICES = Object.freeze([
     tools: () => analyticsMcp.TOOLS,
     call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
+  },
+  // XENO Assets (brandKitsMcp.js): read a workspace's brand so work stays on it, and propose tokens. Publishing is a person's.
+  {
+    category: 'brand', title: 'Brand kits', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Brand kits: read a workspace’s published tokens, logos and voice so what you make stays on brand, export them, and propose tokens for a person to publish.',
+    tools: () => brandKitsMcp.TOOLS,
+    call: (db, actor, name, args) => brandKitsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof brandKitsMcp.BrandKitsMcpError,
   },
   // XENO Forms (formsMcp.js): build forms, sign-in links only (a public link is a person's), read and act on responses.
   {

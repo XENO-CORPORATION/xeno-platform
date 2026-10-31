@@ -5,6 +5,13 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Studio › Libraries has brand kits (XENO Assets).**
+
+- Keep a brand’s colors, sizes, type, shadows, logos and voice in one kit the whole workspace shares, with light, dark or any other modes.
+- Publish a kit to freeze it as a numbered version that never changes, so what follows it always knows exactly what it has.
+- Export any version as W3C Design Tokens, CSS variables, a Tailwind theme or XENO Canvas tokens, and import Design Tokens files with a preview first.
+- Agents can read a published brand to stay on it, and propose tokens. Only a person can publish.
+
 **Fixes that had been waiting on branches.**
 
 - Expired credit holds are all released at once, not only the first thousand, so reserved credits no longer linger.

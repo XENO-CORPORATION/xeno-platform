@@ -33,6 +33,7 @@ import commsIdentityRoutes from './routes/commsIdentityRoutes.js';
 import mailRoutes from './routes/mailRoutes.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
+import brandKitRoutes from './routes/brandKitRoutes.js';
 import workspaceDocsRoutes from './routes/workspaceDocsRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
@@ -697,6 +698,7 @@ app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, 
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
 // Corpo › Forms (services/forms.js): auth per route — the respondent's /public/:token side needs no account
 app.use('/api/forms', databaseMiddleware, formsRoutes);
+app.use('/api/brand-kits', databaseMiddleware, brandKitRoutes);   // XENO Assets, Studio › Libraries (services/brandKits.js)
 app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
 // XENO Message = XENO Comms, server-to-server (services/xenoComms.js). The platform keeps no messages.
 app.use('/api/message', databaseMiddleware, authMiddleware, requireActivated, messageRoutes);

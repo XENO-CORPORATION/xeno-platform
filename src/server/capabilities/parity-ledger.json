@@ -172,7 +172,9 @@
     "platform-company.js": "workspace-ui",
     "platform-anima.js": "workspace-ui",
     "formsRoutes.js": "forms",
-    "platform-forms.js": "forms"
+    "platform-forms.js": "forms",
+    "brandKitRoutes.js": "forms",
+    "platform-assets.js": "forms"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11256,6 +11258,80 @@
       "class": "reversible",
       "scope": "none",
       "because": "moves around this screen; the data it shows is already covered"
+    },
+    "route:brandKitRoutes.js:GET /": {
+      "status": "capability",
+      "capability": "brand.kit.list",
+      "class": "safe",
+      "scope": "brand:read"
+    },
+    "route:brandKitRoutes.js:POST /": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:GET /:id": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "brand:read"
+    },
+    "route:brandKitRoutes.js:PATCH /:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:DELETE /:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:POST /:id/restore": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:PUT /:id/tokens": {
+      "status": "capability",
+      "capability": "brand.token.propose",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:POST /:id/logos": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:DELETE /:id/items": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:POST /:id/import": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:POST /:id/publish": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "brand:write"
+    },
+    "route:brandKitRoutes.js:GET /:id/versions": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "brand:read"
+    },
+    "route:brandKitRoutes.js:GET /:id/versions/:version": {
+      "status": "capability",
+      "capability": "brand.version.get",
+      "class": "safe",
+      "scope": "brand:read"
+    },
+    "route:brandKitRoutes.js:GET /:id/export": {
+      "status": "capability",
+      "capability": "brand.tokens.export",
+      "class": "safe",
+      "scope": "brand:read"
     }
   }
 }

@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1988 actions · 225 agent capability · 1350 planned (debt) · 413 excluded · **coverage 14.3%** of the 1575 owed.
+**Total:** 2002 actions · 229 agent capability · 1360 planned (debt) · 413 excluded · **coverage 14.4%** of the 1589 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -22,11 +22,11 @@ Every action a person can take on the platform, and whether an agent can take it
 | platform | 75 | 0 | 37 | 38 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
 | canvas | 22 | 6 | 16 | 0 | 27.3% |
+| forms | 33 | 11 | 15 | 7 | 42.3% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | scheduling | 22 | 4 | 12 | 6 | 25% |
 | support | 22 | 8 | 12 | 2 | 40% |
 | customers | 29 | 7 | 9 | 13 | 43.8% |
-| forms | 19 | 7 | 5 | 7 | 58.3% |
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
@@ -544,8 +544,18 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:customersRoutes.js:POST /contacts/:id/task`
 - `route:customersRoutes.js:POST /stages`
 
-## forms — 5 planned
+## forms — 15 planned
 
+- `route:brandKitRoutes.js:DELETE /:id`
+- `route:brandKitRoutes.js:DELETE /:id/items`
+- `route:brandKitRoutes.js:GET /:id`
+- `route:brandKitRoutes.js:GET /:id/versions`
+- `route:brandKitRoutes.js:PATCH /:id`
+- `route:brandKitRoutes.js:POST /`
+- `route:brandKitRoutes.js:POST /:id/import`
+- `route:brandKitRoutes.js:POST /:id/logos`
+- `route:brandKitRoutes.js:POST /:id/publish`
+- `route:brandKitRoutes.js:POST /:id/restore`
 - `route:formsRoutes.js:DELETE /:id`
 - `route:formsRoutes.js:DELETE /:id/responses`
 - `route:formsRoutes.js:DELETE /:id/responses/:rid`
