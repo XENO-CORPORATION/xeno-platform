@@ -167,7 +167,9 @@
     "toolsRoutes.js": "platform",
     "platform-tools.js": "workspace-ui",
     "platform-places.js": "workspace",
-    "platform-market.js": "commerce"
+    "platform-market.js": "commerce",
+    "companyRoutes.js": "workspace",
+    "platform-company.js": "workspace-ui"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11030,6 +11032,74 @@
       "status": "planned",
       "class": "external",
       "scope": "marketplace:write"
+    },
+    "route:companyRoutes.js:GET /:id": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:PUT /:id/profile": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/registrations": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/tax": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/customs": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/financial": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/mandates": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/tax/:itemId/check": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:DELETE /:id/:kind/:itemId": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "ui:platform-company.js:data-co2=retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
     }
   }
 }

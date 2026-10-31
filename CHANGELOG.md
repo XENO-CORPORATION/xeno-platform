@@ -5,6 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Corpo › Company is real.**
+
+- A company’s legal entity: its legal name and form, registered office and where it’s actually run, its registrations and branches, its tax, customs and financial-market numbers, and who may act for it.
+- VAT numbers can be checked with VIES, and every answer is kept. If a register can’t be reached the page says it couldn’t check, never that the number is invalid.
+- Owners and admins change it; a person, never an agent. A date of birth is shown only to them.
+
 **Selling a team, and Tools for agents.**
 
 - The Seller console can publish a team: the server packages its setup and its agents’ definitions, leaves your people behind, says who stayed, and sends it to review.
