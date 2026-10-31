@@ -8,6 +8,8 @@
  *   - links: sign-in (needs an account) and public; an agent cannot make a public link — the service refuses AND the
  *     database refuses; a revoked or expired link, a draft or closed form, takes nothing; only the token's hash is stored
  *   - spam: a filled honeypot is stored as spam and answered as accepted; per-source hourly limit
+ *   - a closing date and a response limit are held, even by answers arriving together
+ *   - an answer keeps its question as it read then; erasing a contact erases what they answered
  *   - actions: a response becomes a XENO Tasks task and a support request, recorded once; contact says Customers is
  *     unavailable when that area is absent
  *   - CSV export guards against spreadsheet formulas; deleting a response erases its answers
@@ -20,6 +22,9 @@ import pg from 'pg';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { writeTuples } from '../utils/authzReBAC.js';
 import * as F from '../services/forms.js';
+import * as customers from '../services/customers.js';
+import express from 'express';
+import formsRoutes from '../routes/formsRoutes.js';
 import * as Mcp from '../services/formsMcp.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -107,7 +112,6 @@ async function main() {
   ok(again.already && again.response.actions.task.key === key, 'running it again returns the same task, never a second');
   const tk = await F.runAction(pool, E, { ...w, id: form.id, responseId: ada.id, action: 'ticket' });
   ok(/^T-\d+$/.test(tk.response.actions.ticket.key) && (await pool.query('SELECT 1 FROM support_tickets WHERE number = $1 AND requester_id = $2', [Number(tk.response.actions.ticket.key.slice(2)), editor])).rows.length === 1, 'a response becomes a support request, raised by the person who ran it');
-  ok(!!(await F.customersArea()), 'the Customers area is present');
   const ct = await F.runAction(pool, E, { ...w, id: form.id, responseId: ada.id, action: 'contact' });
   const crow = (await pool.query('SELECT * FROM crm_contacts WHERE id = $1', [ct.response.actions.contact.id])).rows[0];
   ok(crow && crow.workspace_id === ws && crow.email === 'ada@example.com' && crow.name === 'Ada' && crow.source === 'form', 'a response becomes a Customers contact in the same workspace, sourced "form"');
@@ -143,6 +147,78 @@ async function main() {
   await F.submit(pool, tokenOf(al2.url), { answers: { name: 'Crash on save' }, source: '5.5.5.5' });
   const ar = (await F.listResponses(pool, E, { ...w, id: auto.id })).responses[0];
   ok(ar && ar.actions.task && /^T-\d+$/.test(ar.actions.task.key), 'a form set to make a task does so on every response');
+
+  // ── an answer keeps its question as it read then
+  const hist = (await F.createForm(pool, E, { ...w, title: 'History', fields: [{ id: 'q', type: 'text', label: 'First wording', required: true }, { id: 'gone', type: 'text', label: 'Later removed' }] })).form;
+  await F.updateForm(pool, E, { ...w, id: hist.id, status: 'open' });
+  const hl = await F.createLink(pool, E, { ...w, id: hist.id, kind: 'public' });
+  await F.submit(pool, tokenOf(hl.url), { answers: { q: 'yes', gone: 'kept' }, source: '6.6.6.6' });
+  await F.updateForm(pool, E, { ...w, id: hist.id, fields: [{ id: 'q', type: 'text', label: 'Second wording', required: true }] });
+  const hr = (await F.listResponses(pool, E, { ...w, id: hist.id })).responses[0];
+  ok(hr.fields.find((x) => x.id === 'q').label === 'First wording', 'editing a form leaves an old answer with its question as it read then');
+  const hcsv = (await F.exportCsv(pool, E, { ...w, id: hist.id })).csv;
+  ok(hcsv.includes('Later removed') && hcsv.includes('kept'), 'a question since removed still has its answers in the export');
+  const notes = (await pool.query(`SELECT title FROM user_notifications WHERE user_id = $1 AND source = 'forms' AND title LIKE '%History%'`, [editor])).rows;
+  ok(notes.length === 1, 'whoever made the form is told about a response');
+
+  // ── a closing date and a limit
+  const dated = (await F.createForm(pool, E, { ...w, title: 'Dated', fields: [{ id: 'q', type: 'text', label: 'Q' }] })).form;
+  await F.updateForm(pool, E, { ...w, id: dated.id, status: 'open', closesAt: new Date(Date.now() + 3_600_000).toISOString() });
+  const dl = tokenOf((await F.createLink(pool, E, { ...w, id: dated.id, kind: 'public' })).url);
+  ok(!!(await F.publicForm(pool, dl)).form, 'a form before its closing date opens');
+  await F.updateForm(pool, E, { ...w, id: dated.id, closesAt: new Date(Date.now() - 1000).toISOString() });
+  ok(await code(F.publicForm(pool, dl)) === 'form_not_open' && await code(F.submit(pool, dl, { answers: { q: 'x' }, source: '7.7.7.7' })) === 'form_not_open', 'after it, it is closed');
+  ok(await code(F.updateForm(pool, E, { ...w, id: dated.id, closesAt: 'soon' })) === 'invalid_closes_at' && await code(F.updateForm(pool, E, { ...w, id: dated.id, maxResponses: 0 })) === 'invalid_max_responses', 'a bad date or limit is refused');
+  const full = (await F.createForm(pool, E, { ...w, title: 'One only', fields: [{ id: 'q', type: 'text', label: 'Q' }] })).form;
+  await F.updateForm(pool, E, { ...w, id: full.id, status: 'open', maxResponses: 1 });
+  const fl = tokenOf((await F.createLink(pool, E, { ...w, id: full.id, kind: 'public' })).url);
+  await Promise.all(Array.from({ length: 8 }, () => pool.query('SELECT pg_sleep(0.1)')));   // warm connections, so the answers really do arrive together
+  const got = await Promise.allSettled([1, 2, 3, 4, 5, 6].map((i) => F.submit(pool, fl, { answers: { q: `r${i}` }, source: `8.8.8.${i}` })));
+  ok(got.filter((x) => x.status === 'fulfilled').length === 1 && got.filter((x) => x.status === 'rejected').every((x) => x.reason.code === 'form_full'), 'six answers at once can’t overrun a limit of one');
+  ok(await code(F.publicForm(pool, fl)) === 'form_full', 'and the form says it has all it needs');
+
+  // ── erasing a contact erases what they answered
+  const lead = (await F.createForm(pool, E, { ...w, title: 'Leads', fields: [{ id: 'name', type: 'text', label: 'Name' }, { id: 'mail', type: 'email', label: 'Mail' }], autoActions: ['contact'] })).form;
+  await F.updateForm(pool, E, { ...w, id: lead.id, status: 'open' });
+  const ll = tokenOf((await F.createLink(pool, E, { ...w, id: lead.id, kind: 'public' })).url);
+  await F.submit(pool, ll, { answers: { name: 'Grace', mail: 'grace@example.test' }, source: '9.9.9.1' });
+  await F.submit(pool, ll, { answers: { name: 'G', mail: 'GRACE@example.test' }, source: '9.9.9.2' });
+  const cs = (await pool.query(`SELECT id FROM crm_contacts WHERE workspace_id = $1 AND lower(email) = 'grace@example.test'`, [ws])).rows;
+  ok(cs.length === 1, 'the same e-mail answering twice is one contact');
+  const O = { id: owner, kind: 'human' };
+  ok((await customers.exportContact(pool, O, cs[0].id, w)).formResponses.length === 2, 'their export includes what they answered');
+  await customers.eraseContact(pool, O, cs[0].id, w);
+  ok((await F.listResponses(pool, E, { ...w, id: lead.id })).responses.length === 0, 'erasing the contact erases what they answered');
+
+  // ── the public page itself, over HTTP: no account, no JavaScript
+  const app = express(); app.use((req, _res, next) => { req.db = pool; next(); }); app.use('/api/forms', formsRoutes);
+  const srv = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  try {
+    const base = `http://127.0.0.1:${srv.address().port}/api/forms/public`;
+    const pg1 = (await F.createForm(pool, E, { ...w, title: 'Page <b>', fields: [{ id: 'who', type: 'text', label: 'Who?', required: true }, { id: 'how', type: 'select', label: 'How', options: ['A', 'B'] }, { id: 'days', type: 'multiselect', label: 'Days', options: ['Mon', 'Tue'] }] })).form;
+    await F.updateForm(pool, E, { ...w, id: pg1.id, status: 'open', confirmation: 'Got it.' });
+    const tk = tokenOf((await F.createLink(pool, E, { ...w, id: pg1.id, kind: 'public' })).url);
+    const got = await fetch(`${base}/${tk}`), html = await got.text();
+    ok(got.status === 200 && /<form[^>]+method="post"/.test(html) && !/<script/i.test(html), 'the public page is a plain form with no script');
+    ok(html.includes('Page &lt;b&gt;') && !html.includes('Page <b>'), 'what a person typed is escaped');
+    ok(/noindex/.test(got.headers.get('x-robots-tag') || '') && /default-src 'none'/.test(got.headers.get('content-security-policy') || ''), 'it’s not indexed and allows nothing else to load');
+    const post = (b) => fetch(`${base}/${tk}`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(b).toString() });
+    const badRes = await post([['a_who', ''], ['a_how', 'A']]);
+    const bad = await badRes.text();
+    ok(badRes.status === 422 && /<option selected>A<\/option>/.test(bad), 'a wrong answer comes back with what they typed still there');
+    const good = await post([['a_who', 'Lin'], ['a_how', 'B'], ['a_days', 'Mon'], ['a_days', 'Tue']]);
+    ok(good.status === 200 && (await good.text()).includes('Got it.'), 'a good answer gets the thanks');
+    const saved = (await F.listResponses(pool, E, { ...w, id: pg1.id })).responses[0];
+    ok(saved.answers.who === 'Lin' && saved.answers.days.join() === 'Mon,Tue', 'and is stored, several choices included');
+    await post([['a_who', 'Bot'], [F.HONEYPOT, 'x']]);
+    ok((await F.listResponses(pool, E, { ...w, id: pg1.id })).responses.length === 1, 'a filled honeypot isn’t counted as a response');
+    const nope = await fetch(`${base}/${'x'.repeat(43)}`);
+    ok(nope.status === 404 && /doesn|does not work/.test(await nope.text()), 'a dead link says so');
+  } finally { await new Promise((r) => srv.close(r)); }
+
+  // ── erasing every answer is a person's
+  ok(await code(F.deleteAllResponses(pool, AG, { ...w, id: hist.id })) === 'person_required', 'an agent can’t erase all responses');
+  ok((await F.deleteAllResponses(pool, E, { ...w, id: hist.id })).deleted === 1 && (await pool.query(`SELECT answers, fields, email FROM form_responses WHERE form_id = $1`, [hist.id])).rows.every((r) => JSON.stringify(r.answers) === '{}' && JSON.stringify(r.fields) === '[]' && r.email === null), 'a person can, and the answers are gone, not hidden');
 
   console.log(`\nforms: ${passed} passed`);
 }

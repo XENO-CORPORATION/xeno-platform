@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS forms (
   status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'open', 'closed')),
   confirmation text NOT NULL DEFAULT 'Thank you — your response was received.' CHECK (length(confirmation) <= 1000),
   auto_actions jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(auto_actions) = 'array'),
+  closes_at timestamptz,
+  max_responses integer CHECK (max_responses IS NULL OR max_responses > 0),
   created_by_user_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -44,6 +46,8 @@ CREATE TABLE IF NOT EXISTS form_responses (
   workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   link_id uuid REFERENCES form_links(id) ON DELETE SET NULL,
   answers jsonb NOT NULL CHECK (jsonb_typeof(answers) = 'object'),
+  fields jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(fields) = 'array'),   -- the questions as they read when this was answered
+  email text,                             -- the first e-mail answered, so erasing a contact can find what they said
   submitter_user_id uuid,
   source_hash text,                       -- SHA-256 of (form, client address): rate limits, never the address itself
   spam boolean NOT NULL DEFAULT false,
@@ -53,7 +57,9 @@ CREATE TABLE IF NOT EXISTS form_responses (
 );
 CREATE INDEX IF NOT EXISTS form_responses_form ON form_responses (form_id, created_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS form_responses_source ON form_responses (source_hash, created_at DESC);
+CREATE INDEX IF NOT EXISTS form_responses_email ON form_responses (workspace_id, lower(email)) WHERE email IS NOT NULL;
 -- DOWN
+DROP INDEX IF EXISTS form_responses_email;
 DROP INDEX IF EXISTS form_responses_source;
 DROP INDEX IF EXISTS form_responses_form;
 DROP TABLE IF EXISTS form_responses;

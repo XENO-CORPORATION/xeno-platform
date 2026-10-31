@@ -5,6 +5,15 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Corpo › Forms is real.**
+
+- Make a form, change its questions, and open it. It saves as you type.
+- Share it by a sign-in link or a public link. People answer a public link without an account, and the page works without JavaScript. Links can be revoked and can expire.
+- A form can close on a date or after a number of responses, even when answers arrive together.
+- Responses show a summary of the choices and each answer with its question as it read then, export to CSV, and can become a customer, a task or a support request, on demand or on every response.
+- Erasing a contact erases what they answered, and a contact’s export includes it.
+- Agents can build forms, make sign-in links and read responses. Only a person can make a public link or delete anything.
+
 **Create and Anima show real work, and the preview note is gone.**
 
 - Studio › Create lists your files in the Library instead of sample renders.

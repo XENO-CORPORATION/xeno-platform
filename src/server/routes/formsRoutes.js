@@ -8,7 +8,7 @@
  *   DELETE /:id                                (a person; soft, undo with POST /:id/restore)
  *   POST   /:id/links {kind: signin|public, label?, expiresInDays?}   public: a person only
  *   POST   /:id/links/:linkId/revoke
- *   GET    /:id/responses?spam=1               · GET /:id/responses.csv
+ *   GET    /:id/responses?spam=1               · GET /:id/responses.csv · DELETE /:id/responses (a person; erases them all)
  *   GET    /:id/responses/:rid                 · DELETE /:id/responses/:rid (a person; erases the answers)
  *   POST   /:id/responses/:rid/actions {action: contact|task|ticket, projectId?}
  *
@@ -95,7 +95,7 @@ router.post('/public/:token/responses', optionalAuthMiddleware, async (req, res)
 router.get('/', ...A, run((req, a) => F.listForms(req.db, a, { workspace: ws(req) })));
 router.post('/', ...A, run((req, a) => F.createForm(req.db, a, { workspace: ws(req), title: b(req).title, description: b(req).description, fields: b(req).fields || [], confirmation: b(req).confirmation, autoActions: b(req).autoActions || [] })));
 router.get('/:id', ...A, run((req, a) => F.getForm(req.db, a, { workspace: ws(req), id: req.params.id })));
-router.patch('/:id', ...A, run((req, a) => F.updateForm(req.db, a, { workspace: ws(req), id: req.params.id, title: b(req).title, description: b(req).description, fields: b(req).fields, confirmation: b(req).confirmation, autoActions: b(req).autoActions, status: b(req).status })));
+router.patch('/:id', ...A, run((req, a) => F.updateForm(req.db, a, { workspace: ws(req), id: req.params.id, title: b(req).title, description: b(req).description, fields: b(req).fields, closesAt: b(req).closesAt, maxResponses: b(req).maxResponses, confirmation: b(req).confirmation, autoActions: b(req).autoActions, status: b(req).status })));
 router.delete('/:id', ...A, run((req, a) => F.deleteForm(req.db, a, { workspace: ws(req), id: req.params.id })));
 router.post('/:id/restore', ...A, run((req, a) => F.restoreForm(req.db, a, { workspace: ws(req), id: req.params.id })));
 router.post('/:id/links', ...A, run((req, a) => F.createLink(req.db, a, { workspace: ws(req), id: req.params.id, kind: b(req).kind || 'signin', label: b(req).label, expiresInDays: b(req).expiresInDays })));
@@ -105,6 +105,7 @@ router.get('/:id/responses.csv', ...A, async (req, res) => {
   catch (e) { fail(res, e); }
 });
 router.get('/:id/responses', ...A, run((req, a) => F.listResponses(req.db, a, { workspace: ws(req), id: req.params.id, spam: req.query.spam === '1' })));
+router.delete('/:id/responses', ...A, run((req, a) => F.deleteAllResponses(req.db, a, { workspace: ws(req), id: req.params.id })));
 router.get('/:id/responses/:rid', ...A, run((req, a) => F.getResponse(req.db, a, { workspace: ws(req), id: req.params.id, responseId: req.params.rid })));
 router.delete('/:id/responses/:rid', ...A, run((req, a) => F.deleteResponse(req.db, a, { workspace: ws(req), id: req.params.id, responseId: req.params.rid })));
 router.post('/:id/responses/:rid/actions', ...A, run((req, a) => F.runAction(req.db, a, { workspace: ws(req), id: req.params.id, responseId: req.params.rid, action: b(req).action, projectId: b(req).projectId })));

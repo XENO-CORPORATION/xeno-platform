@@ -25,3 +25,35 @@
 .fm-fill .fm-q{color:var(--text);font-size:13px;margin-top:6px}.fm-fill small{color:var(--dim)}
 .fm-err{font-size:12px;color:var(--text);font-weight:600}
 @media (max-width:760px){.fm-table{display:block;overflow-x:auto}.fm-row{grid-template-columns:1fr}}
+
+/* the workspace page frame: questions beside settings, responses as cards */
+.fm-cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;padding-top:4px}
+@media (max-width:900px){.fm-cols{grid-template-columns:minmax(0,1fr)}}
+.fm-main{display:flex;flex-direction:column;gap:8px;min-width:0}
+.fm .fm-field{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:8px;padding:12px}
+.fm-q-top{display:flex;gap:8px;flex-wrap:wrap}
+.fm-q-label{flex:1 1 240px;min-width:0}
+.fm-q-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.fm-q-foot label,.fm-line{display:flex;align-items:center;gap:6px}
+.fm-sp{flex:1}
+.fm-add{display:flex;flex-direction:column;gap:6px;padding:10px 0;color:var(--muted)}
+.fm-add > div{display:flex;flex-wrap:wrap;gap:6px}
+.fm-side{min-width:0}
+.fm-side .sc-card{margin:0}
+.fm-set label:not(.fm-line){flex-direction:column;align-items:stretch;gap:4px}
+.fm-set textarea.in,.fm-set input.in{width:100%;box-sizing:border-box}
+.fm-auto{flex-direction:column;align-items:flex-start;gap:6px}
+.fm-saved{font-size:12px;color:var(--muted);align-self:center;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-sums{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin:8px 0}
+.fm-sum{margin:0;max-width:none}
+.fm-bar{display:grid;grid-template-columns:minmax(0,1fr) 90px 28px;gap:8px;align-items:center;font-size:12px}
+.fm-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fm-bar i{display:block;height:6px;border-radius:3px;background:var(--n26);overflow:hidden}
+.fm-bar u{display:block;height:100%;background:currentColor;text-decoration:none}
+.fm-bar small{color:var(--muted);text-align:right}
+.fm-resp{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:8px;background:var(--n20);margin:6px 0}
+.fm-resp-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.fm-resp-top small{color:var(--muted)}
+.fm-a{display:flex;flex-direction:column;gap:1px;font-size:13px;overflow-wrap:anywhere}
+.fm-a small{color:var(--muted)}
+.fm-qq{display:block;margin-bottom:4px}

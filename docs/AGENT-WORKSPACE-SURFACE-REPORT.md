@@ -25,8 +25,8 @@ Per division: how many actions a person can take, how many an agent can take tod
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
 | support | 22 | 8 | 12 | 2 | 4 | 15 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
 | customers | 29 | 7 | 9 | 13 | 9 | 14 | 5 | 1 | `customers:write` 6, `customers:read` 3 |
+| forms | 19 | 7 | 5 | 7 | 7 | 10 | 2 | 0 | `forms:write` 5 |
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
-| forms | 18 | 8 | 4 | 6 | 8 | 9 | 1 | 0 | `forms:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
 | releases | 19 | 9 | 4 | 6 | 8 | 11 | 0 | 0 | `workspace:read` 3, `workspace:admin` 1 |
 | message | 11 | 6 | 3 | 2 | 7 | 4 | 0 | 0 | `message:write` 2, `message:read` 1 |

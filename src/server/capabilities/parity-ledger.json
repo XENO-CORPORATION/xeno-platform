@@ -11245,11 +11245,17 @@
       "scope": "none",
       "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
     },
-    "ui:platform-forms.js:data-fm-page": {
-      "status": "capability",
-      "capability": "forms.form.list",
-      "class": "safe",
-      "scope": "forms:read"
+    "route:formsRoutes.js:DELETE /:id/responses": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "forms:write"
+    },
+    "ui:platform-forms.js:data-fm-field": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
     }
   }
 }

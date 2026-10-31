@@ -378,9 +378,13 @@ A form belongs to a workspace (§8.11): viewers list, editors build and read res
 - The respondent's side is `/api/forms/public/:token`: a server-rendered page that needs no account and no
   JavaScript (under `/api/`, so the site gate does not hide it). Answers are validated on the server; a filled
   honeypot is stored as spam and answered as accepted; per-source (hashed, never stored) and per-form hourly limits.
-- Response → contact / task / ticket. Contact goes through `customersArea()`, the one seam to `services/customers.js`
-  (`createContact` + a timeline note; a known email is matched, never duplicated). Each action runs once per response.
-- Proofs: `npm run test:forms` (real Postgres, 7/7 mutations killed), `npm run test:forms-ui` (browser, 4/4).
+- Response → contact / task / ticket, through `services/customers.js` (`createContact` + a timeline note; a known email is
+  matched, never duplicated), Tasks and Support. Each action runs once per response.
+- **An answer keeps its question as it read then** (`form_responses.fields`). Never rewrite it when a form changes.
+- **Erasing a contact erases what they answered** (`customers.eraseContact`), by the contact it became and by e-mail.
+- A response limit holds under concurrent answers: `submit` locks the form row. The catalog folds forms into a block, not a
+  product, so a Docs or Sites block embeds these rather than starting a second store.
+- Proofs: `npm run test:forms` (real Postgres, mutation-checked), `npm run test:forms-ui` (browser, 4/4).
 
 ## 🪪 An agent's identity is an Anima Mind; skills are the open Agent Skills format (owner, 2026-10-24)
 

@@ -29,7 +29,9 @@ import { check } from '../utils/authzReBAC.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import * as xenoTasks from './xenoTasks.js';
 import * as support from './supportTickets.js';
-import { siteOrigin } from '../config/hosts.js';
+import * as customers from './customers.js';
+import * as inbox from './inbox.js';
+import { publicSiteOrigin } from '../config/hosts.js';
 
 export class FormsError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'FormsError'; this.code = code; this.status = status; }
@@ -150,7 +152,7 @@ const cleanActions = (a) => {
 
 const viewForm = (r, counts = {}) => ({
   id: r.id, workspaceId: r.workspace_id, title: r.title, description: r.description, fields: r.fields, status: r.status,
-  confirmation: r.confirmation, autoActions: r.auto_actions, responses: Number(counts.responses || 0), createdAt: r.created_at, updatedAt: r.updated_at,
+  confirmation: r.confirmation, autoActions: r.auto_actions, closesAt: r.closes_at, maxResponses: r.max_responses, responses: Number(counts.responses || 0), createdAt: r.created_at, updatedAt: r.updated_at,
   url: `/workspace/corpo/spaces/forms/${r.id}`,
 });
 
@@ -190,7 +192,10 @@ export async function createForm(db, actor, { workspace, title, description, fie
   return { form: viewForm(r) };
 }
 
-export async function updateForm(db, actor, { workspace, id, title, description, fields, confirmation, autoActions, status } = {}) {
+const closingDate = (v) => { if (v == null || v === '') return null; const d = new Date(v); if (Number.isNaN(d.getTime())) throw new FormsError('That closing date isn’t a date', 'invalid_closes_at'); return d; };
+const responseLimit = (v) => { if (v == null || v === '') return null; const n = Number(v); if (!Number.isInteger(n) || n < 1) throw new FormsError('The response limit must be a whole number above zero', 'invalid_max_responses'); return n; };
+
+export async function updateForm(db, actor, { workspace, id, title, description, fields, confirmation, autoActions, status, closesAt, maxResponses } = {}) {
   const s = await scopeFor(db, actor, { workspace, need: 'editor' });
   const cur = await loadForm(db, s, id);
   if (status != null && !STATUSES.includes(status)) throw new FormsError('Unknown status', 'invalid_status');
@@ -201,10 +206,12 @@ export async function updateForm(db, actor, { workspace, id, title, description,
     confirmation: confirmation == null ? cur.confirmation : (str(confirmation, 1000, 'confirmation') || cur.confirmation),
     autoActions: autoActions == null ? cur.auto_actions : cleanActions(autoActions),
     status: status == null ? cur.status : status,
+    closesAt: closesAt === undefined ? cur.closes_at : closingDate(closesAt),
+    maxResponses: maxResponses === undefined ? cur.max_responses : responseLimit(maxResponses),
   };
   if (next.status === 'open' && !next.fields.length) throw new FormsError('Add at least one field before opening the form', 'no_fields');
-  const r = (await db.query(`UPDATE forms SET title=$3, description=$4, fields=$5::jsonb, confirmation=$6, auto_actions=$7::jsonb, status=$8, updated_at=now()
-     WHERE id = $1 AND workspace_id = $2 RETURNING *`, [cur.id, s.workspaceId, next.title, next.description, JSON.stringify(next.fields), next.confirmation, JSON.stringify(next.autoActions), next.status])).rows[0];
+  const r = (await db.query(`UPDATE forms SET title=$3, description=$4, fields=$5::jsonb, confirmation=$6, auto_actions=$7::jsonb, status=$8, closes_at=$9, max_responses=$10, updated_at=now()
+     WHERE id = $1 AND workspace_id = $2 RETURNING *`, [cur.id, s.workspaceId, next.title, next.description, JSON.stringify(next.fields), next.confirmation, JSON.stringify(next.autoActions), next.status, next.closesAt, next.maxResponses])).rows[0];
   return { form: viewForm(r) };
 }
 
@@ -229,7 +236,7 @@ function viewLink(l) {
   return { id: l.id, kind: l.kind, label: l.label, createdByKind: l.created_by_kind, expiresAt: l.expires_at, revokedAt: l.revoked_at, createdAt: l.created_at,
     live: !l.revoked_at && (!l.expires_at || new Date(l.expires_at) > new Date()) };
 }
-export const fillUrl = (kind, token) => (kind === 'public' ? `${siteOrigin()}/api/forms/public/${token}` : `${siteOrigin()}/workspace/corpo/spaces/forms/fill/${token}`);
+export const fillUrl = (kind, token) => (kind === 'public' ? `${publicSiteOrigin()}/api/forms/public/${token}` : `${publicSiteOrigin()}/workspace/corpo/spaces/forms/fill/${token}`);
 
 /** Make a link to a form. `kind` signin (default) or public — public only by a person. The token is shown ONCE. */
 export async function createLink(db, actor, { workspace, id, kind = 'signin', label, expiresInDays } = {}) {
@@ -259,14 +266,18 @@ export async function revokeLink(db, actor, { workspace, id, linkId } = {}) {
 }
 
 /** The live link + form a token opens, or a FormsError. `user` is the signed-in person (or null). */
+const responseCount = async (db, formId) => Number((await db.query('SELECT count(*) AS n FROM form_responses WHERE form_id = $1 AND deleted_at IS NULL AND spam = false', [formId])).rows[0].n);
+
 async function openToken(db, token, user) {
   const none = () => new FormsError('This form link does not work. It may have been revoked or expired.', 'link_not_found', 404);
   if (!isToken(token)) throw none();
-  const row = (await db.query(`SELECT l.*, f.id AS fid, f.workspace_id, f.title, f.description, f.fields, f.status, f.confirmation, f.auto_actions, f.deleted_at AS f_deleted
+  const row = (await db.query(`SELECT l.*, f.id AS fid, f.workspace_id, f.title, f.description, f.fields, f.status, f.confirmation, f.auto_actions, f.closes_at, f.max_responses, f.created_by_user_id AS form_creator, f.deleted_at AS f_deleted
      FROM form_links l JOIN forms f ON f.id = l.form_id WHERE l.token_sha256 = $1`, [sha(token)])).rows[0];
   if (!row || row.revoked_at || row.f_deleted || (row.expires_at && new Date(row.expires_at) <= new Date())) throw none();
   if (row.kind === 'signin' && !(user && user.id)) throw new FormsError('Sign in to XENO to answer this form', 'sign_in_required', 401);
   if (row.status !== 'open') throw new FormsError(row.status === 'closed' ? 'This form is closed.' : 'This form is not open yet.', 'form_not_open', 409);
+  if (row.closes_at && new Date(row.closes_at) <= new Date()) throw new FormsError('This form is closed.', 'form_not_open', 409);
+  if (row.max_responses && await responseCount(db, row.fid) >= row.max_responses) throw new FormsError('This form has all the responses it needs.', 'form_full', 409);
   return row;
 }
 
@@ -287,8 +298,21 @@ export async function submit(db, token, { answers, user = null, source = '' } = 
   const spam = raw[HONEYPOT] != null && String(raw[HONEYPOT]) !== '';
   const { answers: clean, errors } = validateAnswers(r.fields, raw);
   if (!spam && Object.keys(errors).length) { const e = new FormsError('Some answers need fixing', 'invalid_answers', 422); e.errors = errors; throw e; }
-  const row = (await db.query(`INSERT INTO form_responses (form_id, workspace_id, link_id, answers, submitter_user_id, source_hash, spam) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7) RETURNING *`,
-    [r.fid, r.workspace_id, r.id, JSON.stringify(spam ? {} : clean), user && user.id ? user.id : null, src, spam])).rows[0];
+  const emailField = r.fields.find((x) => x.type === 'email' && clean[x.id]);
+  const insert = (c) => c.query(`INSERT INTO form_responses (form_id, workspace_id, link_id, answers, fields, email, submitter_user_id, source_hash, spam) VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7,$8,$9) RETURNING *`,
+    [r.fid, r.workspace_id, r.id, JSON.stringify(spam ? {} : clean), JSON.stringify(spam ? [] : r.fields), !spam && emailField ? clean[emailField.id] : null, user && user.id ? user.id : null, src, spam]);
+  let row;
+  if (r.max_responses && !spam && typeof db.connect === 'function') {   // one at a time, or a limit could be overrun
+    const c = await db.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query('SELECT 1 FROM forms WHERE id = $1 FOR UPDATE', [r.fid]);
+      if (await responseCount(c, r.fid) >= r.max_responses) throw new FormsError('This form has all the responses it needs.', 'form_full', 409);
+      row = (await insert(c)).rows[0];
+      await c.query('COMMIT');
+    } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; } finally { c.release(); }
+  } else row = (await insert(db)).rows[0];
+  if (!spam) await inbox.tell(db, { userId: r.form_creator, source: 'forms', kind: 'form_response', ref: `/workspace/corpo/spaces/forms/${r.fid}/responses`, title: `New response · ${r.title}`, area: 'corpo' });
   // automatic actions run as the form's creator, the person who set them up; a failure never loses the response
   if (!spam && (r.auto_actions || []).length) {
     const creator = (await db.query('SELECT created_by_user_id FROM forms WHERE id = $1', [r.fid])).rows[0];
@@ -302,7 +326,7 @@ export async function submit(db, token, { answers, user = null, source = '' } = 
 
 // ─────────────────────────────────────────── responses
 
-const viewResponse = (r) => ({ id: r.id, formId: r.form_id, answers: r.answers, spam: r.spam, signedIn: !!r.submitter_user_id, actions: r.actions, createdAt: r.created_at,
+const viewResponse = (r) => ({ id: r.id, formId: r.form_id, answers: r.answers, fields: r.fields, email: r.email, spam: r.spam, signedIn: !!r.submitter_user_id, actions: r.actions, createdAt: r.created_at,
   url: `/workspace/corpo/spaces/forms/${r.form_id}/responses/${r.id}` });
 
 export async function listResponses(db, actor, { workspace, id, spam = false, limit = 100 } = {}) {
@@ -332,8 +356,16 @@ export async function deleteResponse(db, actor, { workspace, id, responseId } = 
   const form = await loadForm(db, s, id);
   const r = await loadResponse(db, s, form.id, responseId);
   // erased, not hidden: the answers are personal data
-  await db.query('UPDATE form_responses SET deleted_at = now(), answers = \'{}\'::jsonb, source_hash = NULL WHERE id = $1', [r.id]);
+  await db.query('UPDATE form_responses SET deleted_at = now(), answers = \'{}\'::jsonb, fields = \'[]\'::jsonb, email = NULL, source_hash = NULL WHERE id = $1', [r.id]);
   return { deleted: true, id: r.id };
+}
+
+/** Erase every answer to a form. A person's act, and it can't be undone. */
+export async function deleteAllResponses(db, actor, { workspace, id } = {}) {
+  const s = await scopeFor(db, actor, { workspace, need: 'editor', person: true });
+  const form = await loadForm(db, s, id);
+  const r = await db.query(`UPDATE form_responses SET deleted_at = now(), answers = '{}'::jsonb, fields = '[]'::jsonb, email = NULL, source_hash = NULL WHERE form_id = $1 AND deleted_at IS NULL`, [form.id]);
+  return { deleted: r.rowCount };
 }
 
 /** Plain text of a response, for a task or ticket body. */
@@ -342,12 +374,6 @@ function summary(form, answers) {
 }
 const firstOf = (form, answers, type) => { const f = form.fields.find((x) => x.type === type && answers[x.id]); return f ? answers[f.id] : null; };
 const byLabel = (form, answers, re) => { const f = form.fields.find((x) => re.test(x.label) && answers[x.id]); return f ? String(answers[f.id]) : null; };
-
-/** The Customers area, when present. Kept as one seam so this file never re-implements contacts. */
-export async function customersArea() {
-  try { const m = await import('./customers.js'); return typeof m.createContact === 'function' && typeof m.addActivity === 'function' ? m : null; }
-  catch (e) { if (e && (e.code === 'ERR_MODULE_NOT_FOUND' || /Cannot find module/.test(e.message))) return null; throw e; }
-}
 
 /** Act on a response: make a contact, a task or a support request from it. Recorded; never run twice. */
 export async function runAction(db, actor, { workspace, id, responseId, action, projectId } = {}) {
@@ -359,7 +385,7 @@ export async function runAction(db, actor, { workspace, id, responseId, action, 
   if (r.actions && r.actions[action]) return { response: viewResponse(r), already: true };
   const a = r.answers || {};
   const title = `${form.title}: ${byLabel(form, a, /name/i) || firstOf(form, a, 'email') || 'new response'}`.slice(0, 200);
-  const body = `Form response (${new Date(r.created_at).toISOString().slice(0, 10)})\n\n${summary(form, a)}\n\n${siteOrigin()}${viewResponse(r).url}`;
+  const body = `Form response (${new Date(r.created_at).toISOString().slice(0, 10)})\n\n${summary(form, a)}\n\n${publicSiteOrigin()}${viewResponse(r).url}`;
   let result;
   if (action === 'task') {
     const t = await xenoTasks.createTask(db, actor, { title, body, projectId: projectId || null, source: undefined, sourceRef: `form-response:${r.id}` });
@@ -368,16 +394,14 @@ export async function runAction(db, actor, { workspace, id, responseId, action, 
     const t = await support.createTicket(db, actor, { kind: 'other', title, body, workspaceId: s.workspaceId });
     result = { key: t.key, at: new Date().toISOString() };
   } else {
-    const C = await customersArea();
-    if (!C) throw new FormsError('Customers is not available on this platform yet, so a contact cannot be made', 'customers_not_available', 501);
     // the same person answering twice is one contact: a known email is matched, never duplicated
     const mail = firstOf(form, a, 'email');
     let contactId = null, matched = false;
     try {
-      const c = await C.createContact(db, actor, { workspace: s.workspaceId, name: byLabel(form, a, /name/i) || mail || 'Form respondent', email: mail, phone: firstOf(form, a, 'phone'), source: 'form' });
+      const c = await customers.createContact(db, actor, { workspace: s.workspaceId, name: byLabel(form, a, /name/i) || mail || 'Form respondent', email: mail, phone: firstOf(form, a, 'phone'), source: 'form' });
       contactId = c.id;
     } catch (e) { if (e && e.code === 'duplicate_contact' && e.existingId) { contactId = e.existingId; matched = true; } else throw e; }
-    await C.addActivity(db, actor, contactId, { workspace: s.workspaceId, kind: 'note', body: body.slice(0, 20000) });
+    await customers.addActivity(db, actor, contactId, { workspace: s.workspaceId, kind: 'note', body: body.slice(0, 20000) });
     result = { id: contactId, matched, at: new Date().toISOString() };
   }
   const u = (await db.query('UPDATE form_responses SET actions = actions || jsonb_build_object($2::text, $3::jsonb) WHERE id = $1 RETURNING *', [r.id, action, JSON.stringify(result)])).rows[0];
@@ -388,7 +412,9 @@ export async function runAction(db, actor, { workspace, id, responseId, action, 
 export async function exportCsv(db, actor, { workspace, id } = {}) {
   const { form, responses } = await listResponses(db, actor, { workspace, id, limit: 500 });
   const cell = (v) => { let s = Array.isArray(v) ? v.join('; ') : v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const head = ['submitted', ...form.fields.map((f) => f.label)];
-  const lines = [head.map(cell).join(','), ...responses.map((r) => [new Date(r.createdAt).toISOString(), ...form.fields.map((f) => r.answers[f.id])].map(cell).join(','))];
+  const cols = form.fields.map((f) => [f.id, f.label]);
+  for (const r of responses) for (const f of r.fields || []) if (!cols.some(([k]) => k === f.id)) cols.push([f.id, f.label]);
+  const head = ['submitted', ...cols.map(([, l]) => l)];
+  const lines = [head.map(cell).join(','), ...responses.map((r) => [new Date(r.createdAt).toISOString(), ...cols.map(([k]) => r.answers[k])].map(cell).join(','))];
   return { filename: `${form.title.replace(/[^\w.-]+/g, '_').slice(0, 60) || 'form'}-responses.csv`, csv: lines.join('\r\n') + '\r\n' };
 }
