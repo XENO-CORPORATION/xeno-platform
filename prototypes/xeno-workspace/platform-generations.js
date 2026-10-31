@@ -16,7 +16,8 @@
     const old = path.match(/^\/workspace\/studio\/(?:generate\/enhance(?:\/g\/([0-9a-f-]{36}))?|enhance(?:\/e\/([0-9a-f-]{36}))?)\/?$/i);
     if (old) { const id = old[1] || old[2]; if (path === location.pathname) history.replaceState(history.state, '', pathFor('enhance-image', id)); return frameFor('image', id); }
     const m = path.match(/^\/workspace\/studio\/generate\/(image|video|audio|3d)(?:\/g\/([0-9a-f-]{36}))?\/?$/i);
-    return m ? { type: m[1].toLowerCase(), id: m[2] || null, shelf: null, framePath: '/chat?generationType=' + m[1].toLowerCase() + (m[2] ? '&generationId=' + encodeURIComponent(m[2]) : '') } : null;
+    const words = !m || m[2] || path !== location.pathname ? '' : String(new URLSearchParams(location.search).get('prompt') || '').slice(0, 500);   // a search handed over from Stock
+    return m ? { type: m[1].toLowerCase(), id: m[2] || null, shelf: null, framePath: '/chat?generationType=' + m[1].toLowerCase() + (m[2] ? '&generationId=' + encodeURIComponent(m[2]) : '') + (words ? '&prompt=' + encodeURIComponent(words) : '') } : null;
   };
   const host = () => '<div class="live-chat-host" data-chat-frame data-generation-host></div>';
   const open = (type, id) => {

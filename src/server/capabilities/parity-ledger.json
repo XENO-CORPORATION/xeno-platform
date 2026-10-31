@@ -176,7 +176,9 @@
     "brandKitRoutes.js": "forms",
     "platform-assets.js": "forms",
     "fontRoutes.js": "forms",
-    "platform-fonts.js": "forms"
+    "platform-fonts.js": "forms",
+    "stockRoutes.js": "forms",
+    "platform-stock.js": "forms"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11387,6 +11389,35 @@
       "status": "planned",
       "class": "irreversible",
       "scope": "workspace:admin"
+    },
+    "route:stockRoutes.js:GET /search": {
+      "status": "capability",
+      "capability": "stock.item.search",
+      "class": "safe",
+      "scope": "stock:read"
+    },
+    "route:stockRoutes.js:GET /items/:id": {
+      "status": "capability",
+      "capability": "stock.item.read",
+      "class": "safe",
+      "scope": "stock:read"
+    },
+    "route:stockRoutes.js:GET /saved": {
+      "status": "capability",
+      "capability": "stock.saved.list",
+      "class": "safe",
+      "scope": "stock:read"
+    },
+    "route:stockRoutes.js:POST /saved": {
+      "status": "capability",
+      "capability": "stock.item.save",
+      "class": "reversible",
+      "scope": "stock:write"
+    },
+    "route:stockRoutes.js:POST /items/:id/withdraw": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "stock:write"
     }
   }
 }

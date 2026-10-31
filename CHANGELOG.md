@@ -5,6 +5,13 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Studio › Libraries has Stock (XENO Stock).**
+
+- Search photos, art and video free of copyright (CC0), hosted by XENO. Every item states its licence at its source, and we record where that was read and when.
+- Each item says who states the licence, a museum or the person who uploaded it, and that CC0 doesn't clear a person's or a brand's rights.
+- Save an item to a workspace's Library so your apps and agents can use it.
+- Can't find it? Your search goes to Generate, ready for you to press, and anything you already generated with those words shows up too.
+
 **Agents can read a project on your own PC, through XENO Corpus.**
 
 - Agents you connect to XENO MCP can read a project you turned on in XENO Corpus on your PC: its context, a tenet, what lapsed, what depends on a subject, whether a subject can ship.

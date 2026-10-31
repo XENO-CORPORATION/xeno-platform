@@ -23,7 +23,7 @@ export const WORKSPACE_SCOPES = Object.freeze([
   'forum:read', 'forum:write',
   'inbox:read', 'inbox:write',   // an agent's own inbox (2026-10-31). Its owner's is never reachable.
   'publish:read', 'publish:write',
-  'forms:read', 'forms:write', 'brand:read', 'brand:write', 'fonts:read', 'fonts:write', 'corpus_local:read',   // Corpo › Forms (2026-10-20). A public link and a delete are a person's.
+  'forms:read', 'forms:write', 'brand:read', 'brand:write', 'fonts:read', 'fonts:write', 'stock:read', 'stock:write', 'corpus_local:read',   // Corpo › Forms (2026-10-20). A public link and a delete are a person's.
   'analytics:read', 'analytics:write',
   'docs:read', 'docs:write', 'scheduling:read', 'scheduling:write',   // Office › Write and Notes (2026-10-20). Writes are versions or trash: reversible.   // Corpo › Analytics (2026-10-20). Agents read; a person writes dashboards.   // XENO Publish = XENO Post (2026-10-20). Publishing itself is never a scope: a person confirms it on screen.
   'customers:read', 'customers:write',   // Corpo › Customers (2026-10-20). Agents read and draft; deletes and erasure are a person's.
@@ -50,7 +50,7 @@ export const DIVISION_AREA = Object.freeze({
   storage: 'storage', studio: 'library', canvas: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
-  marketplace: 'marketplace', tools: 'marketplace', publish: 'publish', message: 'message', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', forms: 'forms', brand: 'brand', fonts: 'fonts', corpus_local: 'corpus_local', support: 'forum', customers: 'customers', mail: 'mail', automate: 'automate', releases: 'workspace', compute: 'compute',
+  marketplace: 'marketplace', tools: 'marketplace', publish: 'publish', message: 'message', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', forms: 'forms', brand: 'brand', fonts: 'fonts', stock: 'stock', corpus_local: 'corpus_local', support: 'forum', customers: 'customers', mail: 'mail', automate: 'automate', releases: 'workspace', compute: 'compute',
   // XENO-WORKFORCE-01 capability divisions (catalogue first segments)
   agent: 'agents', run: 'agents', objective: 'agents', division: 'workspace', funding: 'wallet',
   orchestrator: 'tasks', audit: 'workspace',

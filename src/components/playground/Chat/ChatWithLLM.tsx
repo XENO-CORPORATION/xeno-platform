@@ -2653,6 +2653,10 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [inputValue, setInputValue] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
+        // words handed over from XENO Stock: filled in, never sent. Generating stays the person's press, at the price shown.
+        const params = new URLSearchParams(window.location.search);
+        const handedOver = params.get('generationType') ? params.get('prompt') : null;
+        if (handedOver) return handedOver.slice(0, 500);
         return localStorage.getItem('xeno_chat_draft') || '';
       } catch {
         return '';

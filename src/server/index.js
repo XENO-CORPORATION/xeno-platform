@@ -35,6 +35,7 @@ import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import brandKitRoutes from './routes/brandKitRoutes.js';
 import fontRoutes, { actorOf as fontActorOf, fail as fontFail } from './routes/fontRoutes.js';
+import stockRoutes from './routes/stockRoutes.js';
 import * as fontsService from './services/fonts.js';
 import workspaceDocsRoutes from './routes/workspaceDocsRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
@@ -701,6 +702,7 @@ app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, 
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
 // Corpo › Forms (services/forms.js): auth per route — the respondent's /public/:token side needs no account
 app.use('/api/forms', databaseMiddleware, formsRoutes);
+app.use('/api/stock', databaseMiddleware, stockRoutes);   // XENO Stock, Studio › Libraries (services/stock.js)
 app.use('/api/fonts', databaseMiddleware, fontRoutes);   // XENO Fonts, Studio › Libraries (services/fonts.js)
 app.use('/api/brand-kits', databaseMiddleware, brandKitRoutes);   // XENO Assets, Studio › Libraries (services/brandKits.js)
 app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
