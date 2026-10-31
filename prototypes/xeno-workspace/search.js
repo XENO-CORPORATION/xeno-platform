@@ -29,6 +29,7 @@
     (window.XENO_PG_FORUM || []).forEach((t) => add('Threads', t.title, `${t.space} · ${t.state}`, 'community', G('community', t.id)));
     (window.XENO_COMM?.tickets() || []).forEach((t) => add('Your reports', `#${t.n} · ${t.title}`, `Private ticket · ${t.state}`, 'edit', G('community', 'My reports/' + t.n), String(t.n)));
     // marketplace
+    window.XENO_TOOLS_ENSURE?.();   // tools are read when something needs them, and this index does
     (window.XENO_PG_MARKET || []).forEach((x) => add('Marketplace', x.name, `${x.seller} · ${x.price}`, x.mode === 'agents' ? 'bot' : 'market', G('market', x.name), x.kind));
     // anima
     (window.XENO_PG_ANIMA?.minds || []).forEach((m) => { add('Minds', m.name, m.role, 'anima', G('anima', m.name + ' — ' + m.role.toLowerCase())); (m.memories || []).forEach((r) => add('Memories', r.t, `${m.name} remembers`, 'anima', G('anima', m.name + ' — ' + m.role.toLowerCase() + '/Soul'))); });

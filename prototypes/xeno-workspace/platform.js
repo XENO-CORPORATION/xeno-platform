@@ -98,7 +98,7 @@
     + '#xp-state{transition:opacity .42s cubic-bezier(.2,.7,.2,1)}#xp-state[data-leaving]{opacity:0;pointer-events:none}#xp-state .xp-mark{display:grid;place-items:center;color:#e8e8e8}'
     + '#xp-state div{max-width:360px;text-align:center}#xp-state button{margin-top:14px;padding:8px 14px;border-radius:8px;border:1px solid #3a3a3a;background:#1a1a1a;color:#fff;font:inherit;cursor:pointer}'
     // the note is fixed over the page, so every page reserves room for it at its foot: nothing is ever hidden under it
-    + 'body:has(#xp-note) .pg{padding-bottom:64px}'
+    + 'body:has(#xp-note:not([hidden])) .pg{padding-bottom:64px}'
     + '#xp-note{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);padding:6px 12px;border-radius:8px;border:1px solid #2e2e2e;background:#141414;color:#b8b8b8;font:12px/1.4 Inter,system-ui,sans-serif;z-index:9000}';
   document.head.appendChild(style);
   const icon = document.createElement('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; document.head.appendChild(icon); // the platform's own icon; from disk there is none to point at
@@ -122,8 +122,8 @@
     // the adapters start their first loads when `ready` resolves, a moment after this returns; wait for them
     const lift = () => { if (!root.classList.contains('xp-wait')) return; reuseUntil = Date.now(); const s = document.getElementById('xp-state'); try { window.XW?.render?.(); } catch {} root.classList.remove('xp-wait'); if (s && !s.isConnected) document.body.appendChild(s); /* the first render rewrites the page; the mark stays on top and fades away over it */ if (s) { s.dataset.leaving = ''; setTimeout(() => { stopMark?.(); stopMark = null; s.remove(); }, 440); } };
     setTimeout(() => { Promise.race([Promise.all(firsts), new Promise((r) => setTimeout(r, FIRST_PAINT_MS))]).then(lift); }, 0);
-    const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); n.textContent = previewNote(); document.body.appendChild(n);
-    if (document.readyState !== 'complete') window.addEventListener('load', () => { n.textContent = previewNote(); }, { once: true });   // the areas register as their scripts load
+    const n = document.createElement('div'); n.id = 'xp-note'; n.setAttribute('role', 'note'); const note = () => { const t = previewNote(); n.textContent = t; n.hidden = !t; }; note(); document.body.appendChild(n);
+    if (document.readyState !== 'complete') window.addEventListener('load', note, { once: true });   // the areas register as their scripts load
     try { window.XW?.render?.(); } catch {}
     return u;
   }
@@ -136,8 +136,8 @@
     for (const [mode, zones] of Object.entries(window.XENO_MODE_ZONES || {})) {
       for (const z of zones) if (tables[`${mode}.${z.id}`] && !live[`${mode}.${z.id}`]) names.push(z.label);
     }
-    const rest = [...new Set(names), 'Anima'];
-    return `Preview. Your account, chats, projects, tasks, library, people, community, places, the marketplace and each area’s home are real. Still sample data: ${rest.join(', ')}.`;
+    const rest = [...new Set(names)];
+    return rest.length ? `Preview. Still sample data: ${rest.join(', ')}.` : '';
   }
 
   async function notActivated() {

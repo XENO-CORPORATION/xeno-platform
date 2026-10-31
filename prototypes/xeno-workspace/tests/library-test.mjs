@@ -87,7 +87,10 @@ try {
   // Overview: the library of everything (an area shows only its own, checked further down)
   await p.goto(base + '/workspace/#/overview', { waitUntil: 'networkidle0' }); await wait(700);
   ok((await p.evaluate(() => window.XENO_LIB.state().status)) === 'ready', 'the Library loads from the platform');
-  ok(db.gets.some((g) => g.view === 'active') && db.gets.some((g) => g.view === 'trash'), 'it asks for the Library and for the trash');
+  ok(db.gets.some((g) => g.view === 'active') && !db.gets.some((g) => g.view === 'trash'), 'it asks for the Library, and leaves the trash until the Library is open');
+  await p.evaluate(() => window.XW.go('global', { global: 'library', item: null })); await wait(600);
+  ok(db.gets.some((g) => g.view === 'trash'), 'opening the Library asks for the trash');
+  await p.evaluate(() => window.XW.go('dashboard')); await wait(200);
   await goLib(); let t = await main();
   const list = await names();
   ok(list.length === 9 && ['Engine diagram.png', 'Notes on the engine.pdf', 'Bernoulli numbers', 'Brand guide.pdf'].every((n) => list.includes(n) && t.includes(n)), 'the files are the real ones (' + list.length + ')');

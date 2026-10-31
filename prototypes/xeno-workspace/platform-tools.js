@@ -91,8 +91,8 @@
     e.preventDefault(); e.stopPropagation();
     openTool(t.dataset.arg.slice(5));
   }, true);
-  // the Marketplace needs the real tools even before Tools was visited (once the workspace has drawn itself)
-  setTimeout(() => { if (S.status === 'idle') load(); }, 0);
+  // the Marketplace shows the real tools even before Tools was visited: it calls this when it draws them
+  window.XENO_TOOLS_ENSURE = () => { if (S.status === 'idle') load(); };
   // a tool's own Close button returns to its area
   window.addEventListener('message', (e) => {
     if (e.origin !== location.origin || !e.data || e.data.type !== 'xeno-tool:close') return;

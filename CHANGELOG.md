@@ -5,6 +5,15 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Create and Anima show real work, and the preview note is gone.**
+
+- Studio › Create lists your files in the Library instead of sample renders.
+- Anima lists the agents you made, opens each one’s Mind and skills, and says plainly where a Soul lives today: on the computer where Anima runs.
+- Nothing in the workspace shows sample data as yours any more, so the “Preview” note no longer appears. A test now walks every screen with an empty account and fails if a sample row comes back.
+- Anima’s sidebar lists your agents. Community’s sidebar no longer shows made-up counts, and Following shows the threads you follow.
+- Customers, Scheduling, Analytics, Compute and the Tools areas no longer say “Coming soon” or offer “Notify me”: they’re live.
+- A new account no longer starts with a “Video agency” mode it never made.
+
 **Corpo › Company is real.**
 
 - A company’s legal entity: its legal name and form, registered office and where it’s actually run, its registrations and branches, its tax, customs and financial-market numbers, and who may act for it.

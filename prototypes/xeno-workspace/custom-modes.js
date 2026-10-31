@@ -10,8 +10,8 @@
  * moved: the local copy is left as it was).
  */
 (() => {
-  const KEY = 'xw.customs', DEFAULT = [{ id: 'c-agency', name: 'Video agency', products: ['motion', 'post', 'audience', 'image'] }];
-  const readLocal = () => { try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); return Array.isArray(v) ? v : DEFAULT; } catch { return DEFAULT; } };
+  const KEY = 'xw.customs', SERVED = !!window.XENO_PLATFORM?.served, DEFAULT = SERVED ? [] : [{ id: 'c-agency', name: 'Video agency', products: ['motion', 'post', 'audience', 'image'] }];
+  const readLocal = () => { try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); return Array.isArray(v) ? (SERVED ? v.filter((c) => c.id !== 'c-agency') : v) : DEFAULT; } catch { return DEFAULT; } };
   const writeLocal = (l) => { try { localStorage.setItem(KEY, JSON.stringify(l)); } catch {} };
   const MODES = window.XENO_MODES, Z = window.XENO_MODE_ZONES, MK = window.XENO_MODE_MARKS, PR = window.XENO_PRODUCTS;
   const builtIn = () => MODES.filter((m) => !m.custom);

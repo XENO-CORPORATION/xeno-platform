@@ -12,7 +12,7 @@ import path from 'node:path'; import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises'; import { createServer } from 'node:http'; import puppeteer from 'puppeteer';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const PORT = 5261, base = 'http://127.0.0.1:' + PORT;
-const BUDGET = Number(process.env.CALL_BUDGET || 32);   // measured 2026-10-24: 59 before, 31 after
+const BUDGET = Number(process.env.CALL_BUDGET || 32);   // measured 2026-10-24: 59 before, 31 after; 2026-10-31: back to 32 by reading Skills, Tools, Trash and Compute sizes when shown
 let failed = 0;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 let ROLE = 'user';
