@@ -43,7 +43,7 @@ export interface DoorElectron {
   BrowserWindow: { getAllWindows(): Array<{ isDestroyed(): boolean; webContents: { send(channel: string, ...args: unknown[]): void } }> };
 }
 
-export interface DpopSigner { createProof(o: { method: string; url: string; accessToken?: string }): Promise<string> }
+export interface DpopSigner { createProof(o: { method: string; url: string; accessToken?: string; nonce?: string }): Promise<string> }
 export interface TokenSet { accessToken: string; refreshToken?: string; expiresAt?: string | number | Date }
 
 /** The slice of `@xeno-corporation/account` (+ `/node`) the door uses — the app's own vendored SDK. */
@@ -328,15 +328,15 @@ export function createDoor(o: DoorOptions) {
     return null;
   }
 
-  /** Headers for ONE request to a XENO service: `Authorization: DPoP <token>` + a proof bound to this method and URL. */
-  async function authorizeRequest(target: { method: string; url: string }): Promise<{ authorization: string; dpop: string } | null> {
+  /** Headers for ONE request to a XENO service: `Authorization: DPoP <token>` + a proof bound to this method and URL (and to a server's nonce, when it issued one: RFC 9449 §8). */
+  async function authorizeRequest(target: { method: string; url: string; nonce?: string }): Promise<{ authorization: string; dpop: string } | null> {
     let url: URL;
     try { url = new URL(target.url); } catch { return null; }
     if (url.protocol !== 'https:' || !AUTHORIZABLE_ORIGINS.has(url.origin)) return null;
     if (!/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(target.method)) return null;
     const token = await getAccessToken();
     if (!token) return null;
-    const dpop = await (await signer()).createProof({ method: target.method, url: url.href, accessToken: token });
+    const dpop = await (await signer()).createProof({ method: target.method, url: url.href, accessToken: token, ...(target.nonce ? { nonce: target.nonce } : {}) });
     return { authorization: `DPoP ${token}`, dpop };
   }
 
