@@ -24,6 +24,14 @@ const need = () => (db.confirmed ? null : json(403, { success: false, error: 'Co
 const security = () => ({ confirmation: { confirmed: db.confirmed, available: true, expires_at: db.confirmed ? new Date(Date.now() + 6e5).toISOString() : null }, methods: [db.hasPassword ? 'password' : 'email_code'], has_password: db.hasPassword, email: db.user.email, pending_email: db.pending ? { new_email: db.pending.email, expires_at: new Date(Date.now() + 6e5).toISOString() } : null });
 function accountSecurity(m, p, body) {
   if (p === '/api/account/security' && m === 'GET') return json(200, { success: true, security: security() });
+  if (p === '/api/compute/cloud-shell') return json(200, { success: true, available: false });
+  if (p === '/api/compute/machines') return json(200, { success: true, machines: [] });
+  if (p === '/api/compute/sizes') return json(200, { success: true, sizes: [] });
+  if (p === '/api/skills') return json(200, { success: true, skills: [] });
+  if (p === '/api/tools') return json(200, { success: true, tools: [] });
+  if (p === '/api/account/deletion' && m === 'GET') return json(200, { success: true, deletion: db.deletion || null });
+  if (p === '/api/account/deletion' && m === 'POST') { const no = need(); if (no) return no; if (db.refuseDeletion) return json(409, { success: false, code: 'owns_workspace', error: 'You own Real Co, with other people in it. Make someone else the owner first.' }); db.deletion = { requestedAt: new Date().toISOString(), eraseAt: new Date(Date.now() + 30 * 864e5).toISOString() }; return json(200, { success: true, deletion: db.deletion }); }
+  if (p === '/api/account/deletion' && m === 'DELETE') { db.deletion = null; return json(200, { success: true, deletion: null }); }
   if (p === '/api/account/confirm/code' && m === 'POST') { db.mailed.push({ to: db.user.email, code: '424242', purpose: 'confirm' }); return json(200, { success: true, sent_to: 'a**@example.test', expires_in: 600 }); }
   if (p === '/api/account/confirm' && m === 'POST') {
     const right = db.hasPassword ? body.password === db.password : body.code === '424242';
@@ -233,6 +241,27 @@ try {
   const outs = db.calls.filter((c) => c.m === 'DELETE');
   ok(outs.length === 1 && outs[0].p === '/api/account/sessions' && outs[0].csrf === 'csrf-test-token', 'signing out everywhere is one call that also reaches the apps (' + JSON.stringify(outs.map((c) => c.p)) + ')');
   t = await text(); ok(!/Firefox on Linux/.test(t) && /Edge on Windows/.test(t), 'only this device is left');
+
+  // ---- deleting your account ----
+  const askDelete = async () => {
+    await p.click('.pg--set [data-set="delete"]'); await wait(300);
+    await p.evaluate((h) => { const i = document.querySelector('#xd-type'); i.value = h; i.dispatchEvent(new Event('input', { bubbles: true })); }, db.user.username);
+    await wait(100); await confirmYes(); await settle();
+  };
+  db.confirmed = true; db.calls.length = 0;
+  await open('Delete account');
+  ok(!/isn’t available/.test(await text()) && /30 days/.test(await text()), 'Delete account is a real section');
+  db.refuseDeletion = true; await askDelete();
+  ok(db.calls.some((c) => c.m === 'POST' && c.p === '/api/account/deletion'), 'it goes to the server');
+  ok(/You own Real Co/.test(await p.evaluate(() => document.body.innerText)) && /Delete your account/.test(await text()), 'a refusal says what to do first, and nothing changes');
+  await p.evaluate(() => document.querySelector('.xd [data-xd-ok], .xd [data-xd-cancel]')?.click()); await wait(400);
+  db.refuseDeletion = false; await open('Delete account'); await askDelete();
+  t = await text(); ok(/being deleted/.test(t) && /Keep my account/.test(t), 'then it says the date, and offers to keep it');
+  await p.reload({ waitUntil: 'domcontentloaded' }); await settle(); await wait(1500); await open('Delete account');
+  ok(/being deleted/.test(await text()), 'a refresh reads the same from the server');
+  db.calls.length = 0; await p.click('.pg--set [data-set="undelete"]'); await settle();
+  ok(db.calls.some((c) => c.m === 'DELETE' && c.p === '/api/account/deletion') && !db.deletion, 'keeping it goes to the server');
+  ok(/Delete your account/.test(await text()), 'and the page is back as it was');
 
   ok(missing.length === 0, 'the workspace asked for no route the platform lacks (' + JSON.stringify([...new Set(missing)].slice(0, 3)) + ')');
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');

@@ -10792,6 +10792,27 @@
       "class": "reversible",
       "scope": "none",
       "because": "moves around this screen; the data it shows is already covered"
+    },
+    "route:accountSecurityRoutes.js:GET /deletion": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
+    },
+    "route:accountSecurityRoutes.js:POST /deletion": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
+    },
+    "route:accountSecurityRoutes.js:DELETE /deletion": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
     }
   }
 }

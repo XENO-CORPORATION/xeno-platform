@@ -27,7 +27,10 @@ import * as placesMcp from '../services/placesMcp.js';
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const here = path.dirname(fileURLToPath(import.meta.url));
-const [UPRAW, DOWN] = fs.readFileSync(path.join(here, '../database/migrations/20261020180000-places.sql'), 'utf8').split(/^-- DOWN\s*$/m);
+const downOf = (name) => fs.readFileSync(path.join(here, '../database/migrations', name), 'utf8').split(/^-- DOWN\s*$/m)[1] || '';
+const [UPRAW, PLACES_DOWN] = fs.readFileSync(path.join(here, '../database/migrations/20261020180000-places.sql'), 'utf8').split(/^-- DOWN\s*$/m);
+// the migrations that came later hang tables off `places`, so going down starts with them, newest first
+const DOWN = ['20261027110000-places-lease-wallet.sql', '20261027100000-places-world.sql', '20261027090000-places-city.sql', '20261020220000-places-signin-country.sql'].map(downOf).join('\n') + '\n' + PLACES_DOWN;
 const UP = UPRAW.replace(/^-- UP\s*$/m, '');
 const tag = `pl${process.pid}`;
 let seq = 0;
@@ -165,7 +168,7 @@ async function main() {
   refused(await places.call(pool, me(owner, 'Owner'), 'places.create', { workspaceId: co, requestId: rid() }), 'conflict', 'place_exists');
 
   // ── DOWN removes everything; UP again is clean ──
-  await pool.query(DOWN);
+  await pool.query(PLACES_DOWN);
   const left = (await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'place%'`)).rows;
   assert.deepEqual(left, [], 'DOWN drops every Places table');
   assert.equal((await pool.query(`SELECT count(*)::int n FROM pg_trigger WHERE tgname='places_default_building'`)).rows[0].n, 0);

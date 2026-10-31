@@ -19,6 +19,7 @@ import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPerson
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
 import { sendDigests, digestsEnabled } from './services/inbox.js';
+import { sweep as sweepAccountDeletions } from './services/accountDeletion.js';
 import { sweepLiveRuns } from './services/agentCloudRuns.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
@@ -4264,9 +4265,10 @@ backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, del
 backgroundLeader.whenLeader(() => {
   const runs = setInterval(() => sweepLiveRuns(pool).catch((e) => console.error('[AgentRuns] sweep failed:', e.message)), 60000);
   const mail = setInterval(() => sendDigests(pool).catch((e) => console.error('[Inbox] digest sweep failed:', e.message)), 3600000);
-  runs.unref?.(); mail.unref?.();
+  const erase = setInterval(() => sweepAccountDeletions(pool).catch((e) => console.error('[AccountDeletion] sweep failed:', e.message)), 3600000);
+  runs.unref?.(); mail.unref?.(); erase.unref?.();
   console.log(`[Inbox] live run sweep every 60s, digests hourly (${digestsEnabled() ? 'on' : 'off'})`);
-  return () => { clearInterval(runs); clearInterval(mail); };
+  return () => { clearInterval(runs); clearInterval(mail); clearInterval(erase); };
 });
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.

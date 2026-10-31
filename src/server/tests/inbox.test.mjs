@@ -132,7 +132,10 @@ async function main() {
   ok(mails.filter((m) => m.to === `${tag}me@example.test`).length === 1, 'and not when nothing is unread');
   // two workers at once send one
   const racer = await user('racer'); await I.setPrefs(pool, racer, { digest: 'daily' }); await row(racer, { title: 'Race' });
-  await Promise.all([I.sendDigests(pool, { env: on, send, now: now + 3 * 86400000 }), I.sendDigests(pool, { env: on, send, now: now + 3 * 86400000 })]);
+  // each worker waits until both have read the same list of who is due, so the claim is what has to stop the second
+  let read = 0, release; const bothRead = new Promise((r) => { release = r; });
+  const held = { query: async (q, p) => { const r = await pool.query(q, p); if (/FROM user_settings s JOIN users u/.test(q)) { read += 1; if (read === 2) release(); await bothRead; } return r; } };
+  const raceAt = Date.now() + 1000; await Promise.all([I.sendDigests(held, { env: on, send, now: raceAt }), I.sendDigests(held, { env: on, send, now: raceAt })]);
   ok(mails.filter((m) => m.to === `${tag}racer@example.test`).length === 1, 'two workers at once send one digest');
   await I.setPrefs(pool, me, { digest: 'off' });
   ok((await pool.query(`SELECT settings->'inbox'->>'digestSentAt' AS s FROM user_settings WHERE user_id = $1`, [me])).rows[0].s, 'changing preferences keeps when the last one went');

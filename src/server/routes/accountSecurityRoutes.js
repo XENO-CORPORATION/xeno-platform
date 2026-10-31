@@ -13,6 +13,9 @@
  *   POST   /exports                  ask for a new copy                        [confirmed]
  *   GET    /exports/:id/download     the file
  *   DELETE /exports/:id              remove a copy now
+ *   GET    /deletion                 is this account being deleted, and when
+ *   POST   /deletion                 delete it after 30 days                   [confirmed]
+ *   DELETE /deletion                 keep it
  *
  * [confirmed] routes answer 403 `confirmation_required` until POST /confirm succeeds in this
  * browser session. An API key has no session, so it can never reach them.
@@ -29,6 +32,7 @@ import {
 } from '../services/accountConfirmation.js';
 import { cancelEmailChange, completeEmailChange, pendingEmailChange, requestEmailChange } from '../services/accountEmailChange.js';
 import { deleteExport, exportFile, listExports, requestExport } from '../services/accountExport.js';
+import * as deletion from '../services/accountDeletion.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -142,6 +146,22 @@ router.delete('/sessions', guard('sign out everywhere', async (req, res) => {
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   finally { if (client !== req.db) client.release(); }
   res.json({ success: true, revoked_sessions: revoked, apps_signed_out: true, signed_out: all });
+}));
+
+// ── deleting your account ─
+router.get('/deletion', guard('deletion status', async (req, res) => { res.json({ success: true, deletion: await deletion.status(req.db, req.user.id) }); }));
+router.post('/deletion', requireConfirmation(), guard('deletion request', async (req, res) => {
+  const r = await deletion.request(req.db, req.user.id);
+  if (!r.ok) return fail(res, 409, r.blockers[0].code, r.blockers[0].message, { blockers: r.blockers });
+  await recordSecurityEvent(req.db, EVENTS.ACCOUNT_DELETION_REQUESTED, { userId: req.user.id, req, metadata: { erase_at: r.deletion.eraseAt } });
+  const user = await account(req.db, req.user.id);
+  await sendEmail(req.db, 'account_deletion', user.email, { displayName: nameOf(user), eraseAt: r.deletion.eraseAt }, user.id).catch((e) => console.error('[account] deletion mail not sent:', e.message));
+  res.json({ success: true, deletion: r.deletion });
+}));
+router.delete('/deletion', guard('deletion cancel', async (req, res) => {
+  const r = await deletion.cancel(req.db, req.user.id);
+  if (r.cancelled) await recordSecurityEvent(req.db, EVENTS.ACCOUNT_DELETION_CANCELLED, { userId: req.user.id, req });
+  res.json({ success: true, deletion: null });
 }));
 
 // ── a copy of your data ────────────────────────────────────────────────────────────────────────────

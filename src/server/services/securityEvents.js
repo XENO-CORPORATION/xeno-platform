@@ -53,6 +53,9 @@ export const EVENTS = Object.freeze({
   SESSIONS_REVOKED_ALL: 'sessions_revoked_all',         // sign out everywhere
   DATA_EXPORT_REQUESTED: 'data_export_requested',
   DATA_EXPORT_DOWNLOADED: 'data_export_downloaded',
+  // Deleting an account (services/accountDeletion.js)
+  ACCOUNT_DELETION_REQUESTED: 'account_deletion_requested',
+  ACCOUNT_DELETION_CANCELLED: 'account_deletion_cancelled',
   // OIDC / token lifecycle
   TOKEN_ISSUED: 'token_issued',         // an authorization_code or device grant completed
   TOKEN_REFRESHED: 'token_refreshed',

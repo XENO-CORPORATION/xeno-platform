@@ -15,6 +15,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - Workspace › Teams now creates, edits and archives real teams, each with its own link. Automations lists your real workflows and
   opens them in Automate. Activity shows what was recorded in the workspace, and says how many entries you can't see.
 
+**You can delete your account from Settings.**
+
+- You confirm it's you, then you have 30 days to change your mind, as the page always said. An email tells you the date.
+- It works however you sign in. The old way needed a password, so anyone using Google or GitHub had to write to support.
+- A company workspace you own with other people in it, or a subscription still running, comes first, and the page says so.
+
 **The Marketplace is the real store.**
 
 - The store lists real listings with their real prices and sellers. It used to show sample ones, and "buying" changed nothing but
