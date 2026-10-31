@@ -30,16 +30,19 @@ const AUTHORED = {
   'XENO Storage.dc.html': 'storage',
   // XENO Corpus shipped (desktop 0.1.0, 2026-10-27): the handoff's waitlist page, released — download, status, FAQ.
   'XENO Corpus.dc.html': 'corpus',
-  // XENO View shipped (desktop 0.2.1, 2026-10-31): universal viewer, no handoff design.
+  // XENO View shipped (desktop 0.2.2, 2026-10-31): universal viewer, no handoff design.
   'XENO View.dc.html': 'view',
 };
 // …and their cards on the /products index, which the handoff never listed.
 // Status lines on handoff cards that a release made false. Applied on every import, both modes, so a re-import of
 // the zip cannot bring "built, private" back for a product people can download.
-const CARD_STATUS = { corpus: { from: ['built, private', 'v0.1.0 · Windows', 'v0.1.1 · Windows', 'v0.1.2 · Windows'], to: 'v0.1.3 · Windows' } };
+const CARD_STATUS = {
+  corpus: { from: ['built, private', 'v0.1.0 · Windows', 'v0.1.1 · Windows', 'v0.1.2 · Windows'], to: 'v0.1.3 · Windows' },
+  view: { from: ['v0.2.1 · Windows'], to: 'v0.2.2 · Windows' },
+};
 const AUTHORED_CARDS = [
   { slug: 'storage', section: 'Platform', name: 'XENO Storage', desc: 'Your clouds as drives on Windows', status: 'v0.1.0', color: '#2D5BD7' },
-  { slug: 'view', section: 'Create', name: 'XENO View', desc: 'Images, video, audio and 3D in one viewer', status: 'v0.2.1 · Windows', color: '#DFD746' },
+  { slug: 'view', section: 'Create', name: 'XENO View', desc: 'Images, video, audio and 3D in one viewer', status: 'v0.2.2 · Windows', color: '#DFD746' },
 ];
 
 // Design file -> URL slug. Catalog slugs keep their existing addresses; the
