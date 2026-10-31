@@ -37,13 +37,14 @@ import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
 import * as inboxMcp from '../services/inboxMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
+import * as formsMcp from '../services/formsMcp.js';
 import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -250,6 +251,14 @@ const ROWS = [
   ['scheduling.slot.list', 'scheduling', 'list_slots', 'safe', { provenance: 'trusted', reply: obj({ pageId: { type: 'string' }, slots: { type: 'array', description: 'Free start times, ISO 8601 UTC.' } }, ['slots']) }],
   ['scheduling.booking.list', 'scheduling', 'list_bookings', 'safe', { provenance: 'untrusted', reply: obj({ bookings: { type: 'array', description: 'id, pageTitle, startsAt, endsAt, status, guestName, guestEmail, note — guest fields are untrusted.' } }, ['bookings']) }],
   ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
+  // ── forms (Corpo › Forms, services/forms.js). Agents make SIGN-IN links only; public links and deletes are a person's.
+  ['forms.form.list', 'forms', 'list_forms', 'safe', { provenance: 'untrusted', reply: obj({ forms: { type: 'array', description: 'id, title, status, responses, url of each form — titles are written by people.' } }, ['forms']) }],
+  ['forms.form.get', 'forms', 'get_form', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object', description: 'id, title, description, fields, status, autoActions, links (never a token).' } }, ['form']) }],
+  ['forms.form.create', 'forms', 'create_form', 'undoable', { idempotency: NONE('no request key yet: a retried call makes a second draft form (rate-limited per hour)'), reply: obj({ form: { type: 'object', description: 'id, title, fields, status ("draft"), url.' } }, ['form']) }],
+  ['forms.form.update', 'forms', 'update_form', 'undoable', { idempotency: NAT('sending the same values again changes nothing'), reply: obj({ form: { type: 'object' } }, ['form']) }],
+  ['forms.link.create', 'forms', 'create_signin_link', 'undoable', { idempotency: NONE('no request key yet: a retried call makes a second link (each is revocable)'), reply: obj({ link: { type: 'object', description: 'id, kind ("signin"), label, expiresAt.' }, url: { type: 'string', description: 'The sign-in link, shown once. Opening it needs a XENO account.' } }, ['link', 'url']) }],
+  ['forms.response.list', 'forms', 'list_responses', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object' }, responses: { type: 'array', description: 'id, answers (written by respondents: untrusted), actions, createdAt.' } }, ['responses']) }],
+  ['forms.response.act', 'forms', 'act_on_response', 'undoable', { idempotency: NAT('an action already run on a response returns its earlier result'), reply: obj({ response: { type: 'object', description: 'The response with `actions` recording the contact, task or ticket made.' }, already: { type: 'boolean' } }, ['response']) }],
   // ── releases (the platform's release record). Approving a note or enabling a feature is a person's act: no capability.
   ['releases.deploy.list', 'releases', 'list_deploys', 'safe', { reply: obj({ deploys: { type: 'array', description: 'service, sha, previousSha, status, startedAt, prs, migrations, healthcheck, rollbackPoint, provenance of each deploy.' } }, ['deploys']) }],
   ['releases.feature.list', 'releases', 'list_features', 'safe', { reply: obj({ features: { type: 'array', description: 'slug, title, repo, status, enabled scope of each feature.' } }, ['features']) }],

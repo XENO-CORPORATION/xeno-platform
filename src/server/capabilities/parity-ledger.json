@@ -170,7 +170,9 @@
     "platform-market.js": "commerce",
     "companyRoutes.js": "workspace",
     "platform-company.js": "workspace-ui",
-    "platform-anima.js": "workspace-ui"
+    "platform-anima.js": "workspace-ui",
+    "formsRoutes.js": "forms",
+    "platform-forms.js": "forms"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11131,6 +11133,124 @@
       "because": "moves around this screen; the data it shows is already covered"
     },
     "ui:platform-anima.js:data-xan=copy": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "route:formsRoutes.js:DELETE /:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:DELETE /:id/responses/:rid": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:GET /": {
+      "status": "capability",
+      "capability": "forms.form.list",
+      "class": "safe",
+      "scope": "forms:read"
+    },
+    "route:formsRoutes.js:GET /:id": {
+      "status": "capability",
+      "capability": "forms.form.get",
+      "class": "safe",
+      "scope": "forms:read"
+    },
+    "route:formsRoutes.js:GET /:id/responses": {
+      "status": "capability",
+      "capability": "forms.response.list",
+      "class": "safe",
+      "scope": "forms:read"
+    },
+    "route:formsRoutes.js:GET /:id/responses.csv": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:formsRoutes.js:GET /:id/responses",
+      "class": "safe",
+      "scope": "none",
+      "because": "the same responses list_responses returns"
+    },
+    "route:formsRoutes.js:GET /:id/responses/:rid": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:formsRoutes.js:GET /:id/responses",
+      "class": "safe",
+      "scope": "none",
+      "because": "the same responses list_responses returns"
+    },
+    "route:formsRoutes.js:GET /public/:token": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+    },
+    "route:formsRoutes.js:GET /public/:token/form": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+    },
+    "route:formsRoutes.js:PATCH /:id": {
+      "status": "capability",
+      "capability": "forms.form.update",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:POST /": {
+      "status": "capability",
+      "capability": "forms.form.create",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:POST /:id/links": {
+      "status": "capability",
+      "capability": "forms.link.create",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:POST /:id/links/:linkId/revoke": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:POST /:id/responses/:rid/actions": {
+      "status": "capability",
+      "capability": "forms.response.act",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:POST /:id/restore": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "forms:write"
+    },
+    "route:formsRoutes.js:POST /public/:token": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+    },
+    "route:formsRoutes.js:POST /public/:token/responses": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "the respondent’s side of a form link: answering it needs no XENO account and is not an action in a workspace"
+    },
+    "route:formsRoutes.js:DELETE /:id/responses": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "forms:write"
+    },
+    "ui:platform-forms.js:data-fm-field": {
       "status": "excluded",
       "category": "view-state",
       "class": "reversible",

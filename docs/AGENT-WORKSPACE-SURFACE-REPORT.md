@@ -25,6 +25,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
 | support | 22 | 8 | 12 | 2 | 4 | 15 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
 | customers | 29 | 7 | 9 | 13 | 9 | 14 | 5 | 1 | `customers:write` 6, `customers:read` 3 |
+| forms | 19 | 7 | 5 | 7 | 7 | 10 | 2 | 0 | `forms:write` 5 |
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
 | releases | 19 | 9 | 4 | 6 | 8 | 11 | 0 | 0 | `workspace:read` 3, `workspace:admin` 1 |
@@ -34,4 +35,4 @@ Per division: how many actions a person can take, how many an agent can take tod
 | compute | 32 | 18 | 1 | 13 | 16 | 9 | 7 | 0 | `compute:read` 1 |
 | docs | 11 | 11 | 0 | 0 | 5 | 6 | 0 | 0 | — |
 
-Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `inbox:read`, `inbox:write`, `publish:read`, `publish:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.
+Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `inbox:read`, `inbox:write`, `publish:read`, `publish:write`, `forms:read`, `forms:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.

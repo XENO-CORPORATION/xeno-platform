@@ -34,6 +34,8 @@
     "test:message-ui": "node prototypes/xeno-workspace/tests/message-test.mjs",
     "test:workspace-analytics": "cd src/server && node tests/workspace-analytics.test.mjs",
     "test:analytics-ui": "node prototypes/xeno-workspace/tests/analytics-test.mjs",
+    "test:forms": "node src/server/tests/forms.test.mjs",
+    "test:forms-ui": "node prototypes/xeno-workspace/tests/forms-test.mjs",
     "test:workspace-docs": "cd src/server && node tests/workspace-docs.test.mjs",
     "test:docs-ui": "node prototypes/xeno-workspace/tests/docs-test.mjs",
     "test:workspace-docs-bundle": "node --test scripts/workspace-docs-bundle.test.mjs",

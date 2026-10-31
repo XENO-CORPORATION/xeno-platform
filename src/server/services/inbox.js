@@ -12,6 +12,7 @@ export class InboxError extends Error { constructor(message, code, status = 400)
 
 /** What each kind asks of the person: a label for its row, and whether it waits on them until read. Unknown kinds are activity. */
 const KINDS = {
+  form_response: ['Form response', false],
   assigned: ['Assigned', true], review_requested: ['Review', true], review_assigned: ['Reviewer', true], changes_requested: ['Changes', true], mentioned: ['Mention', true], due_soon: ['Due soon', true], overdue: ['Overdue', true],
   run_failed: ['Run failed', true], workflow_failed: ['Run failed', true], workflow_off: ['Turned off', true], invited: ['Invitation', true],
   run_finished: ['Finished', false], run_stopped: ['Stopped', false], shared: ['Shared', false], commented: ['Comment', false], status: ['Update', false],

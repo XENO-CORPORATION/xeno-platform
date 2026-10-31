@@ -2704,6 +2704,104 @@
    ]
   },
   {
+   "name": "forms.form.list",
+   "wire": "forms__form__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forms:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_list_forms"
+   ]
+  },
+  {
+   "name": "forms.form.get",
+   "wire": "forms__form__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forms:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_get_form"
+   ]
+  },
+  {
+   "name": "forms.form.create",
+   "wire": "forms__form__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forms:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_create_form"
+   ]
+  },
+  {
+   "name": "forms.form.update",
+   "wire": "forms__form__update",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forms:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_update_form"
+   ]
+  },
+  {
+   "name": "forms.link.create",
+   "wire": "forms__link__create",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forms:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_create_signin_link"
+   ]
+  },
+  {
+   "name": "forms.response.list",
+   "wire": "forms__response__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "forms:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_list_responses"
+   ]
+  },
+  {
+   "name": "forms.response.act",
+   "wire": "forms__response__act",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "forms:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "forms_act_on_response"
+   ]
+  },
+  {
    "name": "releases.deploy.list",
    "wire": "releases__deploy__list",
    "version": "1.0.0",

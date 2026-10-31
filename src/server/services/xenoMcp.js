@@ -37,6 +37,7 @@ import * as publishMcp from './publishMcp.js';
 import * as messageMcp from './messageMcp.js';
 import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
+import * as formsMcp from './formsMcp.js';
 import * as toolsMcp from './toolsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
@@ -211,6 +212,14 @@ export const SERVICES = Object.freeze([
     tools: () => analyticsMcp.TOOLS,
     call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
+  },
+  // XENO Forms (formsMcp.js): build forms, sign-in links only (a public link is a person's), read and act on responses.
+  {
+    category: 'forms', title: 'Forms', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Forms: build a workspace’s forms, share them by sign-in link, read responses and turn them into contacts, tasks or support requests.',
+    tools: () => formsMcp.TOOLS,
+    call: (db, actor, name, args) => formsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof formsMcp.FormsMcpError,
   },
   // The inbox (inboxMcp.js): what was written to the agent itself. Its owner's inbox is not reachable from here.
   {

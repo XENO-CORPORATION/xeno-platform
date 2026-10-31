@@ -145,7 +145,8 @@ export async function deleteContact(db, actor, contactId, { workspace } = {}) {
 export async function eraseContact(db, actor, contactId, { workspace } = {}) {
   const ctx = await workspaceFor(db, actor, workspace, 'admin');
   const c = await contactRow(db, ctx, contactId);
-  // activities and links cascade; deals keep their amount but lose the person
+  // activities and links cascade; deals keep their amount but lose the person; what they answered on a form goes
+  await db.query(`DELETE FROM form_responses WHERE workspace_id = $1 AND (actions->'contact'->>'id' = $2::text OR ($3::text IS NOT NULL AND lower(email) = lower($3::text)))`, [ctx.workspaceId, c.id, c.email]);
   await db.query('DELETE FROM crm_contacts WHERE id = $1', [c.id]);
   await db.query('INSERT INTO crm_erasures (workspace_id, contact_id, erased_by) VALUES ($1,$2,$3)', [ctx.workspaceId, c.id, ctx.userId]);
   return { erased: true, id: c.id };
@@ -162,7 +163,8 @@ export async function exportContact(db, actor, contactId, { workspace } = {}) {
   const links = (await db.query('SELECT target_kind, target_key FROM crm_links WHERE contact_id = $1', [c.id])).rows;
   return { format: 'xeno-customers-export@1', exportedAt: new Date().toISOString(),
     contact: { name: c.name, email: c.email, phone: c.phone, title: c.title, tags: c.tags, source: c.source, createdAt: c.created_at },
-    company, deals, activities, links };
+    company, deals, activities, links,
+    formResponses: (await db.query(`SELECT form_id, answers, fields, created_at FROM form_responses WHERE workspace_id = $1 AND deleted_at IS NULL AND (actions->'contact'->>'id' = $2::text OR ($3::text IS NOT NULL AND lower(email) = lower($3::text))) ORDER BY created_at`, [ctx.workspaceId, c.id, c.email])).rows };
 }
 
 /** One contact with its company, deals, timeline and linked tickets/tasks (each link read through its own owner). */
