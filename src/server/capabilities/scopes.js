@@ -38,6 +38,14 @@ export const LEDGER_CLASSES = Object.freeze(['safe', 'reversible', 'irreversible
 export const ledgerClassOf = (catalogueClass) => (catalogueClass === 'undoable' ? 'reversible' : catalogueClass);
 
 /** Which area a parity division's actions fall in. */
+/**
+ * Scopes nothing gets by being given "everything". Reading a person's own PC needs that person to have said yes for this app: on the consent
+ * screen, on a key they made, or by turning the service on for the connection. Anything that grants a whole set (a Cloud Shell key, read grants
+ * for a shell agent) starts from AMBIENT_SCOPES, because a workload running in the cloud is not someone asking.
+ */
+export const ASK_FIRST_SCOPES = Object.freeze(['corpus_local:read']);
+export const AMBIENT_SCOPES = Object.freeze(WORKSPACE_SCOPES.filter((s) => !ASK_FIRST_SCOPES.includes(s)));
+
 export const DIVISION_AREA = Object.freeze({
   storage: 'storage', studio: 'library', canvas: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',

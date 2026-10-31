@@ -322,7 +322,7 @@
   // Rows come from /api/account/corpus-pcs. The projects are turned on in XENO Corpus on that PC; this is the off switch from anywhere.
   function pcsSection(h) {
     if (!S.pcs) return h.card('Corpus on your PCs', '<p class="set-p">XENO couldn’t load your PCs.</p>', retry);
-    const rule = '<p class="pg-rule">Agents you connect to XENO MCP can read the projects you turned on, read-only, while that PC is connected. Answers aren’t kept on XENO’s servers.</p>';
+    const rule = '<p class="pg-rule">Apps you connect to XENO MCP can read the projects you turned on, read-only, while that PC is connected, once you turn on Corpus on your PC for that app. Answers aren’t kept on XENO’s servers.</p><button class="pg-btn ghost" data-acct="goto" data-arg="/workspace/dev/apps/mcp"><span>Choose apps in XENO MCP</span></button>';
     if (!S.pcs.length) return h.card('Corpus on your PCs', '<p class="pg-dim set-p">No PC is connected. In XENO Corpus on your PC, turn a project on for agents.</p>') + rule;
     const rows = S.pcs.map((p) => {
       const seen = !p.enabled ? 'Turned off' : p.connected ? 'Connected now' : p.lastSeenAt ? `Last seen ${h.ago(ms(p.lastSeenAt))}` : 'Not connected yet';

@@ -15,7 +15,7 @@ import * as compute from './compute.js';
 import * as creds from './workspaceCredentials.js';
 import { boundAgentFor, bindClientAgent, mcpAgentFor } from './xenoTasks.js';
 import { CATALOGUE } from '../capabilities/catalogue.js';
-import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
+import { AMBIENT_SCOPES, ASK_FIRST_SCOPES } from '../capabilities/scopes.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 
 export const SHELL_CLIENT = 'xeno-cloud-shell';
@@ -54,7 +54,7 @@ export async function shellAgent(db, personId) {
 /** On first use in a workspace, the agent may READ there; nothing that changes data until the person grants it. */
 export async function ensureReadGrants(db, agentId, workspaceId) {
   if ((await creds.listGrants(db, agentId)).some((g) => g.workspaceId === String(workspaceId).toLowerCase())) return false;
-  const safe = CATALOGUE.filter((c) => c.class === 'safe').map((c) => c.name);
+  const safe = CATALOGUE.filter((c) => c.class === 'safe' && !ASK_FIRST_SCOPES.includes(c.scope)).map((c) => c.name);
   if (safe.length) await creds.grant(db, agentId, workspaceId, safe);
   return true;
 }
@@ -89,7 +89,7 @@ export async function connectionKey(db, ctx) {
   if (!(await shellEnabledFor(db, ctx.userId))) throw new CloudShellError('Cloud Shell is not open to your account yet', 'shell_not_enabled', 403);
   const agentId = await shellAgent(db, ctx.userId);
   await ensureReadGrants(db, agentId, ctx.workspaceId);
-  const k = await creds.createRunKey(db, { ownerId: ctx.userId, agentId, workspaceId: ctx.workspaceId, scopes: [...WORKSPACE_SCOPES], label: 'Cloud Shell', minutes: KEY_MINUTES });
+  const k = await creds.createRunKey(db, { ownerId: ctx.userId, agentId, workspaceId: ctx.workspaceId, scopes: [...AMBIENT_SCOPES], label: 'Cloud Shell', minutes: KEY_MINUTES });
   return { key: k.key, keyId: k.id };
 }
 
