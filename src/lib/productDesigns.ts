@@ -47,5 +47,6 @@ export const PRODUCT_DESIGN_SLUGS: ReadonlySet<string> = new Set([
   "stock",
   "storage",
   "video",
+  "view",
   "workflow"
 ]);

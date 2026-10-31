@@ -20,11 +20,12 @@ import shell from './shell';
 import spawn from './spawn';
 import storage from './storage';
 import corpus from './corpus';
+import view from './view';
 
 /* Registry of product documentation. A product listed here gets a full docs
  * section at /docs/<slug>; products NOT here show "coming soon" on the hub.
  * Add a product = author src/content/docs/<slug>.ts and import it here. */
-const MODULES: ProductDocs[] = [agent, agentCli, hub, sdk, acp, pixel, motion, comms, canvas, rt, post, sound, workflow, architect, form, engine, browser, shell, spawn, storage, corpus];
+const MODULES: ProductDocs[] = [agent, agentCli, hub, sdk, acp, pixel, motion, comms, canvas, rt, post, sound, workflow, architect, form, engine, browser, shell, spawn, storage, corpus, view];
 
 const BY_SLUG = new Map(MODULES.map((m) => [m.slug, m]));
 

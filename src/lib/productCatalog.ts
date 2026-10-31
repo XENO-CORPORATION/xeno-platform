@@ -279,6 +279,9 @@ export const PRODUCTS: Product[] = [
   // interface behind the XENO sign-in door; the corpus itself stays in the project (.xeno/corpus/).
   { slug: 'corpus', name: 'XENO Corpus', tagline: 'Know which of your project’s claims are still true.', category: 'Develop', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-corpus' },
   { slug: 'storage', name: 'XENO Storage', tagline: 'Your XENO files and your Google Drive, as drives on this PC.', category: 'Platform', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-storage' },
+  // XENO View desktop 0.2.1 (2026-10-31): experimental, unsigned, Windows x64, with an in-app updater, behind the XENO
+  // sign-in door. No `signing` field on purpose: the fail-safe default produces the site's experimental notice.
+  { slug: 'view', name: 'XENO View', tagline: 'One Windows app for your images, video, audio and 3D models.', category: 'Create', status: 'beta', delivery: 'desktop', operatingSystem: 'Windows', repo: 'xeno-view' },
   // Anima SHIPS. All 8 packages are live on npm at 0.0.2 (verified against the
   // registry 2026-07-27), so 'coming-soon'/'soon' was telling visitors a product
   // they can install does not exist. It also suppressed an upgrade signal that

@@ -56,6 +56,7 @@ const NAME_MAP = new Map([
   ['xeno-spawn', 'spawn'], ['xenospawn', 'spawn'],
   ['xeno-corpus', 'corpus'], ['xenocorpus', 'corpus'], ['xeno corpus', 'corpus'],
   ['xeno-storage', 'storage'], ['xenostorage', 'storage'], ['xeno storage', 'storage'],
+  ['xeno-view', 'view'], ['xenoview', 'view'], ['xeno view', 'view'],
   ['xeno-extension', 'extension'], ['xenoextension', 'extension'], ['xeno extension', 'extension'],
   ['xeno-workshop', 'workshop'], ['xeno-workshop-local', 'workshop'], ['xenoworkshop', 'workshop'],
   ['xenoharbor', 'harbor'],

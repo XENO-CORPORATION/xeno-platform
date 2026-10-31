@@ -38,6 +38,7 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-pixel': PRODUCT,
   'xeno-motion': PRODUCT,
   'xeno-sound': PRODUCT,
+  'xeno-view': PRODUCT,
   'xeno-canvas': [...PRODUCT, 'collaboration:use'],
   'xeno-browser': PRODUCT,
   // XENO Extension (MV3, RFC 8628 device grant + DPoP): its own metered model loop, plus browser:connect so a

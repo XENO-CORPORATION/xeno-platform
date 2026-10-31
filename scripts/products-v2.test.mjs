@@ -81,6 +81,19 @@ test('the Spawn product design states what ships, not the concept it was written
   assert.doesNotMatch(html, /"Can I use it\?","No\./, 'the first FAQ answer says it cannot be used');
 });
 
+test('the View product design is authored in-repo, downloads through the gate and discloses what it is', () => {
+  const importer = read('scripts/import-products-v2.mjs');
+  assert.match(importer, /'XENO View\.dc\.html': 'view'/, 'the importer owns the View design');
+  assert.ok(onDisk('src/content/product-designs/XENO View.dc.html'), 'the View design source is in the repo');
+  const html = read('public/product-pages/view/index.html');
+  assert.match(html, /v0\.2\.1/, 'names the published version');
+  assert.match(html, /\/product\/view\/download\/win/, 'links the gated download route');
+  assert.doesNotMatch(html, /updates\.xenostudio\.ai\/apps\/view/, 'never a raw installer URL');
+  assert.match(html, /not code-signed yet[\s\S]*SmartScreen/, 'the unsigned-installer notice (§5c site half)');
+  assert.match(html, /not a codec pack/, 'says which videos it will not play');
+  assert.doesNotMatch(html, /macOS[^<]{0,40}(available|download)/i, 'never offers a platform with no build');
+});
+
 test('the Storage product design is authored in-repo and states only what 0.1.0 ships', () => {
   // Storage had no design in the handoff zip; its page is written in this repo and imported by the
   // same transform (`import-products-v2.mjs --authored`). The served document must be that output.
@@ -121,5 +134,6 @@ test('every /products card wears its real app icon when the pack has one', async
   }
   assert.ok(stamped >= 40, `expected 40+ stamped cards, got ${stamped}`);
   assert.match(html, /<a href="\/product\/storage" style="position:relative;/, 'Storage is listed on /products');
-  assert.match(html, /XENO products · 46/, 'the total counts the added card');
+  assert.match(html, /<a href="\/product\/view" style="position:relative;/, 'View is listed on /products');
+  assert.match(html, /XENO products · 47/, 'the total counts the added cards');
 });
