@@ -17,7 +17,7 @@ const hex = () => [...Array(32)].map(() => '0123456789abcdef'[Math.floor(Math.ra
 const WS = uuid();
 const db = { objs: [], runs: [], hiddenProjects: 1, lends: [], offers: [], calls: [], divs: [], proj: [{ id: uuid(), name: 'Website', div: null }, { id: uuid(), name: 'Brand film', div: null }], agents: [], agentProj: {} };
 const ad = (a) => ({ id: a.id, userId: a.userId, name: a.name, description: a.description, division: a.div ? { id: a.div, name: db.divs.find((d) => d.id === a.div).name, archived: false } : null,
-  workspace: { id: WS, name: 'Me', personal: true }, instructions: a.versions[0].instructions, version: a.versions[0].version, versions: a.versions, createdAt: a.createdAt, status: 'active',
+  workspace: { id: WS, name: 'Me', personal: true }, instructions: a.versions[0].instructions, version: a.versions[0].version, versions: a.versions, createdAt: a.createdAt, status: 'active', rights: { viewer: true, runner: true, editor: true, exporter: true, manage: true },
   projects: (db.agentProj[a.id] || []).map((pid) => { const p = db.proj.find((x) => x.id === pid); return { id: p.id, name: p.name, access: 'editor', division: p.div ? { id: p.div, name: db.divs.find((d) => d.id === p.div).name } : null }; }),
   credentials: [], connections: [], lentTo: db.lends.filter((l) => l.agent === a.id && l.state !== 'revoked').map((l) => ({ id: l.id, state: l.state, workspace: { id: WS, name: 'Me' }, division: { id: l.div, name: db.divs.find((d) => d.id === l.div).name }, acceptedAt: new Date().toISOString() })) });
 const dd = (d) => ({ id: d.id, workspaceId: WS, parentId: d.parent, key: d.name.toLowerCase(), name: d.name, lifecycle: d.archived ? 'archived' : 'active', revision: 1,
@@ -162,20 +162,23 @@ try {
   ok(ag && ag.div === creative.id, 'a new agent can be created straight into a division');
   // New agent then asks where it runs (platform-agents.js create); answering it opens the agent's page
   await submit();
-  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${ag.id}`, 'after “Where will it run?”, the new agent’s page opens at its id');
+  ok(new URL(p.url()).pathname === `/workspace/workspace/Agents/${ag.id}/Connect`, 'after “Where will it run?”, the new agent opens at its id, on Connect');
+  const agentTab = (name) => fresh(`/workspace/workspace/Agents/${ag.id}/${name}`);   // the page has tabs since 2026-10-25
+  await agentTab('Settings');
   t = await main();
   ok(/Division/.test(t) && /Cutter works only on Creative’s projects/.test(t), 'its page says which division it is in and what that means');
-  const film2 = await p.$('[data-xag-proj] '); void film2;
+  await agentTab('Work');
   const disabled = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));
   ok(disabled.some(([n, d]) => /Website/.test(n) && d) && disabled.some(([n, d]) => /Brand film/.test(n) && !d), `only the project in its division can be given (${JSON.stringify(disabled)})`);
   await p.$eval(`[data-xag-proj="${db.proj.find((x) => x.name === 'Brand film').id}"]`, (x) => { x.scrollIntoView({ block: 'center' }); x.click(); }); await settle(900);
   ok((db.agentProj[ag.id] || []).length === 1, 'giving it the Creative project works');
 
   // instructions -> a new version
+  await agentTab('Settings');
   await p.click('[data-xag="instr-edit"]'); await settle(300);
   await p.evaluate(() => { const t = document.querySelector('.xag-instr textarea'); t.value = 'Cut to the beat.'; });
   await p.evaluate(() => document.querySelector('.xag-instr button[type="submit"]').click()); await settle(1000);
-  ok(ag.versions[0].version === 2 && /Cut to the beat/.test(await main()) && /version 2/.test(await main()), 'saving instructions makes version 2 and shows it');
+  ok(ag.versions[0].version === 2 && /Cut to the beat/.test(await main()) && /version 2/i.test(await main()), 'saving instructions makes version 2 and shows it');
 
   // move the agent out: its project goes
   await p.click('[data-xag="division"]'); await settle(500); await choose('No division'); await submit();
@@ -183,9 +186,11 @@ try {
 
   // lend it to Creative: it keeps its own division (none) and may take Creative's project
   await p.click('[data-xag="lend"]'); await settle(500); await choose('Creative'); await submit();
-  ok(db.lends.length === 1 && db.lends[0].div === creative.id && /Also works in[\s\S]*Creative[\s\S]*working there/.test(await main()), 'Lend it adds Creative under Also works in');
+  ok(db.lends.length === 1 && db.lends[0].div === creative.id && /Lent to[\s\S]*Creative[\s\S]*working there/.test(await main()), 'Lend it adds Creative under Lent to');
+  await agentTab('Work');
   const canNow = await p.$$eval('[data-xag-proj]', (xs) => xs.map((x) => [x.closest('label').innerText.split('\n')[0], x.disabled]));
   ok(canNow.some(([n, d]) => /Brand film/.test(n) && !d), 'once lent, the Creative project can be given');
+  await agentTab('Settings');
   await p.click('[data-xag="unlend"]'); await settle(400); await submit();
   ok(db.lends[0].state === 'revoked' && /Only its own division/.test(await main()), 'ending the lend removes it');
   // an offer into my workspace waits on the Agents page
