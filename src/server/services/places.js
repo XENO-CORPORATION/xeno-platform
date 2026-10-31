@@ -168,8 +168,9 @@ export async function buildSnapshot(db, me, place, access) {
   }
   const pids = [...new Set([...memberships.map((m) => m.principalId).filter((x) => !x.startsWith('res:')), ...shown.map((d) => d.head_principal_id).filter(Boolean)])];
   const principals = pids.length ? (await db.query(`SELECT u.id, COALESCE(NULLIF(u.display_name,''), u.username, 'Someone') AS name,
+      (SELECT ai.public_id FROM agent_identities ai WHERE ai.user_id = u.id) AS public_id,
       EXISTS (SELECT 1 FROM agent_identities ai WHERE ai.user_id = u.id) AS is_agent FROM users u WHERE u.id = ANY($1::uuid[])`, [pids])).rows
-    .map((u) => ({ id: u.id, displayName: u.name, isAgent: u.is_agent })) : [];
+    .map((u) => ({ id: u.id, displayName: u.name, isAgent: u.is_agent, ...(u.public_id ? { publicId: u.public_id } : {}) })) : [];
   for (const [id, name] of unnamed) principals.push({ id, displayName: name, isAgent: true });
   if (!principals.some((p) => p.id === me.id)) principals.push({ id: me.id, displayName: me.name || 'You', isAgent: me.kind === 'agent' });
 

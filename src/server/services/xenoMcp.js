@@ -39,6 +39,7 @@ import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
+import * as inboxMcp from './inboxMcp.js';
 import * as workforceMcp from './workforceMcp.js';
 import * as forumMcp from './forumMcp.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -201,6 +202,14 @@ export const SERVICES = Object.freeze([
     tools: () => analyticsMcp.TOOLS,
     call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
+  },
+  // The inbox (inboxMcp.js): what was written to the agent itself. Its owner's inbox is not reachable from here.
+  {
+    category: 'inbox', title: 'Inbox', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Your inbox: what was written to you, newest first; mark it read, archive it, or snooze it.',
+    tools: () => inboxMcp.TOOLS,
+    call: (db, actor, name, args) => inboxMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof inboxMcp.InboxMcpError,
   },
   // XENO Scheduling (schedulingMcp.js): read-only availability, booking pages, free slots and bookings.
   {

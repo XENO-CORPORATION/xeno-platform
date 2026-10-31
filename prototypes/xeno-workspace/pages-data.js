@@ -178,7 +178,7 @@
       ['Divisions', window.XENO_DIVISIONS?.served ? window.XENO_DIVISIONS.list().map((d) => [d.name, `${pl(d.agents, 'agent', 'agents')} · ${pl(d.projects, 'project', 'projects')}`, `Divisions/${d.id}`]) : W.divisions.map((d) => div(d.name))], ['Across all workspaces', [['All my agents', window.XENO_AGENTS?.served ? String(window.XENO_AGENTS.count() ?? '') : String(ag)], ['All my teams', String(W.teams.length)], ['Switch workspace', window.XA ? `${window.XA.workspaces().length} workspaces` : '']]]];
     const PL = window.XENO_PG_PROJECTS.items, act = PL.filter((p) => p.status === 'active');
     G.projects[3] = [['Active', act.map((p) => [p.name, `${p.mode} · ${p.tasks.done}/${p.tasks.total}`])], ['Shared with me', PL.filter((p) => p.status === 'shared').map((p) => [p.name, p.mode])], ['Archive', [['Archived projects', String(PL.filter((p) => p.status === 'archived').length)]]]];
-    const MK = window.XENO_PG_MARKET; G.market[3][2][1] = [['Purchases', String(MK.filter((x) => x.owned && !/Rent/.test(x.price)).length)], ['Rentals', String(MK.filter((x) => x.owned && /Rent/.test(x.price)).length)], ['Seller console', '']];
+    const MK = window.XENO_PG_MARKET; G.market[3][2][1] = [['Purchases', window.XENO_PLATFORM?.served ? '' : String(MK.filter((x) => x.owned && !/Rent/.test(x.price)).length)], ['Rentals', window.XENO_PLATFORM?.served ? '' : String(MK.filter((x) => x.owned && /Rent/.test(x.price)).length)], ['Seller console', '']];
   }
   window.XENO_DB.save(); }; window.XENO_PG_SYNC_NAV(); remember(); dbReady = true;
 

@@ -11,13 +11,13 @@ Per division: how many actions a person can take, how many an agent can take tod
 | tasks | 107 | 13 | 86 | 8 | 16 | 81 | 10 | 0 | `tasks:write` 79, `tasks:read` 7 |
 | chat | 101 | 0 | 100 | 1 | 32 | 52 | 17 | 0 | `chat:write` 69, `chat:read` 31 |
 | agents | 204 | 0 | 142 | 62 | 61 | 133 | 10 | 0 | `agents:write` 109, `agents:read` 33 |
-| commerce | 130 | 0 | 103 | 27 | 42 | 71 | 7 | 10 | `wallet:spend` 63, `wallet:read` 40 |
-| workspace | 155 | 23 | 97 | 35 | 57 | 78 | 20 | 0 | `workspace:admin` 72, `workspace:read` 24, `agents:write` 1 |
+| commerce | 146 | 0 | 113 | 33 | 43 | 83 | 7 | 13 | `wallet:spend` 65, `wallet:read` 41, `marketplace:write` 7 |
+| workspace | 162 | 23 | 97 | 42 | 57 | 85 | 20 | 0 | `workspace:admin` 72, `workspace:read` 24, `agents:write` 1 |
 | places | 9 | 3 | 4 | 2 | 8 | 1 | 0 | 0 | `places:read` 4 |
 | forum | 54 | 8 | 44 | 2 | 22 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 17 |
 | workforce | 303 | 53 | 245 | 5 | 35 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
-| workspace-ui | 172 | 4 | 101 | 67 | 68 | 103 | 1 | 0 | `workspace:admin` 101 |
-| account | 88 | 0 | 60 | 28 | 32 | 50 | 6 | 0 | `workspace:admin` 41, `workspace:read` 19 |
+| workspace-ui | 173 | 4 | 101 | 68 | 68 | 104 | 1 | 0 | `workspace:admin` 101 |
+| account | 94 | 4 | 58 | 32 | 32 | 56 | 6 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
 | browser-shell | 28 | 0 | 28 | 0 | 11 | 15 | 2 | 0 | `workspace:admin` 17, `workspace:read` 11 |
 | canvas | 22 | 6 | 16 | 0 | 5 | 13 | 4 | 0 | `tasks:write` 13, `tasks:read` 3 |
@@ -34,4 +34,4 @@ Per division: how many actions a person can take, how many an agent can take tod
 | compute | 32 | 18 | 1 | 13 | 16 | 9 | 7 | 0 | `compute:read` 1 |
 | docs | 11 | 11 | 0 | 0 | 5 | 6 | 0 | 0 | — |
 
-Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `publish:read`, `publish:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.
+Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `inbox:read`, `inbox:write`, `publish:read`, `publish:write`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.

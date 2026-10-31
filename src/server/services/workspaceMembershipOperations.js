@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import * as inbox from './inbox.js';
 import { check, listObjectTuples, writeTuples, ROLE_RANK } from '../utils/authzReBAC.js';
 import { workspaceSeatInfo } from '../utils/workspaceContext.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationError as error, operationHash, operationIdentity, readWorkspaceOperation, transactWorkspaceOperation, workspaceOperationIncarnation as identityIncarnation } from './workspaceOperationReceipts.js';
@@ -108,6 +109,10 @@ export async function mutateWorkspaceMembership(pool,workspaceId,actor,clientId,
             : "UPDATE workspace_invites SET expires_at=now()+interval '7 days' WHERE id=$1 RETURNING *",[invite.id])).rows[0];
         }
         result={invite:options.legacy===true ? {...invite,token:undefined} : inviteProjection(invite)};target=invite.id;
+        if (invite.invited_user_id) {
+          if (action === 'invite.revoke') await db.query("DELETE FROM user_notifications WHERE user_id=$1 AND source='workspace' AND dedupe_key=$2",[invite.invited_user_id,'invite:'+invite.id]);
+          else { const ws=(await db.query('SELECT name FROM workspaces WHERE id=$1',[workspaceId])).rows[0]; await inbox.notify(db,{userId:invite.invited_user_id,source:'workspace',kind:'invited',ref:'/invite/'+invite.token,title:'You were invited to '+(ws?ws.name:'a workspace'),actorId:actor,actorKind:'human',dedupeKey:'invite:'+invite.id}); }
+        }
         if (action !== 'invite.revoke') {
           const deliveryId=crypto.randomUUID();
           await db.query('INSERT INTO workspace_invite_deliveries(id,workspace_id,invite_id,invite_expires_at) SELECT $1,workspace_id,id,expires_at FROM workspace_invites WHERE id=$2',[deliveryId,invite.id]);

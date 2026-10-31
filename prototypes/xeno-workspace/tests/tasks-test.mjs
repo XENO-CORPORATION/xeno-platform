@@ -42,7 +42,7 @@ p.on('request', (q) => {
   db.calls.push([method, u.pathname + u.search, b]);
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
-  if (u.pathname === '/api/notifications') return json(200, { success: true, unread: db.notes.filter((n) => !n.read).length, items: db.notes });
+  if (u.pathname === '/api/notifications') return json(200, { success: true, unread: db.notes.filter((n) => !n.read).length, items: db.notes.map((n) => ({ label: 'Update', asks: ['assigned', 'review_requested', 'review_assigned', 'changes_requested', 'mentioned', 'due_soon', 'overdue'].includes(n.kind), ...n })) });
   if (u.pathname === '/api/notifications/read') { for (const n of db.notes) if (b.all || (b.ids || []).includes(n.id)) n.read = true; return json(200, { success: true, unread: 0, items: [] }); }
   if (u.pathname === '/api/tasks/views') { if (method === 'POST') db.views.push({ id: 'v' + (db.views.length + 1), name: b.name, area: b.area, filters: b.filters }); if (method === 'DELETE') db.views = []; return json(200, { success: true, views: db.views }); }
   if (u.pathname === '/api/tasks' && method === 'GET') { if (fail) return json(500, { success: false }); const a = u.searchParams.get('area'), pid = u.searchParams.get('projectId'); return json(200, { success: true, tasks: db.tasks.filter((t) => (!a || t.area === a) && (!pid || (t.project && t.project.id === pid))).map(view) }); }

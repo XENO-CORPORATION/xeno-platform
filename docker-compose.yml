@@ -297,6 +297,7 @@ services:
       - FORUM_NOTIFICATION_EMAILS=${FORUM_NOTIFICATION_EMAILS:-}
       - SUPPORT_EMAILS=${SUPPORT_EMAILS:-}
       - SCHEDULING_EMAILS=${SCHEDULING_EMAILS:-}
+      - INBOX_DIGEST_EMAILS=${INBOX_DIGEST_EMAILS:-}
       - XENO_EXTENSION_ORIGINS=${XENO_EXTENSION_ORIGINS:-}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       # Svix signing secret of the Resend webhook that posts delivery events to

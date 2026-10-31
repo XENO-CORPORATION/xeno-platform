@@ -21,6 +21,7 @@
  * matters is not "does notify() work" — it is "does createPost CALL it".
  * See `scripts/forum-notify.test.mjs`.
  */
+import * as inbox from './inbox.js';
 
 /**
  * Create a notification. Returns the row id, or `null` when the notification
@@ -58,7 +59,15 @@ export async function notify(db, { userId, kind, threadId = null, postId = null,
   );
   // ON CONFLICT fires on the partial unique index for 'accepted' — re-accepting
   // an answer must not re-notify. No row back is a correct, quiet outcome.
+  if (rows[0]?.id && threadId) await mirrorToInbox(db, { id: rows[0].id, userId, kind, threadId, actor });
   return rows[0]?.id ?? null;
+}
+
+const SAID = { answer: 'answered your question', reply: 'replied', mention: 'mentioned you', accepted: 'accepted your answer' };
+async function mirrorToInbox(db, { id, userId, kind, threadId, actor }) {
+  const t = (await db.query('SELECT short_id, title FROM forum_threads WHERE id = $1', [threadId])).rows[0];
+  if (!t || !t.short_id) return;
+  await inbox.notify(db, { userId, source: 'forum', kind: kind === 'mention' ? 'mentioned' : kind === 'accepted' ? 'answer_accepted' : 'reply', ref: `/workspace/community/${t.short_id}`, title: t.title, detail: `Someone ${SAID[kind] || 'wrote'}`, actorId: actor?.id ?? null, actorKind: actor?.kind ?? null, dedupeKey: `forum:${id}` });
 }
 
 /** Unread count for the badge. The hottest query in the product. */
@@ -122,6 +131,7 @@ export async function listNotifications(db, userId, { unreadOnly = false, limit 
  */
 export async function markRead(db, userId, ids = null) {
   if (Array.isArray(ids) && ids.length === 0) return { updated: 0 };
+  await db.query(`UPDATE user_notifications SET read_at = now() WHERE user_id = $1 AND source = 'forum' AND read_at IS NULL${ids ? " AND dedupe_key = ANY(SELECT 'forum:' || x FROM unnest($2::text[]) x)" : ''}`, ids ? [userId, ids.map(String)] : [userId]);
   const { rowCount } = ids
     ? await db.query(
         `UPDATE forum_notifications SET read_at = NOW()

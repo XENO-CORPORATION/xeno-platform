@@ -38,7 +38,7 @@
     // places + company
     add('Pages', 'Company', 'Legal entity, wallet, seats, staff', 'building', G('workspace', 'Company'), 'wallet vat registration legal tax');
     add('Pages', 'Places', 'Your workspace as a building', 'places', G('places'), 'building floors office');
-    (window.XENO_PLACES ? (window.XENO_WF?.divs() || []) : []).forEach((d) => add('Floors', d.name, 'Floor in Places', 'places', G('places', d.name)));
+    (window.XENO_PLACES ? (window.XENO_PLACES.served ? window.XENO_PLACES.floors() : window.XENO_WF?.divs() || []) : []).forEach((d) => add('Floors', d.name, 'Floor in Places', 'places', G('places', d.name)));
     return out;
   }
   const COMMANDS = () => [

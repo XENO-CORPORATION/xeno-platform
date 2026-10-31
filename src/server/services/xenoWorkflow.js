@@ -33,6 +33,7 @@ import { WORKSPACE_SCOPES } from '../capabilities/scopes.js';
 import { validateIanaTimeZone } from './chatScheduleRecurrence.js';
 import * as creds from './workspaceCredentials.js';
 import { mcpAgentFor } from './xenoTasks.js';
+import * as inbox from './inbox.js';
 
 export class AutomateError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'AutomateError'; this.code = code; this.status = status; this.statusCode = status; }
@@ -494,7 +495,7 @@ export async function emitEvent(db, { workspaceId, event, eventKey, input = {}, 
     if (actorId && w.agent_user_id && String(w.agent_user_id) === String(actorId)) continue;
     if (!match(w.trigger_config || {})) continue;
     const recent = (await db.query(`SELECT count(*)::int AS n FROM workspace_workflow_runs WHERE workflow_id = $1 AND created_at > now() - make_interval(mins => $2)`, [w.id, LOOP_LIMIT.windowMinutes])).rows[0].n;
-    if (recent >= LOOP_LIMIT.runs) { await turnOff(db, w, `Started ${recent} runs in ${LOOP_LIMIT.windowMinutes} minutes, so it was turned off (a loop?)`); continue; }
+    if (recent >= LOOP_LIMIT.runs) { await turnOff(db, w, `Started ${recent} runs in ${LOOP_LIMIT.windowMinutes} minutes, so it was turned off (a loop?)`); await tellTurnedOff(db, w, 'It started too many runs in a short time, which looks like a loop.'); continue; }
     n += (await db.query(`INSERT INTO workspace_workflow_runs (workflow_id, workspace_id, event_key, trigger_event, input, graph_revision) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workflow_id, event_key) DO NOTHING`,
       [w.id, workspaceId, String(eventKey).slice(0, 300), event, input, w.revision])).rowCount;
   }
@@ -596,6 +597,17 @@ export async function claimRuns(db, { worker = `w${process.pid}`, batch = 4, now
 async function finish(db, run, fields) {
   const keys = Object.keys(fields);
   await db.query(`UPDATE workspace_workflow_runs SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, lease_until = NULL WHERE id = $1`, [run.id, ...keys.map((k) => fields[k])]);
+  if (fields.state === 'failed' || fields.state === 'dead') await tellFailed(db, run, fields.error);
+}
+const workflowAddress = (w) => `/workspace/dev/spaces/automate/workflows/${w.id}`;
+async function tellFailed(db, run, error) {
+  const w = (await db.query('SELECT id, name, enabled_by, created_by FROM workspace_workflows WHERE id = $1', [run.workflow_id])).rows[0];
+  if (w) await inbox.tell(db, { userId: w.enabled_by || w.created_by, source: 'automate', kind: 'workflow_failed', ref: workflowAddress(w), title: `${w.name} failed`, detail: error || '', area: 'dev', dedupeKey: `failed:${w.id}:${new Date().toISOString().slice(0, 10)}` });
+}
+/** The workflow stopped itself: whoever turned it on hears why, and whoever made it if that person can no longer act. */
+async function tellTurnedOff(db, w, reason) {
+  await inbox.tell(db, { userId: w.enabled_by || w.created_by, source: 'automate', kind: 'workflow_off', ref: workflowAddress(w), title: `${w.name} was turned off`, detail: reason, area: 'dev' });
+  if (w.created_by && String(w.created_by) !== String(w.enabled_by)) await inbox.tell(db, { userId: w.created_by, source: 'automate', kind: 'workflow_off', ref: workflowAddress(w), title: `${w.name} was turned off`, detail: reason, area: 'dev' });
 }
 async function endKey(db, run) {
   if (run.key_id) await creds.revokeRunKey(db, run.key_id);
@@ -611,6 +623,7 @@ export async function dispatchRun(db, run, { fetchImpl } = {}) {
     const enabler = (await db.query('SELECT is_active, status FROM users WHERE id = $1', [w.enabled_by])).rows[0];
     if (!enabler || enabler.is_active === false || String(enabler.status || '').toLowerCase() === 'suspended' || !(await isAdmin(db, w.workspace_id, w.enabled_by))) {
       await turnOff(db, w, 'The person who turned it on is no longer an admin of this workspace');
+      await tellTurnedOff(db, w, 'The person who turned it on is no longer an admin of this workspace.');
       await finish(db, run, { state: 'failed', finished_at: new Date(), error: 'The person who turned it on is no longer an admin of this workspace', error_code: 'enabler_lost' });
       await endKey(db, run); return 'failed';
     }
@@ -636,7 +649,7 @@ export async function dispatchRun(db, run, { fetchImpl } = {}) {
       if (ok) await db.query('UPDATE workspace_workflows SET consecutive_failures = 0 WHERE id = $1', [w.id]);
       else {
         const f = (await db.query('UPDATE workspace_workflows SET consecutive_failures = consecutive_failures + 1 WHERE id = $1 RETURNING consecutive_failures, failure_threshold', [w.id])).rows[0];
-        if (f && f.consecutive_failures >= f.failure_threshold) await turnOff(db, w, `Failed ${f.consecutive_failures} runs in a row`);
+        if (f && f.consecutive_failures >= f.failure_threshold) { await turnOff(db, w, `Failed ${f.consecutive_failures} runs in a row`); await tellTurnedOff(db, w, `It failed ${f.consecutive_failures} runs in a row.`); }
       }
       await endKey(db, run); return ok ? 'succeeded' : 'failed';
     }

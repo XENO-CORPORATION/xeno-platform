@@ -84,6 +84,9 @@ async function main() {
   assert.ok(home.ok, JSON.stringify(home.error));
   const desks = home.result.spec.snap.memberships.map((m) => m.principalId);
   assert.ok(desks.includes(owner) && desks.includes(agent), 'the owner and their own agent have desks in the personal building');
+  const atDesk = home.result.spec.snap.principals.find((x) => x.id === agent), publicId = (await pool.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [agent])).rows[0].public_id;
+  assert.ok(publicId && atDesk.publicId === publicId, 'an agent at a desk carries its stable id, so the desk can open its page');
+  assert.ok(!home.result.spec.snap.principals.find((x) => x.id === owner).publicId, 'a person has none');
   const agentView = await places.call(pool, me(agent, 'Agent', 'agent'), 'places.get', { placeId: pPersonal.id });
   assert.ok(agentView.ok && agentView.result.access.role === 'member' && !agentView.result.access.permissions.includes('edit'), 'the agent enters its owner’s building as a member, never an admin');
 

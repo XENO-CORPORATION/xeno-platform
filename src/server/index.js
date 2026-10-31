@@ -18,6 +18,8 @@ import workspaceApiRoutes from './routes/workspaceApiRoutes.js';
 import xenoMcpRoutes, { management as xenoMcpManagement, personOnly as mcpPersonOnly, mcpResourceMetadata } from './routes/xenoMcpRoutes.js';
 import userNotificationsRoutes from './routes/userNotificationsRoutes.js';
 import { startTaskSweeps } from './services/taskNotifyEmail.js';
+import { sendDigests, digestsEnabled } from './services/inbox.js';
+import { sweepLiveRuns } from './services/agentCloudRuns.js';
 import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './services/xenoTasks.js';
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
@@ -4258,6 +4260,14 @@ initBackgroundJobs(pool).catch(err => {
 backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // XENO Tasks: notification email (on unless TASK_NOTIFICATION_EMAILS=false) and due reminders, on the leader only
 backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases }));
+// the inbox: a run that ended tells its owner even if nobody has its page open; digests go out hourly when switched on
+backgroundLeader.whenLeader(() => {
+  const runs = setInterval(() => sweepLiveRuns(pool).catch((e) => console.error('[AgentRuns] sweep failed:', e.message)), 60000);
+  const mail = setInterval(() => sendDigests(pool).catch((e) => console.error('[Inbox] digest sweep failed:', e.message)), 3600000);
+  runs.unref?.(); mail.unref?.();
+  console.log(`[Inbox] live run sweep every 60s, digests hourly (${digestsEnabled() ? 'on' : 'off'})`);
+  return () => { clearInterval(runs); clearInterval(mail); };
+});
 // Loop D push half. The delivery engine it feeds had ZERO producers before this
 // line existed — see forumWebhookPush.js.
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));

@@ -26,6 +26,7 @@ import { issuer } from '../config/hosts.js';
 import { admitAccountRun, readRunnablePin, RunAdmissionError } from './workforceRunAdmission.js';
 import { revokeRun } from './workforceRunAuthority.js';
 import { MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
+import * as inbox from './inbox.js';
 
 export const RUN_ACTOR = 'xeno-agent-runs';
 const DEFAULT_BUDGET_CREDITS = 20;
@@ -256,6 +257,14 @@ export async function issueRunCredential(db, { runRef, runId }) {
   return { token: cred.token, expiresAt: cred.expiresAt, agentId: row.public_id };
 }
 
+/** Tell the owner a run ended. One row per run, however many replicas noticed. A person who stopped it themselves knows. */
+async function tellEnded(db, r, state, reason) {
+  const a = (await db.query('SELECT a.public_id, COALESCE(u.display_name, u.username) AS name FROM agent_identities a JOIN users u ON u.id = a.user_id WHERE a.user_id = $1', [r.agent_user_id])).rows[0];
+  if (!a) return;
+  const kind = state === 'completed' ? 'run_finished' : state === 'failed' ? 'run_failed' : 'run_stopped';
+  await inbox.tell(db, { userId: r.owner_user_id, source: 'agents', kind, ref: `/workspace/workspace/Agents/${a.public_id}/Work`, title: `${a.name} ${state === 'completed' ? 'finished a run' : state === 'failed' ? 'failed a run' : 'was stopped'}`, detail: reason || '', area: 'dev', actorId: r.agent_user_id, actorKind: 'agent', dedupeKey: `run:${r.id}` });
+}
+
 /** Refresh one run's state from xeno-agents-api; a run that ended gets its credential revoked. */
 export async function refresh(db, owner, row, { fetchImpl = fetch, env = process.env } = {}) {
   // A revoked admission ends a live run here: the hosted run is stopped and its credential revoked.
@@ -285,6 +294,7 @@ export async function refresh(db, owner, row, { fetchImpl = fetch, env = process
       await revokeAdmission(db, owner.id, row.admission_id);
       const a = (await db.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [row.agent_user_id])).rows[0];
       if (a) await revokeCredential(db, owner, a.public_id, row.credential_id);
+      await tellEnded(db, r, state, r.reason);
     }
     return r;
   } finally {
@@ -312,7 +322,16 @@ export async function stop(db, owner, runRowId, { fetchImpl = fetch, env = proce
   const r = LIVE.has(row.state)
     ? (await db.query(`UPDATE agent_cloud_runs SET state = 'cancelled', reason = $2, ended_at = now() WHERE id = $1 RETURNING *`, [row.id, reason])).rows[0]
     : row;
+  if (LIVE.has(row.state) && reason !== 'stopped_by_owner') await tellEnded(db, r, 'cancelled', reason);
   return view(r);
+}
+
+/** Runs end whether or not anyone has the agent's page open, so the leader asks about the live ones. */
+export async function sweepLiveRuns(db, { fetchImpl = fetch, env = process.env, batch = 25 } = {}) {
+  if (!agentsApiBaseUrl(env)) return { checked: 0 };
+  const rows = (await db.query(`SELECT * FROM agent_cloud_runs WHERE state IN ('starting', 'queued', 'running') AND run_id IS NOT NULL ORDER BY created_at LIMIT $1`, [batch])).rows;
+  for (const row of rows) await refresh(db, { id: row.owner_user_id }, row, { fetchImpl, env }).catch((e) => console.error('[AgentRuns] sweep:', e.message));
+  return { checked: rows.length };
 }
 
 /** An agent's runs (newest first), refreshed when still live. */

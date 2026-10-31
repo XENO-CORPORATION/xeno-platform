@@ -18,6 +18,7 @@
  * claim, move and comment, never accept their own work.
  */
 import crypto from 'node:crypto';
+import * as inbox from './inbox.js';
 import { assertAvailableOrOverridden, workspaceOfProject, AwayError } from './workforceAvailability.js';
 import { check, writeTuples } from '../utils/authzReBAC.js';
 import { createAgent, DEFAULT_AGENT_CAP } from './agentIdentity.js';
@@ -567,8 +568,7 @@ async function notifyUsers(db, t, me, userIds, kind, detail) {
   for (const id of ids) {
     const s = await standing(db, { id }, t);
     if (!s.view) continue;
-    await db.query(`INSERT INTO user_notifications (user_id, source, kind, ref, title, detail, area, actor_id, actor_kind) VALUES ($1, 'tasks', $2, $3, $4, $5, $6, $7, $8)`,
-      [id, kind, `T-${t.number}`, title, String(detail || '').slice(0, 1000), area, me && me.id ? me.id : null, me && me.id ? kindOf(me) : null]);
+    await inbox.notify(db, { userId: id, source: 'tasks', kind, ref: `T-${t.number}`, title, detail, area, actorId: me && me.id ? me.id : null, actorKind: me && me.id ? kindOf(me) : null });
   }
 }
 const MENTION = /(^|[^\w@.-])@([A-Za-z0-9][A-Za-z0-9_.-]{0,48}[A-Za-z0-9_])/g;
@@ -705,20 +705,8 @@ export async function deleteView(db, me, id) {
   return listViews(db, me);
 }
 
-// the inbox: everything written to user_notifications, newest first
-export async function listNotifications(db, userId, { unread = false, limit = 50 } = {}) {
-  const n = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
-  const rows = (await db.query(`SELECT n.id, n.source, n.kind, n.ref, n.title, n.detail, n.area, n.read_at, n.created_at, n.actor_kind,
-      COALESCE(u.display_name, u.username) AS actor_name FROM user_notifications n LEFT JOIN users u ON u.id = n.actor_id
-     WHERE n.user_id = $1 ${unread ? 'AND n.read_at IS NULL' : ''} ORDER BY n.created_at DESC LIMIT ${n}`, [userId])).rows;
-  const unreadCount = (await db.query('SELECT count(*)::int AS n FROM user_notifications WHERE user_id = $1 AND read_at IS NULL', [userId])).rows[0].n;
-  return { unread: unreadCount, items: rows.map((r) => ({ id: r.id, source: r.source, kind: r.kind, ref: r.ref, title: r.title, detail: r.detail, area: r.area, read: !!r.read_at, at: r.created_at, actor: r.actor_name ? { name: r.actor_name, kind: r.actor_kind || 'human' } : null })) };
-}
-export async function markNotificationsRead(db, userId, ids) {
-  if (ids === 'all') { await db.query('UPDATE user_notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL', [userId]); return; }
-  const list = (Array.isArray(ids) ? ids : []).filter((x) => UUID.test(String(x))).slice(0, 500);
-  if (list.length) await db.query('UPDATE user_notifications SET read_at = now() WHERE user_id = $1 AND id = ANY($2::uuid[]) AND read_at IS NULL', [userId, list]);
-}
+// the inbox moved to inbox.js; these names stay for the callers that import them from here
+export { listNotifications, markNotificationsRead } from './inbox.js';
 
 /** Due reminders, once per due date: a day before to the assignee (or owner), and once overdue to them and the reporter. */
 export async function sweepDueReminders(db) {

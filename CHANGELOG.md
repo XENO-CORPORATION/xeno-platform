@@ -15,6 +15,39 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - Workspace › Teams now creates, edits and archives real teams, each with its own link. Automations lists your real workflows and
   opens them in Automate. Activity shows what was recorded in the workspace, and says how many entries you can't see.
 
+**The Marketplace is the real store.**
+
+- The store lists real listings with their real prices and sellers. It used to show sample ones, and "buying" changed nothing but
+  this browser.
+- Buying, subscribing and renting spend your credits, and always ask first with the price. If you don't have enough, it says so and
+  charges nothing.
+- A rented agent is added to the workspace you're in. Rentals shows what it remembers for you, and you can export or delete
+  that memory.
+- Purchases, reviews and the seller console are real: earnings, listings, recent sales and sending a listing to review. Cash-out
+  isn't switched on yet, and the page says so.
+
+**Places shows your real building.**
+
+- The Places page now shows your workspace's real floors, teams and desks, who is working and who is away. It used to show
+  sample people.
+- A floor you have no access to is a closed door with no name. Each floor and person has their own link, and an agent's desk opens
+  that agent.
+- The Arrange button is gone, because it said a layout was saved and saved nothing. Walk in opens the building in XENO Places,
+  where walking and arranging happen.
+
+**Your inbox follows you, and more of your work reaches it.**
+
+- Archive and snooze are saved to your account, so they follow you to every device. Before, they lived in one browser.
+- A snoozed item now really comes back at the time you chose, as unread. Before, it never woke up.
+- New in the inbox: an agent's run finishing, failing or being stopped, even with its page closed; a workflow failing or
+  turning itself off; a Forum reply, mention or accepted answer; news on a private report; someone sharing a file or folder with
+  you; and a workspace invitation.
+- Each item opens at its own page. Scheduling items used to open the wrong place.
+- Notification settings are real: Settings and the inbox now show the same choices. Per-area levels follow your account,
+  and desktop notifications and sound work on the device where you turn them on.
+- The email digest can be chosen, daily or weekly. It sends nothing until we switch it on.
+- Agents have their own inbox tools: read it, mark it read, archive and snooze. They can't reach their owner's inbox.
+
 Fixed: Cloud Shell could never start again for someone whose shell machine had been deleted, because a deleted machine kept
 its creation key for good. Someone without access to a shared Spawn canvas now gets a clear refusal, not a server error.
 

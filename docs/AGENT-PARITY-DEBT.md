@@ -4,20 +4,20 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1888 actions · 214 agent capability · 1329 planned (debt) · 345 excluded · **coverage 13.9%** of the 1543 owed.
+**Total:** 1918 actions · 218 agent capability · 1337 planned (debt) · 363 excluded · **coverage 14%** of the 1555 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 303 | 53 | 245 | 5 | 17.8% |
 | agents | 204 | 0 | 142 | 62 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
-| commerce | 130 | 0 | 103 | 27 | 0% |
-| workspace-ui | 172 | 4 | 101 | 67 | 3.8% |
+| commerce | 146 | 0 | 113 | 33 | 0% |
+| workspace-ui | 173 | 4 | 101 | 68 | 3.8% |
 | chat | 101 | 0 | 100 | 1 | 0% |
-| workspace | 155 | 23 | 97 | 35 | 19.2% |
+| workspace | 162 | 23 | 97 | 42 | 19.2% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 91 | 5 | 83 | 3 | 5.7% |
-| account | 88 | 0 | 60 | 28 | 0% |
+| account | 94 | 4 | 58 | 32 | 6.5% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 75 | 0 | 37 | 38 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
@@ -36,7 +36,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | compute | 32 | 18 | 1 | 13 | 94.7% |
 | docs | 11 | 11 | 0 | 0 | 100% |
 
-## account — 60 planned
+## account — 58 planned
 
 - `route:accountRoutes.js:DELETE /sessions/:id`
 - `route:accountRoutes.js:GET /notifications`
@@ -79,8 +79,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:authRoutes.js:PUT /profile`
 - `route:handleRoutes.js:GET /check`
 - `route:handleRoutes.js:POST /claim`
-- `route:userNotificationsRoutes.js:GET /`
-- `route:userNotificationsRoutes.js:POST /read`
 - `route:v2AuthzRoutes.js:GET /objects/:type/:id`
 - `route:v2AuthzRoutes.js:POST /check`
 - `route:v2AuthzRoutes.js:POST /write`
@@ -409,7 +407,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-chat.js:data-side=swap`
 - `ui:platform-chat.js:data-side=tab`
 
-## commerce — 103 planned
+## commerce — 113 planned
 
 - `route:accountGiftRoutes.js:POST /`
 - `route:accountGiftRoutes.js:POST /account-history`
@@ -450,6 +448,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:marketplaceRoutes.js:DELETE /rental-partitions/:id/content`
 - `route:marketplaceRoutes.js:GET /catalog`
 - `route:marketplaceRoutes.js:GET /developer/earnings`
+- `route:marketplaceRoutes.js:GET /developer/listings`
 - `route:marketplaceRoutes.js:GET /developer/listings/:id/rental-disclosures`
 - `route:marketplaceRoutes.js:GET /developer/me`
 - `route:marketplaceRoutes.js:GET /developer/skill-listings`
@@ -514,6 +513,15 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:market.js:data-mk=review`
 - `ui:market.js:data-mk=soul`
 - `ui:market.js:data-mk=unlist`
+- `ui:platform-market.js:data-xmk=buy`
+- `ui:platform-market.js:data-xmk=endrent`
+- `ui:platform-market.js:data-xmk=export`
+- `ui:platform-market.js:data-xmk=forget`
+- `ui:platform-market.js:data-xmk=import`
+- `ui:platform-market.js:data-xmk=payout`
+- `ui:platform-market.js:data-xmk=register`
+- `ui:platform-market.js:data-xmk=review`
+- `ui:platform-market.js:data-xmk=submit`
 
 ## compute — 1 planned
 

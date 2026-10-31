@@ -1138,8 +1138,8 @@
     if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases', shell: 'Cloud Shell' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       if (S.global === 'library' && S.item.startsWith('f/')) { const f = libFiles().find((x) => 'f/' + x.id === S.item); return `<a data-crumb="">${gn}</a>${sep}<b>${esc(f ? f.name : 'File')}</b>`; }   // a file's id address reads as its name
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'shell' && window.XENO_SHELL?.label ? window.XENO_SHELL.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Skills' && window.XENO_SKILLS?.label ? window.XENO_SKILLS.label(x, i, parts) : S.global === 'workspace' && i === 1 && parts[0] === 'Teams' && window.XENO_TEAMS?.served ? (window.XENO_TEAMS.label(x) || 'Team') : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.label ? window.XENO_DIRECTORY.label(x, i, parts) :S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
-      return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(lbl(x, i))}</a>` : `<b>${esc(lbl(x, i))}</b>`)).join(''); }
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'market' && window.XENO_MARKET?.label ? window.XENO_MARKET.label(x) : S.global === 'places' && window.XENO_PLACES?.label ? window.XENO_PLACES.label(x) : S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'shell' && window.XENO_SHELL?.label ? window.XENO_SHELL.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Skills' && window.XENO_SKILLS?.label ? window.XENO_SKILLS.label(x, i, parts) : S.global === 'workspace' && i === 1 && parts[0] === 'Teams' && window.XENO_TEAMS?.served ? (window.XENO_TEAMS.label(x) || 'Team') : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.label ? window.XENO_DIRECTORY.label(x, i, parts) :S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
+      return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => { const name = lbl(x, i); return name == null ? '' : sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(name)}</a>` : `<b>${esc(name)}</b>`); }).join(''); }
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
       const generationId = /^g\/[0-9a-f-]{36}$/i.test(S.item || '') ? S.item.slice(2) : null;
@@ -1532,11 +1532,10 @@
 
   // ---- data: one cache, stale-while-revalidate, each source names where it will come from ----
   // A "needs you" item as an inbox entry. On the platform it carries its own id and time; the picture's samples do not.
-  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, ref: n.ref || null, serverId: n.serverId || null, seen: !!n.seen, detail: n.detail, actor: n.actor || undefined, live: !!n.serverId, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: n.g === 'act' ? 'act' : 'needs', mention: n.kind === 'question' || n.kind === 'task_mentioned' }));
+  const NEED_NOTES = () => (window.XENO_NEEDS || []).map((n, i) => ({ id: n.id ? 'n-' + n.id : 'n' + i, t: n.t, m: n.m, p: n.p, kind: n.kind, act: n.meta, ref: n.ref || null, serverId: n.serverId || null, seen: !!n.seen, archived: !!n.archived, snoozedUntil: n.snoozedUntil || null, detail: n.detail, actor: n.actor || undefined, live: !!n.serverId, at: Number.isFinite(Date.parse(n.at)) ? Date.parse(n.at) : Date.now() - [2, 18, 60, 64, 180][i] * 60000, g: n.g === 'act' ? 'act' : 'needs', mention: n.kind === 'question' || n.kind === 'task_mentioned' }));
   const SRC = {
-    // notifications: no platform API yet (needs one — see the report); sample shaped like a feed
-    // Served by the platform there is no activity feed to read yet, so the inbox holds only what really waits on
-    // the person; the sample activity below is the picture's own and is never shown as theirs.
+    // Served by the platform the inbox is what was written for the person (platform-area.js); the sample activity below
+    // is the picture's own and is never shown as theirs.
     notes: () => (window.XENO_PLATFORM?.served ? NEED_NOTES() : [
       ...NEED_NOTES(),
       { id: 'a1', t: 'Atlas finished a research brief', m: 'dev', p: 'agent', actor: 'Atlas', at: Date.now() - 4 * 60000, g: 'act' },
@@ -1614,16 +1613,39 @@
   }
 
   // ---- notifications: model ----
-  const NS = () => ({ read: new Set(store.get('readN', []) || []), arch: new Set(store.get('archN', []) || []), snooze: store.get('snoozeN', {}) || {}, done: store.get('doneN', {}) || {}, prefs: store.get('ntPrefs', { desktop: false, digest: 'daily', muted: [] }) });
+  const NS = () => ({ read: new Set(store.get('readN', []) || []), arch: new Set(store.get('archN', []) || []), snooze: store.get('snoozeN', {}) || {}, done: store.get('doneN', {}) || {}, prefs: store.get('ntPrefs', { desktop: false, sound: false, digest: 'off', muted: [] }) });
   // per-area notification level (§7z): all = everything · needs = only what needs you (activity leaves the inbox) ·
   // off = nothing rings either. One store (ntPrefs.levels); the old muted list is kept in step for anything reading it.
   const NT_LEVELS = [['all', 'Everything'], ['needs', 'Needs me'], ['off', 'Off']];
   const ntLevel = (st, m) => st.prefs.levels?.[m] || (st.prefs.muted.includes(m) ? 'off' : 'all');
-  function ntSetLevel(m, lv) { const st = NS(); const was = ntLevel(st, m); if (was === lv) return; st.prefs.levels = { ...(st.prefs.levels || {}), [m]: lv }; st.prefs.muted = MODES.map((x) => x.id).filter((id) => ntLevel(st, id) === 'off'); ntSave('ntPrefs', st.prefs); syncBell(); window.XENO_HIST?.record(`${M[m]?.name || m} notifications: ${NT_LEVELS.find((x) => x[0] === lv)[1]}`, null); }
+  function ntSetLevel(m, lv) { const st = NS(); const was = ntLevel(st, m); if (was === lv) return; st.prefs.levels = { ...(st.prefs.levels || {}), [m]: lv }; st.prefs.muted = MODES.map((x) => x.id).filter((id) => ntLevel(st, id) === 'off'); ntSave('ntPrefs', st.prefs); window.XENO_INBOX?.savePrefs?.({ levels: st.prefs.levels }); syncBell(); window.XENO_HIST?.record(`${M[m]?.name || m} notifications: ${NT_LEVELS.find((x) => x[0] === lv)[1]}`, null); }
+  // Desktop notifications need the browser's yes, asked when the person turns them on; a no is said, not hidden.
+  async function ntSetDevice(key, repaint) {
+    const st = NS(), on = !st.prefs[key];
+    if (key === 'desktop' && on) {
+      const yes = typeof Notification !== 'undefined' && (Notification.permission === 'granted' || await Notification.requestPermission().catch(() => 'denied') === 'granted');
+      if (!yes) { toast('Your browser did not allow notifications. You can allow them in its site settings.'); return repaint(); }
+    }
+    st.prefs[key] = on; ntSave('ntPrefs', st.prefs); repaint();
+  }
+  function ntSetDigest(v, repaint) { const st = NS(), was = st.prefs.digest; st.prefs.digest = v; ntSave('ntPrefs', st.prefs); repaint(); Promise.resolve(window.XENO_INBOX?.savePrefs?.({ digest: v }) ?? true).then((ok) => { if (ok) return; const s = NS(); s.prefs.digest = was; ntSave('ntPrefs', s.prefs); repaint(); toast('That could not be saved. Try again.'); }); }
+  function ntBlip() { try { const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; g.gain.setValueAtTime(0.04, a.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.18); o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime + 0.18); o.onended = () => a.close(); } catch {} }
+  /** New rows arrived. Rings only for areas that are not off, and shows the operating system's notice only when the page is not in front. */
+  function ntArrived(rows) {
+    const st = NS(), ring = rows.filter((n) => ntLevel(st, n.m || 'overview') !== 'off'); if (!ring.length) return;
+    if (st.prefs.sound) ntBlip();
+    if (!st.prefs.desktop || !document.hidden || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    ring.slice(0, 3).forEach((r) => { const x = new Notification(r.t, { body: r.detail || r.meta || '', tag: String(r.serverId) }); x.onclick = () => { window.focus(); const n = ntAll().find((y) => y.serverId === r.serverId); if (n) ntOpen(n); x.close(); }; });
+  }
   const ntSave = (k, v) => store.set(k, k === 'snoozeN' || k === 'doneN' || k === 'ntPrefs' ? v : [...v]);
   const ntAll = () => (DS.notes && DS.notes.val) || [];
-  const viewOf = (n, st) => (st.arch.has(n.id) ? 'archive' : st.snooze[n.id] ? 'snoozed' : 'inbox');
-  const isUnread = (n, st) => (n.g === 'needs' || (n.g === 'act' && n.live)) && !n.seen && !st.read.has(n.id) && viewOf(n, st) === 'inbox';
+  // A row on the platform carries its own state. Only an item with no row (derived from what is waiting) keeps it here.
+  const asleep = (at) => { const t = Date.parse(at); return Number.isFinite(t) && t > Date.now(); };
+  const wakeOf = (n, st) => (n.live ? n.snoozedUntil : st.snooze[n.id]);
+  const viewOf = (n, st) => (n.live ? (n.archived ? 'archive' : asleep(n.snoozedUntil) ? 'snoozed' : 'inbox') : st.arch.has(n.id) ? 'archive' : asleep(st.snooze[n.id]) ? 'snoozed' : 'inbox');
+  const isUnread = (n, st) => viewOf(n, st) === 'inbox' && (n.live ? !n.seen : n.g === 'needs' && !n.seen && !st.read.has(n.id));
+  const wakeLabel = (at) => { const d = new Date(at); if (!Number.isFinite(d.getTime())) return ''; const hm = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); return d.toDateString() === new Date().toDateString() ? hm : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ', ' + hm; };
+  const SNOOZES = () => { const h9 = (days) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(9, 0, 0, 0); return d.toISOString(); }; const toMon = ((8 - new Date().getDay()) % 7) || 7; return [['1 hour', new Date(Date.now() + 3600000).toISOString()], ['Tomorrow', h9(1)], ['Next week', h9(toMon)]]; };
   function ntFiltered(view, filter) {
     const st = NS();
     return ntAll().filter((n) => viewOf(n, st) === view && !(n.g === 'act' && ntLevel(st, n.m) !== 'all') && (filter === 'all' || (filter === 'mentions' ? n.mention : n.m === filter)));
@@ -1637,11 +1659,11 @@
     const tools = view === 'snoozed' ? iconBtn(`data-nt-unsnooze data-fk="u${n.id}"`, 'reset', 'Back to inbox')
       : view === 'archive' ? iconBtn(`data-nt-arch data-fk="r${n.id}"`, 'reset', 'Move to inbox')
         : done ? '' : `${iconBtn(`data-nt-snz data-fk="s${n.id}"`, 'clock', 'Snooze  S')}${iconBtn(`data-nt-arch data-fk="a${n.id}"`, 'archive', 'Archive  E')}`;
-    const action = view === 'snoozed' ? `<span class="nt2-wake">${ic('clock')}${esc(st.snooze[n.id])}</span>`
+    const action = view === 'snoozed' ? `<span class="nt2-wake">${ic('clock')}${esc(wakeLabel(wakeOf(n, st)))}</span>`
       : view === 'archive' ? ''
         : done ? `<span class="nt2-done">${ic('check')}${esc(done)}</span>`
-          : n.act ? `<button class="nt2-act${INLINE[n.kind] ? ' primary' : ''}" data-nt-do data-fk="d${n.id}">${esc(n.act)}</button>` : '';
-    const chooser = snoozing ? `<div class="nt2-snz" role="group" aria-label="Snooze until" data-nt="${n.id}"><span>Snooze until</span>${[['1 hour', 'In 1 hour'], ['Tomorrow', 'Tomorrow 9:00'], ['Next week', 'Mon 9:00']].map(([l, w]) => `<button data-nt-snooze="${esc(w)}" data-fk="z${n.id}${l}">${l}</button>`).join('')}<button class="pp-ib" data-nt-snz aria-label="Cancel">${ic('x')}</button></div>` : '';
+          : n.act ? (n.live ? `<span class="nt2-wake">${esc(n.act)}</span>` : `<button class="nt2-act${INLINE[n.kind] ? ' primary' : ''}" data-nt-do data-fk="d${n.id}">${esc(n.act)}</button>`) : '';
+    const chooser = snoozing ? `<div class="nt2-snz" role="group" aria-label="Snooze until" data-nt="${n.id}"><span>Snooze until</span>${SNOOZES().map(([l, w]) => `<button data-nt-snooze="${esc(w)}" data-fk="z${n.id}${l}">${l}</button>`).join('')}<button class="pp-ib" data-nt-snz aria-label="Cancel">${ic('x')}</button></div>` : '';
     return `<div class="nt2${un ? ' unread' : ''}${done ? ' done' : ''}${n.live ? ' arrived' : ''}" tabindex="0" role="button" data-nt="${n.id}" data-fk="n${n.id}" aria-label="${esc(n.t)}${un ? ', unread' : ''}">
       <span class="nt2-mark"></span><span class="nt2-ic">${p ? pIconFull(p, 18) : ic('bell')}</span>
       <span class="nt2-main">
@@ -1706,7 +1728,8 @@
       <div class="pl-stack">
         <section class="pl pl-list"><div class="pl-cap"><span>Delivery</span></div>
           <button class="us-toggle" role="switch" aria-checked="${p.desktop}" data-nt-pref="desktop" data-fk="pd"><span class="hp-t">Desktop notifications<small>Shown by your operating system when XENO is in the background</small></span><span class="sw"><i></i></span></button>
-          <div class="nt-seg-row"><span class="hp-t">Email digest<small>A summary of what you missed</small></span><div class="pl-seg" role="radiogroup" aria-label="Email digest">${['off', 'daily', 'weekly'].map((k) => `<button role="radio" aria-checked="${p.digest === k}" data-nt-digest="${k}" data-fk="dg${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
+          <button class="us-toggle" role="switch" aria-checked="${!!p.sound}" data-nt-pref="sound" data-fk="ps"><span class="hp-t">Sound<small>A short sound when something new arrives</small></span><span class="sw"><i></i></span></button>
+          <div class="nt-seg-row"><span class="hp-t">Email digest<small>What is unread in your inbox, once a day or a week</small></span><div class="pl-seg" role="radiogroup" aria-label="Email digest">${['off', 'daily', 'weekly'].map((k) => `<button role="radio" aria-checked="${p.digest === k}" data-nt-digest="${k}" data-fk="dg${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
         </section>
         <section class="pl pl-list"><div class="pl-cap"><span>Modes</span><span>What each mode tells you about</span></div>
           ${MODES.map((m) => { const lv = ntLevel(NS(), m.id); return `<div class="nt-seg-row"><span class="hp-t">${esc(M[m.id].name)}</span><div class="pl-seg" role="radiogroup" aria-label="${esc(M[m.id].name)} notifications">${NT_LEVELS.map(([k, l]) => `<button role="radio" aria-checked="${lv === k}" data-nt-level="${m.id}:${k}" data-fk="lv${m.id}${k}">${l}</button>`).join('')}</div></div>`; }).join('')}
@@ -1724,27 +1747,57 @@
     if (e.target.closest('[data-nt-all]')) return markAllRead(repaint);
     if (e.target.closest('[data-nt-set]')) { S.ntSettings = true; return repaint(); }
     if (e.target.closest('[data-nt-back]')) { S.ntSettings = false; return repaint(); }
-    const pf = e.target.closest('[data-nt-pref]'); if (pf) { st.prefs[pf.dataset.ntPref] = !st.prefs[pf.dataset.ntPref]; ntSave('ntPrefs', st.prefs); return repaint(); }
-    const dg = e.target.closest('[data-nt-digest]'); if (dg) { st.prefs.digest = dg.dataset.ntDigest; ntSave('ntPrefs', st.prefs); return repaint(); }
+    const pf = e.target.closest('[data-nt-pref]'); if (pf) return ntSetDevice(pf.dataset.ntPref, repaint);
+    const dg = e.target.closest('[data-nt-digest]'); if (dg) return ntSetDigest(dg.dataset.ntDigest, repaint);
     const lvb = e.target.closest('[data-nt-level]'); if (lvb) { const [m, lv] = lvb.dataset.ntLevel.split(':'); ntSetLevel(m, lv); return repaint(); }
     if (e.target.closest('[data-nt-viewall]')) { hidePops(); return go('global', { global: 'inbox', item: null }); }
     const gr = e.target.closest('[data-nt-grp]'); if (gr) { const a = new Set(S.ntOpenGroups || []); a.has(gr.dataset.ntGrp) ? a.delete(gr.dataset.ntGrp) : a.add(gr.dataset.ntGrp); S.ntOpenGroups = [...a]; return repaint(); }
     const row = e.target.closest('[data-nt]'); if (!row) return;
     const n = ntAll().find((x) => x.id === row.dataset.nt); if (!n) return;
     if (e.target.closest('[data-nt-snz]')) { S.ntSnoozeOpen = S.ntSnoozeOpen === n.id ? null : n.id; return repaint(); }
-    const sz = e.target.closest('[data-nt-snooze]'); if (sz) { st.snooze[n.id] = sz.dataset.ntSnooze; ntSave('snoozeN', st.snooze); S.ntSnoozeOpen = null; syncBell(); repaint(); return undoToast(`Snoozed until ${sz.dataset.ntSnooze}`, () => { const s = NS().snooze; delete s[n.id]; ntSave('snoozeN', s); syncBell(); repaint(); }); }
-    if (e.target.closest('[data-nt-unsnooze]')) { delete st.snooze[n.id]; ntSave('snoozeN', st.snooze); syncBell(); return repaint(); }
+    const sz = e.target.closest('[data-nt-snooze]'); if (sz) { S.ntSnoozeOpen = null; return ntSnooze(n, sz.dataset.ntSnooze, repaint); }
+    if (e.target.closest('[data-nt-unsnooze]')) return ntSnooze(n, null, repaint);
     if (e.target.closest('[data-nt-arch]')) return ntArchive(n, repaint);
     if (e.target.closest('[data-nt-do]') && INLINE[n.kind]) return ntInline(n, repaint);
     ntOpen(n);
   }
-  function markAllRead(repaint) { const st = NS(), ids = ntAll().filter((n) => isUnread(n, st)).map((n) => n.id); if (!ids.length) return toast('Nothing unread'); ids.forEach((i) => st.read.add(i)); ntSave('readN', st.read); { const srv = ntAll().filter((n) => ids.includes(n.id) && n.serverId).map((n) => n.serverId); if (srv.length) window.XENO_TASKS?.markRead?.(srv); } syncBell(); repaint(); undoToast(`Marked ${ids.length} as read`, () => { const r = NS().read; ids.forEach((i) => r.delete(i)); ntSave('readN', r); syncBell(); repaint(); }); }
+  // Show the result at once; the platform's answer decides whether it stands.
+  function ntSent(ok, undo, repaint, msg) { Promise.resolve(ok).then((good) => { if (good) return; undo(); syncBell(); repaint(); toast(msg); }); }
+  function markAllRead(repaint) {
+    const st = NS(), rows = ntAll().filter((n) => isUnread(n, st)); if (!rows.length) return toast('Nothing unread');
+    const live = rows.filter((n) => n.live), local = rows.filter((n) => !n.live);
+    local.forEach((n) => st.read.add(n.id)); ntSave('readN', st.read); live.forEach((n) => { n.seen = true; });
+    const back = () => { const r = NS().read; local.forEach((n) => r.delete(n.id)); ntSave('readN', r); live.forEach((n) => { n.seen = false; }); };
+    if (live.length) ntSent(window.XENO_INBOX?.read(live.map((n) => n.serverId)), back, repaint, 'That could not be marked read. Try again.');
+    syncBell(); repaint();
+    undoToast(`Marked ${rows.length} as read`, () => { back(); if (live.length) window.XENO_INBOX?.read(live.map((n) => n.serverId), false); syncBell(); repaint(); });
+  }
   // the Inbox page's sidebar primary action is the same command
   document.addEventListener('click', (e) => { if (S.view === 'global' && S.global === 'inbox' && e.target.closest('#panel .act.primary')) { e.stopPropagation(); markAllRead(paintInboxPage); } }, true);
   function ntArchive(n, repaint) {
+    if (n.live) {
+      const was = n.archived, seen = n.seen, wake = n.snoozedUntil, set = (a) => { n.archived = a; if (a) { n.seen = true; n.snoozedUntil = null; } };
+      const back = () => { n.archived = was; n.seen = seen; n.snoozedUntil = wake; };
+      set(!was); ntSent(window.XENO_INBOX?.archive([n.serverId], !was), back, repaint, 'That could not be changed. Try again.'); syncBell(); repaint();
+      if (!was) undoToast('Archived', () => { back(); window.XENO_INBOX?.archive([n.serverId], false); syncBell(); repaint(); });
+      return;
+    }
     const st = NS(), was = st.arch.has(n.id); was ? st.arch.delete(n.id) : st.arch.add(n.id); st.read.add(n.id);
     ntSave('archN', st.arch); ntSave('readN', st.read); syncBell(); repaint();
     if (!was) undoToast('Archived', () => { const a = NS().arch; a.delete(n.id); ntSave('archN', a); syncBell(); repaint(); });
+  }
+  /** Until a time, or null to wake it now. A row asleep comes back unread. */
+  function ntSnooze(n, until, repaint) {
+    const said = until ? `Snoozed until ${wakeLabel(until)}` : null;
+    if (n.live) {
+      const wake = n.snoozedUntil, seen = n.seen, back = () => { n.snoozedUntil = wake; n.seen = seen; };
+      n.snoozedUntil = until; if (until) n.seen = false;
+      ntSent(window.XENO_INBOX?.snooze([n.serverId], until), back, repaint, 'That could not be snoozed. Try again.'); syncBell(); repaint();
+      if (said) undoToast(said, () => { back(); window.XENO_INBOX?.snooze([n.serverId], null); syncBell(); repaint(); });
+      return;
+    }
+    const st = NS(); if (until) st.snooze[n.id] = until; else delete st.snooze[n.id]; ntSave('snoozeN', st.snooze); syncBell(); repaint();
+    if (said) undoToast(said, () => { const s = NS().snooze; delete s[n.id]; ntSave('snoozeN', s); syncBell(); repaint(); });
   }
   // act in place, optimistically: the row shows the result at once, rolls back if the server refuses
   function ntInline(n, repaint) {
@@ -1755,9 +1808,11 @@
       undoToast(`${label}: ${n.t}`, () => { const x = NS(); delete x.done[n.id]; x.arch.delete(n.id); ntSave('doneN', x.done); ntSave('archN', x.arch); syncBell(); repaint(); });
     }, 700);
   }
-  function ntOpen(n) { const st = NS(); st.read.add(n.id); ntSave('readN', st.read); syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled();
+  function ntOpen(n) { const st = NS(); if (n.live) { if (!n.seen) { n.seen = true; window.XENO_INBOX?.read([n.serverId]); } } else { st.read.add(n.id); ntSave('readN', st.read); } syncBell(); hidePops(); if (n.kind === 'schedule_failed') return window.XA.scheduled();
+    if (n.ref && n.ref.startsWith('/workspace')) return window.XENO_ADDR.go(window.XENO_ADDR.toHash(n.ref));   // the row names its own address
+    if (n.ref && n.ref.startsWith('/invite/')) return location.assign(n.ref);
     if (n.ref && /^support\/T-\d+$/.test(n.ref)) return go('global', { global: 'support', item: n.ref.slice(8) });
-    if (n.ref && /^T-\d+$/.test(n.ref)) { if (n.serverId) window.XENO_TASKS?.markRead?.([n.serverId]); return go('global', { global: 'tasks', item: n.ref }); } go('product', { product: n.p, item: n.t }); }
+    if (n.ref && /^T-\d+$/.test(n.ref)) return go('global', { global: 'tasks', item: n.ref }); go('product', { product: n.p, item: n.t }); }
   function ntKey(e, el, repaint) {
     if (!el || !el.dataset.nt) { if (el && el.dataset.ntGrp && e.key === 'Enter') { e.preventDefault(); el.click(); } return; }
     const n = ntAll().find((x) => x.id === el.dataset.nt); if (!n) return;
@@ -1781,7 +1836,10 @@
     popKeys(m, '.nt2', (e, el) => ntKey(e, el, () => openBell(true)));
     if (!keep) (m.querySelector('.nt2') || m.querySelector('[role="tab"][aria-selected="true"]'))?.focus({ preventScroll: true });
   }
-  window.XENO_NT = { levels: NT_LEVELS, level: (m) => ntLevel(NS(), m), setLevel: ntSetLevel, modes: () => MODES.map((m) => [m.id, M[m.id].name]) };
+  window.XENO_NT = { levels: NT_LEVELS, level: (m) => ntLevel(NS(), m), setLevel: ntSetLevel, modes: () => MODES.map((m) => [m.id, M[m.id].name]), prefs: () => NS().prefs, arrived: ntArrived,
+    setDevice: (k, repaint) => ntSetDevice(k, repaint || render), setDigest: (v, repaint) => ntSetDigest(v, repaint || render),
+    remotePrefs: (p) => { const st = NS(); st.prefs.digest = p.digest; st.prefs.levels = p.levels || {}; ntSave('ntPrefs', st.prefs); syncBell(); },
+    drainLocalArchive: () => { const a = NS().arch, ids = [...a].filter((i) => i.startsWith('n-note-')); if (!ids.length) return []; ids.forEach((i) => a.delete(i)); ntSave('archN', a); return ids.map((i) => i.slice(7)); } };
   // the bell rings only for unread inbox items in areas that are not off
   function syncBell() {
     const st = NS(), un = ntAll().filter((n) => isUnread(n, st) && ntLevel(st, n.m) !== 'off').length;

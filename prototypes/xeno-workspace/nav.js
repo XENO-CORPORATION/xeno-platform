@@ -134,7 +134,7 @@ window.XENO_GLOBAL_NAV = {
   places: ['Places', 'Your workspace as a building', null, [['Building', [['All floors', ''], ['Lobby', '']]]]],
   anima: ['Anima', 'Your agent', 'New chat with Anima', [['Minds', [['Atlas — research', 'Running'], ['Juno — inbox', 'Idle'], ['Kit — code review', 'Idle']]], ['Soul', [['Memory', '1,204 episodes'], ['Skills it learned', '17']]], ['Together', [['Swarms', '1']]], ['Chats', [['Plan the offsite', 'Today'], ['Summarise my week', 'Mon']]]]],
   community: ['Community', 'Forum', 'New thread', [['Your feed', [['For you', ''], ['Following', '3 new'], ['My threads', '2 replies']]], ['Spaces', [['Questions', ''], ['Discussions', ''], ['Showcase', ''], ['Feedback', ''], ['Announcements', '']]], ['Report', [['Report a problem', 'F1'], ['My reports', ''], ['Moderation', '']]]]],
-  market: ['Marketplace', 'Store', 'Browse', [['Apps', [['All apps', ''], ['Tools', ''], ['Blocks', ''], ['Plugins & MCP', ''], ['Blueprints', '']]], ['Agents', [['All agents', ''], ['Minds', ''], ['Teams', ''], ['Models', '']]], ['Yours', [['Purchases', '2'], ['Rentals', '1'], ['Seller console', '']]]]],
+  market: ['Marketplace', 'Store', 'Browse', [['Apps', [['All apps', ''], ['Tools', ''], ['Blocks', ''], ['Plugins & MCP', ''], ['Blueprints', '']]], ['Agents', [['All agents', ''], ['Minds', ''], ['Teams', ''], ['Models', '']]], ['Yours', [['Purchases', ''], ['Rentals', ''], ['Seller console', '']]]]],
 };
 
 // ── Chat keeps ONE history per context: a chat started in Studio stays in Studio, Overview's
