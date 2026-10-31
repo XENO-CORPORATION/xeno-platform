@@ -1,6 +1,6 @@
 import type { ProductDocs } from './_types';
 
-/* XENO View desktop documentation: reconciled against xeno-view 0.2.1 (Windows), 2026-10-31. Every claim traces to that
+/* XENO View desktop documentation: reconciled against xeno-view 0.2.2 (Windows), 2026-10-31. Every claim traces to that
  * release: src/main/index.ts (door, open dialog, clipboard, window), fileScanner.ts (extensions, natural order),
  * escalation.ts (Pixel, Motion, Sound, Form), aiEdit.ts (AI Restyle through the door, .bak on replace), updater.ts
  * (gated updates, 30-minute check), src/renderer/src/App.tsx (the keyboard table), electron-builder.yml (installer and
@@ -9,7 +9,7 @@ const view: ProductDocs = {
   slug: 'view',
   productName: 'XENO View',
   tagline: 'One Windows app for your images, video, audio and 3D models.',
-  version: '0.2.1',
+  version: '0.2.2',
   updated: '2026-10-31',
   seo: {
     title: 'XENO View documentation',
@@ -28,8 +28,8 @@ const view: ProductDocs = {
         {
           slug: 'installation',
           title: 'Installation',
-          description: 'Download and install XENO View 0.2.1 on Windows, and make it your viewer.',
-          body: "## Installation\n\nXENO View 0.2.1 is available for **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/view), choose **Download for Windows**.\n2. Run `XENO View Setup 0.2.1.exe` and choose where to install it.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **UNSIGNED BUILD** badge sits in its window.\n\n## Make it your viewer\n\nThe installer registers XENO View for all 24 file types, but Windows keeps your current default until you change it.\n\n- For one file type: right-click a file, choose **Open with → Choose another app**, pick **XENO View** and choose **Always**.\n- For many: **Settings → Apps → Default apps → XENO View**.\n\n## Updates\n\nFrom 0.2.1, XENO View keeps itself up to date while you are signed in with a plan that includes updates. It checks shortly after it starts and every 30 minutes, downloads a new version in the background and checks it against the published fingerprint. When it is ready it asks whether to restart now; if you choose **Later**, it installs the next time you quit. It never installs an older version.\n\nCopies of 0.1.0 cannot update themselves: install 0.2.1 once from the product page, over the top.\n\n## Uninstalling\n\nUse **Settings → Apps → XENO View → Uninstall**. Your files are not touched.",
+          description: 'Download and install XENO View 0.2.2 on Windows, and make it your viewer.',
+          body: "## Installation\n\nXENO View 0.2.2 is available for **Windows 10 and 11 (x64)**.\n\n1. On the [product page](/product/view), choose **Download for Windows**.\n2. Run `XENO View Setup 0.2.2.exe` and choose where to install it.\n3. The installer is **not code-signed yet**, so Windows SmartScreen may show *Windows protected your PC*. Choose **More info → Run anyway**. The app says so too: an **UNSIGNED BUILD** badge sits in its window.\n\n## Make it your viewer\n\nThe installer registers XENO View for all 24 file types, but Windows keeps your current default until you change it.\n\n- For one file type: right-click a file, choose **Open with → Choose another app**, pick **XENO View** and choose **Always**.\n- For many: **Settings → Apps → Default apps → XENO View**.\n\n## Updates\n\nFrom 0.2.2, XENO View keeps itself up to date while you are signed in with a plan that includes updates. It checks shortly after it starts and every 30 minutes, downloads a new version in the background and checks it against the published fingerprint. When it is ready it asks whether to restart now; if you choose **Later**, it installs the next time you quit. It never installs an older version.\n\nCopies of 0.1.0 cannot update themselves: install 0.2.2 once from the product page, over the top.\n\n## Uninstalling\n\nUse **Settings → Apps → XENO View → Uninstall**. Your files are not touched.",
         },
         {
           slug: 'signing-in',

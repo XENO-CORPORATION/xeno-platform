@@ -86,7 +86,7 @@ test('the View product design is authored in-repo, downloads through the gate an
   assert.match(importer, /'XENO View\.dc\.html': 'view'/, 'the importer owns the View design');
   assert.ok(onDisk('src/content/product-designs/XENO View.dc.html'), 'the View design source is in the repo');
   const html = read('public/product-pages/view/index.html');
-  assert.match(html, /v0\.2\.1/, 'names the published version');
+  assert.match(html, /v0\.2\.2/, 'names the published version');
   assert.match(html, /\/product\/view\/download\/win/, 'links the gated download route');
   assert.doesNotMatch(html, /updates\.xenostudio\.ai\/apps\/view/, 'never a raw installer URL');
   assert.match(html, /not code-signed yet[\s\S]*SmartScreen/, 'the unsigned-installer notice (§5c site half)');
