@@ -35,6 +35,8 @@
     "test:workspace-analytics": "cd src/server && node tests/workspace-analytics.test.mjs",
     "test:analytics-ui": "node prototypes/xeno-workspace/tests/analytics-test.mjs",
     "test:export-audit": "node --test scripts/export-audit-awaited.test.mjs",
+    "test:corpus-pcs-ui": "node prototypes/xeno-workspace/tests/corpus-pcs-test.mjs",
+    "test:corpus-relay": "node src/server/tests/corpus-relay.test.mjs",
     "test:fonts": "node src/server/tests/fonts.test.mjs",
     "test:font-file": "node --test scripts/font-file.test.mjs",
     "test:fonts-ui": "node prototypes/xeno-workspace/tests/fonts-test.mjs",

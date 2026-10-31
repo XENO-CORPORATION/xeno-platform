@@ -11372,6 +11372,21 @@
       "status": "planned",
       "class": "irreversible",
       "scope": "fonts:write"
+    },
+    "route:browserRelayRoutes.js:GET / (accountCorpusRouter)": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:browserRelayRoutes.js:PATCH /:id (accountCorpusRouter)": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "workspace:admin"
+    },
+    "route:browserRelayRoutes.js:DELETE /:id (accountCorpusRouter)": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "workspace:admin"
     }
   }
 }

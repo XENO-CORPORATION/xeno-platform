@@ -24,8 +24,8 @@ test('the seed upserts xeno-corpus with its checked-in authority', async () => {
   assert.equal(row.params[5], true);
 });
 
-test('corpus authority: identity plus inference and credits for the agent panel; no projects, team or billing', () => {
-  assert.deepEqual([...scopesForClient('xeno-corpus')].sort(), ['email', 'inference:run', 'ledger:read', 'ledger:spend', 'openid', 'profile']);
+test('corpus authority: identity, inference and credits for the agent panel, and the PC connection for XENO MCP; no projects, team or billing', () => {
+  assert.deepEqual([...scopesForClient('xeno-corpus')].sort(), ['corpus:connect', 'email', 'inference:run', 'ledger:read', 'ledger:spend', 'openid', 'profile']);
 });
 
 test('the version floor and the door reach xeno-corpus builds', () => {
@@ -34,4 +34,11 @@ test('the version floor and the door reach xeno-corpus builds', () => {
     const id = identifyClient({ headers: { 'x-xeno-client': 'xeno-corpus/0.1.0 (win32; x64)' } });
     assert.equal(id?.product, 'corpus', JSON.stringify(id));
   }
+});
+
+test('corpus:connect is held by the Corpus desktop client alone, and never added to what a stranger can ask for by default', async () => {
+  const { CLIENT_AUTHORITY } = await import('../src/server/config/oidcAuthorityPolicy.js');
+  const holders = Object.entries(CLIENT_AUTHORITY).filter(([, scopes]) => scopes.includes('corpus:connect')).map(([id]) => id);
+  assert.deepEqual(holders, ['xeno-corpus']);
+  assert.ok(!CLIENT_AUTHORITY['xeno-corpus'].includes('browser:connect'), 'a Corpus sign-in cannot connect a browser');
 });

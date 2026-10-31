@@ -74,6 +74,23 @@ export function parseTools(raw) {
   return tools;
 }
 
+/** The projects a Corpus PC turned on, from its `hello`. An id and a name. A name is only ever a folder's last segment, so anything
+ *  longer is cut to that: this row is read back to agents, and a full path says who someone is and how their disk is laid out. */
+export const MAX_PROJECTS = 200;
+export function parseProjects(raw) {
+  if (!Array.isArray(raw)) throw new RelayProtocolError('bad_hello', 'hello.projects must be an array.');
+  if (raw.length > MAX_PROJECTS) throw new RelayProtocolError('bad_hello', `A PC may offer at most ${MAX_PROJECTS} projects.`);
+  const seen = new Set();
+  return raw.map((p) => {
+    if (!isObject(p) || !/^[A-Za-z0-9_-]{1,64}$/.test(String(p.id || ''))) throw new RelayProtocolError('bad_hello', 'Each project needs an id.');
+    if (seen.has(p.id)) throw new RelayProtocolError('bad_hello', `Duplicate project id: ${p.id}`);
+    seen.add(p.id);
+    const name = String(p.name ?? '').split(/[\\/]/).filter(Boolean).pop()?.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120);
+    if (!name) throw new RelayProtocolError('bad_hello', 'Each project needs a name.');
+    return { id: p.id, name };
+  });
+}
+
 /** `auth` — the extension's first frame, carrying the access token and its DPoP proof. */
 export function parseAuth(frame) {
   if (!short(frame.accessToken, 8192)) throw new RelayProtocolError('bad_auth', 'auth.accessToken is required.');
@@ -120,6 +137,19 @@ export function parseResult(frame) {
 }
 
 /** The server's own frames. Built here so both the socket and any test speak one shape. */
+/**
+ * What rides this wire. The frames are the same; these are the differences, and there are few on purpose. A Corpus answer keeps its
+ * whole size on the record because nothing else reads it and the row forgets it at once (browserRelay.forgetCall).
+ *
+ * 🔴 XENO Corpus's desktop client decides what to do from the WORDS of a 4403 reason: "scope" asks the person to sign in again, "turned off"
+ * keeps its installation id, "revoked" means removed and mints a new one when the person asks. So they're a contract: reading "turned off" as
+ * "removed" would let a new id walk round the person's switch. Changing one is a coordinated change, and corpus-relay.test.mjs pins all three.
+ */
+export const RELAY_SURFACES = Object.freeze({
+  browser: Object.freeze({ surface: 'browser', path: '/api/v2/browser/connect', scope: 'browser:connect', noun: 'browser', off: 'XENO chats are not allowed to use this browser', signIn: 'Connecting a browser needs a sign-in bound to this browser’s key. Sign in from the extension.' }),
+  corpus: Object.freeze({ surface: 'corpus', path: '/api/v2/corpus/connect', scope: 'corpus:connect', noun: 'PC', off: 'This PC is turned off in your XENO account', signIn: 'Connecting a PC needs a sign-in bound to this PC’s key. Sign in from XENO Corpus.', recordCap: 400_000, note: 'The answer was too long and this is only its start. Ask a narrower question.' }),
+});
+
 export const outbound = {
   challenge: (nonce) => ({ type: 'challenge', nonce }),
   ready: (installation) => ({ type: 'ready', installation }),
@@ -150,12 +180,12 @@ export const RESULT_WIRE_CAP = 400_000;
 export const RESULT_RECORD_CAP = 60_000;
 
 /** Bound one result's stored copy without lying about it: the truncation is stated, never silent. */
-export function boundOutput(output) {
+export function boundOutput(output, cap = RESULT_RECORD_CAP, note = 'The step returned more than the turn can carry. Ask the browser for a narrower answer.') {
   const json = JSON.stringify(output ?? null);
   if (json === undefined) return { output: null, truncated: false };
-  if (json.length <= RESULT_RECORD_CAP) return { output, truncated: false };
+  if (json.length <= cap) return { output, truncated: false };
   return {
-    output: { truncated: true, excerpt: json.slice(0, RESULT_RECORD_CAP), note: 'The step returned more than the turn can carry. Ask the browser for a narrower answer.' },
+    output: { truncated: true, excerpt: json.slice(0, cap), note },
     truncated: true,
   };
 }

@@ -17,6 +17,9 @@ export const OIDC_SCOPES = Object.freeze([
   // XENO Extension: let platform chats use THIS browser (register an installation, hold the relay connection).
   // Separate from inference on purpose: driving a browser is a different authority from spending credits.
   'browser:connect',
+  // XENO Corpus desktop: hold the connection that lets agents on XENO MCP read a project the person turned on, on this PC. Also its own
+  // authority: reading someone's documents is not spending their credits.
+  'corpus:connect',
   // XENO workspace agent surface (WORKSPACE AGENT SURFACE SPEC P2, approved 2026-10-20): the per-area scopes a
   // self-registered client may hold on the 'xeno-workspace' audience (capabilities/scopes.js, minus the two Tasks ones above)
   ...WORKSPACE_SCOPES.filter((s) => s !== 'tasks:read' && s !== 'tasks:write'),
@@ -72,7 +75,7 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // XENO Corpus desktop: identity, plus gateway inference and the credits balance since 0.3.0 mounted the XENO Agent
   // panel: an agent turn a person starts in Corpus runs on, and bills, that person's own account (surface-account seam,
   // the same set as xeno-workshop's without its storage). The corpus itself stays the person's local files: no projects or team.
-  'xeno-corpus': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend'],
+  'xeno-corpus': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'corpus:connect'],
   // XENO Workshop: identity, the credits balance, and gateway inference — an agent turn a person
   // starts in the workshop runs on, and bills, that person's own account (surface-account seam).
   // storage:read/write (owner, 2026-10-23): a project's files live in the person's XENO Storage

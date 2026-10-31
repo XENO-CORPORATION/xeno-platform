@@ -153,7 +153,8 @@ import spawnCanvasRoutes from './routes/spawnCanvasRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
-import browserRelayRoutes, { accountBrowserRouter } from './routes/browserRelayRoutes.js';
+import browserRelayRoutes, { accountBrowserRouter, corpusRelayRoutes, accountCorpusRouter } from './routes/browserRelayRoutes.js';
+import { sweepForgottenCalls } from './services/browserRelay.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
 import { handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade as authenticatePortUpgrade } from './services/computePorts.js';
 import inferenceCredentialRoutes from './routes/inferenceCredentialRoutes.js';
@@ -812,6 +813,9 @@ if (process.env.OIDC_ENABLED === 'true') {
   // req.auth (scope + DPoP binding) because every route here requires a BOUND token (see the routes file).
   app.use('/api/v2/browser', databaseMiddleware, authMiddleware, browserRelayRoutes);
   app.use('/api/account/browsers', databaseMiddleware, authMiddleware, accountBrowserRouter);
+  // XENO Corpus on a person's PC, over the same relay (services/corpusLocalMcp.js)
+  app.use('/api/v2/corpus', databaseMiddleware, authMiddleware, corpusRelayRoutes);
+  app.use('/api/account/corpus-pcs', databaseMiddleware, authMiddleware, accountCorpusRouter);
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);
@@ -4291,6 +4295,12 @@ initBackgroundJobs(pool).catch(err => {
 backgroundLeader.whenLeader(() => startNotificationEmailSweep(pool));
 // XENO Tasks: notification email (on unless TASK_NOTIFICATION_EMAILS=false) and due reminders, on the leader only
 backgroundLeader.whenLeader(() => startTaskSweeps(pool, { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases }));
+// a Corpus answer is forgotten as soon as it's read; this catches the ones a replica died holding
+backgroundLeader.whenLeader(() => {
+  const forget = setInterval(() => sweepForgottenCalls(pool).catch((e) => console.error('[Relay] forget sweep failed:', e.message)), 5 * 60_000);
+  forget.unref?.();
+  return () => clearInterval(forget);
+});
 // the inbox: a run that ended tells its owner even if nobody has its page open; digests go out hourly when switched on
 backgroundLeader.whenLeader(() => {
   const runs = setInterval(() => sweepLiveRuns(pool).catch((e) => console.error('[AgentRuns] sweep failed:', e.message)), 60000);

@@ -141,10 +141,10 @@ export async function revoke(db, installationId) {
  * every call still waiting on it. Used by revoke and by the person turning chats OFF — 🔴 which must not revoke:
  * before 2026-10-17 "turn off" called revoke(), so pausing a browser permanently deleted the connection.
  */
-export async function disconnect(db, installationId, code = 'revoked', message = 'XENO chats are not allowed to use this browser.') {
+export async function disconnect(db, installationId, code = 'revoked', message = 'XENO chats are not allowed to use this browser.', closeReason = null) {
   const key = String(installationId);
-  closeConnection(key, CLOSE.FORBIDDEN, code === 'revoked' ? 'revoked' : 'XENO chats are not allowed to use this browser');
-  await notify(db, { installation: key, close: true, reason: code });
+  closeConnection(key, CLOSE.FORBIDDEN, closeReason || (code === 'revoked' ? 'revoked' : 'XENO chats are not allowed to use this browser'));
+  await notify(db, { installation: key, close: true, reason: closeReason || code });
   await failQueued(db, key, code, message);
 }
 
@@ -183,7 +183,9 @@ export function attach({ db, installation, installationId, socket, np }) {
 }
 
 export function detach(socket) {
-  for (const [key, entry] of connections) if (entry.socket === socket) connections.delete(key);
+  let held = false;
+  for (const [key, entry] of connections) if (entry.socket === socket) { connections.delete(key); held = true; }
+  return held;
 }
 
 export const liveInstallationIds = () => [...connections.keys()];
@@ -223,11 +225,11 @@ export async function notify(db, payload) {
  *  refusal — a refused step is a RESULT the model must report truthfully, not an exception the turn
  *  dies on. The only throw is a database failure, which is genuinely our problem. */
 export async function callTool(db, {
-  installationId, tool, args, conversationId = null, turnId = null, tabGroup = null,
+  callId: givenCallId = null, installationId, tool, args, conversationId = null, turnId = null, tabGroup = null,
   actorUserId, stepMs = STEP_DEADLINE_MS, approvalMs = APPROVAL_DEADLINE_MS, onEvent = null, signal: abort = null,
 }) {
   ensureListening(db);
-  const callId = uuid();
+  const callId = givenCallId || uuid();
   const deadline = new Date(nowMs() + stepMs);
   // The row is inserted BEFORE anything is sent, so a call that crashes the replica mid-flight is still
   // recoverable and still idempotent: the extension's ledger and this row agree on one id.
@@ -345,9 +347,9 @@ export async function markApproval(db, callId, state) {
 /** `result` — the outcome, recorded once. 🔴 IDEMPOTENT: a duplicate result for a finished call is
  *  ignored, never re-applied, because the second write could carry a different answer and the first one
  *  is what the turn already read. */
-export async function recordResult(db, callId, ok, outputOrError) {
+export async function recordResult(db, callId, ok, outputOrError, { recordCap, note } = {}) {
   if (ok) {
-    const bounded = boundOutput(outputOrError);
+    const bounded = boundOutput(outputOrError, recordCap, note);
     const { rows } = await db.query(
       `UPDATE browser_calls SET state = 'done', ok = true, result = $2::jsonb, updated_at = now()
         WHERE call_id = $1 AND state NOT IN ('done','failed') RETURNING call_id`,
@@ -369,6 +371,36 @@ export async function recordHello(db, installationId, { tools, extensionVersion 
   await db.query(
     `UPDATE browser_installations SET tools = $2::jsonb, extension_version = $3, last_seen_at = now(), updated_at = now()
       WHERE id = $1 AND revoked_at IS NULL`, [installationId, JSON.stringify(tools), extensionVersion]);
+}
+
+/** `hello` from a Corpus PC. `tools` stays empty on purpose: it is what offers a device to a chat as a browser. */
+export async function recordCorpusHello(db, installationId, { tools, projects, appVersion = null }) {
+  await db.query(
+    `UPDATE browser_installations SET offered_tools = $2::jsonb, projects = $3::jsonb, extension_version = $4, last_seen_at = now(), updated_at = now()
+      WHERE id = $1 AND surface = 'corpus' AND revoked_at IS NULL`, [installationId, JSON.stringify(tools), JSON.stringify(projects), appVersion]);
+}
+
+/**
+ * A Corpus call is over, so its row stops holding the person's words: what was asked and what came back go, and its status and the size
+ * remain. A call still open ends here too, so an answer arriving after the caller gave up can't be written back into the row.
+ */
+const FORGET = `result_bytes = COALESCE(octet_length(result::text), result_bytes), result = NULL, args = '{}'::jsonb,
+    ok = COALESCE(ok, false), error_code = CASE WHEN state IN ('done', 'failed') THEN error_code ELSE 'abandoned' END,
+    state = CASE WHEN state IN ('done', 'failed') THEN state ELSE 'failed' END, updated_at = now()`;
+export async function forgetCall(db, callId) {
+  await db.query(`UPDATE browser_calls SET ${FORGET} WHERE call_id = $1`, [callId]);
+}
+/** What forgetCall never reached, because the replica died holding it, and old status rows. Runs on the leader. */
+export async function sweepForgottenCalls(db) {
+  const surfaces = `installation IN (SELECT id FROM browser_installations WHERE surface <> 'browser')`;
+  const forgot = await db.query(`UPDATE browser_calls SET ${FORGET} WHERE ${surfaces} AND deadline < now() - interval '2 minutes' AND (result IS NOT NULL OR args <> '{}'::jsonb)`);
+  const gone = await db.query(`DELETE FROM browser_calls WHERE ${surfaces} AND created_at < now() - interval '30 days'`);
+  return { forgot: forgot.rowCount, gone: gone.rowCount };
+}
+
+/** A Corpus PC's socket closed, so it stops counting as connected now: a call would otherwise wait out its deadline on a PC that isn't there. */
+export async function markCorpusGone(db, installationId) {
+  await db.query(`UPDATE browser_installations SET last_seen_at = now() - interval '61 seconds' WHERE id = $1 AND surface = 'corpus' AND revoked_at IS NULL`, [installationId]).catch(() => {});
 }
 
 export async function touch(db, installationId) {

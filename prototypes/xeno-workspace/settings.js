@@ -48,7 +48,7 @@
 
   // ---------- the sections ----------
   const SECT = [
-    ['Personal', [['profile', 'Profile', 'user'], ['security', 'Sign-in & security', 'lock'], ['sessions', 'Sessions & devices', 'hub'], ['browsers', 'Connected browsers', 'globe'], ['apps', 'Apps & sign-in methods', 'flow'], ['keys', 'API keys', 'code'], ['providers', 'Provider keys & inference', 'box']]],
+    ['Personal', [['profile', 'Profile', 'user'], ['security', 'Sign-in & security', 'lock'], ['sessions', 'Sessions & devices', 'hub'], ['browsers', 'Connected browsers', 'globe'], ['pcs', 'Corpus on your PCs', 'layers'], ['apps', 'Apps & sign-in methods', 'flow'], ['keys', 'API keys', 'code'], ['providers', 'Provider keys & inference', 'box']]],
     ['Billing', [['plan', 'Plan & billing', 'star'], ['usage', 'Usage & limits', 'chart'], ['gifts', 'Gifts', 'send']]],
     ['Preferences', [['general', 'General', 'gear'], ['appearance', 'Appearance', 'palette'], ['notifications', 'Notifications', 'bell'], ['modes', 'Modes', 'layers'], ['keyboard', 'Keyboard', 'terminal'], ['region', 'Language & region', 'globe']]],
     ['Privacy', [['data', 'Your data', 'download'], ['danger', 'Delete account', 'trash']]],
@@ -61,6 +61,7 @@
     security: 'How you prove it’s you: your password, a passkey or an authenticator app, and confirming before a sensitive change.',
     sessions: 'Every device signed in to your account. Sign one out, or all the others at once.',
     browsers: 'Browsers you connected with XENO Extension. A chat can use one only while you allow it here.',
+    pcs: 'PCs running XENO Corpus. Agents you connect to XENO MCP can read the projects you turned on there.',
     apps: 'The ways you can sign in, and the apps you have allowed to act for you.',
     keys: 'Keys let your own code call the XENO API. They are managed on the API portal.',
     providers: 'Use your own provider keys, and choose where each product’s AI comes from.',
@@ -107,6 +108,7 @@
         + row('Recovery codes', a.codes ? `${a.codesLeft} of 10 left — each works once if you lose your devices` : 'Created when you turn on two-step sign-in', a.codes ? b('Make new codes', 'codes') : (a.passkeys.length || a.totp ? b('Create', 'codes') : '')))
       + card('Sign-in methods', a.methods.map((m) => row(esc(m.kind), `${esc(m.who)} · added ${when(m.added)}`, a.methods.length > 1 ? b('Remove', 'removeMethod', m.id) : tag('Only method'))).join('') + row('', '', b(ON_PLATFORM ? 'Connect Google, GitHub or X' : 'Connect Google, Apple or GitHub', 'addMethod'))),
     browsers: () => card('Connected browsers', '<p class="pg-dim set-p">Sign in to see the browsers you connected with XENO Extension.</p>'),
+    pcs: () => card('Corpus on your PCs', '<p class="pg-dim set-p">Sign in to see the PCs running XENO Corpus.</p>'),
     sessions: (a) => card('Signed-in devices', a.sessions.map((s) => row(`${esc(s.device)}${s.current ? ' ' + tag('This device', 'on') : ''}`, `${esc(s.where)} · ${s.current ? 'active now' : 'last active ' + ago(s.last)}`, s.current ? '' : b('Sign out', 'endSession', s.id))).join(''), a.sessions.length > 1 ? b('Sign out everywhere else', 'endOthers') : ''),
     apps: (a) => card('Apps you’re signed into', a.apps.length ? a.apps.map((x) => row(esc(x.name), `Can see: ${esc(x.scope)} · used ${ago(x.last)}`, b('Remove access', 'removeApp', x.id))).join('') : '<p class="pg-dim">No apps have access to your account.</p>')
       + card('Sign-in methods', `<p class="pg-dim set-p">Google, Apple and GitHub sign-in are managed in <a data-set="go" data-arg="security">Sign-in & security</a>.</p>`)
@@ -254,5 +256,5 @@
   setTimeout(() => { const a = A(); if (a.deletion && window.XW) { const t = document.getElementById('toast'); t.innerHTML = `Your account is scheduled for deletion on ${when(a.deletion.at + 30 * DAY)} <button class="pg-undo">Keep my account</button>`; t.classList.add('on'); t.querySelector('.pg-undo').onclick = () => { ACT.undelete(); t.classList.remove('on'); }; } }, 1500);
   // the sidebar for Settings is the same nav, as rows (one source: SECT)
   window.XENO_GLOBAL_NAV.settings = ['Settings', 'You and your workspace', '', SECT.map(([g, s]) => [g, s.map(([, l]) => [l, ''])])];
-  window.XENO_SETTINGS = { render: (item) => render(idOf(item || 'Profile')), go, idOf, stepUp, sections: () => allIds, open: (sec) => go(ALIAS[sec] || sec || 'profile') };
+  window.XENO_SETTINGS = { render: (item) => render(idOf(item || 'Profile')), go, idOf, label: (item) => title(idOf(item)), stepUp, sections: () => allIds, open: (sec) => go(ALIAS[sec] || sec || 'profile') };
 })();
