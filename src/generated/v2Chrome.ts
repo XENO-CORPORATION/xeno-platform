@@ -55,5 +55,6 @@ export const V2_ACCENTS: Readonly<Record<string, string>> = {
   "stock": "#EAB308",
   "storage": "#2449B8",
   "video": "#FB7185",
+  "view": "#DFD746",
   "workflow": "#BEF264"
 };
