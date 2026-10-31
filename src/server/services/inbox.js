@@ -14,6 +14,7 @@ export class InboxError extends Error { constructor(message, code, status = 400)
 const KINDS = {
   form_response: ['Form response', false],
   font_taken_down: ['Font taken down', false],
+  stock_withdrawn: ['Stock item withdrawn', false],
   assigned: ['Assigned', true], review_requested: ['Review', true], review_assigned: ['Reviewer', true], changes_requested: ['Changes', true], mentioned: ['Mention', true], due_soon: ['Due soon', true], overdue: ['Overdue', true],
   run_failed: ['Run failed', true], workflow_failed: ['Run failed', true], workflow_off: ['Turned off', true], invited: ['Invitation', true],
   run_finished: ['Finished', false], run_stopped: ['Stopped', false], shared: ['Shared', false], commented: ['Comment', false], status: ['Update', false],

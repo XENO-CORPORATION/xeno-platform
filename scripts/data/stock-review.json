@@ -1,0 +1,726 @@
+{
+ "reviewedAt": "2026-11-01",
+ "how": "Every candidate was looked at on contact sheets, twice, by the agent that built this catalogue, at thumbnail size. No person has reviewed it yet, and a small face, plate or logo can still be missed: a person should spot-check it before it is promoted.",
+ "rejected": [
+  {
+   "id": "cma-112586",
+   "why": "Nudity, which a stock library for any workspace shouldn’t surface by default"
+  },
+  {
+   "id": "cma-106120",
+   "why": "Nudity, which a stock library for any workspace shouldn’t surface by default"
+  },
+  {
+   "id": "cma-150023",
+   "why": "Nudity, which a stock library for any workspace shouldn’t surface by default"
+  },
+  {
+   "id": "cma-114740",
+   "why": "Nudity, which a stock library for any workspace shouldn’t surface by default"
+  },
+  {
+   "id": "cma-125873",
+   "why": "Nudity, which a stock library for any workspace shouldn’t surface by default"
+  },
+  {
+   "id": "cma-124796",
+   "why": "Violence"
+  },
+  {
+   "id": "cma-113945",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-130361",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-160137",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-136296",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-135964",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-95082",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-156160",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-156983",
+   "why": "Too narrow to use as a picture"
+  },
+  {
+   "id": "cma-423526",
+   "why": "A table of text, not a picture"
+  },
+  {
+   "id": "cma-423524",
+   "why": "A table of text, not a picture"
+  },
+  {
+   "id": "wc-159251358",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-194365508",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-127131973",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-128709001",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-37581285",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-146346129",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-104370310",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-134828785",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147683844",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147683845",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147683846",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147685722",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147685723",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147688282",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-147688283",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-145133358",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-167222719",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-167222724",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-167222726",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-150150993",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-18390597",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-145133441",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-154515612",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-159487043",
+   "why": "A recognisable person"
+  },
+  {
+   "id": "wc-37582409",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-47209510",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-47209512",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-146948521",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-149258116",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-160689227",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-181514138",
+   "why": "A crowd or event, where people can be recognised and haven’t agreed"
+  },
+  {
+   "id": "wc-177877531",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-145129280",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-152272349",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-152272352",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-171998939",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-171998944",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-171998945",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-112178500",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-141506172",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-158508356",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-156706808",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-165008440",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-168865392",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-106373903",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-106373904",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-106991161",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-107158481",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-149390339",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-199801247",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-145030726",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-145145159",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-145133471",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-145133485",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-164231523",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-146915100",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-90130771",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-145133383",
+   "why": "A brand, a shop sign or product packaging"
+  },
+  {
+   "id": "wc-141680529",
+   "why": "A number plate or a police vehicle"
+  },
+  {
+   "id": "wc-135269409",
+   "why": "A number plate or a police vehicle"
+  },
+  {
+   "id": "wc-151393808",
+   "why": "A number plate or a police vehicle"
+  },
+  {
+   "id": "wc-126540118",
+   "why": "A number plate or a police vehicle"
+  },
+  {
+   "id": "wc-140410295",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-93316075",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-200750209",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-200750210",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-149675086",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-38072076",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-107816105",
+   "why": "Someone else’s artwork, which CC0 from the photographer can’t clear"
+  },
+  {
+   "id": "wc-148579185",
+   "why": "Has a watermark or a credit burned in"
+  },
+  {
+   "id": "wc-149989392",
+   "why": "Has a watermark or a credit burned in"
+  },
+  {
+   "id": "wc-149989393",
+   "why": "Has a watermark or a credit burned in"
+  },
+  {
+   "id": "wc-68938641",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-90762907",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-92302170",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-92302171",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-92302172",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-175871015",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-194110412",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-148494407",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-67092836",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-129542032",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-164923692",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-153666849",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-34436085",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-34436086",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-34436091",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-76334151",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-175623997",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-134821929",
+   "why": "Too dark, blurred or empty to be useful"
+  },
+  {
+   "id": "wc-130632157",
+   "why": "A screenshot, or imagery whose real source can’t be told"
+  },
+  {
+   "id": "wc-110167384",
+   "why": "A screenshot, or imagery whose real source can’t be told"
+  },
+  {
+   "id": "wc-153995808",
+   "why": "A screenshot, or imagery whose real source can’t be told"
+  },
+  {
+   "id": "wc-141119910",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141119958",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120017",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120058",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120100",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120140",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120210",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120370",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141120490",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-146657977",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-146657978",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-146657980",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165604",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165605",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165606",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165607",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165608",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165611",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165615",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165616",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165622",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149165623",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149252130",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149252131",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149252132",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149820639",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141121201",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141121212",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141121213",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141121219",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141121220",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-141121221",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-113277963",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-113277977",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-113278012",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-113278265",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-113278365",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-156423151",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-156423152",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167557904",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167557961",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167557985",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167558061",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167558095",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167558132",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-167558263",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143137272",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143137720",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143137724",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143137730",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143137731",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143138549",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143139145",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-143139157",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-159487084",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-159487087",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581605",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581607",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581610",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581611",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581615",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581616",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581617",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581621",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581628",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581634",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581635",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581636",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581637",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581638",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  },
+  {
+   "id": "wc-149581640",
+   "why": "A near-duplicate: five from the same person on this subject are already in"
+  }
+ ]
+}

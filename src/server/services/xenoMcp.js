@@ -41,6 +41,7 @@ import * as analyticsMcp from './analyticsMcp.js';
 import * as formsMcp from './formsMcp.js';
 import * as brandKitsMcp from './brandKitsMcp.js';
 import * as fontsMcp from './fontsMcp.js';
+import * as stockMcp from './stockMcp.js';
 import * as toolsMcp from './toolsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
@@ -224,6 +225,14 @@ export const SERVICES = Object.freeze([
     tools: () => analyticsMcp.TOOLS,
     call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
+  },
+  // XENO Stock (stockMcp.js): find copyright-free media, read its licence, save it to a workspace's Library.
+  {
+    category: 'stock', title: 'Stock', version: '1.0.0', timeoutMs: 130_000,
+    description: 'Stock: search photos, art and video free of copyright (CC0), read where each licence was stated, and save one to a workspace’s Library.',
+    tools: () => stockMcp.TOOLS,
+    call: (db, actor, name, args) => stockMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof stockMcp.StockMcpError,
   },
   // XENO Fonts (fontsMcp.js): find open-licence fonts and pairings, read a workspace's fonts, add one. Uploading is a person's.
   {

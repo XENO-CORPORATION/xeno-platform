@@ -2802,6 +2802,62 @@
    ]
   },
   {
+   "name": "stock.item.search",
+   "wire": "stock__item__search",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "stock:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "stock_search"
+   ]
+  },
+  {
+   "name": "stock.item.read",
+   "wire": "stock__item__read",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "stock:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "stock_get_item"
+   ]
+  },
+  {
+   "name": "stock.saved.list",
+   "wire": "stock__saved__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "stock:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "stock_list_saved"
+   ]
+  },
+  {
+   "name": "stock.item.save",
+   "wire": "stock__item__save",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "stock:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "stock_save"
+   ]
+  },
+  {
    "name": "fonts.catalogue.search",
    "wire": "fonts__catalogue__search",
    "version": "1.0.0",

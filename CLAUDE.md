@@ -369,6 +369,16 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🖼️ XENO Stock lives HERE: Studio › Libraries › Stock (2026-10-31)
+
+`services/stock.js` is the one service (screen `platform-stock.js`, routes `stockRoutes.js`, agents `stockMcp.js`). Owner decision 2026-10-31: open-licence media we host, plus what people generate. The product's spec is `../xeno-stock/SPEC.md`.
+- **The catalogue is built by `scripts/stock-catalogue.mjs`:** an item needs CC0 stated on the item at its source. Never hand-edit `src/server/data/stockCatalogue.json`. Every item is looked at first; `scripts/data/stock-review.json` records what was rejected and why.
+- **Don't add Unsplash or Pexels:** their licences forbid building a similar stock service from their files. Don't get round a source's bot challenge either, which is why the Art Institute of Chicago isn't here.
+- **Never call an item "safe".** CC0 speaks for copyright only, and a museum's statement isn't an uploader's. The rights note says so on every item.
+- **A save fetches only the catalogue's own URL and checks its hash.** A caller can't name a URL. Withdrawing is staff's; the CDN bytes are then an operator step.
+- **Generate is the AI half, not a second generator.** Stock hands it the words and never sends them.
+Proofs: `npm run test:stock` (real Postgres, mutation-checked), `test:stock-ui`.
+
 ## 🖥️ XENO Corpus on a person's PC, through the relay (owner, 2026-10-31)
 
 `services/corpusLocalMcp.js` is XENO MCP's `corpus_local_*` (scope `corpus_local:read`, off per connection until turned on). The desktop app holds the socket: `corpus` surface of `browserRelay.js`, `browserRelaySocket.js` (`/api/v2/corpus/connect`, scope `corpus:connect`), `browserInstallations.js`, `routes/browserRelayRoutes.js`. Settings: `/api/account/corpus-pcs`, section `pcs`.
