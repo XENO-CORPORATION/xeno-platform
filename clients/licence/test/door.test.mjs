@@ -181,6 +181,28 @@ test('onStateChange sees every state the windows see, names the sign-in host, an
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('authorizeRequest signs over a server nonce when given one, and only then', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'xeno-door-'));
+  try {
+    const base = `http://127.0.0.1:${platform.address().port}`;
+    const f = fakeElectron(dir);
+    const proofs = [];
+    refreshBehaviour = 'ok';
+    await writeRefresh(dir, 'RT-SECRET-0');
+    const door = esm.createDoor({ product: 'pixel', productName: 'XENO Pixel', clientId: 'xeno-pixel', scopes: ['openid'], electron: f.electron, issuer: base, apiBase: base,
+      account: { ...fakeSdk(), createNodeDpopSigner: () => ({ createProof: async (o) => { proofs.push(o); return 'proof'; } }) } });
+    door.start();
+    await wait(150);
+    const url = 'https://xenosystem.ai/api/v2/corpus/connect';
+    const signed = await door.authorizeRequest({ method: 'GET', url, nonce: 'server-nonce' });
+    assert.equal(signed.dpop, 'proof');
+    await door.authorizeRequest({ method: 'GET', url });
+    assert.equal(proofs[0].nonce, 'server-nonce');
+    assert.ok(!('nonce' in proofs[1]), 'no nonce was asked for');
+    door.stop();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 async function writeRefresh(dir, token) {
   const { writeFileSync } = await import('node:fs');
   writeFileSync(join(dir, 'auth-refresh.bin'), Buffer.from(`enc:${token}`).toString('base64'), 'utf-8');
