@@ -5,6 +5,14 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Fixes that had been waiting on branches.**
+
+- Expired credit holds are all released at once, not only the first thousand, so reserved credits no longer linger.
+- Requesting or downloading a data export finishes writing its audit record before answering.
+- Signing out of an app reports a failure honestly instead of saying it worked.
+- Version floors compare versions the same way everywhere, including betas and very large numbers.
+- Chat images in 2:3 and 3:2 no longer fail on the Google image models.
+
 **Corpo › Forms is real.**
 
 - Make a form, change its questions, and open it. It saves as you type.

@@ -72,6 +72,9 @@ export const CHAT_IMAGE_BUDGET = 2;
  */
 export const CHAT_IMAGE_CREDITS = getCreditCost('image', CHAT_IMAGE_MODEL);
 
+/** The Google models accept 1:1, 16:9, 9:16, 4:3 and 3:4 (measured 2026-10-11); the rest map to the nearest. */
+const GOOGLE_ASPECT = Object.freeze({ '2:3': '3:4', '3:2': '4:3' });
+
 /** Only the GPT image models (Codex-backed) accept a reference image through the gateway. */
 export const takesReference = (model) => /^gpt-image/.test(String(model));
 
@@ -394,7 +397,7 @@ export function createChatImageExecutor({ db, userId, turnId, meter, generate, r
           output_format: 'png',
           response_format: 'b64_json',
           ...(edited ? { reference_images: [reference.dataUrl] } : {}),
-        } : { model, prompt: shapedPrompt(prompt, aspectRatio), aspect_ratio: aspectRatio });
+        } : { model, prompt: shapedPrompt(prompt, aspectRatio), aspect_ratio: GOOGLE_ASPECT[aspectRatio] || aspectRatio });
         usage = imageUsageFrom(response);
         const b64 = base64FromImageItem(response?.data?.[0]);
         if (!b64) throw Object.assign(new Error('The image service returned no image.'), { code: 'image_empty' });
