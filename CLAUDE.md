@@ -369,6 +369,15 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🎨 XENO Assets lives HERE: brand kits, Studio › Libraries (2026-10-31)
+
+`services/brandKits.js` is the one service (screen `platform-assets.js`, routes `brandKitRoutes.js` at `/api/brand-kits`, agents `brandKitsMcp.js`); the product's spec and agent contract are in `../xeno-assets`, the Tasks pattern.
+- **A token's value is XENO Canvas's `TokenValue`**, with an alias naming a path. Never start a second token model. Canvas's own export is `format=canvas`.
+- **A published version never changes** (`brand_kit_version_guard`), and publishing is a person's act (service AND trigger). "Latest" is the newest published, never the draft.
+- **Validation is what makes exports safe:** colors are strict hex and text refuses `<>{};\\`, because values land in CSS and config files. Never loosen it without changing every exporter.
+- **A logo is a file in the workspace's Library**, never bytes here.
+Proofs: `npm run test:brand-kits` (real Postgres, mutation-checked), `npm run test:brand-kits-ui`.
+
 ## Corpo › Forms lives HERE (services/forms.js, 2026-10-20)
 
 One service for the screen (`prototypes/xeno-workspace/platform-forms.js`), `/api/forms` and agents (`formsMcp.js`).

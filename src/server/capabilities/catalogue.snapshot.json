@@ -2704,6 +2704,62 @@
    ]
   },
   {
+   "name": "brand.kit.list",
+   "wire": "brand__kit__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "brand:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "brand_list_kits"
+   ]
+  },
+  {
+   "name": "brand.version.get",
+   "wire": "brand__version__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "brand:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "brand_get_brand"
+   ]
+  },
+  {
+   "name": "brand.tokens.export",
+   "wire": "brand__tokens__export",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "brand:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "brand_export_tokens"
+   ]
+  },
+  {
+   "name": "brand.token.propose",
+   "wire": "brand__token__propose",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "brand:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "brand_propose_token"
+   ]
+  },
+  {
    "name": "forms.form.list",
    "wire": "forms__form__list",
    "version": "1.0.0",

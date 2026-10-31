@@ -35,6 +35,8 @@
     "test:workspace-analytics": "cd src/server && node tests/workspace-analytics.test.mjs",
     "test:analytics-ui": "node prototypes/xeno-workspace/tests/analytics-test.mjs",
     "test:export-audit": "node --test scripts/export-audit-awaited.test.mjs",
+    "test:brand-kits": "node src/server/tests/brand-kits.test.mjs",
+    "test:brand-kits-ui": "node prototypes/xeno-workspace/tests/brand-kits-test.mjs",
     "test:forms": "node src/server/tests/forms.test.mjs",
     "test:forms-ui": "node prototypes/xeno-workspace/tests/forms-test.mjs",
     "test:workspace-docs": "cd src/server && node tests/workspace-docs.test.mjs",

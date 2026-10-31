@@ -88,6 +88,7 @@ try {
   ok(db.calls.some((c) => c[1].endsWith('/links') && c[2].kind === 'public') && await p.evaluate(() => !!document.querySelector('[data-fm-shown] input')?.value.includes('/api/forms/public/')), 'then it’s made and shown once');
   await p.click('[data-fm-status="open"]'); await wait(900);
   ok(db.calls.filter((c) => c[0] === 'PATCH').pop()[2].status === 'open', 'Open the form PATCHes status open');
+  ok(/It’s taking responses/.test(await main()), 'and the page says it’s open');
 
   // responses
   await open(`/workspace/corpo/spaces/forms/${FID}/responses`);

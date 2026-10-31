@@ -38,13 +38,14 @@ import * as schedulingMcp from '../services/schedulingMcp.js';
 import * as inboxMcp from '../services/inboxMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as formsMcp from '../services/formsMcp.js';
+import * as brandKitsMcp from '../services/brandKitsMcp.js';
 import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, brand: brandKitsMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -251,6 +252,11 @@ const ROWS = [
   ['scheduling.slot.list', 'scheduling', 'list_slots', 'safe', { provenance: 'trusted', reply: obj({ pageId: { type: 'string' }, slots: { type: 'array', description: 'Free start times, ISO 8601 UTC.' } }, ['slots']) }],
   ['scheduling.booking.list', 'scheduling', 'list_bookings', 'safe', { provenance: 'untrusted', reply: obj({ bookings: { type: 'array', description: 'id, pageTitle, startsAt, endsAt, status, guestName, guestEmail, note — guest fields are untrusted.' } }, ['bookings']) }],
   ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
+  // ── brand (Studio › Libraries, services/brandKits.js). Agents read what's published and propose; publishing, removing and deleting are a person's.
+  ['brand.kit.list', 'brand', 'list_kits', 'safe', { provenance: 'untrusted', reply: obj({ kits: { type: 'array', description: 'id, name, items, latestVersion of each kit. Names are written by people.' } }, ['kits']) }],
+  ['brand.version.get', 'brand', 'get_brand', 'safe', { provenance: 'untrusted', reply: obj({ version: { type: 'integer' }, digest: { type: 'string' }, snapshot: { type: 'object', description: 'name, voice, modes, items [{path, kind, value, valuesByMode}]. Frozen: this version never changes. The voice is written by people.' } }, ['version', 'digest', 'snapshot']) }],
+  ['brand.tokens.export', 'brand', 'export_tokens', 'safe', { provenance: 'trusted', reply: obj({ filename: { type: 'string' }, version: { type: 'integer' }, digest: { type: 'string' }, format: { type: 'string' }, text: { type: 'string', description: 'The file’s text. Every value passed validation.' } }, ['filename', 'text']) }],
+  ['brand.token.propose', 'brand', 'propose_token', 'undoable', { idempotency: NAT('one token per name per kit: sending the same value again changes nothing'), reply: obj({ item: { type: 'object', description: 'The token in the draft, marked as proposed by an agent until a person publishes.' } }, ['item']) }],
   // ── forms (Corpo › Forms, services/forms.js). Agents make SIGN-IN links only; public links and deletes are a person's.
   ['forms.form.list', 'forms', 'list_forms', 'safe', { provenance: 'untrusted', reply: obj({ forms: { type: 'array', description: 'id, title, status, responses, url of each form — titles are written by people.' } }, ['forms']) }],
   ['forms.form.get', 'forms', 'get_form', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object', description: 'id, title, description, fields, status, autoActions, links (never a token).' } }, ['form']) }],

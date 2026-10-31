@@ -1,0 +1,27 @@
+/* assets.css — Studio › Libraries (platform-assets.js). Workspace tokens only; emphasis by surface and text brightness, never hue
+   (DESIGN_SYSTEM.md). A swatch shows the person's own color, which is the one place a hue belongs. Text inputs take no focus ring. */
+.bk .in{padding:6px 8px;border-radius:6px;background:var(--n20);border:1px solid var(--n38);color:var(--text);font:inherit;font-size:13px;outline:0}
+.bk .in:focus{border-color:var(--n58);outline:0}
+.bk-group{margin:14px 0}
+.bk-group h3{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px}
+.bk-rows{display:flex;flex-direction:column;gap:4px}
+.bk-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,2fr) auto;gap:12px;align-items:center;padding:8px 10px;border-radius:8px;background:var(--n20)}
+.bk-path{display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere}
+.bk-path small{color:var(--muted)}
+.bk-vals{display:flex;flex-wrap:wrap;gap:10px;align-items:center;min-width:0}
+.bk-col{display:inline-flex;gap:6px;align-items:center}
+.bk-col .in{width:96px}
+.bk-num{width:96px}
+.bk-sw{display:inline-block;width:18px;height:18px;border-radius:4px;border:1px solid var(--n38);flex:none}
+.bk-mode{display:inline-flex;gap:6px;align-items:center}
+.bk-mode small{color:var(--muted)}
+.bk-problems{max-width:none}
+.bk-problems small{display:block}
+.bk-logos{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.bk-logo{margin:0;display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:8px;background:var(--n20)}
+.bk-logo-img{height:90px;display:flex;align-items:center;justify-content:center}
+.bk-logo-img img{max-width:100%;max-height:100%;object-fit:contain}
+.bk-logo figcaption{display:flex;flex-direction:column;gap:1px;overflow-wrap:anywhere}
+.bk-logo small{color:var(--muted)}
+.bk-voice{width:100%;box-sizing:border-box;max-width:760px;resize:vertical}
+@media (max-width:760px){.bk-row{grid-template-columns:minmax(0,1fr)}}
