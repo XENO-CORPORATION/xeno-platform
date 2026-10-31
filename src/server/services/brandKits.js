@@ -19,6 +19,7 @@
 import crypto from 'node:crypto';
 import * as customers from './customers.js';
 import { getAuthorizedLibraryFile } from './libraryAssets.js';
+import { catalogueIdFor, faceCss } from './fonts.js';
 
 export class BrandKitError extends Error {
   constructor(message, code, status = 400, details = null) { super(message); this.name = 'BrandKitError'; this.code = code; this.status = status; this.details = details; }
@@ -253,7 +254,11 @@ function cssDecls(path, v) {
 }
 function toCss(snap) {
   const block = (sel, decls) => (decls.length ? `${sel} {\n${decls.map(([k, v]) => `  ${k}: ${v};`).join('\n')}\n}\n` : '');
-  let out = block(':root', tokensOf(snap).flatMap((t) => cssDecls(t.path, t.value)));
+  // a type token naming a catalogue font brings that font, at the weights the kit uses, so the file works on its own
+  const used = new Map();
+  for (const t of tokensOf(snap)) for (const v of [t.value, ...Object.values(t.valuesByMode || {})]) if (v.kind === 'typography') { const id = catalogueIdFor(v.value.fontFamily); if (id) used.set(id, [...(used.get(id) || []), v.value.fontWeight]); }
+  const faces = [...used].map(([id, weights]) => faceCss([id], { weights })).filter(Boolean).join('\n');
+  let out = (faces ? `${faces}\n\n` : '') + block(':root', tokensOf(snap).flatMap((t) => cssDecls(t.path, t.value)));
   for (const m of snap.modes) out += `\n${block(`[data-theme="${m}"]`, tokensOf(snap).flatMap((t) => (t.valuesByMode?.[m] ? cssDecls(t.path, t.valuesByMode[m]) : [])))}`;
   return out.replace(/\n+$/, '\n');
 }

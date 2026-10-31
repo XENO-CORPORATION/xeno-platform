@@ -5,6 +5,13 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Studio › Libraries has fonts (XENO Fonts).**
+
+- A catalogue of 40 open-licence font families XENO hosts, set in the fonts themselves, with type your own sample text into and pairings written by hand.
+- Upload your own fonts. They stay private to the workspace, you confirm you have the rights, and a font whose own licence forbids embedding is refused.
+- A brand kit’s CSS export brings its catalogue fonts with it.
+- Agents can search the catalogue and add fonts. Only a person can upload one.
+
 **Studio › Libraries has brand kits (XENO Assets).**
 
 - Keep a brand’s colors, sizes, type, shadows, logos and voice in one kit the whole workspace shares, with light, dark or any other modes.

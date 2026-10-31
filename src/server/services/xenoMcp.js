@@ -39,6 +39,7 @@ import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as formsMcp from './formsMcp.js';
 import * as brandKitsMcp from './brandKitsMcp.js';
+import * as fontsMcp from './fontsMcp.js';
 import * as toolsMcp from './toolsMcp.js';
 import * as docsMcp from './docsMcp.js';
 import * as schedulingMcp from './schedulingMcp.js';
@@ -213,6 +214,14 @@ export const SERVICES = Object.freeze([
     tools: () => analyticsMcp.TOOLS,
     call: (db, actor, name, args) => analyticsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof analyticsMcp.AnalyticsMcpError,
+  },
+  // XENO Fonts (fontsMcp.js): find open-licence fonts and pairings, read a workspace's fonts, add one. Uploading is a person's.
+  {
+    category: 'fonts', title: 'Fonts', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Fonts: search the open-licence catalogue and its pairings, read the fonts a workspace uses, and add a catalogue family. Uploading means holding the rights to a font, which is a person’s.',
+    tools: () => fontsMcp.TOOLS,
+    call: (db, actor, name, args) => fontsMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof fontsMcp.FontsMcpError,
   },
   // XENO Assets (brandKitsMcp.js): read a workspace's brand so work stays on it, and propose tokens. Publishing is a person's.
   {

@@ -24,7 +24,7 @@
   const q = (extra = {}) => { const p = new URLSearchParams(); if (S.ws) p.set('workspace', S.ws); for (const [k, v] of Object.entries(extra)) if (v !== '' && v != null) p.set(k, v); const s = p.toString(); return s ? '?' + s : ''; };
   const withWs = (b) => ({ ...(b || {}), ...(S.ws ? { workspace: S.ws } : {}) });
   const item = () => { const s = X()?.S; return s && s.view === 'zone' && s.zone === 'libraries' ? (s.item || '') : ''; };
-  const route = () => { const m = item().match(/^([0-9a-f-]{36})(?:\/(brand|versions))?$/i); return m ? { view: m[2] || 'tokens', id: m[1] } : { view: 'list' }; };
+  const route = () => { if (/^fonts(\/|$)/.test(item())) return { view: 'fonts' }; const m = item().match(/^([0-9a-f-]{36})(?:\/(brand|versions))?$/i); return m ? { view: m[2] || 'tokens', id: m[1] } : { view: 'list' }; };
   const goto = (it) => X()?.go?.('zone', { zone: 'libraries', item: it || null });
   const paint = () => { try { X()?.renderRail?.(); X()?.refreshPanel?.(); const s = X()?.S; if (s && s.view === 'zone' && s.zone === 'libraries') X().render(); } catch {} };
   const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
@@ -82,7 +82,9 @@
   function page() {
     const h = H(), r0 = route(), key = JSON.stringify([wsId(), r0]);
     const wrap = (inner) => h.page(`<div class="bk" data-bk-page="${esc(S.status)}" data-bk-view="${esc(r0.view)}">${inner}</div>`);
-    const plain = h.head({ title: 'Libraries', sub: 'Brand kits: the colors, type, logos and voice your apps and agents share.', acts: r0.view === 'list' ? h.btn('New brand kit', 'data-bk-new', false, 'plus') : '' });
+    const areaTabs = h.tabs([['kits', 'Brand kits'], ['fonts', 'Fonts']], r0.view === 'fonts' ? 'fonts' : 'kits', 'data-bk-area');
+    if (r0.view === 'fonts') return h.page(`<div class="bk">${h.head({ title: 'Libraries' })}${areaTabs}${window.XENO_FONTS.body()}</div>`);
+    const plain = h.head({ title: 'Libraries', acts: r0.view === 'list' ? h.btn('New brand kit', 'data-bk-new', false, 'plus') : '' }) + (r0.view === 'list' ? areaTabs : '');
     if (S.status === 'loading' || S.loadedFor !== key) { if (S.status !== 'loading' || S.loadedFor !== key) load(); return wrap(plain + h.box('refresh', 'Loading', '', '', 'sm')); }
     if (S.status === 'error') return wrap(plain + h.box('x', 'That couldn’t be loaded', esc(S.error), h.btn('Try again', 'data-bk-reload', true), 'sm'));
     if (r0.view === 'list') {
@@ -99,14 +101,14 @@
   window.XENO_ZONE_LIVE = window.XENO_ZONE_LIVE || {};
   window.XENO_ZONE_LIVE['studio.libraries'] = {
     served: true, items: true,
-    label: (it) => { const [id, tab] = String(it).split('/'), name = S.kit?.id === id ? S.kit.name : 'Brand kit'; return tab === 'brand' ? `${name} · Logos and voice` : tab === 'versions' ? `${name} · Versions` : /^[0-9a-f-]{36}$/i.test(id) ? name : it; },
+    label: (it) => { if (/^fonts/.test(String(it))) return it === 'fonts/catalogue' ? 'Fonts · Catalogue' : 'Fonts'; const [id, tab] = String(it).split('/'), name = S.kit?.id === id ? S.kit.name : 'Brand kit'; return tab === 'brand' ? `${name} · Logos and voice` : tab === 'versions' ? `${name} · Versions` : /^[0-9a-f-]{36}$/i.test(id) ? name : it; },
     work: () => (S.status === 'ready' && S.kits.length ? ['Brand kits', S.kits.slice(0, 6).map((k) => [k.name, k.latestVersion ? `v${k.latestVersion}` : 'Draft', null, 'Brand kits'])] : null),
     badge: () => null,
     page: () => page(),
     state: () => ({ status: S.status, kits: S.kits.length, route: route() }),
     reload: () => load(),
   };
-  { const z = (window.XENO_MODE_ZONES?.studio || []).find((x) => x.id === 'libraries'); if (z) { z.blurb = 'Brand kits'; z.work = null; } }
+  { const z = (window.XENO_MODE_ZONES?.studio || []).find((x) => x.id === 'libraries'); if (z) { z.blurb = 'Brand kits and fonts'; z.work = null; } }
 
   // ─────────────────────────────── acting
   const newKit = () => D().form({ title: 'New brand kit', sub: 'You add its colors, type and logos next. Nothing follows it until you publish.', submit: 'Create kit',
@@ -163,10 +165,11 @@
   const saveLine = (t) => { S.save = t; const n = document.querySelector('#main [data-bk-saved]'); if (n) n.textContent = t; };
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-bk-reload],[data-bk-new],[data-bk-open],[data-bk-tab],[data-bk-restore],[data-bk-add],[data-bk-import],[data-bk-modes],[data-bk-publish],[data-bk-delete],[data-bk-del],[data-bk-addlogo],[data-bk-addmode]');
+    const t = e.target.closest('[data-bk-area],[data-bk-reload],[data-bk-new],[data-bk-open],[data-bk-tab],[data-bk-restore],[data-bk-add],[data-bk-import],[data-bk-modes],[data-bk-publish],[data-bk-delete],[data-bk-del],[data-bk-addlogo],[data-bk-addmode]');
     if (!t || !t.closest('#main')) return;
     e.preventDefault(); e.stopPropagation();
     const d = t.dataset, k = S.kit;
+    if (d.bkArea) return goto(d.bkArea === 'fonts' ? 'fonts' : null);
     if ('bkReload' in d) return load();
     if ('bkNew' in d) return newKit();
     if (d.bkOpen) return goto(d.bkOpen);

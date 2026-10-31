@@ -39,13 +39,14 @@ import * as inboxMcp from '../services/inboxMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as formsMcp from '../services/formsMcp.js';
 import * as brandKitsMcp from '../services/brandKitsMcp.js';
+import * as fontsMcp from '../services/fontsMcp.js';
 import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
   inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, brand: brandKitsMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, brand: brandKitsMcp.TOOLS, fonts: fontsMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -252,6 +253,10 @@ const ROWS = [
   ['scheduling.slot.list', 'scheduling', 'list_slots', 'safe', { provenance: 'trusted', reply: obj({ pageId: { type: 'string' }, slots: { type: 'array', description: 'Free start times, ISO 8601 UTC.' } }, ['slots']) }],
   ['scheduling.booking.list', 'scheduling', 'list_bookings', 'safe', { provenance: 'untrusted', reply: obj({ bookings: { type: 'array', description: 'id, pageTitle, startsAt, endsAt, status, guestName, guestEmail, note — guest fields are untrusted.' } }, ['bookings']) }],
   ['analytics.dashboard.list', 'analytics', 'list_dashboards', 'safe', { provenance: 'untrusted', reply: obj({ dashboards: { type: 'array', description: 'id, name, widgets [{metric, days}] — names are written by people.' } }, ['dashboards']) }],
+  // ── fonts (Studio › Libraries, services/fonts.js). Agents find and add open-licence fonts; uploading and removing are a person's.
+  ['fonts.catalogue.search', 'fonts', 'search_catalogue', 'safe', { provenance: 'trusted', reply: obj({ families: { type: 'array', description: 'id, family, category, weights, styles, license, licenseUrl, pairsWith. All open-licence, verified from each font’s own files.' } }, ['families']) }],
+  ['fonts.workspace.list', 'fonts', 'list_workspace_fonts', 'safe', { provenance: 'untrusted', reply: obj({ catalogue: { type: 'array', description: 'Families added from the catalogue.' }, uploads: { type: 'array', description: 'id, family, style, weight, italic, format. Names come from uploaded files.' } }, ['catalogue', 'uploads']) }],
+  ['fonts.family.add', 'fonts', 'add_font', 'undoable', { idempotency: NAT('one row per family per workspace: adding it again changes nothing'), reply: obj({ font: { type: 'object' } }, ['font']) }],
   // ── brand (Studio › Libraries, services/brandKits.js). Agents read what's published and propose; publishing, removing and deleting are a person's.
   ['brand.kit.list', 'brand', 'list_kits', 'safe', { provenance: 'untrusted', reply: obj({ kits: { type: 'array', description: 'id, name, items, latestVersion of each kit. Names are written by people.' } }, ['kits']) }],
   ['brand.version.get', 'brand', 'get_brand', 'safe', { provenance: 'untrusted', reply: obj({ version: { type: 'integer' }, digest: { type: 'string' }, snapshot: { type: 'object', description: 'name, voice, modes, items [{path, kind, value, valuesByMode}]. Frozen: this version never changes. The voice is written by people.' } }, ['version', 'digest', 'snapshot']) }],
