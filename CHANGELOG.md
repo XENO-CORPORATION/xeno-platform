@@ -5,6 +5,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Selling a team, and Tools for agents.**
+
+- The Seller console can publish a team: the server packages its setup and its agents’ definitions, leaves your people behind, says who stayed, and sends it to review.
+- Agents connected over XENO MCP can find the XENO tool that fits what someone wants, and give them the address that opens it. Tools still run on the person’s side.
+
 **Two-step sign-in.**
 
 - Settings › Sign-in & security now really sets up an authenticator app, adds passkeys, and makes recovery codes. Your password alone no longer signs in once one is on, and that goes for Google, GitHub and X sign-in too.

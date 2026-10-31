@@ -32,6 +32,7 @@ import * as publishMcp from '../services/publishMcp.js';
 import * as messageMcp from '../services/messageMcp.js';
 import * as mailMcp from '../services/mailMcp.js';
 import * as analyticsMcp from '../services/analyticsMcp.js';
+import * as toolsMcp from '../services/toolsMcp.js';
 import * as docsMcp from '../services/docsMcp.js';
 import * as schedulingMcp from '../services/schedulingMcp.js';
 import * as inboxMcp from '../services/inboxMcp.js';
@@ -42,7 +43,7 @@ import * as skillsMcp from '../services/skillsMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -232,6 +233,9 @@ const ROWS = [
   ['docs.version.restore', 'docs', 'restore_version', 'undoable', { idempotency: NAT('restoring adds a new newest version; restoring the previous one undoes it'), reply: obj({ doc: { type: 'object' }, previousVersion: { type: 'string' } }, ['doc']) }],
   ['docs.doc.trash', 'docs', 'trash_doc', 'undoable', { idempotency: NAT('a document already in the trash is refused with already_in_trash'), reply: obj({ trashed: { type: 'boolean' }, id: { type: 'string' } }, ['trashed']) }],
   ['docs.doc.untrash', 'docs', 'untrash_doc', 'undoable', { idempotency: NAT('a document not in the trash is refused with not_in_trash'), reply: obj({ doc: { type: 'object' } }, ['doc']) }],
+  // ── tools (services/toolsMcp.js). Find a tool; it runs on the person's side.
+  ['tools.tool.list', 'tools', 'list', 'safe', { provenance: 'trusted', reply: obj({ tools: { type: 'array', description: 'id, name, description, category, version, open (the address), runsInBrowser, needsHubFor of each tool.' } }, ['tools']) }],
+  ['tools.tool.suggest', 'tools', 'suggest', 'safe', { provenance: 'trusted', reply: obj({ tools: { type: 'array', description: 'The same fields, best fit first.' } }, ['tools']) }],
   // ── analytics (Corpo › Analytics, services/analytics.js). Read-only for agents: a person saves dashboards.
   ['analytics.metric.list', 'analytics', 'list_metrics', 'safe', { provenance: 'trusted', reply: obj({ metrics: { type: 'array', description: 'id, title, scope (workspace|division), description of each metric.' }, divisions: { type: 'array', description: 'id, name of the workspace’s active divisions.' } }, ['metrics']) }],
   ['analytics.metric.query', 'analytics', 'query_metric', 'safe', { provenance: 'trusted', reply: obj({ metric: { type: 'string' }, scope: { type: 'string', description: 'workspace or division.' }, days: { type: 'integer' }, value: { type: 'object', description: 'The metric’s value; its shape is the metric’s (series of {day, value}, totals, medians).' } }, ['metric', 'value']) }],

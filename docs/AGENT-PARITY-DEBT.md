@@ -4,14 +4,14 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1953 actions · 218 agent capability · 1343 planned (debt) · 392 excluded · **coverage 14%** of the 1561 owed.
+**Total:** 1954 actions · 218 agent capability · 1344 planned (debt) · 392 excluded · **coverage 14%** of the 1562 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 303 | 53 | 245 | 5 | 17.8% |
 | agents | 204 | 0 | 142 | 62 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
-| commerce | 148 | 0 | 114 | 34 | 0% |
+| commerce | 149 | 0 | 115 | 34 | 0% |
 | chat | 104 | 0 | 102 | 2 | 0% |
 | workspace-ui | 173 | 4 | 101 | 68 | 3.8% |
 | workspace | 167 | 23 | 98 | 46 | 19% |
@@ -409,7 +409,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-chat.js:data-side=swap`
 - `ui:platform-chat.js:data-side=tab`
 
-## commerce — 114 planned
+## commerce — 115 planned
 
 - `route:accountGiftRoutes.js:POST /`
 - `route:accountGiftRoutes.js:POST /account-history`
@@ -522,6 +522,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-market.js:data-xmk=forget`
 - `ui:platform-market.js:data-xmk=import`
 - `ui:platform-market.js:data-xmk=payout`
+- `ui:platform-market.js:data-xmk=publishTeam`
 - `ui:platform-market.js:data-xmk=register`
 - `ui:platform-market.js:data-xmk=review`
 - `ui:platform-market.js:data-xmk=submit`

@@ -53,3 +53,22 @@ test('where a tool runs comes from its manifest', () => {
   assert.deepEqual(T.webSupport({ capabilities: ['fs.read', 'inference'] }).needsHub, ['local AI models']);
   assert.equal(T.webSupport({ contract: 'agent@1', capabilities: [] }).runs, false);
 });
+
+test('agents find a tool, and are told it runs on the person’s side', async () => {
+  const toolPackages = await import('../src/server/services/toolPackages.js');
+  const mcp = await import('../src/server/services/toolsMcp.js');
+  toolPackages.setFetch(async () => ({ ok: true, status: 200, arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({ tools: [
+    { id: 'image-resize', name: 'Image Resize', description: 'Resize images', category: 'converter', version: '1.0.0', capabilities: ['fs.read'] },
+    { id: 'whisper', name: 'Whisper', description: 'Transcribe audio', category: 'ai', version: '1.0.0', capabilities: ['local.models'] },
+    { id: 'xeno-agent-interface', name: 'Agent', description: 'A product', version: '1.0.0', contract: 'agent@1' },
+  ] })).buffer }));
+  const listed = (await mcp.callTool(null, null, 'list', {})).structuredContent.tools;
+  assert.deepEqual(listed.map((t) => t.id), ['image-resize', 'whisper'], 'products are not tools');
+  assert.equal(listed[0].open, 'https://xenosystem.ai/tools/image-resize');
+  assert.equal(listed[0].runsInBrowser, true);
+  const best = (await mcp.callTool(null, null, 'suggest', { q: 'transcribe this audio' })).structuredContent.tools;
+  assert.equal(best[0].id, 'whisper', 'the best fit comes first');
+  await assert.rejects(() => mcp.callTool(null, null, 'suggest', {}), (e) => e.code === 'bad_input');
+  assert.ok(mcp.TOOLS.every((t) => t.annotations.readOnlyHint === true), 'nothing here changes anything');
+  toolPackages.setFetch((...a) => fetch(...a));
+});

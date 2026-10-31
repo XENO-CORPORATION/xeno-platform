@@ -2522,6 +2522,34 @@
    ]
   },
   {
+   "name": "tools.tool.list",
+   "wire": "tools__tool__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "marketplace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "tools_list"
+   ]
+  },
+  {
+   "name": "tools.tool.suggest",
+   "wire": "tools__tool__suggest",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "marketplace:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "tools_suggest"
+   ]
+  },
+  {
    "name": "analytics.metric.list",
    "wire": "analytics__metric__list",
    "version": "1.0.0",
