@@ -373,6 +373,7 @@ access or access to unrelated library records. Regression suites: `stream-projec
 
 `services/corpusLocalMcp.js` is XENO MCP's `corpus_local_*` (scope `corpus_local:read`, off per connection until turned on). The desktop app holds the socket: `corpus` surface of `browserRelay.js`, `browserRelaySocket.js` (`/api/v2/corpus/connect`, scope `corpus:connect`), `browserInstallations.js`, `routes/browserRelayRoutes.js`. Settings: `/api/account/corpus-pcs`, section `pcs`.
 - **A PC is never a browser.** Its row keeps `tools` empty, so `resolveChatBrowser` can't offer it even without the `surface` filter, which is what a rollback relies on. Keep what it offers in `offered_tools`.
+- **Nobody gets it by being given everything.** `ASK_FIRST_SCOPES` (`capabilities/scopes.js`) and `askFirst` on the service keep it out of a platform agent's default categories, a Cloud Shell key and its read grants. Anything new that grants a whole set starts from `AMBIENT_SCOPES`. An app gets it by the person turning it on for that connection in Dev › XENO MCP, or by asking for the scope at sign-in. The sign-in challenge stays Tasks-only on purpose.
 - **The tool list is fixed here.** `hello.tools` only says which of them a version supports. Only arguments a tool names reach the PC.
 - **An answer is forgotten once read** (`forgetCall`, plus `sweepForgottenCalls` on the leader). The row keeps status and size. Never log or store one.
 - **`corpus_local` must stay above `corpus` in `SERVICES`:** `route()` takes the first category a name starts with.

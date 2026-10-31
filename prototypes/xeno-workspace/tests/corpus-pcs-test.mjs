@@ -36,6 +36,7 @@ try {
   ok((await p.evaluate(() => location.pathname)).endsWith('/settings/pcs'), `it has its own address (${await p.evaluate(() => location.pathname)})`);
   ok(/No PC is connected/.test(await main()) && /turn a project on/.test(await main()), 'with no PC, it says what to do');
   ok(/Answers aren’t kept on XENO’s servers/.test(await main()), 'and what happens to answers');
+  ok(/once you turn on Corpus on your PC for that app/.test(await main()) && !!(await p.$('[data-arg="/workspace/dev/apps/mcp"]')), 'and where to turn it on for an app');
   db.pcs = [{ id: ID, label: 'Work PC', os: 'win32', enabled: true, connected: true, appVersion: '0.3.5', projects: [{ id: 'a', name: 'Thesis' }, { id: 'b', name: 'Notes' }], lastSeenAt: new Date().toISOString() }];
   await open();
   const t = await main();

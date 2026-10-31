@@ -8,7 +8,7 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 **Agents can read a project on your own PC, through XENO Corpus.**
 
 - Agents you connect to XENO MCP can read a project you turned on in XENO Corpus on your PC: its context, a tenet, what lapsed, what depends on a subject, whether a subject can ship.
-- It's off until you turn a project on, on that PC, and it's read-only. If the PC isn't connected, the agent is told so rather than getting an empty answer.
+- It's off until you turn a project on, on that PC, and turn Corpus on your PC on for that app in Dev › XENO MCP. It's read-only. If the PC isn't connected, the agent is told so rather than getting an empty answer.
 - Answers pass through XENO and aren't kept here. Your folder paths never leave the PC.
 - Settings › Corpus on your PCs shows each PC and its projects. You can turn one off or remove it from there.
 - Needs a XENO Corpus release that asks for the new sign-in permission.

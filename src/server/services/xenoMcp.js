@@ -107,7 +107,7 @@ export const SERVICES = Object.freeze([
   // XENO Corpus on a person's PC (corpusLocalMcp.js): read-only, through the desktop app. 🔴 Must stay ABOVE `corpus`: route() takes the
   // first category a name starts with, and `corpus_local_lapsed` starts with `corpus_` too.
   {
-    category: 'corpus_local', title: 'Corpus on your PC', version: '1.0.0', timeoutMs: 65_000,
+    category: 'corpus_local', title: 'Corpus on your PC', version: '1.0.0', timeoutMs: 65_000, askFirst: true,
     description: 'Corpus on your PC: read the projects a person turned on for agents in XENO Corpus on their own computer. Read-only, and only while that PC is connected.',
     tools: () => corpusLocalMcp.TOOLS,
     call: (db, actor, name, args) => corpusLocalMcp.callTool(db, actor, name, args),
@@ -527,8 +527,8 @@ const shapeConnection = (r) => ({ id: String(r.id), client: { id: r.client_id, n
   createdAt: r.created_at, lastUsedAt: r.last_used_at, calls: r.calls != null ? Number(r.calls) : undefined, revokedAt: r.revoked_at || null });
 
 /** The live connection for this person and client, created on first use. Signing the same client in again reuses it. */
-/** The categories a platform agent's own credential starts with: every service an agent can use. */
-export const AGENT_DEFAULT_CATEGORIES = Object.freeze(SERVICES.map((s) => s.category));
+/** The categories a platform agent's own credential starts with: every service an agent can use, except one that asks first. Its owner turns that on for it. */
+export const AGENT_DEFAULT_CATEGORIES = Object.freeze(SERVICES.filter((s) => !s.askFirst).map((s) => s.category));
 export async function connectionFor(db, { ownerId, agentId, clientId, clientName, categories = null }) {
   const found = (await db.query('SELECT * FROM mcp_connections WHERE owner_user_id = $1 AND client_id = $2 AND revoked_at IS NULL', [ownerId, clientId])).rows[0];
   if (found) {

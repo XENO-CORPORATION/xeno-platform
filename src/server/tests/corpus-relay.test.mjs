@@ -28,6 +28,9 @@ import * as relay from '../services/browserRelay.js';
 import * as installations from '../services/browserInstallations.js';
 import * as local from '../services/corpusLocalMcp.js';
 import * as mcp from '../services/xenoMcp.js';
+import { AMBIENT_SCOPES } from '../capabilities/scopes.js';
+import { ensureReadGrants } from '../services/cloudShell.js';
+import * as creds from '../services/workspaceCredentials.js';
 import { startDeviceAuthorization, approveDevice, deviceTokenGrant } from '../utils/oidcProvider.js';
 import { accessTokenHash } from '../utils/dpop.js';
 import { issuer } from '../config/hosts.js';
@@ -260,6 +263,24 @@ async function main() {
     await pool.query('INSERT INTO agent_identities (user_id, owner_user_id) VALUES ($1,$2)', [agentU.id, alice.id]);
     const AGENT = { id: agentU.id, kind: 'agent', role: 'user' };
     ok((await local.callTool(pool, AGENT, 'projects', {})).structuredContent.devices.length === 1, 'an agent reads its owner’s PC');
+    // nobody gets this by being given everything: it takes a person saying yes for that app
+    ok(!mcp.AGENT_DEFAULT_CATEGORIES.includes('corpus_local') && mcp.AGENT_DEFAULT_CATEGORIES.includes('corpus'), 'a platform agent’s own credential doesn’t start with this');
+    ok(!AMBIENT_SCOPES.includes('corpus_local:read') && AMBIENT_SCOPES.includes('workspace:read'), 'nor does a key given every ordinary scope');
+    const shellAgentU = await mkUser('shellagent');
+    await pool.query('INSERT INTO agent_identities (user_id, owner_user_id) VALUES ($1,$2)', [shellAgentU.id, alice.id]);
+    const shellWs = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'team','Sh',$2) RETURNING id`, [alice.id, `${tag}-sh`])).rows[0].id;
+    await ensureReadGrants(pool, shellAgentU.id, shellWs);
+    ok(await creds.hasGrant(pool, shellAgentU.id, 'corpus.corpus.query', shellWs) && !(await creds.hasGrant(pool, shellAgentU.id, 'corpus_local.lapsed.list', shellWs)), 'a Cloud Shell agent’s read grants leave it out');
+    ok(/scopes: \[\.\.\.AMBIENT_SCOPES\], label: 'Cloud Shell'/.test(fs.readFileSync(path.resolve(here, '../services/cloudShell.js'), 'utf8')), 'and a Cloud Shell key is made from the ordinary scopes');
+    // the way an app such as Claude Code gets it: signs in with Tasks only, and the person turns it on for that app
+    const appConn = await mcp.connectionFor(pool, { ownerId: alice.id, agentId: agentU.id, clientId: `${tag}-app`, clientName: 'Claude Code' });
+    const APP = { ...AGENT, token: { audience: 'xeno-tasks', scopes: ['tasks:read', 'tasks:write'], ownerId: alice.id, agentUserId: agentU.id } };
+    const before = await mcp.callTool(pool, APP, appConn, 'corpus_local_projects', {});
+    ok(before.result.isError && /Dev › XENO MCP/.test(before.result.content[0].text), 'an app signed in with Tasks only can’t use it, and is told where it’s turned on');
+    await mcp.setCategories(pool, alice.id, appConn.id, ['tasks', 'corpus_local']);
+    const onConn = await mcp.connectionFor(pool, { ownerId: alice.id, agentId: agentU.id, clientId: `${tag}-app` });
+    const after2 = await mcp.callTool(pool, APP, onConn, 'corpus_local_projects', {});
+    ok(!after2.result.isError && after2.result.structuredContent.devices[0].projects[0].id === 'p-one', 'once the person turns it on for that app, the same sign-in reads their PC');
     const co = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1,'company','Co',$2) RETURNING id`, [alice.id, `${tag}-co`])).rows[0].id;
     const res = (await pool.query(`INSERT INTO workforce_resources (kind, owner_workspace_id, created_by_user_id, name) VALUES ('agent', $1, $2, 'Co agent') RETURNING id`, [co, alice.id])).rows[0];
     await pool.query(`INSERT INTO agent_identities (user_id, owner_user_id, workforce_resource_id, workforce_resource_kind) VALUES ($1,$2,$3,'agent')`, [coAgentU.id, alice.id, res.id]);
