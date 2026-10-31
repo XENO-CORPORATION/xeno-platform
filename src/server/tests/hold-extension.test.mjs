@@ -17,6 +17,8 @@
  *   - a settled hold may be extended                -> "a settled or voided hold cannot be extended"
  *   - no upper bound on the extension               -> "an extension is bounded"
  *   - the extension moves expires_at backwards      -> "an extension never shortens a hold"
+ *   - the sweeper voids one batch only              -> "a backlog larger than one batch is voided by one sweep"
+ *   - the control hold is not created               -> "fixture: the control hold is created"
  *
  * Run: DATABASE_URL=postgresql://t:t@127.0.0.1:5432/<disposable> node tests/hold-extension.test.mjs
  */
@@ -76,6 +78,25 @@ async function main() {
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
+    // ── The sweeper voids the whole backlog, not one batch of it. ──────────────────────────────────
+    // The FUND-09 control below is the NEWEST expired hold in the database. Ordered oldest-first, it falls
+    // outside the sweeper's default batch of 1,000 once 1,000 older expired holds exist, which is the state
+    // a shared or reused database accumulates. This plants 1,001 such holds so that boundary is exercised on
+    // every run, not only on a dirty database, and expects ONE default sweep to void every one. A sweep
+    // that stops after one batch voids 1,000 and leaves one held.
+    const backlogUser = (await pool.query('SELECT gen_random_uuid() AS id')).rows[0].id;
+    await pool.query(
+      `INSERT INTO credit_holds (user_id, account_id, hold_id, surface, operation, amount_micro, expires_at)
+       SELECT $1::uuid, NULL, 'backlog-' || g, 'backlog', 'backlog', 1000000,
+              now() - interval '1 day' + (g || ' milliseconds')::interval
+         FROM generate_series(1, 1001) g`,
+      [backlogUser],
+    );
+    const backlogSwept = await sweepExpiredHolds(pool);
+    const backlogLeft = (await pool.query("SELECT count(*)::int AS n FROM credit_holds WHERE user_id=$1 AND state='held'", [backlogUser])).rows[0].n;
+    ok(backlogLeft === 0 && backlogSwept >= 1001,
+      `a backlog larger than one batch is voided by one sweep (${backlogLeft} of 1001 left held; sweep reported ${backlogSwept})`);
+
     // ── The FUND-09 scenario: a 100-credit run whose work outlives its hold's TTL. ───────────
     // Both holds get a ONE-second TTL and the test waits past it, so the sweeper genuinely sees them
     // expire. The first version used a 60 s TTL and swept at once, which would have passed with no
@@ -84,7 +105,8 @@ async function main() {
     const hold = await req('/holds', { userId: u, holdId: 'run-long', amountMicro: C(100), operation: 'agent_run', surface: 'agents', expiresInSeconds: 1 });
     ok(hold.status === 200 && hold.json?.state === 'held', `fixture: a 100-credit hold with a 1 s TTL (got ${hold.status})`);
     const control = await newUser(100);
-    await req('/holds', { userId: control, holdId: 'run-long', amountMicro: C(100), operation: 'agent_run', surface: 'agents', expiresInSeconds: 1 });
+    const controlHold = await req('/holds', { userId: control, holdId: 'run-long', amountMicro: C(100), operation: 'agent_run', surface: 'agents', expiresInSeconds: 1 });
+    ok(controlHold.status === 200 && controlHold.json?.state === 'held', `fixture: the control hold is created (got ${controlHold.status})`);
 
     // The holder keeps its hold alive while the run works; the control's holder does not.
     const ext = await req('/holds/run-long/extend', { userId: u, extendBySeconds: 600 });
