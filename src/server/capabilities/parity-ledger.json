@@ -10813,6 +10813,16 @@
       "class": "irreversible",
       "scope": "none",
       "because": "deleting an account is a person’s own act, confirmed in a browser session; an API key has no session, and an agent must not reach it"
+    },
+    "route:libraryRoutes.js:POST /assets/file/:id/duplicate": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "library:write"
+    },
+    "route:libraryRoutes.js:PUT /assets/:source/:id/project": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "library:write"
     }
   }
 }

@@ -15,6 +15,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - Workspace › Teams now creates, edits and archives real teams, each with its own link. Automations lists your real workflows and
   opens them in Automate. Activity shows what was recorded in the workspace, and says how many entries you can't see.
 
+**Library: Shared with me, duplicate, and move to a project.**
+
+- Shared with me lists what other people shared with you, and says who.
+- Duplicate makes a real copy with its own history. If someone shared a file with you, the copy is yours.
+- Move to project files the item in that project's folder, so everyone on the project can reach it.
+
 **You can delete your account from Settings.**
 
 - You confirm it's you, then you have 30 days to change your mind, as the page always said. An email tells you the date.

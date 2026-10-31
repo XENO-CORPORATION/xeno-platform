@@ -80,6 +80,7 @@
     "test:workspace-mail-mutation": "node scripts/workspace-mail-mutation-check.mjs",
     "test:scheduling": "node src/server/tests/scheduling.test.mjs",
     "test:inbox": "node src/server/tests/inbox.test.mjs",
+    "test:library-copies": "node src/server/tests/library-copies.test.mjs",
     "test:inbox-ui": "node prototypes/xeno-workspace/tests/inbox-test.mjs",
     "test:places-ui": "node prototypes/xeno-workspace/tests/places-live-test.mjs",
     "test:market-ui": "node prototypes/xeno-workspace/tests/market-live-test.mjs",

@@ -690,14 +690,14 @@
       undo(`Renamed to “${f.name}”`, () => { f.name = was; sync(); repaint(); });
     }
     function duplicateFile(f) {
-      if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('duplicate')) return;
+      if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.duplicate(f);
       const L = window.XENO_PG_LIBRARY.items, dot = f.name.lastIndexOf('.'), stem = dot > 0 ? f.name.slice(0, dot) : f.name, ext = dot > 0 ? f.name.slice(dot) : '';
       let n = 1, name = `${stem} copy${ext}`; while (L.some((o) => o.name === name)) name = `${stem} copy ${++n}${ext}`;
       const now = new Date().toISOString(), c = { ...f, id: 'lib_' + Date.now(), name, createdAt: now, updatedAt: now, starred: false, source: { ...f.source }, media: f.media && { ...f.media } };
       L.splice(L.indexOf(f) + 1, 0, c); sync(); repaint(); if (onLib()) selectFile(c.id);
       undo(`Duplicated as “${name}”`, () => { L.splice(L.indexOf(c), 1); sync(); repaint(); });
     }
-    function moveFile(f, project) { if (window.XENO_LIB && window.XENO_LIB.served && window.XENO_LIB.refuse('move')) return; const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
+    function moveFile(f, project) { if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.moveToProject(f, project); const was = f.project; f.project = project; f.updatedAt = new Date().toISOString(); sync(); repaint(); undo(project ? `Moved to ${project}` : 'Removed from its project', () => { f.project = was; sync(); repaint(); }); }
     function trashFile(f) { if (window.XENO_LIB && window.XENO_LIB.served) { ui('library').sel = null; return void window.XENO_LIB.trash([f]); } f.trashedAt = new Date().toISOString(); ui('library').sel = null; sync(); repaint(); undo(`Moved “${f.name}” to Trash`, () => { f.trashedAt = null; sync(); repaint(); }); }
     async function purgeFile(f) {
       if (window.XENO_LIB && window.XENO_LIB.served) return void window.XENO_LIB.purge([f]);

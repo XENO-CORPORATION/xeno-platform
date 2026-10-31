@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1921 actions · 218 agent capability · 1337 planned (debt) · 366 excluded · **coverage 14%** of the 1555 owed.
+**Total:** 1923 actions · 218 agent capability · 1339 planned (debt) · 366 excluded · **coverage 14%** of the 1557 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -16,7 +16,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | chat | 101 | 0 | 100 | 1 | 0% |
 | workspace | 162 | 23 | 97 | 42 | 19.2% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
-| storage | 91 | 5 | 83 | 3 | 5.7% |
+| storage | 93 | 5 | 85 | 3 | 5.6% |
 | account | 97 | 4 | 58 | 35 | 6.5% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 75 | 0 | 37 | 38 | 0% |
@@ -688,7 +688,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:schedulingRoutes.js:PUT /availability`
 - `ui:platform-scheduling.js:data-sc-page`
 
-## storage — 83 planned
+## storage — 85 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -733,11 +733,13 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:libraryRoutes.js:POST /assets/:id/link`
 - `route:libraryRoutes.js:POST /assets/:source/:id/restore`
 - `route:libraryRoutes.js:POST /assets/:source/:id/trash`
+- `route:libraryRoutes.js:POST /assets/file/:id/duplicate`
 - `route:libraryRoutes.js:POST /assets/file/:id/shares`
 - `route:libraryRoutes.js:POST /assets/file/:id/versions/:version/restore`
 - `route:libraryRoutes.js:POST /folders/:id/shares`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/area`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/folder`
+- `route:libraryRoutes.js:PUT /assets/:source/:id/project`
 - `route:libraryRoutes.js:PUT /assets/:source/:id/star`
 - `route:projectDirectoryBindingRoutes.js:GET /projects/:id/directories`
 - `route:projectDirectoryBindingRoutes.js:GET /projects/:id/execution-root`
