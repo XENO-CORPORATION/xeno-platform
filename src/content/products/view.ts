@@ -1,6 +1,6 @@
 import type { ProductContent } from './_types';
 
-/* XENO View desktop: sourced from ../xeno-view at the 0.2.1 release. src/main/index.ts (door, file dialog, clipboard),
+/* XENO View desktop: sourced from ../xeno-view at the 0.2.2 release. src/main/index.ts (door, file dialog, clipboard),
  * src/main/fileScanner.ts (the 24 extensions, natural sibling order), src/main/escalation.ts (Pixel, Motion, Sound,
  * Form), src/main/aiEdit.ts (AI Restyle through the door), src/main/updater.ts (gated in-app updates), the renderer
  * components (ImageViewer, VideoPlayer, AudioPlayer, ModelViewer, Inspector) and electron-builder.yml (associations).
@@ -18,7 +18,7 @@ const view: ProductContent = {
     sub: 'XENO View is one Windows app for your images, video, audio and 3D models. Arrow keys walk the folder, and one click sends a file to the XENO app that can change it.',
     media: { type: 'image', src: '/product-icons/svg/xeno-view.svg', alt: 'The XENO View app icon' },
     badges: ['Windows', 'Experimental', 'Unsigned build', 'XENO account'],
-    note: 'Experimental · v0.2.1 · Windows x64 only. Updates itself.',
+    note: 'Experimental · v0.2.2 · Windows x64 only. Updates itself.',
   },
   trust: [
     'Viewing happens on this PC: your files stay where they are',

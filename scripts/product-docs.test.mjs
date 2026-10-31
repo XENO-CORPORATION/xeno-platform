@@ -15,7 +15,7 @@ const required = {
   hub: { version: '0.11.18', pages: ['introduction', 'agent', 'agent-runtime-updates', 'updates', 'troubleshooting'] },
   browser: { version: '0.5.8', pages: ['introduction', 'installation', 'signing-in', 'tabs-and-workspaces', 'agent-api', 'troubleshooting'] },
   corpus: { version: '0.3.4', pages: ['introduction', 'installation', 'signing-in', 'quickstart', 'notes', 'agent-panel', 'tenets-and-verdicts', 'checks', 'connecting-agents', 'command-line', 'command-reference', 'exit-codes', 'troubleshooting'] },
-  view: { version: '0.2.1', pages: ['introduction', 'installation', 'signing-in', 'viewing-files', 'keyboard', 'opening-in-other-apps', 'ai-restyle', 'your-data', 'troubleshooting', 'release-history'] },
+  view: { version: '0.2.2', pages: ['introduction', 'installation', 'signing-in', 'viewing-files', 'keyboard', 'opening-in-other-apps', 'ai-restyle', 'your-data', 'troubleshooting', 'release-history'] },
   shell: { version: '0.1.0-beta.6', pages: ['introduction', 'installation', 'signing-in', 'bringing-apps-in', 'sharing', 'shared-folders-and-terminals', 'troubleshooting'] },
 };
 
