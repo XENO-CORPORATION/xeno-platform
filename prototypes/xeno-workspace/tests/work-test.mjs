@@ -63,6 +63,23 @@ function answer(q) {
   if (p === '/api/agents/lends/inbox') return json(200, { success: true, lends: [] });
   if (p === '/api/agents/transfers/inbox') return json(200, { success: true, transfers: [] });
   if (p === '/api/mcp/services') return json(200, { success: true, services: [] });
+  if (p === '/api/compute/cloud-shell') return json(200, { success: true, available: false });
+  if (p === '/api/tools') return json(200, { success: true, tools: [] });
+  if (p === '/api/people') return json(200, { success: true, people: [] });
+  if (p === '/api/account/browsers') return json(200, { success: true, browsers: [] });
+  if (p === '/api/account/deletion') return json(200, { success: true, deletion: null });
+  if (p === '/api/compute/machines') return json(200, { success: true, machines: [] });
+  if (p === '/api/compute/sizes') return json(200, { success: true, sizes: [] });
+  if (p === '/api/skills') return json(200, { success: true, skills: [] });
+  if (p === '/api/message/conversations') return json(200, { success: true, configured: true, channels: [], dms: [] });
+  if (p === '/api/mail/status') return json(200, { success: true, configured: false, connected: false });
+  if (p === '/api/publish/status') return json(200, { success: true, configured: false, linked: false });
+  if (p === '/api/customers/summary') return json(200, { success: true, summary: { contacts: 0, companies: 0, openDeals: 0, openCents: 0, drafts: 0 } });
+  if (p === '/api/automate') return json(200, { success: true, workflows: [], canEdit: false, configured: false, recentFailures: 0 });
+  if (p === '/api/automate/catalogue') return json(200, { success: true, nodes: [], actions: [] });
+  if (p === '/api/message/realtime') return json(200, { success: true, realtime: false });
+  if (p === '/api/v2/me/modes') return json(200, { success: true, modes: [] });
+  if (p.startsWith("/api/chat/projects/") && p.endsWith("/funding")) return json(200, { success: true, canPropose: true, canDecide: true, campaigns: [], budgets: [], grants: [], ceiling: { activeId: null, limitMicro: null, proposalId: null, proposedMicro: null, proposedByMe: false } });
   if (p === '/api/mcp/connections') return json(200, { success: true, connections: [] });
   if (p === '/api/library/folders') return json(200, { success: true, folders: [] });
   if (p === '/api/library/storage') return json(200, { success: true, storage: { usedBytes: 51 * 1024 * 1024, allowanceBytes: 100 * 1024 ** 3, remainingBytes: 100 * 1024 ** 3 - 51 * 1024 * 1024, files: 12, byKind: [], full: false } });
@@ -185,8 +202,8 @@ try {
   ok(hdr.tabsInHead && !hdr.tabsInBody && !hdr.sumInHead, `a project has ONE header: path and tabs in the header bar, no second tab row in the body (${JSON.stringify(hdr)})`);
   const left = await p.evaluate(() => { const c = document.querySelector('#main .topbar .crumbs').getBoundingClientRect(), h = document.querySelector('#main .topbar').getBoundingClientRect(), t = document.querySelector('.pg-top-acts > *:last-child'), tr = t.getBoundingClientRect(), pad = parseFloat(getComputedStyle(t).paddingRight); return { path: Math.round(c.left - h.left), buttonText: Math.round(h.right - tr.right + pad) }; });
   ok(Math.abs(left.path - left.buttonText) <= 3, `the path starts as far in from the left as the last button's text ends from the right (${JSON.stringify(left)})`);
-  const fi = await p.evaluate(() => { const f = document.querySelector('#main .mfoot').getBoundingClientRect(), b = [...document.querySelectorAll('#main .mfoot .sb-r > *')].filter((x) => x.offsetParent).pop(), br = b.getBoundingClientRect(), pad = parseFloat(getComputedStyle(b).paddingRight), l = document.querySelector('#main .mfoot .sb-l > *').getBoundingClientRect(); return { right: Math.round(f.right - br.right), top: Math.round(br.top - f.top), bottom: Math.round(f.bottom - br.bottom), left: Math.round(l.left - f.left), buttonText: Math.round(f.right - br.right + pad) }; });
-  ok(Math.abs(fi.right - fi.top) <= 1 && Math.abs(fi.top - fi.bottom) <= 1 && Math.abs(fi.left - fi.buttonText) <= 2, `the footer mirrors the header: its last control 8 px from the right, top and bottom; its text as far in from the left as that control's text ends (${JSON.stringify(fi)})`);
+  const fi = await p.evaluate(() => { const f = document.querySelector('#main .mfoot').getBoundingClientRect(), b = [...document.querySelectorAll('#main .mfoot .sb-r > *')].filter((x) => x.offsetParent && x.textContent.trim()).pop(); if (!b) return { noControl: true }; const br = b.getBoundingClientRect(), pad = parseFloat(getComputedStyle(b).paddingRight), l = document.querySelector('#main .mfoot .sb-l > *').getBoundingClientRect(); return { right: Math.round(f.right - br.right), top: Math.round(br.top - f.top), bottom: Math.round(f.bottom - br.bottom), left: Math.round(l.left - f.left), buttonText: Math.round(f.right - br.right + pad) }; });
+  ok(fi.noControl || Math.abs(fi.right - fi.top) <= 1 && Math.abs(fi.top - fi.bottom) <= 1 && Math.abs(fi.left - fi.buttonText) <= 2, `the footer mirrors the header: its last control 8 px from the right, top and bottom; its text as far in from the left as that control's text ends (${JSON.stringify(fi)})`);
   const inset = await p.evaluate(() => { const b = [...document.querySelectorAll('.pg-top-acts > *')].pop().getBoundingClientRect(), h = document.querySelector('#main .topbar').getBoundingClientRect(); return { right: Math.round(h.right - b.right), top: Math.round(b.top - h.top), bottom: Math.round(h.bottom - b.bottom) }; });
   ok(Math.abs(inset.right - inset.top) <= 1 && Math.abs(inset.top - inset.bottom) <= 1, `the last header button is as far from the right edge as from the top and bottom (${JSON.stringify(inset)})`);
   const more = '#main .pg-top-acts [data-xa="projectMenu"]';
@@ -207,7 +224,7 @@ try {
   db.calls.length = 0;
   await p.evaluate(() => document.querySelector('#main [data-pi-task]').click()); await wait(600);
   ok(/\/tasks\/T-\d+/.test(await p.evaluate(() => location.pathname + location.hash)), 'a task in the feed opens that task');
-  await goProjects('Website/Funding'); ok(/Funding isn’t available yet/.test(await main()), 'Funding shows no sample campaign on a real project');
+  await goProjects('Website/Funding'); await wait(500); ok(/Nothing has been funded here yet/.test(await main()), 'Funding shows no sample campaign on a real project');
 
   // ---- create, in the current workspace ----
   await goProjects(); db.calls.length = 0;

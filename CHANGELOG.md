@@ -5,6 +5,17 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Settings, Knowledge and project Funding are real.**
+
+- Settings › Apps lists every app signed in with your account and what it can do. Removing one signs it out everywhere at once.
+- Settings › Provider keys adds your own OpenAI, Anthropic, Google or compatible key. XENO checks it with the provider first, and you confirm it’s you before adding one, because a key’s endpoint receives your prompts. Each product can use your key or XENO credits.
+- Settings › Usage sets a monthly spend limit. Work that would go past it is refused.
+- Settings › Connections shows your connected clouds and agents, and opens each where it is managed. Settings › Workspace and Gifts show real state; sending gifts stays closed.
+- Workspace › Knowledge shows what the workspace holds to be true, with search, in place of sample sources.
+- A project’s Funding tab shows campaigns, totals, budgets and requests. Nobody can see who gave what except their own part. It moves no money. Someone with edit access can propose a monthly ceiling, and an owner who didn’t propose it approves it.
+- Forms that offer a choice now show a real list. Corpus’s New tenet and Research’s project field were showing a box to type in.
+- A project’s tabs no longer run underneath its buttons, and the “Preview” switch is gone from real pages.
+
 **Three more workspace areas show your real work.**
 
 - Corpo › People, Dev › Agents and Studio › Generate now list your own people, agents and generations, and open each at its

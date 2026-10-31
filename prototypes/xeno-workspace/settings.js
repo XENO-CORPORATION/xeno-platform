@@ -156,7 +156,7 @@
     const nav0 = `<nav class="set-nav" aria-label="Settings">${SECT.map(([g, s]) => `<div class="set-grp">${g}</div>${s.map(([sid, l, i]) => `<button class="set-nl" data-set="go" data-arg="${sid}" aria-current="${sid === id}">${ic(i)}<span>${esc(l)}</span></button>`).join('')}`).join('')}</nav>`;
     const group = SECT.find(([, s]) => s.some(([x]) => x === id))?.[0] || 'Settings';
     return `<div class="pg pg--set">
-      <div class="set-wrap"><header class="set-intro"><small>${esc(group)}</small><h1>${esc(title(id))}</h1>${LEAD[id] ? `<p>${esc(LEAD[id])}</p>` : ''}</header><div class="set-body" data-set-body="${id}">${(window.XENO_ACCOUNT && window.XENO_ACCOUNT.section(id, a, { card, row, b, tag, esc, when, ago, ic })) ?? S[id](a)}</div></div><footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer></div>`;
+      <div class="set-wrap"><header class="set-intro"><small>${esc(group)}</small><h1>${esc(title(id))}</h1>${LEAD[id] ? `<p>${esc(LEAD[id])}</p>` : ''}</header><div class="set-body" data-set-body="${id}">${(window.XENO_ACCOUNT && window.XENO_ACCOUNT.section(id, a, { card, row, b, tag, esc, when, ago, ic })) ?? S[id](a)}</div></div>${ON_PLATFORM ? '' : `<footer class="pg-foot" data-fam="settings" data-api="${esc(API[id] || '')}" data-noun=""></footer>`}</div>`;
   }
   const go = (sid) => X().go('global', { global: 'settings', item: title(sid) });
   // theme controls: save, and say so if the save is refused (nothing changes then)

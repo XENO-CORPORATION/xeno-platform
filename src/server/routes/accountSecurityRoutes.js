@@ -16,6 +16,8 @@
  *   GET    /deletion                 is this account being deleted, and when
  *   POST   /deletion                 delete it after 30 days                   [confirmed]
  *   DELETE /deletion                 keep it
+ *   GET    /apps                     the apps signed in with this account
+ *   DELETE /apps/:clientId           take an app's access away, now
  *
  * [confirmed] routes answer 403 `confirmation_required` until POST /confirm succeeds in this
  * browser session. An API key has no session, so it can never reach them.
@@ -33,6 +35,7 @@ import {
 import { cancelEmailChange, completeEmailChange, pendingEmailChange, requestEmailChange } from '../services/accountEmailChange.js';
 import { deleteExport, exportFile, listExports, requestExport } from '../services/accountExport.js';
 import * as deletion from '../services/accountDeletion.js';
+import { listApps, removeApp } from '../services/authorizedApps.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -149,6 +152,14 @@ router.delete('/sessions', guard('sign out everywhere', async (req, res) => {
 }));
 
 // ── deleting your account ─
+// ── apps signed in with this account ─────────────────────────────
+router.get('/apps', guard('apps', async (req, res) => { res.json({ success: true, apps: await listApps(req.db, req.user.id) }); }));
+router.delete('/apps/:clientId', guard('app removal', async (req, res) => {
+  const out = await removeApp(req.db, req.user.id, req.params.clientId);
+  if (out.notFound) return fail(res, 404, 'app_not_found', 'That app has no access to your account');
+  res.json({ success: true, ...out });
+}));
+
 router.get('/deletion', guard('deletion status', async (req, res) => { res.json({ success: true, deletion: await deletion.status(req.db, req.user.id) }); }));
 router.post('/deletion', requireConfirmation(), guard('deletion request', async (req, res) => {
   const r = await deletion.request(req.db, req.user.id);

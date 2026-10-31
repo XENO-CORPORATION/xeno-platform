@@ -9,15 +9,15 @@ Per division: how many actions a person can take, how many an agent can take tod
 | storage | 93 | 5 | 85 | 3 | 34 | 48 | 11 | 0 | `storage:write` 52, `storage:read` 30, `library:write` 2, `share:create` 1 |
 | studio | 122 | 4 | 118 | 0 | 54 | 55 | 13 | 0 | `library:write` 67, `library:read` 51 |
 | tasks | 107 | 13 | 86 | 8 | 16 | 81 | 10 | 0 | `tasks:write` 79, `tasks:read` 7 |
-| chat | 101 | 0 | 100 | 1 | 32 | 52 | 17 | 0 | `chat:write` 69, `chat:read` 31 |
+| chat | 104 | 0 | 102 | 2 | 33 | 54 | 17 | 0 | `chat:write` 70, `chat:read` 32 |
 | agents | 204 | 0 | 142 | 62 | 61 | 133 | 10 | 0 | `agents:write` 109, `agents:read` 33 |
-| commerce | 146 | 0 | 113 | 33 | 43 | 83 | 7 | 13 | `wallet:spend` 65, `wallet:read` 41, `marketplace:write` 7 |
-| workspace | 162 | 23 | 97 | 42 | 57 | 85 | 20 | 0 | `workspace:admin` 72, `workspace:read` 24, `agents:write` 1 |
+| commerce | 148 | 0 | 114 | 34 | 44 | 84 | 7 | 13 | `wallet:spend` 65, `wallet:read` 42, `marketplace:write` 7 |
+| workspace | 167 | 23 | 98 | 46 | 57 | 90 | 20 | 0 | `workspace:admin` 72, `workspace:read` 24, `agents:write` 1, `chat:write` 1 |
 | places | 9 | 3 | 4 | 2 | 8 | 1 | 0 | 0 | `places:read` 4 |
 | forum | 54 | 8 | 44 | 2 | 22 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 17 |
 | workforce | 303 | 53 | 245 | 5 | 35 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
 | workspace-ui | 173 | 4 | 101 | 68 | 68 | 104 | 1 | 0 | `workspace:admin` 101 |
-| account | 97 | 4 | 58 | 35 | 32 | 56 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
+| account | 101 | 4 | 58 | 39 | 33 | 59 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
 | browser-shell | 28 | 0 | 28 | 0 | 11 | 15 | 2 | 0 | `workspace:admin` 17, `workspace:read` 11 |
 | canvas | 22 | 6 | 16 | 0 | 5 | 13 | 4 | 0 | `tasks:write` 13, `tasks:read` 3 |

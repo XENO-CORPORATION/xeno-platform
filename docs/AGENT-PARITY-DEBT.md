@@ -4,20 +4,20 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 1923 actions · 218 agent capability · 1339 planned (debt) · 366 excluded · **coverage 14%** of the 1557 owed.
+**Total:** 1937 actions · 218 agent capability · 1343 planned (debt) · 376 excluded · **coverage 14%** of the 1561 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 303 | 53 | 245 | 5 | 17.8% |
 | agents | 204 | 0 | 142 | 62 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
-| commerce | 146 | 0 | 113 | 33 | 0% |
+| commerce | 148 | 0 | 114 | 34 | 0% |
+| chat | 104 | 0 | 102 | 2 | 0% |
 | workspace-ui | 173 | 4 | 101 | 68 | 3.8% |
-| chat | 101 | 0 | 100 | 1 | 0% |
-| workspace | 162 | 23 | 97 | 42 | 19.2% |
+| workspace | 167 | 23 | 98 | 46 | 19% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 93 | 5 | 85 | 3 | 5.6% |
-| account | 97 | 4 | 58 | 35 | 6.5% |
+| account | 101 | 4 | 58 | 39 | 6.5% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 75 | 0 | 37 | 38 | 0% |
 | browser-shell | 28 | 0 | 28 | 0 | 0% |
@@ -304,7 +304,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-canvas.js:data-cv-text`
 - `ui:platform-canvas.js:data-cv-wire`
 
-## chat — 100 planned
+## chat — 102 planned
 
 - `route:aiRoutes.js:GET /local-model-catalog`
 - `route:aiRoutes.js:GET /models`
@@ -342,6 +342,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:GET /projects/:id/access`
 - `route:chatRoutes.js:GET /projects/:id/activity`
 - `route:chatRoutes.js:GET /projects/:id/files`
+- `route:chatRoutes.js:GET /projects/:id/funding`
 - `route:chatRoutes.js:GET /projects/:id/people`
 - `route:chatRoutes.js:GET /projects/:id/storage`
 - `route:chatRoutes.js:GET /projects/:id/summary`
@@ -363,6 +364,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:POST /personas/:id/use`
 - `route:chatRoutes.js:POST /projects`
 - `route:chatRoutes.js:POST /projects/:id/files`
+- `route:chatRoutes.js:POST /projects/:id/funding/ceiling`
 - `route:chatRoutes.js:POST /scheduled`
 - `route:chatRoutes.js:POST /scheduled-runs/:id/retry`
 - `route:chatRoutes.js:POST /scheduled/:id/run`
@@ -407,7 +409,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-chat.js:data-side=swap`
 - `ui:platform-chat.js:data-side=tab`
 
-## commerce — 113 planned
+## commerce — 114 planned
 
 - `route:accountGiftRoutes.js:POST /`
 - `route:accountGiftRoutes.js:POST /account-history`
@@ -484,6 +486,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:productDownloadRoutes.js:GET /:slug/grant (updateGrantRouter)`
 - `route:productDownloadRoutes.js:POST /grant (grantRouter)`
 - `route:v2LedgerRoutes.js:GET /balance`
+- `route:v2LedgerRoutes.js:GET /caps`
 - `route:v2LedgerRoutes.js:GET /quota`
 - `route:v2LedgerRoutes.js:GET /usage`
 - `route:v2LedgerRoutes.js:GET /verify`
@@ -1249,7 +1252,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 97 planned
+## workspace — 98 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
@@ -1340,6 +1343,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-services.js:data-xsv=list`
 - `ui:platform-services.js:data-xsv=open`
 - `ui:platform-services.js:data-xsv=retry`
+- `ui:platform-work.js:data-pf=propose`
 - `ui:platform-work.js:data-pj-conv`
 - `ui:platform-work.js:data-pj=files-add`
 - `ui:platform-work.js:data-pj=files-remove`

@@ -10823,6 +10823,96 @@
       "status": "planned",
       "class": "reversible",
       "scope": "library:write"
+    },
+    "route:accountSecurityRoutes.js:GET /apps": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "safe",
+      "scope": "none",
+      "because": "which apps hold a person’s account is that person’s own security information; an agent has no need of it"
+    },
+    "route:accountSecurityRoutes.js:DELETE /apps/:clientId": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "taking an app’s access away is the person’s own account decision"
+    },
+    "route:chatRoutes.js:GET /projects/:id/funding": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "chat:read"
+    },
+    "route:chatRoutes.js:POST /projects/:id/funding/ceiling": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "chat:write"
+    },
+    "route:chatRoutes.js:POST /projects/:id/funding/ceiling/:proposalId/decision": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "deciding a spending ceiling is a person’s act; workforceFunding refuses an agent"
+    },
+    "route:v2LedgerRoutes.js:GET /caps": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "wallet:read"
+    },
+    "route:v2LedgerRoutes.js:DELETE /caps/:windowSec": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "removing a spending limit is the person’s own decision; an agent must not lift it"
+    },
+    "ui:platform-account.js:data-acct=goto": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-account.js:data-acct-route": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "where a person’s AI comes from, and whose key pays for it, is their own decision"
+    },
+    "ui:platform-corpus.js:data-xcp-search": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "the same read as corpus.query, which agents already have"
+    },
+    "ui:platform-work.js:data-pf=retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves around this screen; the data it shows is already covered"
+    },
+    "ui:platform-work.js:data-pf=approve": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "deciding a spending ceiling is a person’s act; workforceFunding refuses an agent"
+    },
+    "ui:platform-work.js:data-pf=reject": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "deciding a spending ceiling is a person’s act; workforceFunding refuses an agent"
+    },
+    "ui:platform-work.js:data-pf=propose": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "chat:write"
     }
   }
 }
