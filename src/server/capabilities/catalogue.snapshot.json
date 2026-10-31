@@ -2704,6 +2704,48 @@
    ]
   },
   {
+   "name": "fonts.catalogue.search",
+   "wire": "fonts__catalogue__search",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "fonts:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "fonts_search_catalogue"
+   ]
+  },
+  {
+   "name": "fonts.workspace.list",
+   "wire": "fonts__workspace__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "fonts:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "fonts_list_workspace_fonts"
+   ]
+  },
+  {
+   "name": "fonts.family.add",
+   "wire": "fonts__family__add",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "fonts:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "fonts_add_font"
+   ]
+  },
+  {
    "name": "brand.kit.list",
    "wire": "brand__kit__list",
    "version": "1.0.0",

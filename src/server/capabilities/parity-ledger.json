@@ -174,7 +174,9 @@
     "formsRoutes.js": "forms",
     "platform-forms.js": "forms",
     "brandKitRoutes.js": "forms",
-    "platform-assets.js": "forms"
+    "platform-assets.js": "forms",
+    "fontRoutes.js": "forms",
+    "platform-fonts.js": "forms"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11332,6 +11334,44 @@
       "capability": "brand.tokens.export",
       "class": "safe",
       "scope": "brand:read"
+    },
+    "route:fontRoutes.js:GET /catalogue": {
+      "status": "capability",
+      "capability": "fonts.catalogue.search",
+      "class": "safe",
+      "scope": "fonts:read"
+    },
+    "route:fontRoutes.js:GET /face.css": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "fonts:read"
+    },
+    "route:fontRoutes.js:GET /": {
+      "status": "capability",
+      "capability": "fonts.workspace.list",
+      "class": "safe",
+      "scope": "fonts:read"
+    },
+    "route:fontRoutes.js:POST /families": {
+      "status": "capability",
+      "capability": "fonts.family.add",
+      "class": "reversible",
+      "scope": "fonts:write"
+    },
+    "route:fontRoutes.js:DELETE /families/:family": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "fonts:write"
+    },
+    "route:fontRoutes.js:DELETE /uploads/:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "fonts:write"
+    },
+    "route:fontRoutes.js:POST /uploads/:id/takedown": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "fonts:write"
     }
   }
 }

@@ -34,6 +34,8 @@ import mailRoutes from './routes/mailRoutes.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import brandKitRoutes from './routes/brandKitRoutes.js';
+import fontRoutes, { actorOf as fontActorOf, fail as fontFail } from './routes/fontRoutes.js';
+import * as fontsService from './services/fonts.js';
 import workspaceDocsRoutes from './routes/workspaceDocsRoutes.js';
 import { areaFromRequest } from './utils/resourceArea.js';
 import { fileURLToPath } from 'url';
@@ -698,6 +700,7 @@ app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, 
 app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, publishRoutes);
 // Corpo › Forms (services/forms.js): auth per route — the respondent's /public/:token side needs no account
 app.use('/api/forms', databaseMiddleware, formsRoutes);
+app.use('/api/fonts', databaseMiddleware, fontRoutes);   // XENO Fonts, Studio › Libraries (services/fonts.js)
 app.use('/api/brand-kits', databaseMiddleware, brandKitRoutes);   // XENO Assets, Studio › Libraries (services/brandKits.js)
 app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
 // XENO Message = XENO Comms, server-to-server (services/xenoComms.js). The platform keeps no messages.
@@ -1251,6 +1254,20 @@ app.post('/api/library/assets/file/:id/versions', databaseMiddleware, authMiddle
     if (error?.code === 'version_conflict') return res.status(412).json({ success: false, code: 'version_conflict', error: error.message });
     console.error('Failed to add a file version:', error);
     res.status(500).json({ success: false, error: 'Failed to save the new version' });
+  }
+});
+
+// XENO Fonts: a person's own font. It lands in the workspace's Library; services/fonts.js decides whether it may.
+app.post('/api/fonts/uploads', databaseMiddleware, authMiddleware, requireActivated, upload.single('font'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, code: 'no_file', error: 'No font was sent' });
+  try {
+    const r = await fontsService.uploadFont(req.db, await fontActorOf(req), { workspace: req.body?.workspace || null, storagePath: req.file.path, originalName: req.file.originalname, size: req.file.size, rightsConfirmed: req.body?.rightsConfirmed });
+    storeFileObject(req.db, { id: r.fileId, storage_path: req.file.path, content_sha256: r.contentSha256 }).catch((e) => console.warn('[Fonts] object store:', e.message));
+    res.json({ success: true, upload: r.upload });
+  } catch (e) {
+    try { fs.unlinkSync(req.file.path); } catch { /* best-effort */ }
+    if (e && e.code === 'STORAGE_QUOTA') return res.status(413).json({ success: false, code: e.code, error: e.message });
+    fontFail(res, e);
   }
 });
 

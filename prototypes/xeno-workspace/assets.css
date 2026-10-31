@@ -25,3 +25,18 @@
 .bk-logo small{color:var(--muted)}
 .bk-voice{width:100%;box-sizing:border-box;max-width:760px;resize:vertical}
 @media (max-width:760px){.bk-row{grid-template-columns:minmax(0,1fr)}}
+
+/* Fonts: a specimen is set in the font itself, the one place its face shows */
+.ft-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.ft-sample{flex:1 1 280px;min-width:0}
+.ft-cats{display:flex;flex-wrap:wrap;gap:6px}
+.ft .btn.on{background:var(--n26)}
+.ft-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.ft-card{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--n20);min-width:0}
+.ft-card header{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ft-card header small,.ft-pairs{color:var(--muted)}
+.ft-spec{font-size:22px;line-height:1.25;min-height:56px;overflow-wrap:anywhere}
+.ft-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ft-row small{color:var(--muted)}
+.ft-styles{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px}
+.ft-styles span{display:inline-flex;gap:6px;align-items:center}

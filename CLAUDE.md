@@ -369,6 +369,15 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🔤 XENO Fonts lives HERE: Studio › Libraries › Fonts (2026-10-31)
+
+`services/fonts.js` is the one service (screen `platform-fonts.js`, routes `fontRoutes.js` plus `POST /api/fonts/uploads` in `index.js`, agents `fontsMcp.js`). Owner decision 2026-10-31: an open catalogue plus private uploads.
+- **The catalogue is built by `scripts/fonts-catalogue.mjs`**, which reads each family's licence from its own files and stops on anything but OFL or Apache. Bytes are on R2 at immutable `fonts/<id>/v<version>/` keys, each with its LICENSE. Never hand-edit `src/server/data/fontCatalogue.json`.
+- **An upload is a Library file, private to the workspace**, with who confirmed the rights and when. Only a person can confirm (service AND trigger). `utils/fontFile.js` reads the font's own `fsType`: restricted embedding is refused whatever anyone says.
+- **Staff take a font down** with `POST /api/fonts/uploads/:id/takedown`, for a rights holder's complaint.
+- **Pairings are hand-written. There is no AI pairing yet**, and nothing should claim one.
+Proofs: `npm run test:fonts` (real Postgres, mutation-checked), `test:font-file`, `test:fonts-ui`.
+
 ## 🎨 XENO Assets lives HERE: brand kits, Studio › Libraries (2026-10-31)
 
 `services/brandKits.js` is the one service (screen `platform-assets.js`, routes `brandKitRoutes.js` at `/api/brand-kits`, agents `brandKitsMcp.js`); the product's spec and agent contract are in `../xeno-assets`, the Tasks pattern.
