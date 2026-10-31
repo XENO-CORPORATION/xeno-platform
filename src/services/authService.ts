@@ -85,7 +85,8 @@ class AuthService {
       } else {
         return {
           success: false,
-          error: data.error || 'Login failed'
+          error: data.error || 'Login failed',
+          ...(data.code === 'two_step_required' ? { code: data.code, methods: data.methods } : {}),
         };
       }
     } catch (error) {
@@ -95,6 +96,13 @@ class AuthService {
         error: 'Network error. Please try again.'
       };
     }
+  }
+
+  // A sign-in that finished outside login(): a second step, or a passkey
+  adoptSignIn(user: unknown) {
+    setAccessToken(null);
+    setAuthSession(true);
+    localStorage.setItem('xenoos_user', JSON.stringify(user));
   }
 
   // Register new user

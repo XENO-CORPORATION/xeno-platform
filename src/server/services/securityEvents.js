@@ -54,6 +54,7 @@ export const EVENTS = Object.freeze({
   DATA_EXPORT_REQUESTED: 'data_export_requested',
   DATA_EXPORT_DOWNLOADED: 'data_export_downloaded',
   // Deleting an account (services/accountDeletion.js)
+  TWO_STEP_CHANGED: 'two_step_changed',
   ACCOUNT_DELETION_REQUESTED: 'account_deletion_requested',
   ACCOUNT_DELETION_CANCELLED: 'account_deletion_cancelled',
   // OIDC / token lifecycle

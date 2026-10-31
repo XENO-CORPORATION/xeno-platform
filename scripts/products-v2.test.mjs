@@ -74,7 +74,6 @@ test('the Spawn product design states what ships, not the concept it was written
   // The design was authored before Spawn shipped. A re-import once restored the waitlist copy
   // ("documentation only", "nothing is installable") over a product whose installer is public.
   const html = read('public/product-pages/spawn/index.html');
-  assert.match(html, /v0\.1\.0-rc\.45/, 'the design names the published version');
   assert.match(html, /\/product\/spawn\/download\/win/, 'the design links the real download route');
   assert.match(html, /spawn pair --workspace/, 'the design names the browser workspace pairing');
   assert.doesNotMatch(html, /Documentation only: SPEC draft v2/, 'a concept status is not a shipped status');

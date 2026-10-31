@@ -5,6 +5,14 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**Two-step sign-in.**
+
+- Settings › Sign-in & security now really sets up an authenticator app, adds passkeys, and makes recovery codes. Your password alone no longer signs in once one is on, and that goes for Google, GitHub and X sign-in too.
+- The sign-in page has “Sign in with a passkey”, with nothing to type.
+- Turning two-step off, or making new recovery codes, takes the second step itself. A stolen password or inbox can’t do it, and resetting a password doesn’t clear it.
+- You get an email whenever what protects your account changes.
+- You can connect Google, GitHub or X to your account from Settings.
+
 **Settings, Knowledge and project Funding are real.**
 
 - Settings › Apps lists every app signed in with your account and what it can do. Removing one signs it out everywhere at once.

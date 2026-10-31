@@ -10913,6 +10913,118 @@
       "status": "planned",
       "class": "reversible",
       "scope": "chat:write"
+    },
+    "route:accountSecurityRoutes.js:POST /confirm/passkey/options": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:GET /two-step": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:POST /two-step/totp": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:POST /two-step/totp/confirm": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:DELETE /two-step/totp": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:POST /two-step/recovery-codes": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:POST /two-step/passkeys/options": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:POST /two-step/passkeys": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:PATCH /two-step/passkeys/:id": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:accountSecurityRoutes.js:DELETE /two-step/passkeys/:id": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "how a person proves who they are is theirs alone; an agent never enrols, reads or removes a sign-in factor"
+    },
+    "route:authRoutes.js:GET /two-step": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "part of signing in, before any session exists"
+    },
+    "route:authRoutes.js:POST /two-step/passkey/options": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "part of signing in, before any session exists"
+    },
+    "route:authRoutes.js:POST /two-step/verify": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "part of signing in, before any session exists"
+    },
+    "route:authRoutes.js:DELETE /two-step": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "part of signing in, before any session exists"
+    },
+    "route:authRoutes.js:POST /passkey/options": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "part of signing in, before any session exists"
+    },
+    "route:authRoutes.js:POST /passkey/verify": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "part of signing in, before any session exists"
     }
   }
 }

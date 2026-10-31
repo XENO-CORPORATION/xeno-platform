@@ -13,6 +13,8 @@ import {
   type AuthMode,
 } from '../lib/authRouting.js';
 import { stashReturnUrl, consumeReturnUrl } from '../lib/onboardingHandoff.js';
+import { authService } from '../services/authService';
+import { passkeysAvailable, signWithPasskey } from '../lib/passkeys';
 
 const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -153,6 +155,61 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
   };
 
   const submit = () => handleSubmit();
+
+  // ---- the second step, and signing in with a passkey (services/twoStep.js) ----
+  const [secondStep, setSecondStep] = useState<{ methods: string[] } | null>(null);
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [stepCode, setStepCode] = useState('');
+  const [stepError, setStepError] = useState('');
+  const [stepBusy, setStepBusy] = useState(false);
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).get('two_step')) return;
+    let live = true;
+    fetch('/api/auth/two-step', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (live && d && d.methods) { setSecondStep({ methods: d.methods }); setUseRecovery(!d.methods.includes('authenticator') && !d.methods.includes('passkey')); } }).catch(() => {});
+    return () => { live = false; };
+  }, [location.search]);
+  const signedIn = (d: { user?: unknown; redirect?: string }) => {
+    authService.adoptSignIn(d.user);
+    if (d.redirect) { window.location.href = d.redirect; return; }
+    if (returnUrl) { consumeReturnUrl(); window.location.href = returnUrl; return; }
+    window.location.href = cliSession ? location.pathname + location.search : locationReturnPath((location.state as any)?.from, '/workspace');
+  };
+  const postJson = async (url: string, body: unknown) => {
+    const r = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-xeno-session-mode': 'browser' }, body: JSON.stringify(body) });
+    return { ok: r.ok, d: await r.json().catch(() => ({})) };
+  };
+  const sendStep = async (body: Record<string, unknown>) => {
+    setStepBusy(true); setStepError('');
+    try {
+      const { ok, d } = await postJson('/api/auth/two-step/verify', body);
+      if (ok && d.success) return signedIn(d);
+      if (d.code === 'challenge_expired') { setSecondStep(null); setPasswordError(d.error); setShowEmailForm(true); return; }
+      setStepError(d.error || 'That didn’t work. Try again.'); setStepCode('');
+    } catch { setStepError('Network error. Please try again.'); }
+    finally { setStepBusy(false); }
+  };
+  const stepWithPasskey = async () => {
+    setStepBusy(true); setStepError('');
+    try {
+      const { ok, d } = await postJson('/api/auth/two-step/passkey/options', {});
+      if (!ok) { setStepError(d.error || 'Passkeys aren’t available right now.'); return; }
+      const response = await signWithPasskey(d.options);
+      await sendStep({ method: 'passkey', response });
+    } catch { setStepError('The passkey wasn’t used. Try again, or use another way.'); }
+    finally { setStepBusy(false); }
+  };
+  const signInWithPasskey = async () => {
+    setIsSubmitting(true); setPasswordError(''); setEmailError('');
+    try {
+      const { ok, d } = await postJson('/api/auth/passkey/options', {});
+      if (!ok) { setEmailError(d.error || 'Passkeys aren’t available right now.'); return; }
+      const response = await signWithPasskey(d.options);
+      const v = await postJson('/api/auth/passkey/verify', { ceremonyId: d.ceremonyId, response });
+      if (v.ok && v.d.success) return signedIn(v.d);
+      setShowEmailForm(true); setPasswordError(v.d.error || 'That passkey didn’t work.');
+    } catch { /* closing the passkey window is a choice, not an error */ }
+    finally { setIsSubmitting(false); }
+  };
   const startSocial = (provider: 'google' | 'github' | 'x') => {
     const socialReturnUrl = returnUrl
       || (cliSession ? location.pathname + location.search : null)
@@ -198,6 +255,11 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
         });
       }
 
+      if ((result as any).code === 'two_step_required') {
+        const methods: string[] = (result as any).methods || [];
+        setSecondStep({ methods }); setUseRecovery(!methods.includes('authenticator') && !methods.includes('passkey'));
+        return;
+      }
       if (result.success) {
         // CLI/Hub browser-session: complete the cli-auth session → app callback.
         if (cliSession) { finalizeCli(); return; }
@@ -272,6 +334,41 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
               {cliStatus === 'authorizing' ? 'Authorizing — returning you to the app…' : cliStatus}
             </p>
           )}
+          {secondStep ? (
+            <form
+              data-two-step
+              className="flex flex-col gap-4"
+              onSubmit={(e) => { e.preventDefault(); if (stepCode.trim()) sendStep(useRecovery ? { method: 'recovery_code', code: stepCode.trim() } : { method: 'authenticator', code: stepCode.trim() }); }}
+            >
+              <h1 className="text-2xl font-semibold text-white">Confirm it’s you</h1>
+              <p className="text-sm text-white/60">{useRecovery ? 'Enter one of your recovery codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.'}</p>
+              {(useRecovery || secondStep.methods.includes('authenticator')) && (
+                <input
+                  autoFocus
+                  aria-label={useRecovery ? 'Recovery code' : 'Code from your authenticator app'}
+                  autoComplete="one-time-code"
+                  inputMode={useRecovery ? 'text' : 'numeric'}
+                  value={stepCode}
+                  onChange={(e) => setStepCode(e.target.value)}
+                  style={{ outline: 'none' }}
+                  className="h-11 rounded-lg border border-white/10 bg-white/5 px-3 text-white ring-0 focus:border-white/30"
+                />
+              )}
+              {stepError && <p role="alert" className="text-sm text-white/80">{stepError}</p>}
+              {(useRecovery || secondStep.methods.includes('authenticator')) && (
+                <button type="submit" disabled={stepBusy || !stepCode.trim()} className="h-11 rounded-lg bg-white font-medium text-black disabled:opacity-50">Continue</button>
+              )}
+              {secondStep.methods.includes('passkey') && (
+                <button type="button" disabled={stepBusy} onClick={stepWithPasskey} className="h-11 rounded-lg border border-white/15 text-white disabled:opacity-50">Use a passkey</button>
+              )}
+              {secondStep.methods.includes('recovery_code') && (secondStep.methods.includes('authenticator') || secondStep.methods.includes('passkey')) && (
+                <button type="button" onClick={() => { setUseRecovery((v) => !v); setStepCode(''); setStepError(''); }} className="text-sm text-white/50 hover:text-white">
+                  {useRecovery ? 'Use another way' : 'Use a recovery code'}
+                </button>
+              )}
+              <button type="button" onClick={() => { fetch('/api/auth/two-step', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {}); setSecondStep(null); setPassword(''); }} className="text-sm text-white/50 hover:text-white">Start again</button>
+            </form>
+          ) : (<>
           <CredentialForm
             mode={activeTab}
             onModeChange={handleTabChange}
@@ -301,6 +398,9 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
             before={
               <>
                 <SocialSignIn onSelect={startSocial} disabled={isSubmitting} />
+                {activeTab === 'signin' && passkeysAvailable() && (
+                  <button type="button" data-passkey-sign-in disabled={isSubmitting} onClick={signInWithPasskey} className="mt-2 h-11 w-full rounded-lg border border-white/15 text-sm text-white hover:border-white/30 disabled:opacity-50">Sign in with a passkey</button>
+                )}
                 <EmailDisclosure open={showEmailForm} onToggle={() => setShowEmailForm((v) => !v)} controls="email-auth-form" />
               </>
             }
@@ -315,6 +415,7 @@ const AuthContent: React.FC<{ mode?: AuthMode }> = ({ mode = 'signin' }) => {
               </>
             }
           />
+          </>)}
         </div>
       </div>
     </>
