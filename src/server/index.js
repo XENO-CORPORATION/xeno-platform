@@ -157,6 +157,7 @@ import inferenceServiceRoutes from './routes/inferenceServiceRoutes.js';
 import handleRoutes from './routes/handleRoutes.js';
 import { oidcAuth } from './middleware/oidcAuth.js';
 import { relatedOrigins } from './services/twoStep.js';
+import companyRoutes from './routes/companyRoutes.js';
 import { requireDpopIfBound } from './middleware/dpopResource.js';
 import { discovery as oidcDiscovery } from './utils/oidcProvider.js';
 import { databaseMiddleware, pool as researchPool } from './middleware/database.js';
@@ -687,6 +688,7 @@ console.log('👤 Account + dashboard routes integrated: /api/account/* + /api/d
 // Workspaces / teams (multi-tenant): workspace entity tables + ReBAC membership
 // (workspace:<id>#<role>@user:<id>). Standard authMiddleware — not OIDC-gated.
 app.use('/api/workspaces', databaseMiddleware, authMiddleware, requireActivated, workspaceRoutes);
+app.use('/api/orgs', databaseMiddleware, authMiddleware, requireActivated, companyRoutes);
 app.use('/api/workspace-invites', databaseMiddleware, authMiddleware, workspaceInviteRoutes);
 // One search and one "needs you" feed across a person's chats, projects and Library, each aware of the area.
 app.use('/api/workspace', databaseMiddleware, authMiddleware, requireActivated, areaFromRequest, workspaceAreaRoutes);
