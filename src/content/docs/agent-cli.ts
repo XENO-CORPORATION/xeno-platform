@@ -11,8 +11,8 @@ const agentCli: ProductDocs = {
   slug: 'agent-cli',
   productName: 'XENO Agent CLI',
   tagline: 'The terminal AI coding agent — read, edit, and run with your permission, any model, fully auditable.',
-  version: '0.5.128',
-  updated: '2026-10-22',
+  version: '0.5.166',
+  updated: '2026-11-01',
   seo: {
     title: 'XENO Agent CLI documentation',
     description:
@@ -271,6 +271,8 @@ Configuration resolves in this order (highest wins): **CLI flags → environment
           body: `# Chat and Agent modes
 
 XENO Agent CLI exposes the same canonical modes as the graphical XENO Agent surface.
+
+From CLI 0.5.166, an interactive chat signed in to your account on a XENO endpoint runs on the shared Agent host, the same one the XENO Agent desktop app uses, so the conversation appears in the app too. These stay in the CLI process for now: \`xeno run\` and piped input, an API key, another endpoint or a local model, a custom agent, a goal with a token budget, and delegation. If the host will not start, the chat says so and carries on in the CLI process. Set \`XENO_AGENT_ATTACH=0\` to turn the host off.
 
 | Command | Workspace authority | Intended use |
 |---|---|---|
@@ -753,6 +755,7 @@ The most useful user-facing variables. The CLI reads many more for internal tuni
 | \`XENO_API_KEY\` | Your API key |
 | \`XENO_BASE_URL\` | OpenAI-compatible endpoint |
 | \`XENO_AUTH_BASE\` | Auth service base URL |
+| \`XENO_AGENT_ATTACH\` | Use the shared Agent host: \`0\` never, \`1\` when one can start, \`require\` or fail. Unset, an interactive chat signed in to your account on a XENO endpoint uses it |
 
 ## Models
 | Variable | Purpose |
