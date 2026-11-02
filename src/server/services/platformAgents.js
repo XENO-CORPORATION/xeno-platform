@@ -147,7 +147,7 @@ export async function get(db, me, publicId) { return full(db, await owned(db, me
 export async function getWith(db, me, publicId, need) { return full(db, await owned(db, me, publicId, need), me); }
 
 const ctx = (me) => ({ actorUserId: String(me.id), clientId: CLIENT });
-const defOf = (instructions, runtime) => ({ schemaVersion: 1, instructions: String(instructions || ''), skills: [], requestedCapabilities: [], ...(runtime ? { runtime } : {}), provenance: { source: 'authored' } });
+const defOf = (instructions, runtime, { provenance, license, requestedCapabilities } = {}) => ({ schemaVersion: 1, instructions: String(instructions || ''), skills: [], requestedCapabilities: requestedCapabilities || [], ...(runtime ? { runtime } : {}), provenance: provenance || { source: 'authored' }, ...(license ? { license } : {}) });
 
 /** Make the workforce definition for an existing principal that predates the link (Tasks agents, earlier
  *  platform agents). Idempotent: the operation id is derived from the principal, so a retry replays. */
@@ -180,7 +180,7 @@ function handleSlug(label, ownerHandle) {
   const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, Math.max(1, room - 5)).replace(/-+$/, '') || 'a';
   return `${base}-${tail}`.replace(/^[^a-z0-9]+/, 'a');
 }
-export async function create(db, me, { name, description, instructions, runtime, divisionId, workspaceId } = {}) {
+export async function create(db, me, { name, description, instructions, runtime, divisionId, workspaceId, provenance, license, requestedCapabilities } = {}) {
   person(me);
   const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
   if (!label) throw new AgentError('Give the agent a name', 'name_required');
@@ -196,7 +196,7 @@ export async function create(db, me, { name, description, instructions, runtime,
   let def;
   try {
     def = await createWorkforceResource(db, ctx(me), { operationId: randomUUID(), owner, kind: 'agent',
-      name: label, description: desc, definition: defOf(instructions, runtime) });
+      name: label, description: desc, definition: defOf(instructions, runtime, { provenance, license, requestedCapabilities }) });
   } catch (e) { throw asAgentError(e, 'The agent could not be created'); }
   const rid = def.resource.id;
   // then the principal, linked to it. If that fails, the definition just made is archived: never a definition

@@ -5,6 +5,15 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-10-31
 
+**You can sell your agents in the Marketplace.**
+
+- Seller console › Publish an agent: rent it for 30 days at a time, offer a copy, or both, free or for credits. Its role and instructions go on sale. Its memory, credentials and history stay yours.
+- Instructions holding a key or password, or trying to take over whoever runs them, are refused before they go on sale.
+- A person at XENO reads each agent before it's published, in a new review queue that also covers teams.
+- Renters ask the agent from Marketplace › Rentals and pay for what it uses. What it remembers for them is theirs, and the seller can't read it.
+- Buyers of a copy get their own agent, which starts with no access. A copy bought under terms that forbid resale can't be sold on.
+- Earlier, nothing could be rented outside a test, because nothing marked an agent as ready to run. Approving one now does.
+
 **Studio › Libraries has Stock (XENO Stock).**
 
 - Search photos, art and video free of copyright (CC0), hosted by XENO. Every item states its licence at its source, and we record where that was read and when.

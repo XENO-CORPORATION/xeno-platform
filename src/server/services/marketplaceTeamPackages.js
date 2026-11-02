@@ -64,7 +64,7 @@ const version = (value) => {
   return value;
 };
 
-async function humanActor(db, actorUserId) {
+export async function humanActor(db, actorUserId) {
   const principal = await resolvePrincipal(db, actorUserId);
   if (!principal?.usable) fail('denied', 'actor_unavailable');
   if (principal.kind !== 'human') fail('denied', 'team_packages_require_a_human');
@@ -72,7 +72,7 @@ async function humanActor(db, actorUserId) {
 }
 
 /** May this human act for this owner scope? A person for themselves; an admin for a workspace. */
-async function managesScope(db, actorUserId, scope) {
+export async function managesScope(db, actorUserId, scope) {
   if (scope.type === 'user') return scope.id === actorUserId;
   const status = (await db.query('SELECT status FROM workspaces WHERE id=$1 FOR SHARE', [scope.id])).rows[0]?.status;
   if (status !== 'active') return false;

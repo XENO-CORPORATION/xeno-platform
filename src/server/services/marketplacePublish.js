@@ -207,6 +207,13 @@ export function runAutomatedChecks({ kind, trustTier, license }, versionRow) {
       : { pass: true, detail: 'licensed agent version; any artifact is a signed canonical .xanima' };
   }
 
+  // 6a. A definition the platform built is the database's to check at publication; here, that it came with its hash.
+  if (kind === 'mind' && versionRow?.agent_definition) {
+    checks.agentDefinition = versionRow.agent_definition_hash
+      ? { pass: true, detail: 'agent definition built by the platform' }
+      : { pass: false, detail: 'an agent definition carries its hash' };
+  }
+
   // 7. MKT-04 -- a team version carries a package the platform built, with its hash. Its CONTENTS are the
   //    database's to check at publication (marketplace_team_package_valid); here only that one exists.
   if (kind === 'team') {
