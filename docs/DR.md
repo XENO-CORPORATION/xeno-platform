@@ -278,7 +278,7 @@ held exactly the first — replay stopped where it was told.
 
 ⚠️ **Decryption cannot happen on the box, by design.** `gpg --list-secret-keys`
 on `xeno-platform-001` returns **nothing**; only the public half
-(`12B1F40D…`) is installed, so a compromised server can write backups it can
+(`601628BE…`) is installed, so a compromised server can write backups it can
 never read. A real offsite restore therefore runs wherever the private key is
 held, not here. The mechanism above was proven on-box against the *local*
 unencrypted artifacts; the encrypted round-trip is proven separately by the
@@ -295,12 +295,18 @@ check `backups/wal-ship.log` when investigating any disk-space warning.
 `601628BE281513664200BB459E7C91F92F687F0B`. The private half is
 `XENO_DB_BACKUP_GPG_PRIVATE_B64` in `~/.xeno-secrets`.
 
-🔴 **The earlier key, `12B1F40D…`, could not be found on 2026-11-02.** The name this
+🔴 **The earlier key, `12B1F40D…`, is lost (owner, 2026-11-02: no other copy exists).** The name this
 document gave for it was in neither the secrets file nor its three older copies. Anything
-in R2 from before that time needs that key, unless it turns up. It has been missing since at least 2026-10-24, the date of the oldest copy. Nothing showed
+in R2 from before that time can't be restored, including older secrets backups, and is left to expire. It has been missing since at least 2026-10-24, the date of the oldest copy. Nothing showed
 it: every upload was verified and reported OK, and upload checks can't tell you whether
 anyone can still decrypt. The first base backup under the new key is
 `base-20261102T121944`, so point-in-time recovery under the new key starts there.
+
+**Earlier days that survive.** The last local dump of each day from 2026-10-28 to 2026-11-02 was
+encrypted to the new key and uploaded as `xenostudio-<stamp>.rekeyed.dump.gpg`. Each was downloaded
+from R2, decrypted off the server, and its SHA-256 matched the plain dump. They restore like any
+other dump, with no point-in-time recovery between them, and expire 90 days after upload. Nothing
+readable is left from before 2026-10-28.
 
 **Retention, set on the bucket:**
 
@@ -336,10 +342,10 @@ replay WAL; that mechanism is covered by the 2026-09-12 proof above.
 | **Script** | `/mnt/projects/xeno-platform/scripts/pg-backup.sh` (source of truth in repo: `scripts/pg-backup.sh`) |
 | **Destination** | `/mnt/projects/xeno-platform/backups/xenostudio-YYYYMMDDTHHMMSS.dump` (on-box, local disk) |
 | **Log** | `/mnt/projects/xeno-platform/backups/backup.log` (timestamped, appended) |
-| **Retention** | Last **14** dumps (override with `BACKUP_KEEP`). Older dumps pruned **only after** a new dump passes verification. |
+| **Retention** | Last **3** dumps on the box (`BACKUP_KEEP=3` in root's crontab since 2026-11-02; the script's own default is 14). R2 holds the history. Older dumps pruned **only after** a new dump passes verification. |
 | **Schedule** | root cron, nightly **03:15** server time (UTC on this box) |
 | **Offsite** | Encrypted to R2 `xeno-db-backups` every night. Key, retention and the restore drill: §0a. |
-| **Size** | ~3 GB per dump on 2026-11-02; 14 dumps ≈ 40 GB against a 116 GB disk. |
+| **Size** | ~3 GB per dump on 2026-11-02; 3 dumps ≈ 9 GB against a 116 GB disk. |
 
 ### Integrity guarantees built into the backup
 
@@ -690,7 +696,7 @@ is at 83%. One disk loss took the database and every backup of it together.
 | | |
 |---|---|
 | Bucket | `xeno-db-backups` (Cloudflare R2, WEUR) — **private**, managed public domain disabled and verified |
-| Encryption | GPG 4096-bit RSA, fingerprint `12B1F40DEC4D7172AC76E395E0C0668AFE3DCE5C` |
+| Encryption | GPG 4096-bit RSA, fingerprint `601628BE281513664200BB459E7C91F92F687F0B` since 2026-11-02 (§0a) |
 | Public half | imported on `xeno-platform-001` (encrypt only) |
 | Private half | `~/.xeno-secrets` → `XENO_DB_BACKUP_GPG_PRIVATE_B64` on the operator workstation. **Never on the server.** |
 | Script | `scripts/pg-backup.sh` encrypts before upload; refuses to upload plaintext |
