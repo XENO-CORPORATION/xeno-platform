@@ -12,6 +12,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - The restore drill is now a script: `scripts/dr-restore-proof.sh`.
 - The old key is lost, so R2 backups from before today can't be restored. One dump per day from October 28 on was re-encrypted with the new key and checked by decrypting it from R2.
 - The server now keeps 3 local dumps instead of 14, which frees about 20 GB after tonight's backup.
+- Recovery to an exact moment is now proven with the new key: a base backup and WAL from R2 stopped at the chosen second, and the credit ledger matched production.
+- The restore drill now runs every 4 weeks, and an email goes out if it hasn't passed in 35 days.
+- Server monitoring runs on time again. Listing the backups had grown to over 30 minutes, so its 15-minute checks were piling up.
+- Support mail, scheduling mail and the internal Research workspace are now marked as off on purpose, so they no longer raise an alert.
 
 ## 2026-10-31
 

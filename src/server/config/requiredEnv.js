@@ -24,7 +24,9 @@
  *             missing mail key would turn a partial outage into a total one.
  *
  * An EMPTY value counts as missing — `REGISTRATION_OPEN=` (empty) closed signup
- * for twelve days from 2026-08-29.
+ * for twelve days from 2026-08-29. A feature that is off on purpose says so with a
+ * value (`SUPPORT_EMAILS=false`, `XENO_INTERNAL_WORKSPACE_ID=none`), so the alert
+ * only ever means "nobody decided this".
  *
  * `forbidden` lists defaults committed to git. A key set to one of those is worse
  * than unset, because it WORKS — so a forbidden value refuses to boot even when

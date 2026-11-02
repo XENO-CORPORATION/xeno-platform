@@ -65,12 +65,24 @@ else
 fi
 
 # 5. Prove the OFFSITE chain, not just the local end of it.
-LATEST_WAL_AGE="$(rclone lsl "$R2_REMOTE/wal/" 2>/dev/null | sort -k2,3 | tail -1 | awk '{print $2" "$3}')"
+# --use-server-modtime reads the listing only. Without it rclone asks about every object, which at
+# 15,000 segments took over 30 minutes, so runs of this 15-minute cron piled up on each other.
+LATEST_WAL_AGE="$(rclone lsl --use-server-modtime "$R2_REMOTE/wal/" 2>/dev/null | sort -k2,3 | tail -1 | awk '{print $2" "$3}')"
 if [ -n "${LATEST_WAL_AGE:-}" ]; then
   W=$(( ( $(date +%s) - $(date -d "$LATEST_WAL_AGE" +%s 2>/dev/null || echo 0) ) / 60 ))
   [ "$W" -gt 45 ] && add "Newest WAL segment in R2 is ${W} minutes old — the offsite chain has stalled."
 else
   add "Could not list WAL in R2 ($R2_REMOTE/wal/) — offsite copies are unverifiable."
+fi
+
+# 5b. The restore drill. Only a restore shows a backup can be read: an unreadable key went
+# unnoticed for weeks while every upload here reported OK. The drill runs on the operator PC
+# and stamps this file when it passes, so this also catches the PC never running it.
+DRILL="$BASE/backups/.last-restore-proof"
+if [ -f "$DRILL" ]; then
+  [ $(( ( $(date +%s) - $(stat -c %Y "$DRILL") ) / 86400 )) -ge "${DRILL_MAX_D:-35}" ] && add "The restore drill hasn't passed in ${DRILL_MAX_D:-35} days — run scripts/dr-restore-proof.sh on the operator PC."
+else
+  add "The restore drill has never passed on this box — run scripts/dr-restore-proof.sh on the operator PC."
 fi
 
 # 6. Disk. The failure that takes the database with it.
