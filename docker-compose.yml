@@ -773,6 +773,10 @@ services:
         - VITE_ENABLE_SITE_GATE=${VITE_ENABLE_SITE_GATE}
         - VITE_SITE_PASSWORD=${VITE_SITE_PASSWORD}
     container_name: xenostudio-frontend
+    volumes:
+      # XENO Motion's web build (motion.xenosystem.ai, nginx/default.conf). Published by xeno-motion into
+      # /srv/xeno-motion-web/releases/<version>/ with a relative `current` link; read-only here.
+      - /srv/xeno-motion-web:/usr/share/nginx/motion:ro
     environment:
       - NODE_ENV=production
       - REACT_APP_API_URL=http://backend:8080

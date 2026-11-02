@@ -83,6 +83,8 @@ export const FIRST_PARTY_CLIENTS = [
   // XENO Tools on its own host — a backend-for-frontend on the platform itself (authRoutes /api/auth/host/*): the
   // code is exchanged in-process and becomes an ordinary browser session on tools.xenosystem.ai; no token is kept.
   { id: 'xeno-tools-web', name: 'XENO Tools', loopback: false, redirects: ['https://tools.xenosystem.ai/api/auth/host/callback'] },
+  // Motion in the browser: the host sign-in (authRoutes HOST_SIGNIN_CLIENTS) ends in a browser session; no token is kept.
+  { id: 'xeno-motion-web', name: 'XENO Motion (web)', loopback: false, redirects: ['https://motion.xenosystem.ai/api/auth/host/callback'] },
   // XENO Places — a public browser SPA (no backend): authorization code + PKCE-S256 in the browser, access token in
   // memory only. One exact-match redirect; no localhost redirect (no other web client registers one).
   { id: 'xeno-places', name: 'XENO Places', loopback: false, redirects: ['https://places.xenosystem.ai/auth/callback'] },
