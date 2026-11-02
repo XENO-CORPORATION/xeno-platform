@@ -369,6 +369,17 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🤖 Selling an agent: Marketplace kind `mind` (owner, 2026-11-01)
+
+`services/marketplaceAgentPackages.js` builds a version from one agent, the way `marketplaceTeamPackages.js` builds one from a team. Rentals, partitions and the broker were already here (`marketplaceRentals.js`, `marketplaceRentalPartitions.js`, `marketplaceBroker.js`).
+- **The memory question is already decided:** XENO-WORKFORCE-01 MKT-07/08/09 lock it. Rental learning stays in the renter's partition, and the seller can't read it. The 2026-07 DELTA draft is older and its M3 promotion step isn't how this works.
+- **The definition is an allowlist,** in `buildAgentDefinition` AND `marketplace_agent_definition_valid`. Add a field to both, knowingly. Memory, credentials and the Soul never go in. Secret-shaped text and take-over instructions are refused with Corpus's and Anima's scanners.
+- **Never send `agent_definition` to a page before purchase.** The public view says what it asks for and what the buyer must provide. A reviewer reads all of it.
+- **Approving is what makes it rentable** (`markServing`). Nothing else sets `servable` or `serving_material`.
+- **A copy keeps `provenance: imported` and its licence through every revision,** which is what stops resale, for teams too.
+- **`pay_per_use` and `subscription` don't serve this:** `dispatchInvocation` only assembles the agent for a rental binding, so don't offer them for a `mind` until it does.
+Proofs: `npm run test:marketplace-agents` (real Postgres, mutation-checked), `test:marketplace-agents-ui`.
+
 ## 🖼️ XENO Stock lives HERE: Studio › Libraries › Stock (2026-10-31)
 
 `services/stock.js` is the one service (screen `platform-stock.js`, routes `stockRoutes.js`, agents `stockMcp.js`). Owner decision 2026-10-31: open-licence media we host, plus what people generate. The product's spec is `../xeno-stock/SPEC.md`.

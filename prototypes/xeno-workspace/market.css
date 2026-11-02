@@ -63,3 +63,14 @@
 .mk-kyb p{flex:1;margin:0;font-size:12.5px;color:var(--muted)}
 .fd-sums.mk-4{grid-template-columns:repeat(4,1fr)}
 @media (max-width:1100px){.mk-cols{grid-template-columns:1fr}.mk-hero{grid-template-columns:48px 1fr}.mk-buy{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:space-between}}
+
+/* the review queue: a reviewer reads what would go on sale */
+.mk-rcl li.mk-rev{display:block;padding:14px 0}
+.mk-rev .mk-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.mk-rev .mk-row:first-child{margin-top:0}
+.mk-rev h4{margin:12px 0 4px;font-size:12px;color:var(--muted);font-weight:500}
+.mk-read{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;margin:0;padding:10px;border-radius:8px;background:var(--n20);font:inherit;font-size:12.5px;color:var(--text)}
+/* a rented agent: name, state, actions, then what it answered */
+.mk-rcl li[data-xmk-binding]{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.mk-acts{display:flex;gap:6px;margin-left:auto}
+[data-xmk-answer]{flex-basis:100%;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border-radius:8px;background:var(--n20);color:var(--text)}

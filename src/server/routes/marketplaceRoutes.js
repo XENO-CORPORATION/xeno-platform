@@ -36,6 +36,7 @@ import {
   verifyEd25519, runAutomatedChecks, resolvePublishTrustTier, agentVersionProblems,
 } from '../services/marketplacePublish.js';
 import * as teamPackages from '../services/marketplaceTeamPackages.js';
+import * as agentPackages from '../services/marketplaceAgentPackages.js';
 
 const router = express.Router();
 
@@ -339,7 +340,7 @@ router.post('/invoke/:listingId', authMiddleware, async (req, res) => {
       ? await svc.getVersionById(req.db, binding.serving_version_id)
       : (await svc.getVersionsForListing(req.db, listing.id))?.[0] || null;
     const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version, binding });
-    return sendInvocation(res, after);
+    return sendInvocation(res, after, await broker.outputOf(req.db, after));
   } catch (error) {
     if (error instanceof broker.BrokerUnavailableError) {
       // Not configured: nothing was dispatched and nothing was charged.
@@ -414,6 +415,22 @@ router.post('/listings/:id/import-team', authMiddleware, async (req, res) => {
     if (e?.name === 'WorkforceScopeError') return res.status(400).json({ success: false, error: 'bad_input', details: e.details });
     console.error('[Marketplace] team import error:', e.message);
     return res.status(500).json({ success: false, error: 'Failed to import team' });
+  }
+});
+
+/** A person with a live purchase makes their own agent from a published version. A rental can't: it's hosted use (MKT-05). */
+router.post('/listings/:id/import-agent', authMiddleware, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const version = typeof b.versionId === 'string' && /^[0-9a-f-]{36}$/i.test(b.versionId) ? await svc.getVersionById(req.db, b.versionId) : null;
+    if (!version || version.listing_id !== req.params.id) return res.status(404).json({ success: false, error: 'Version not found' });
+    const result = await agentPackages.importAgent(req.db, { actorUserId: req.user.id, listingVersionId: b.versionId, workspaceId: b.workspaceId ?? null, acceptLicense: b.acceptLicense });
+    return res.status(result.replayed ? 200 : 201).json({ success: true, import: result });
+  } catch (e) {
+    if (e instanceof agentPackages.AgentPackageError) return res.status(e.status).json({ success: false, error: e.code, details: e.details });
+    if (e?.code === 'denied' || e?.name === 'TeamPackageError') return res.status(e.status || 403).json({ success: false, error: e.code, details: e.details });
+    console.error('[Marketplace] agent import error:', e.message);
+    return res.status(500).json({ success: false, error: 'Failed to import agent' });
   }
 });
 
@@ -531,7 +548,7 @@ router.get('/invocations/:id', authMiddleware, async (req, res) => {
       ? (await req.db.query('SELECT * FROM marketplace_rental_bindings WHERE id = $1', [invocation.binding_id])).rows[0]
       : null;
     const after = await broker.refreshInvocation(req.db, { invocation, user: req.user, listing, version: null, binding });
-    return sendInvocation(res, after);
+    return sendInvocation(res, after, await broker.outputOf(req.db, after));
   } catch (error) {
     if (error instanceof broker.BrokerUnavailableError) {
       return res.status(503).json({ success: false, error: 'broker_unavailable' });
@@ -541,8 +558,8 @@ router.get('/invocations/:id', authMiddleware, async (req, res) => {
   }
 });
 
-function sendInvocation(res, row) {
-  const invocation = broker.publicInvocation(row);
+function sendInvocation(res, row, output = null) {
+  const invocation = { ...broker.publicInvocation(row), ...(output ? { output } : {}) };
   if (row.state === 'refused') {
     const status = /insufficient|credit|budget|quota/i.test(row.run_status_reason || '') ? 402 : 409;
     return res.status(status).json({ success: false, error: 'not_admitted', invocation, charged: 0 });
@@ -742,6 +759,10 @@ router.post('/listings', authMiddleware, async (req, res) => {
       });
     }
 
+    const rentalLicense = req.body?.rentalLicense && typeof req.body.rentalLicense === 'object' ? req.body.rentalLicense : null;
+    if (rentalLicense && (typeof rentalLicense.personal !== 'boolean' || typeof rentalLicense.workspace !== 'boolean' || !Number.isInteger(rentalLicense.maxWorkspaces) || rentalLicense.maxWorkspaces < 0 || rentalLicense.maxWorkspaces > 1000 || (!rentalLicense.workspace && rentalLicense.maxWorkspaces !== 0))) {
+      return badRequest(res, 'rentalLicense needs personal, workspace and maxWorkspaces');
+    }
     const summary = isString(req.body?.summary) ? req.body.summary.slice(0, 500) : null;
     const description = isString(req.body?.description) ? req.body.description.slice(0, 20000) : null;
     const category = isString(req.body?.category) ? req.body.category.slice(0, 80) : null;
@@ -772,6 +793,7 @@ router.post('/listings', authMiddleware, async (req, res) => {
       [slug, kind, dev.id, title, summary, description, category, trustTier,
        iconUrl, JSON.stringify(screenshots), license],
     );
+    if (rentalLicense) await req.db.query('UPDATE marketplace_listings SET rental_license = $2::jsonb WHERE id = $1', [rows[0].id, JSON.stringify({ schemaVersion: 1, personal: rentalLicense.personal, workspace: rentalLicense.workspace, maxWorkspaces: rentalLicense.maxWorkspaces })]);
     const listing = rows[0];
 
     for (const p of pricing) {
@@ -837,6 +859,20 @@ router.post('/listings/:id/versions', authMiddleware, async (req, res) => {
         return res.status(201).json({ success: true, ...built });
       } catch (e) {
         if (e instanceof teamPackages.TeamPackageError) return res.status(e.status).json({ success: false, error: e.code, details: e.details });
+        throw e;
+      }
+    }
+
+    // a mind version names one of the seller's agents, and the platform builds its definition. Nobody supplies one; an uploaded .xanima still takes the path below.
+    if (Object.hasOwn(req.body || {}, 'agentDefinition') || Object.hasOwn(req.body || {}, 'agent_definition')) {
+      return res.status(400).json({ success: false, error: 'agent_definition_is_built_by_the_platform' });
+    }
+    if (listing.kind === 'mind' && Object.hasOwn(req.body, 'agentId')) {
+      try {
+        const built = await agentPackages.exportAgentDefinition(req.db, { actorUserId: req.user.id, agentId: req.body.agentId, listing, version, releaseNotes: isString(req.body?.releaseNotes) ? req.body.releaseNotes.slice(0, 10000) : null });
+        return res.status(201).json({ success: true, ...built });
+      } catch (e) {
+        if (e instanceof agentPackages.AgentPackageError) return res.status(e.status).json({ success: false, error: e.code, details: e.details });
         throw e;
       }
     }
@@ -1016,7 +1052,7 @@ router.get('/submissions', authMiddleware, requireAdmin, async (req, res) => {
       `SELECT s.id, s.state, s.checks, s.notes, s.submitted_at, s.decided_at,
               l.id AS listing_id, l.slug, l.title, l.kind, l.trust_tier, v.version, d.display_name AS developer, d.slug AS developer_slug,
               -- a skill is reviewed by READING it: its SKILL.md, its files and which of them are scripts
-              v.skill_package->'files'->0->>'content' AS skill_md, v.manifest->'scripts' AS skill_scripts,
+              v.agent_definition, v.team_package->'members' AS team_members, v.license, v.skill_package->'files'->0->>'content' AS skill_md, v.manifest->'scripts' AS skill_scripts,
               (SELECT jsonb_agg(f->>'path') FROM jsonb_array_elements(v.skill_package->'files') f) AS skill_files
        FROM marketplace_submissions s
        JOIN marketplace_listings l ON l.id = s.listing_id
@@ -1066,6 +1102,8 @@ router.post('/submissions/:id/approve', authMiddleware, requireAdmin, async (req
        WHERE id = $2`,
       [verRows[0]?.version || null, submission.listing_id],
     );
+    // what the reviewer just read is what a rental may run (MKT-07)
+    await agentPackages.markServing(client, submission.listing_version_id, req.user.id);
 
     await client.query('COMMIT');
     res.json({ success: true, listingId: submission.listing_id, publishedVersion: verRows[0]?.version });

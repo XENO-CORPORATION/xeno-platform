@@ -252,4 +252,14 @@ export async function getInvocation(db, userId, id) {
   return r.rows[0] || null;
 }
 
+/** What a finished rental run answered, read from the renter's own partition. Deleting that content removes this too (MKT-09). */
+export async function outputOf(db, invocation) {
+  if (invocation.state !== 'finished') return null;
+  const r = await db.query(`SELECT content FROM marketplace_rental_memory WHERE source_invocation_id = $1 AND kind = 'exchange'`, [invocation.id]);
+  const content = r.rows[0]?.content;
+  if (!content) return null;
+  const at = content.indexOf('\nOutcome: ');
+  return at < 0 ? content : content.slice(at + '\nOutcome: '.length);
+}
+
 export { publicInvocation, TERMINAL as TERMINAL_RUN_STATUSES };

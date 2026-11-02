@@ -11418,6 +11418,36 @@
       "status": "planned",
       "class": "irreversible",
       "scope": "stock:write"
+    },
+    "route:marketplaceRoutes.js:POST /listings/:id/import-agent": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "wallet:spend"
+    },
+    "ui:platform-market.js:data-xmk=publishAgent": {
+      "status": "planned",
+      "class": "external",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=ask": {
+      "status": "planned",
+      "class": "external",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=approve": {
+      "status": "planned",
+      "class": "external",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=sendBack": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
+    },
+    "ui:platform-market.js:data-xmk=importAgent": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "marketplace:write"
     }
   }
 }

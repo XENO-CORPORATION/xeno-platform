@@ -4,14 +4,14 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2017 actions · 236 agent capability · 1368 planned (debt) · 413 excluded · **coverage 14.7%** of the 1604 owed.
+**Total:** 2023 actions · 236 agent capability · 1374 planned (debt) · 413 excluded · **coverage 14.7%** of the 1610 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 303 | 53 | 245 | 5 | 17.8% |
 | agents | 204 | 0 | 142 | 62 | 0% |
+| commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
-| commerce | 149 | 0 | 115 | 34 | 0% |
 | chat | 104 | 0 | 102 | 2 | 0% |
 | workspace-ui | 179 | 4 | 101 | 74 | 3.8% |
 | workspace | 176 | 23 | 99 | 54 | 18.9% |
@@ -413,7 +413,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-chat.js:data-side=swap`
 - `ui:platform-chat.js:data-side=tab`
 
-## commerce — 115 planned
+## commerce — 121 planned
 
 - `route:accountGiftRoutes.js:POST /`
 - `route:accountGiftRoutes.js:POST /account-history`
@@ -472,6 +472,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:marketplaceRoutes.js:POST /developer/register`
 - `route:marketplaceRoutes.js:POST /invoke/:listingId`
 - `route:marketplaceRoutes.js:POST /listings`
+- `route:marketplaceRoutes.js:POST /listings/:id/import-agent`
 - `route:marketplaceRoutes.js:POST /listings/:id/import-team`
 - `route:marketplaceRoutes.js:POST /listings/:id/install-skill`
 - `route:marketplaceRoutes.js:POST /listings/:id/purchase`
@@ -520,15 +521,20 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:market.js:data-mk=review`
 - `ui:market.js:data-mk=soul`
 - `ui:market.js:data-mk=unlist`
+- `ui:platform-market.js:data-xmk=approve`
+- `ui:platform-market.js:data-xmk=ask`
 - `ui:platform-market.js:data-xmk=buy`
 - `ui:platform-market.js:data-xmk=endrent`
 - `ui:platform-market.js:data-xmk=export`
 - `ui:platform-market.js:data-xmk=forget`
 - `ui:platform-market.js:data-xmk=import`
+- `ui:platform-market.js:data-xmk=importAgent`
 - `ui:platform-market.js:data-xmk=payout`
+- `ui:platform-market.js:data-xmk=publishAgent`
 - `ui:platform-market.js:data-xmk=publishTeam`
 - `ui:platform-market.js:data-xmk=register`
 - `ui:platform-market.js:data-xmk=review`
+- `ui:platform-market.js:data-xmk=sendBack`
 - `ui:platform-market.js:data-xmk=submit`
 
 ## compute — 1 planned

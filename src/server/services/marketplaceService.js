@@ -139,6 +139,9 @@ export function serializeVersion(v, { entitled = false, gated = false } = {}) {
       members: (v.team_package.members ?? []).map((m) => ({ name: m.name, role: m.role, license: m.license ?? v.license ?? null,
         secretNames: m.definition?.secretNames ?? [] })),
     } } : {}),
+    // what an agent is before anyone buys it. Its persona and instructions are the product and arrive only by import.
+    ...(v.agent_definition ? { agent: { name: v.agent_definition.agent?.name ?? null, role: v.agent_definition.persona?.role || null,
+      capabilities: v.agent_definition.definition?.requestedCapabilities ?? [], secretNames: v.agent_definition.definition?.secretNames ?? [], skills: (v.agent_definition.definition?.skills ?? []).length, rentable: Boolean(v.servable) } } : {}),
     downloadUrl,
     publishedAt: v.published_at,
   };
