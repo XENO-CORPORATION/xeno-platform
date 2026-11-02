@@ -289,6 +289,44 @@ database.** `wal-ship.sh` logs `ALERT:` once the local archive passes 2 GB.
 `/` on this box runs ~87% full, so that alert has real headroom but not much —
 check `backups/wal-ship.log` when investigating any disk-space warning.
 
+## 0a. The R2 key, retention and restore drill (2026-11-02)
+
+**The key.** Backups from 2026-11-02 11:59 UTC on are encrypted to
+`601628BE281513664200BB459E7C91F92F687F0B`. The private half is
+`XENO_DB_BACKUP_GPG_PRIVATE_B64` in `~/.xeno-secrets`.
+
+🔴 **The earlier key, `12B1F40D…`, could not be found on 2026-11-02.** The name this
+document gave for it was in neither the secrets file nor its three older copies. Anything
+in R2 from before that time needs that key, unless it turns up. It has been missing since at least 2026-10-24, the date of the oldest copy. Nothing showed
+it: every upload was verified and reported OK, and upload checks can't tell you whether
+anyone can still decrypt. The first base backup under the new key is
+`base-20261102T121944`, so point-in-time recovery under the new key starts there.
+
+**Retention, set on the bucket:**
+
+| Prefix | Can't be deleted for | Expires |
+|---|---|---|
+| `xenostudio-` (nightly dumps) | 30 days | 90 days |
+| `base/` | 30 days | 90 days |
+| `wal/` | not locked | 90 days |
+| `secrets/` | not locked | rotated by `secrets-backup.sh` |
+| `xeno-connect/` | not locked | no rule here; that product owns it |
+
+The box's own R2 key can write to this bucket, so without the lock a compromised box could
+erase its own offsite history. Tested: deleting a locked object with that key answers 409.
+WAL isn't locked on purpose: a segment re-sent after a failed check is re-encrypted, so it
+has new bytes under the same name. A lock would refuse it, shipping would stall, and a stalled
+archive fills the disk.
+
+Removing a lock or expiry rule goes through the Cloudflare account API, not the box's R2 key.
+
+**The drill.** Run `bash scripts/dr-restore-proof.sh` from the operator PC. It takes the newest
+objects from R2, decrypts them off the server, checks the base backup and dump are
+byte-identical to the local ones, and restores the dump into an offline throwaway container
+on the box. First run, 2026-11-02: `pg_restore` exit 0 with no errors in 289 s, 570 of 570
+tables, and row counts matching production apart from writes made since the dump. It doesn't
+replay WAL; that mechanism is covered by the 2026-09-12 proof above.
+
 ## 1. What is backed up, where, retention
 
 | | |
@@ -300,8 +338,8 @@ check `backups/wal-ship.log` when investigating any disk-space warning.
 | **Log** | `/mnt/projects/xeno-platform/backups/backup.log` (timestamped, appended) |
 | **Retention** | Last **14** dumps (override with `BACKUP_KEEP`). Older dumps pruned **only after** a new dump passes verification. |
 | **Schedule** | root cron, nightly **03:15** server time (UTC on this box) |
-| **Offsite** | **Not yet wired** — rclone is not installed on the box. See §6. Until then, backups are single-site (same disk as the DB). |
-| **Size** | ~523 MB per dump today; 14 dumps ≈ 7.3 GB. Box had ~60 GB free at setup. |
+| **Offsite** | Encrypted to R2 `xeno-db-backups` every night. Key, retention and the restore drill: §0a. |
+| **Size** | ~3 GB per dump on 2026-11-02; 14 dumps ≈ 40 GB against a 116 GB disk. |
 
 ### Integrity guarantees built into the backup
 
@@ -485,13 +523,9 @@ is not installed. To close the gap:
    missing or the push fails, it logs a `WARN` and keeps the local dump — offsite is
    best-effort and never fails the backup.
 
-4. **(Recommended) R2 lifecycle + retention.** The script rotates the *local* copies
-   (keep 14). It does **not** delete anything on R2, so set an R2 bucket lifecycle rule
-   (e.g. expire objects after 90 days) so offsite storage doesn't grow unbounded.
+4. **R2 lifecycle + retention.** Set on the bucket; see §0a.
 
-5. **(Recommended) Restore drill from R2.** Once offsite is live, periodically
-   `rclone copy r2:xeno-db-backups/<file> /tmp/` and run the §3 test-restore on it, to
-   prove the *offsite* copy is restorable, not just the local one.
+5. **Restore drill from R2.** `bash scripts/dr-restore-proof.sh`; see §0a.
 
 ---
 
@@ -719,7 +753,7 @@ Then, on the box:
 ```
 # in /mnt/projects/xeno-platform/.env  (and nowhere world-readable)
 R2_REMOTE=r2backup:xeno-db-backups
-BACKUP_GPG_RECIPIENT=12B1F40DEC4D7172AC76E395E0C0668AFE3DCE5C
+BACKUP_GPG_RECIPIENT=601628BE281513664200BB459E7C91F92F687F0B
 # plus an rclone remote `r2backup` (type s3, provider Cloudflare) with the scoped key
 ```
 
