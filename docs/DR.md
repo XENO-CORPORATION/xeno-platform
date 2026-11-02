@@ -330,8 +330,20 @@ Removing a lock or expiry rule goes through the Cloudflare account API, not the 
 objects from R2, decrypts them off the server, checks the base backup and dump are
 byte-identical to the local ones, and restores the dump into an offline throwaway container
 on the box. First run, 2026-11-02: `pg_restore` exit 0 with no errors in 289 s, 570 of 570
-tables, and row counts matching production apart from writes made since the dump. It doesn't
-replay WAL; that mechanism is covered by the 2026-09-12 proof above.
+tables, and row counts matching production apart from writes made since the dump.
+
+It then takes the base backup and WAL from R2 and recovers to a chosen second in a second
+offline container, and fails unless recovery stopped there and the credit ledger agrees with
+production. First run, 2026-11-02: base from 12:19 UTC, target 16:35:02 UTC, 68 WAL segments,
+replay 42 s. Ledger rows up to the target: 392,307 in both. Rows after it: 0 restored, 1,762 in
+production. The last restored row's hash matched production's.
+
+A pass stamps `backups/.last-restore-proof` on the box, and `dr-alert.sh` mails if that stamp is
+35 days old or missing, so a drill that fails or never runs still reaches someone. The Windows
+Scheduled Task `XENO DR restore drill` runs it every 4 weeks at 10:00 on the operator PC, or at
+the next chance if the PC was off. Its output is in `scratchpad/dr-drill-last.log`. It runs from
+this checkout, so it uses whichever branch is checked out then. Expect about an hour; it needs
+15 GB free on the box.
 
 ## 1. What is backed up, where, retention
 
