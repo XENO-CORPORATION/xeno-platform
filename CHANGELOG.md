@@ -10,6 +10,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - The private key for older R2 backups couldn't be found, so new backups use a new key, and a full restore from R2 passed.
 - Dumps and base backups in R2 can't be deleted for 30 days, even from the server. Backups expire after 90 days.
 - The restore drill is now a script: `scripts/dr-restore-proof.sh`.
+- The old key is lost, so R2 backups from before today can't be restored. One dump per day from October 28 on was re-encrypted with the new key and checked by decrypting it from R2.
+- The server now keeps 3 local dumps instead of 14, which frees about 20 GB after tonight's backup.
 
 ## 2026-10-31
 
