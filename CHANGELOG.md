@@ -3,6 +3,14 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-02
+
+**Database backups in R2 now have a key we hold, and they've been restored to prove it.**
+
+- The private key for older R2 backups couldn't be found, so new backups use a new key, and a full restore from R2 passed.
+- Dumps and base backups in R2 can't be deleted for 30 days, even from the server. Backups expire after 90 days.
+- The restore drill is now a script: `scripts/dr-restore-proof.sh`.
+
 ## 2026-10-31
 
 **You can sell your agents in the Marketplace.**
