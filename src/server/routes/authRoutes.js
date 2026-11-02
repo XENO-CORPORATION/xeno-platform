@@ -3179,7 +3179,11 @@ router.post('/onboarding', async (req, res) => {
 // revoked at once; only the identity is used. A host gets a client here, and its callback in migrate-oidc-clients.js.
 // The PKCE verifier, state and return path ride in one short-lived HttpOnly cookie on that host (the NextAuth shape):
 // no server-side state, and tampering with it can only break the person's own sign-in (state and PKCE both bind).
-export const HOST_SIGNIN_CLIENTS = Object.freeze({ 'tools.xenosystem.ai': 'xeno-tools-web' });
+export const HOST_SIGNIN_CLIENTS = Object.freeze({
+  'tools.xenosystem.ai': 'xeno-tools-web',
+  // XENO Motion in the browser (owner 2026-10-31/11-02; xeno-motion docs/decisions/0001-motion-on-the-web.md)
+  'motion.xenosystem.ai': 'xeno-motion-web',
+});
 const HOST_STATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-xeno_host_signin' : 'xeno_host_signin';
 const hostOf = (req) => String(req.headers.host || '').toLowerCase().split(':')[0];
 const hostClient = (req) => HOST_SIGNIN_CLIENTS[hostOf(req)] || null;

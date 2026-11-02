@@ -85,6 +85,9 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // XENO Tools on its own host: identity only. The platform's host sign-in (authRoutes /api/auth/host/*) uses the code
   // to learn WHO signed in and opens an ordinary browser session on tools.xenosystem.ai; it keeps no token.
   'xeno-tools-web': IDENTITY,
+  // Identity only, like tools.: the sign-in becomes a browser session and the token is revoked at once, so a scope
+  // here would be unused. Storage is reached as the person through that session.
+  'xeno-motion-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],
