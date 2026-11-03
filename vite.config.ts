@@ -62,7 +62,9 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'axios', 'lucide-react'],
+    // @xenosystem/components/auth renders the sign-in page. Found late, it was re-bundled mid-load on a cold dev start and
+    // the page ran two Reacts ("Invalid hook call", the sign-up form crashed) until a reload. Dev only (2026-11-03).
+    include: ['react', 'react-dom', 'react-router-dom', 'axios', 'lucide-react', '@xenosystem/components/auth'],
   },
   build: {
     chunkSizeWarningLimit: 4000,

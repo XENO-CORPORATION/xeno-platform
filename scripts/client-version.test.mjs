@@ -252,7 +252,7 @@ test('every refusal is recorded', () => {
 test('the gate is mounted on /api only, behind the rate limiter', () => {
   const live = index.split('\n').filter((l) => !l.trim().startsWith('//'));
   const gate = live.findIndex((l) => l.includes('requireSupportedClient)'));
-  const limiter = live.findIndex((l) => l.includes("app.use('/api/', globalLimiter)"));
+  const limiter = live.findIndex((l) => l.includes("app.use('/api/', globalAddressCeiling, globalLimiter)"));
   assert.ok(gate > -1, 'the version gate is not mounted');
   assert.ok(limiter > -1 && limiter < gate,
     'the gate runs before the rate limiter — a refused client could spend more than any other caller');

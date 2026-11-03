@@ -220,7 +220,7 @@ import {
   llmLimiter, imageGenLimiter, uploadLimiter, clientIp,
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
-import { rateLimitKey } from './utils/clientIp.js';
+import { rateLimitKey, requesterRateLimitKey } from './utils/clientIp.js';
 import { globalLimiterSkips, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
@@ -376,19 +376,22 @@ app.use(requestLoggerMiddleware);
 app.use(securityHeadersMiddleware);
 app.use(staticCacheMiddleware);
 
-// Global rate limiter: 200 requests per minute per IP
-const globalLimiter = rateLimit({
+// Global rate limiting, two layers (see requesterRateLimitKey in utils/clientIp.js for why):
+//   per ADDRESS  2000/min  the ceiling: everyone behind one address together, whatever credential they send
+//   per PERSON    300/min  a signed-in person (by a digest of their credential), or an anonymous address
+// It was one layer, 200/min per address, which a single person spent in four or five workspace page loads.
+const limiterBase = {
   windowMs: 60 * 1000, // 1 minute
-  max: 200,
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
-  validate: { ip: false }, // custom key (CF-Connecting-IP) — skip the built-in req.ip validator
-  keyGenerator: rateLimitKey, // real client IP behind Cloudflare, not the collapsed upstream hop
+  validate: { ip: false }, // custom keys (CF-Connecting-IP) — skip the built-in req.ip validator
   message: { success: false, error: 'Too many requests, please try again later.' },
   // Mounted on '/api/', so req.path has '/api' stripped: compare the FULL path, or the skip never matches.
   skip: (req) => globalLimiterSkips(req.baseUrl + req.path),
-});
-app.use('/api/', globalLimiter);
+};
+const globalAddressCeiling = rateLimit({ ...limiterBase, max: 2000, keyGenerator: rateLimitKey });
+const globalLimiter = rateLimit({ ...limiterBase, max: 300, keyGenerator: requesterRateLimitKey });
+app.use('/api/', globalAddressCeiling, globalLimiter);
 
 // ── Minimum supported client build ──────────────────────────────────────────
 //

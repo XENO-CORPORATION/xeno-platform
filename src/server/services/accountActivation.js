@@ -74,13 +74,24 @@ export async function isActivated(db, userId) {
   return rows.length > 0;
 }
 
-/** Activate. Idempotent — a second click is the same intent, not an error. */
+/**
+ * Activate. Idempotent — a second click is the same intent, not an error.
+ *
+ * `email_link` (the link, or the code — both arrive only in the account's mailbox) also proves the person reads that
+ * mailbox, so it marks the address verified. Before this, someone who typed the code was active and still
+ * "unverified": refused their free allowance, shown "Not verified" and nagged to verify (dogfooding 2026-11-03).
+ * Safe because the only other ways an address changes, the email-change flow and erasure, both settle the flag
+ * themselves, so a code minted before a change can never verify an address that never received it.
+ */
 export async function activate(db, userId, { method = 'email_link', ip = null } = {}) {
   await db.query(
     `INSERT INTO account_activations (user_id, method, ip)
      VALUES ($1, $2, $3) ON CONFLICT (user_id) DO NOTHING`,
     [userId, method, ip],
   );
+  if (method === 'email_link') {
+    await db.query('UPDATE users SET email_verified = true WHERE id = $1 AND email_verified IS DISTINCT FROM true', [userId]);
+  }
   return { ok: true };
 }
 

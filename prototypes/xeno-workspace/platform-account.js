@@ -204,7 +204,7 @@
     if (!await confirm('A key’s endpoint receives the prompts of every product you route to it.')) return;
     let made = null;
     const v = await window.XD.form({ title: 'Add a provider key', sub: 'XENO checks it with the provider before saving it.', submit: 'Add key', fields: [
-      { id: 'provider', label: 'Provider', type: 'select', value: e.d.providers[0], options: e.d.providers.map((p) => [p, providerName(p)]) },
+      { id: 'provider', label: 'Provider', type: 'select', required: true, value: e.d.providers[0], options: e.d.providers.map((p) => [p, providerName(p)]) },
       { id: 'label', label: 'Name', required: true, max: 60, placeholder: 'e.g. Work OpenAI' },
       { id: 'secret', label: 'Key', type: 'password', required: true, max: 2000 },
       { id: 'baseUrl', label: 'Endpoint', max: 500, placeholder: 'https://…', hint: 'Only for Azure and OpenAI-compatible providers.', validate: (x, all) => (ENDPOINT.has(all.provider) && !String(x || '').trim() ? 'This provider needs its endpoint.' : null) }],

@@ -448,7 +448,7 @@ router.get('/developer/skill-listings', authMiddleware, async (req, res) => {
     const { rows } = await req.db.query(`SELECT l.id, l.slug, l.title, l.status, l.current_version, l.license,
         (SELECT v.manifest->>'sourceSkill' FROM marketplace_listing_versions v WHERE v.listing_id = l.id ORDER BY v.created_at DESC LIMIT 1) AS source_skill,
         (SELECT jsonb_build_object('state', s.state, 'version', v.version) FROM marketplace_submissions s JOIN marketplace_listing_versions v ON v.id = s.listing_version_id
-          WHERE s.listing_id = l.id ORDER BY s.created_at DESC LIMIT 1) AS last_submission
+          WHERE s.listing_id = l.id ORDER BY s.submitted_at DESC, s.id DESC LIMIT 1) AS last_submission
       FROM marketplace_listings l WHERE l.developer_id = $1 AND l.kind = 'skill' ORDER BY l.created_at DESC`, [dev.id]);
     return res.json({ success: true, developer: { id: dev.id, name: dev.display_name, handle: dev.slug, trustTier: dev.trust_tier },
       listings: rows.map((r) => ({ id: r.id, slug: r.slug, title: r.title, status: r.status, currentVersion: r.current_version, license: r.license, sourceSkill: r.source_skill, lastSubmission: r.last_submission })) });
@@ -465,7 +465,7 @@ router.get('/developer/listings', authMiddleware, async (req, res) => {
     if (!dev) return res.json({ success: true, listings: [] });
     const { rows } = await req.db.query(`SELECT l.id, l.slug, l.kind, l.title, l.status, l.current_version,
         (SELECT count(*)::int FROM marketplace_listing_versions v WHERE v.listing_id = l.id) AS versions,
-        (SELECT jsonb_build_object('state', s.state) FROM marketplace_submissions s WHERE s.listing_id = l.id ORDER BY s.created_at DESC LIMIT 1) AS last_submission
+        (SELECT jsonb_build_object('state', s.state) FROM marketplace_submissions s WHERE s.listing_id = l.id ORDER BY s.submitted_at DESC, s.id DESC LIMIT 1) AS last_submission
       FROM marketplace_listings l WHERE l.developer_id = $1 ORDER BY l.created_at DESC`, [dev.id]);
     return res.json({ success: true, listings: rows.map((r) => ({ id: r.id, slug: r.slug, kind: r.kind, title: r.title, status: r.status, currentVersion: r.current_version, versions: r.versions, lastSubmission: r.last_submission })) });
   } catch (e) {

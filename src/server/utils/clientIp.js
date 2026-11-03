@@ -1,4 +1,5 @@
 import { ipKeyGenerator } from 'express-rate-limit';
+import crypto from 'node:crypto';
 /**
  * The visitor's real IP address.
  *
@@ -77,4 +78,25 @@ export function rateLimitKey(req) {
   const ip = clientIp(req);
   if (!ip) return 'unknown';
   return ip.includes(':') ? ipKeyGenerator(ip) : ip;
+}
+
+/**
+ * The key for the GLOBAL limiter: the person when the request carries a credential, the address when it does not.
+ *
+ * 🔴 One full workspace page load makes 35-48 API calls (measured 2026-11-03), so a per-ADDRESS budget of 200 a minute
+ * was four or five page loads for everyone behind one address: an office, a family, a mobile carrier's NAT. A person
+ * who opened a few tabs saw "could not be loaded" on every screen. The same budget had already taken down the site
+ * gate (2026-10-23) and sign-in (2026-10-27), which is why those paths are skipped in globalLimiterSkip.js.
+ *
+ * The credential is NOT verified here (that happens later, per route). It does not need to be: it only chooses the
+ * bucket, and index.js keeps a much larger per-address ceiling in front of this one, so inventing tokens buys an
+ * attacker nothing beyond that ceiling. Only a digest of the credential is used, never the credential itself.
+ */
+export function requesterRateLimitKey(req) {
+  const auth = String(req.headers?.authorization || '').replace(/^(?:Bearer|DPoP)\s+/i, '').trim();
+  const cookie = String(req.headers?.cookie || '');
+  const session = (cookie.match(/(?:^|;\s*)(?:__Host-)?xeno_session=([^;]+)/) || [])[1];
+  const credential = auth || session;
+  if (!credential) return `ip:${rateLimitKey(req)}`;
+  return `who:${crypto.createHash('sha256').update(credential).digest('base64url').slice(0, 32)}`;
 }

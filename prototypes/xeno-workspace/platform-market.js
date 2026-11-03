@@ -125,6 +125,7 @@
         <section class="pg-sec"><h3>Trust</h3><p class="mk-p"><b>${esc(t[0])}.</b> ${esc(t[1])}</p></section>
         ${l.currentVersion || l.license || l.publishedAt ? `<section class="pg-sec"><h3>Details</h3><dl class="mk-dl">${l.currentVersion ? `<dt>Version</dt><dd>${esc(l.currentVersion)}</dd>` : ''}${l.license ? `<dt>Licence</dt><dd>${esc(licenceName(l.license))}</dd>` : ''}${l.publishedAt ? `<dt>Listed</dt><dd>${esc(day(l.publishedAt))}</dd>` : ''}</dl></section>` : ''}
         ${x.versions?.[0]?.agent ? (() => { const a = x.versions[0].agent; return `<section class="pg-sec" data-xmk-agent><h3>What this agent is</h3><dl class="mk-dl">${a.role ? `<dt>Role</dt><dd>${esc(a.role)}</dd>` : ''}<dt>Asks to use</dt><dd>${a.capabilities.length ? esc(a.capabilities.join(', ')) : 'Nothing beyond chat'}</dd>${a.secretNames.length ? `<dt>You’d provide</dt><dd>${esc(a.secretNames.join(', '))}</dd>` : ''}${a.skills ? `<dt>Skills</dt><dd>${a.skills} to add yourself</dd>` : ''}</dl><p class="pg-dim">You see its instructions once you have a copy. If you rent it, the seller’s instructions stay private and what it remembers for you stays yours.</p></section>`; })() : ''}
+        ${x.versions?.[0]?.team?.members?.length ? (() => { const t = x.versions[0].team; const need = [...new Set(t.members.flatMap((m) => m.secretNames || []))]; return `<section class="pg-sec" data-xmk-team><h3>Who comes with it</h3><dl class="mk-dl">${t.members.map((m) => `<dt>${esc(m.name)}</dt><dd>${esc({ manager: 'Manager', worker: 'Worker', observer: 'Observer' }[m.role] || m.role || '')}</dd>`).join('')}${need.length ? `<dt>You’d provide</dt><dd>${esc(need.join(', '))}</dd>` : ''}</dl><p class="pg-dim">You get a copy of each agent’s setup, starting with no access. The seller’s people and anything they can’t pass on stay behind.</p></section>`; })() : ''}
         ${(x.versions || []).length ? `<section class="pg-sec"><h3>Versions</h3><ul class="mk-vers">${x.versions.map((v) => `<li><b>${esc(v.version)}</b><span>${esc(v.releaseNotes || '')}</span></li>`).join('')}</ul></section>` : ''}
         ${h().btn('Report this listing', 'data-xmk="report"', true, 'flag')}
       </aside></div>`);
@@ -157,9 +158,12 @@
   /** A reviewer reads what would go on sale and what a rental would run, and decides. The checks only say it's well formed. */
   function reviewPage() {
     const Q = S.review; if (Q.status === 'idle') loadReview();
+    // What a buyer's agent will be told: who it is and its instructions. A reviewer reads all of it, for one agent or each
+    // agent in a team (a team card used to show only the names, so a team's instructions reached strangers unread).
+    const reads = (name, persona, def, fn) => `<p class="pg-dim">Agent: ${esc(name || '')}${fn ? ' · ' + esc(fn) : ''}${persona?.role ? ' · ' + esc(persona.role) : ''}</p>${persona?.body ? `<h4>Who it is</h4><pre class="mk-read">${esc(persona.body)}</pre>` : ''}<h4>Its instructions</h4><pre class="mk-read">${esc(def?.instructions || '(none)')}</pre><p class="pg-dim">Asks to use: ${esc((def?.requestedCapabilities || []).join(', ') || 'nothing')} · Buyers provide: ${esc((def?.secretNames || []).join(', ') || 'nothing')} · Skills: ${(def?.skills || []).length}</p>`;
     const one = (s) => { const d = s.agent_definition, m = s.team_members; return `<li class="mk-rev" data-xmk-review="${esc(s.id)}"><div class="mk-row"><b>${esc(s.title)}</b>${h().chip(kindName(s.kind))}<span class="pg-dim">${esc(s.developer || '')} · ${esc(s.version || '')} · ${esc(s.license ? licenceName(s.license) : 'no licence')}</span></div>
-      ${d ? `<p class="pg-dim">Agent: ${esc(d.agent?.name || '')}${d.persona?.role ? ' · ' + esc(d.persona.role) : ''}</p>${d.persona?.body ? `<h4>Who it is</h4><pre class="mk-read">${esc(d.persona.body)}</pre>` : ''}<h4>Its instructions</h4><pre class="mk-read">${esc(d.definition?.instructions || '(none)')}</pre><p class="pg-dim">Asks to use: ${esc((d.definition?.requestedCapabilities || []).join(', ') || 'nothing')} · Buyers provide: ${esc((d.definition?.secretNames || []).join(', ') || 'nothing')} · Skills: ${(d.definition?.skills || []).length}</p>` : ''}
-      ${m ? `<p class="pg-dim">Team of ${m.length}: ${esc(m.map((x) => x.name).join(', '))}</p>` : ''}
+      ${d ? reads(d.agent?.name, d.persona, d.definition) : ''}
+      ${m ? `<p class="pg-dim">Team of ${m.length}: ${esc(m.map((x) => x.name).join(', '))}</p>${m.map((x) => reads(x.name, x.persona, x.definition, x.role)).join('')}` : ''}
       <div class="mk-row">${h().btn('Approve and publish', `data-xmk="approve" data-id="${esc(s.id)}"`)} ${h().btn('Send back', `data-xmk="sendBack" data-id="${esc(s.id)}"`, true)}</div></li>`; };
     const body = Q.status === 'error' ? retry('The review queue', 'review') : Q.status !== 'ready' ? h().box('market', 'Opening', '') : Q.list.length ? `<ul class="mk-rcl mk-revq">${Q.list.map(one).join('')}</ul>` : h().box('market', 'Nothing waiting for review', 'Skills are reviewed in Skills.');
     return h().page(h().head({ eyebrow: '<a data-xmk="go" data-id="">Marketplace</a>', title: 'Review queue' }) + `<div class="pg-body">${body}</div>`);
@@ -199,9 +203,11 @@
       toast('Review posted'); reloadListing(slug);
     },
     async import(slug) {
-      const x = S.listing.get(slug), w = wsId(); if (!w) return toast('Open a company workspace first.');
-      if (!(await D().confirm({ title: `Bring ${esc(x.listing.title)} into this workspace?`, body: 'It becomes a team here, under its licence. You can rename it or remove it later.', action: 'Bring it in' }))) return;
-      const r = await api('POST', `${BASE}/listings/${encodeURIComponent(x.listing.id)}/import-team`, { versionId: x.versions[0].id, owner: { type: 'workspace', id: w }, acceptLicense: true }).catch(() => null);
+      const x = S.listing.get(slug), v = x.versions[0], w = wsId(); if (!w) return toast('Open a company workspace first.');
+      // The server takes the licence by NAME (marketplaceTeamPackages.importTeamPackage), so the person is shown which one
+      // they accept. This sent `true`, which the server refuses, so no team could ever be brought in (dogfooding 2026-11-03).
+      if (!(await D().confirm({ title: `Bring ${esc(x.listing.title)} into this workspace?`, body: `It becomes a team here, under these terms: ${esc(licenceName(v.license || ''))}. You can rename it or remove it later.`, action: 'Bring it in' }))) return;
+      const r = await api('POST', `${BASE}/listings/${encodeURIComponent(x.listing.id)}/import-team`, { versionId: v.id, owner: { type: 'workspace', id: w }, acceptLicense: v.license }).catch(() => null);
       if (!r || !r.ok) return toast(said(r, 'It could not be brought in.'));
       toast('It is now a team in this workspace'); X().go('global', { global: 'workspace', item: 'Teams' });
     },

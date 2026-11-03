@@ -61,3 +61,39 @@ test('OIDC keys, discovery and token survive 201 calls to another route; token h
     assert.equal((await tok('ok=1&client_id=b')).status, 200, 'another client is a different bucket');
   } finally { s.close(); }
 });
+
+test('🔴 the global budget is per PERSON behind one address, under a per-address ceiling', async () => {
+  // Dogfooding 2026-11-03: one workspace page load is 35-48 API calls, so 200/min per ADDRESS was four or five page loads
+  // for everyone behind it, and a person opening a few tabs saw "could not be loaded" on every screen.
+  const { requesterRateLimitKey } = await import('../src/server/utils/clientIp.js');
+  const req = (headers) => ({ headers: { 'x-forwarded-for': '203.0.113.9', ...headers }, socket: { remoteAddress: '203.0.113.9' }, ip: '203.0.113.9' });
+  const a = requesterRateLimitKey(req({ cookie: 'x=1; xeno_session=tokenA' }));
+  assert.equal(a, requesterRateLimitKey(req({ cookie: 'xeno_session=tokenA' })), 'the same session is one bucket');
+  assert.notEqual(a, requesterRateLimitKey(req({ cookie: '__Host-xeno_session=tokenB' })), 'two people behind one address are two buckets');
+  assert.match(requesterRateLimitKey(req({ authorization: 'Bearer abc.def' })), /^who:/, 'a bearer token is a person too');
+  assert.match(requesterRateLimitKey(req({})), /^ip:/, 'no credential falls back to the address');
+  assert.ok(!a.includes('tokenA'), 'the credential itself never becomes the key');
+
+  // Driven: index.js's two layers, scaled down (ceiling 6, person 3).
+  const app = express();
+  const base = { windowMs: 60_000, standardHeaders: true, legacyHeaders: false, validate: { ip: false } };
+  const { rateLimitKey } = await import('../src/server/utils/clientIp.js');
+  app.use('/api/', rateLimit({ ...base, max: 6, keyGenerator: rateLimitKey }), rateLimit({ ...base, max: 3, keyGenerator: requesterRateLimitKey }));
+  app.get('/api/x', (_q, r) => r.json({ ok: true }));
+  const s = app.listen(0, '127.0.0.1'); await new Promise((r) => s.once('listening', r));
+  const hit = (cookie) => fetch(`http://127.0.0.1:${s.address().port}/api/x`, { headers: cookie ? { cookie } : {} }).then((r) => r.status);
+  try {
+    for (let i = 0; i < 3; i++) assert.equal(await hit('xeno_session=alice'), 200);
+    assert.equal(await hit('xeno_session=alice'), 429, 'a person still has a budget');
+    assert.equal(await hit('xeno_session=bob'), 200, 'another person behind the same address is not refused because of the first');
+    assert.equal(await hit('xeno_session=carol'), 200);
+    assert.equal(await hit('xeno_session=mallory-1'), 429, 'inventing new tokens stops at the per-address ceiling');
+  } finally { s.close(); }
+});
+
+test('index.js mounts the per-address ceiling in front of the per-person budget', () => {
+  const src = readFileSync(new URL('../src/server/index.js', import.meta.url), 'utf8');
+  assert.match(src, /app\.use\('\/api\/', globalAddressCeiling, globalLimiter\)/);
+  assert.match(src, /globalLimiter = rateLimit\(\{ \.\.\.limiterBase, max: 300, keyGenerator: requesterRateLimitKey \}\)/);
+  assert.match(src, /globalAddressCeiling = rateLimit\(\{ \.\.\.limiterBase, max: 2000, keyGenerator: rateLimitKey \}\)/);
+});
