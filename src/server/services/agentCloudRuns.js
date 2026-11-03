@@ -34,6 +34,18 @@ const MAX_BUDGET_CREDITS = 200;
 const MAX_RUN_HOURS = 8;
 const LIVE = new Set(['starting', 'queued', 'running']);
 const TERMINAL_FROM_API = { completed: 'completed', failed: 'failed', cancelled: 'cancelled', skipped: 'cancelled', interrupted: 'failed' };
+// The gateway refuses a run's next model call once it has spent its budget (xeno-api-proxy `budget_exceeded`). The
+// runner reports that as a failed run with the raw API error; to the person it is the stop the Run dialog promised.
+const BUDGET_SPENT = /budget_exceeded|run budget exceeded/i;
+export const BUDGET_REACHED_REASON = 'budget_reached: it used its whole budget. Run it again with a bigger budget to carry on.';
+
+/** The state and reason a run that ended with `status` and `statusReason` is recorded with. */
+export function endedAs(status, statusReason) {
+  const ended = TERMINAL_FROM_API[status];
+  if (!ended) return null;
+  if (ended === 'failed' && BUDGET_SPENT.test(String(statusReason || ''))) return { state: 'cancelled', reason: BUDGET_REACHED_REASON };
+  return { state: ended, reason: String(statusReason || status).slice(0, 200) };
+}
 
 /**
  * The runner must SAY it runs platform agents. A runner that predates the capability accepts the run, drops the
@@ -285,11 +297,12 @@ export async function refresh(db, owner, row, { fetchImpl = fetch, env = process
     const body = await res.json().catch(() => null);
     const status = body && body.run && body.run.status;
     if (!status) return row;
-    const ended = TERMINAL_FROM_API[status];
-    const state = ended || (status === 'running' ? 'running' : 'queued');
+    const end = endedAs(status, body.run.statusReason);
+    const ended = Boolean(end);
+    const state = end ? end.state : (status === 'running' ? 'running' : 'queued');
     if (state === row.state) return row;
     const r = (await db.query(`UPDATE agent_cloud_runs SET state = $2, reason = $3, ended_at = CASE WHEN $4 THEN now() ELSE ended_at END WHERE id = $1 RETURNING *`,
-      [row.id, state, ended ? String(body.run.statusReason || status).slice(0, 200) : row.reason, !!ended])).rows[0];
+      [row.id, state, end ? end.reason : row.reason, ended])).rows[0];
     if (ended) {
       await revokeAdmission(db, owner.id, row.admission_id);
       const a = (await db.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [row.agent_user_id])).rows[0];

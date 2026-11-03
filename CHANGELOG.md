@@ -5,6 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**A cloud run that uses up its budget now says it stopped, not that it failed.**
+
+- The Run dialog promises a run stops when it has used its budget. It did stop, but showed as failed with a raw API error. It now shows as stopped, with a note to run it again with a bigger budget to carry on.
+
 **An agent you talk to at its desk is the same agent that works your tasks.**
 
 - In Places, talking to an agent now gives it its persona (its role, voice and boundaries) as well as its instructions, read from the same record its task runs use. Before, a desk conversation knew only its name and instructions.
