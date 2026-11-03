@@ -27,6 +27,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - Each agent in a team is now checked like a single agent: instructions or a persona holding a key or password, or trying to take over whoever runs them, stop the export and name the agent to fix.
 - Teams already published are unchanged.
 
+**Leaving stops what you started.**
+
+- Closing a XENO Compute command’s window now stops the command on the machine. Before, it kept running, and costing, after you left.
+- Leaving Places no longer leaves you shown in the building, and closed live views stop updating in the background.
+
 **Fixes found by using the platform as a new person would, start to finish.**
 
 - Typing the code from the welcome mail now also confirms your email address. Before, you were active but still "unverified", so the free allowance was refused and Settings said "Not verified".
