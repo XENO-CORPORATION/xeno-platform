@@ -34,6 +34,49 @@ export function bundleViolations(bundle) {
   return bad;
 }
 
+/*
+ * The allow list, mirrored from xeno-spawn/server/src/profileSync.js (since Spawn rc.111): only the files it names are kept, so
+ * device state an older Spawn uploaded (Claude Code's .claude.json with the account email, machine id and local project paths, its
+ * paste cache) is never stored again and never handed to another device. Stripped rather than refused, so an older Spawn that has
+ * not updated yet keeps syncing what it is allowed to.
+ */
+const VENDOR_DIRS = new Set(['claude', 'codex', 'xeno-agent', 'agy', 'opencode']);
+const SYNCED_FILES = new Set(['settings.json', 'keybindings.json', 'config.toml', 'config.json', 'opencode.json', 'CLAUDE.md', 'AGENTS.md', 'GEMINI.md']);
+const SYNCED_DIRS = new Set(['agents', 'commands', 'prompts', 'output-styles']);
+const DEVICE_SETTINGS = ['env', 'apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'otelHeadersHelper'];
+
+/** True only for a path the allow list names. @param {string} rel */
+export function isSyncedPath(rel) {
+  const parts = String(rel).split(/[\\/]/).filter(Boolean);
+  if (!parts.length || parts.some(p => p === '..' || p === '.')) return false;
+  if (CREDENTIAL_NAMES.has(parts[parts.length - 1])) return false;
+  const inner = VENDOR_DIRS.has(parts[0]) && parts.length > 1 ? parts.slice(1) : parts;
+  if (inner.length === 1) return SYNCED_FILES.has(inner[0]);
+  return SYNCED_DIRS.has(inner[0]) && !inner.some(p => p.startsWith('.'));
+}
+
+/** A bundle with only the files the allow list names, and settings.json without its device-only keys. Never mutates its input.
+ * @param {any} bundle @returns {{bundle: any, dropped: string[]}} */
+export function allowListed(bundle) {
+  if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle) || !bundle.files || typeof bundle.files !== 'object') return { bundle, dropped: [] };
+  /** @type {Record<string, unknown>} */ const files = {}; /** @type {string[]} */ const dropped = [];
+  for (const [name, text] of Object.entries(bundle.files)) {
+    if (!isSyncedPath(name)) { dropped.push(name); continue; }
+    let value = text;
+    if (typeof text === 'string' && name.split(/[\\/]/).pop() === 'settings.json') {
+      try {
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object' && !Array.isArray(json) && DEVICE_SETTINGS.some(k => Object.hasOwn(json, k))) {
+          for (const k of DEVICE_SETTINGS) delete json[k];
+          value = JSON.stringify(json, null, 2) + '\n';
+        }
+      } catch { /* not JSON: kept as text */ }
+    }
+    files[name] = value;
+  }
+  return { bundle: { ...bundle, files }, dropped };
+}
+
 /** The handlers, with the database injected so tests need no server.
  * @param {{query: (sql: string, params?: unknown[]) => Promise<{rows: any[]}>}} db */
 export function spawnProfileHandlers(db) {
@@ -43,7 +86,7 @@ export function spawnProfileHandlers(db) {
       const r = await db.query(
         'SELECT profile_id, rev, bundle, deleted, updated_at FROM spawn_profile_sync WHERE user_id = $1 ORDER BY updated_at DESC',
         [userId]);
-      return { profiles: r.rows.map(row => ({ profileId: row.profile_id, rev: row.rev, ...(row.deleted ? { deleted: true } : { bundle: row.bundle }), updatedAt: row.updated_at })) };
+      return { profiles: r.rows.map(row => ({ profileId: row.profile_id, rev: row.rev, ...(row.deleted ? { deleted: true } : { bundle: allowListed(row.bundle).bundle }), updatedAt: row.updated_at })) };
     },
     /** @param {string} userId @param {string} profileId @param {number} baseRev @param {unknown} bundle */
     async put(userId, profileId, baseRev, bundle) {
@@ -51,6 +94,7 @@ export function spawnProfileHandlers(db) {
       if (!Number.isInteger(baseRev) || baseRev < 0) return { status: 400, body: { error: { code: 'BAD_REV', message: 'baseRev must be a non-negative integer' } } };
       const bad = bundleViolations(bundle);
       if (bad.length) return { status: 400, body: { error: { code: 'BAD_BUNDLE', message: bad.join('; ') } } };
+      const { bundle: kept, dropped } = allowListed(bundle);
       const cur = await db.query('SELECT rev, deleted FROM spawn_profile_sync WHERE user_id = $1 AND profile_id = $2', [userId, profileId]);
       const currentRev = cur.rows.length ? cur.rows[0].rev : 0;
       if (baseRev !== currentRev) return { status: 409, body: { error: { code: 'REV_CONFLICT', message: `based on rev ${baseRev}, current is ${currentRev}`, currentRev } } };
@@ -58,8 +102,8 @@ export function spawnProfileHandlers(db) {
       await db.query(
         `INSERT INTO spawn_profile_sync (user_id, profile_id, rev, bundle, deleted, updated_at) VALUES ($1,$2,$3,$4,FALSE,now())
          ON CONFLICT (user_id, profile_id) DO UPDATE SET rev = EXCLUDED.rev, bundle = EXCLUDED.bundle, deleted = FALSE, updated_at = now()`,
-        [userId, profileId, rev, JSON.stringify(bundle)]);
-      return { status: 200, body: { profileId, rev } };
+        [userId, profileId, rev, JSON.stringify(kept)]);
+      return { status: 200, body: { profileId, rev, ...(dropped.length ? { dropped } : {}) } };
     },
     /** @param {string} userId @param {string} profileId @param {number} baseRev */
     async remove(userId, profileId, baseRev) {

@@ -5,6 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**Spawn profile sync keeps only what Spawn names.**
+
+- Your account now stores only the settings and instruction files Spawn syncs (`settings.json`, `CLAUDE.md`, `AGENTS.md`, `config.toml` and similar, plus your own agents, commands, prompts and output styles). Device files an older Spawn uploaded (Claude Code's `.claude.json`, with your email, machine ID and local project paths, and its paste cache) are no longer stored or sent to your other devices, and copies already stored are left out when they are read.
+- Environment variables and credential helpers in `settings.json` are not stored.
+- An older Spawn keeps syncing: the files it may not send are dropped and named in the reply, not refused.
+
 **A team sold in the Marketplace keeps who each agent is.**
 
 - Publishing a team now includes each agent's persona (its role, voice and boundaries), the way selling one agent always did. Before, a buyer's copy kept only the instructions.

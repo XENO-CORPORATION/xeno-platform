@@ -79,3 +79,23 @@ test('bad profile ids and oversize bundles are refused', async () => {
   assert.equal((await h.put('user-a', '../escape', 0, bundle)).status, 400);
   assert.equal((await h.put('user-a', 'prof_1', 0, { files: { 'big.txt': 'x'.repeat(300 * 1024) } })).status, 400);
 });
+
+test('only allow-listed files are stored or handed out; device state from an older Spawn is stripped, not refused', async () => {
+  const db = fakeDb(), h = spawnProfileHandlers(db);
+  const bundle = { schema: 1, id: 'p1', vendor: 'claude', files: {
+    'claude/settings.json': JSON.stringify({ theme: 'dark', env: { ANTHROPIC_BASE_URL: 'http://x' }, apiKeyHelper: 'k.sh' }),
+    'claude/CLAUDE.md': '# mine', 'claude/commands/go.md': 'go',
+    'claude/.claude.json': '{"oauthAccount":{"emailAddress":"person@example.com"},"machineID":"m"}',
+    'claude/paste-cache/a.txt': 'pasted', 'claude/skills/s/SKILL.md': 'skill bytes' } };
+  const put = await h.put('u1', 'p1', 0, bundle);
+  assert.equal(put.status, 200);
+  assert.deepEqual(/** @type {any} */ (put.body).dropped.sort(), ['claude/.claude.json', 'claude/paste-cache/a.txt', 'claude/skills/s/SKILL.md']);
+  const stored = db.rows.get('u1|p1').bundle;
+  assert.deepEqual(Object.keys(stored.files).sort(), ['claude/CLAUDE.md', 'claude/commands/go.md', 'claude/settings.json']);
+  assert.deepEqual(JSON.parse(stored.files['claude/settings.json']), { theme: 'dark' }, 'env and key helpers never reach the account');
+  assert.ok(!JSON.stringify(stored).includes('person@example.com'));
+  // A row stored before this change is cleaned on the way out.
+  db.rows.set('u1|old', { user_id: 'u1', profile_id: 'old', rev: 3, bundle: { files: { 'claude/.claude.json': '{"machineID":"m"}', 'claude/settings.json': '{}' } }, deleted: false, updated_at: new Date() });
+  const listed = (await h.list('u1')).profiles.find(p => p.profileId === 'old');
+  assert.deepEqual(Object.keys(listed.bundle.files), ['claude/settings.json']);
+});
