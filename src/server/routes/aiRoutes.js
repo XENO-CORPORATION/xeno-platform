@@ -1041,6 +1041,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
 
       // CHAT_AGENT_RUNTIME=xeno-agent runs this turn on the XENO Agent loop; anything else keeps streamToolLoop.
       for await (const event of chatTurnLoop(process.env, userId)({
+        // The XENO Agent loop runs on its own, so it is told when the person leaves; the old loop ignores it.
+        signal: upstreamAbort.signal,
         messages: finalMessages,
         surface: toolSurface,
         turnId: reqIdSeed,
