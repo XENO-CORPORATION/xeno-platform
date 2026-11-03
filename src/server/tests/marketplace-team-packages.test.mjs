@@ -217,6 +217,27 @@ test('a team exports as configuration only and imports as a new licensed instanc
       [listing, `0.0.1-${field}`])).rows[0].n, 0, 'nothing is written');
   }
 
+  // ── 2c. a team made on the Teams SCREEN: it adds an agent by its identity, not its definition ─────────
+  // Dogfooding 2026-11-03: every team built in Workspace › Teams packaged as "no exportable agents", because the screen
+  // stores the agent's account (member_principal_id) and the package rightly leaves accounts behind.
+  const screenAgent = await agentResource('Screen agent', studioOwner, { persona: reviewerPersona });
+  const screenIdentity = await mkUser('screen-agent-identity');
+  await pool.query("INSERT INTO agent_identities(user_id,owner_user_id,agent_role,agent_origin,workforce_resource_id,workforce_resource_kind) VALUES($1,$2,'other','teampkg-screen',$3,'agent')",
+    [screenIdentity, seller, screenAgent]);
+  const screenTeam = (await pool.query(`INSERT INTO workforce_resources(kind,owner_workspace_id,created_by_user_id,name)
+    VALUES('team',$1,$2,'Screen crew') RETURNING id`, [studio, seller])).rows[0].id;
+  await pool.query(`INSERT INTO workforce_team_memberships(team_id,member_principal_id,role,created_by_user_id) VALUES($1,$2,'worker',$3)`,
+    [screenTeam, screenIdentity, seller]);
+  await pool.query(`INSERT INTO workforce_team_memberships(team_id,member_principal_id,role,created_by_user_id) VALUES($1,$2,'manager',$3)`,
+    [screenTeam, colleague, seller]);   // a person on the same team still stays behind
+  const fromScreen = await sellerCall('POST', `/listings/${listing}/versions`, { version: '0.0.2-screen', teamId: screenTeam });
+  assert.equal(fromScreen.status, 201, `a team made on the Teams screen can be sold: ${JSON.stringify(fromScreen.body)}`);
+  assert.deepEqual(fromScreen.body.package.members.map((m) => m.name), ['Screen agent'], 'the agent added by its identity is packaged as its definition');
+  assert.deepEqual(fromScreen.body.package.members[0].persona, reviewerPersona, 'with who it is');
+  assert.equal(fromScreen.body.excluded.memberships, 1, 'the person stays behind');
+  assert.ok(!JSON.stringify(fromScreen.body.package).includes(screenIdentity), 'the agent’s account id never leaves');
+  assert.ok(!JSON.stringify(fromScreen.body.package).includes(colleague), 'the person’s id never leaves');
+
   // The draft is the seller's: not listed, not importable, not downloadable.
   const slug = (await pool.query('SELECT slug FROM marketplace_listings WHERE id=$1', [listing])).rows[0].slug;
   await pool.query("UPDATE marketplace_listings SET status='published' WHERE id=$1", [listing]);
@@ -229,6 +250,12 @@ test('a team exports as configuration only and imports as a new licensed instanc
   const submitted = await sellerCall('POST', `/listings/${listing}/submit`, { versionId });
   assert.equal(submitted.status, 202, JSON.stringify(submitted.body));
   assert.equal(submitted.body.submission.checks.teamPackage.pass, true, 'the automated checks include the team package');
+  // Dogfooding 2026-11-03: both seller lists ordered by a column marketplace_submissions does not have, so the Seller
+  // console of every seller answered 500 the moment they registered. Only a real database shows that.
+  const mine = await sellerCall('GET', '/developer/listings');
+  assert.equal(mine.status, 200, `the seller console lists their listings: ${JSON.stringify(mine.body)}`);
+  assert.equal(mine.body.listings.find((x) => x.id === listing)?.lastSubmission?.state, 'in_review', 'with how its last review is going');
+  assert.equal((await sellerCall('GET', '/developer/skill-listings')).status, 200, 'the skill seller list loads too');
   assert.equal((await adminCall('POST', `/submissions/${submitted.body.submission.id}/approve`, {})).status, 200);
   const detail = await buyerCall('GET', `/listings/${slug}`);
   const shown = detail.body.versions.find((v) => v.id === versionId);

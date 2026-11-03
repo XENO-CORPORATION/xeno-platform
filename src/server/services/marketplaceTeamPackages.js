@@ -157,14 +157,21 @@ async function loadTeam(db, teamId) {
 }
 async function loadMembers(db, teamId) {
   // The CURRENT definition of each active agent member. Revoked members are history, not configuration.
-  return (await db.query(`SELECT m.id AS membership_id, m.role, m.member_resource_id, m.member_principal_id,
-      r.name, r.owner_user_id, r.owner_workspace_id, v.content, v.license, v.provenance
+  // Workspace › Teams adds an agent by its IDENTITY (member_principal_id = the agent's account). That identity is
+  // never packaged, but the definition it runs is: agent_identities.workforce_resource_id. Before this every team made
+  // on that screen packaged as "no exportable agents" (dogfooding 2026-11-03). A person has no definition, so people
+  // still stay behind, and an agent listed both ways is packaged once.
+  return (await db.query(`SELECT DISTINCT ON (COALESCE(m.member_resource_id, ai.workforce_resource_id, m.id))
+      m.id AS membership_id, m.role, COALESCE(m.member_resource_id, r.id) AS member_resource_id,
+      m.member_principal_id, r.name, r.owner_user_id, r.owner_workspace_id, v.content, v.license, v.provenance, m.created_at
     FROM workforce_team_memberships m
-    LEFT JOIN workforce_resources r ON r.id = m.member_resource_id
+    LEFT JOIN agent_identities ai ON m.member_resource_id IS NULL AND ai.user_id = m.member_principal_id
+    LEFT JOIN workforce_resources r ON r.id = COALESCE(m.member_resource_id, ai.workforce_resource_id)
     LEFT JOIN LATERAL (SELECT content, license, provenance FROM workforce_agent_versions
-      WHERE resource_id = m.member_resource_id ORDER BY version DESC LIMIT 1) v ON true
+      WHERE resource_id = r.id ORDER BY version DESC LIMIT 1) v ON true
     WHERE m.team_id=$1 AND m.state='active'
-    ORDER BY m.created_at, m.id`, [teamId])).rows;
+    ORDER BY COALESCE(m.member_resource_id, ai.workforce_resource_id, m.id), m.created_at, m.id`, [teamId])).rows
+    .sort((a, b) => (a.created_at - b.created_at) || String(a.membership_id).localeCompare(String(b.membership_id)));
 }
 
 export function exportTeamPackage(pool, { actorUserId, teamId, listingId, version: requestedVersion, releaseNotes = null }) {

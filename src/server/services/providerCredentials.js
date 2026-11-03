@@ -155,6 +155,29 @@ export async function verifyCredential({ provider, secret, baseUrl }) {
 }
 
 /**
+ * What a person reads when adding a key is refused, by cause. The code stays on the error for programs; the
+ * message is the screen's. Before this the screen showed "the provider did not accept that key
+ * (endpoint_forbidden_address)" for an address XENO refused, blaming a key nobody had checked (dogfooding 2026-11-03).
+ */
+export const REFUSAL_WORDS = Object.freeze({
+  rejected_by_provider: 'The provider didn’t accept that key. Check you copied all of it and that it’s still active.',
+  provider_rate_limited: 'The provider is limiting requests right now, so the key couldn’t be checked. Try again in a minute.',
+  provider_unavailable: 'The provider didn’t answer, so the key couldn’t be checked. Try again later.',
+  unexpected_provider_response: 'That endpoint didn’t answer like an AI provider, so the key wasn’t saved. Check the endpoint.',
+  endpoint_invalid: 'That endpoint isn’t a web address. It should look like https://example.com/v1.',
+  endpoint_not_https: 'The endpoint has to start with https://, so your key is never sent unencrypted.',
+  endpoint_has_credentials: 'Put the key in the Key field, not inside the endpoint address.',
+  endpoint_is_xeno: 'That endpoint is XENO itself. Use your provider’s address, or choose XENO credits instead.',
+  endpoint_forbidden_address: 'XENO only connects to public addresses, and that endpoint points to a private or local one.',
+  endpoint_redirect_refused: 'That endpoint redirects somewhere else, so XENO didn’t follow it. Use the address it redirects to.',
+  endpoint_response_too_large: 'That endpoint sent back far more than an AI provider does, so the key wasn’t saved.',
+  endpoint_timeout: 'That endpoint didn’t answer in time. Check the address and try again.',
+  endpoint_aborted: 'The check was interrupted. Try again.',
+  endpoint_unreachable: 'XENO couldn’t reach that endpoint. Check the address and try again.',
+});
+const refusalWords = (reason) => REFUSAL_WORDS[reason] || 'That key couldn’t be checked, so it wasn’t saved.';
+
+/**
  * Store a credential. Verification happens first and a failure is REFUSED —
  * we do not store an unusable key as `invalid` and let the user wonder.
  */
@@ -169,9 +192,19 @@ export async function createCredential(db, userId, { provider, label, secret, ba
   if (!label || !String(label).trim()) throw fail('label_required', 'a label is required');
 
   const clean = String(secret).trim();
-  const check = await verifyCredential({ provider, secret: clean, baseUrl });
+  let check;
+  try { check = await verifyCredential({ provider, secret: clean, baseUrl }); }
+  catch (e) {
+    // the address itself was refused before any request: say what is wrong with it, keep its code
+    if (typeof e?.code === 'string' && e.code.startsWith('endpoint_')) throw fail(e.code, refusalWords(e.code), e.http || 400);
+    throw e;
+  }
   if (!check.ok) {
-    throw fail('credential_rejected', `the provider did not accept that key (${check.reason})`, 422);
+    // An address refused at CONNECT time (it resolved to a private network) is the endpoint's fault, not the key's.
+    const blameEndpoint = typeof check.reason === 'string' && check.reason.startsWith('endpoint_');
+    const e = fail(blameEndpoint ? check.reason : 'credential_rejected', refusalWords(check.reason), 422);
+    e.reason = check.reason;
+    throw e;
   }
 
   const fp = fingerprint(clean);

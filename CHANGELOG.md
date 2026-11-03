@@ -11,6 +11,17 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - Each agent in a team is now checked like a single agent: instructions or a persona holding a key or password, or trying to take over whoever runs them, stop the export and name the agent to fix.
 - Teams already published are unchanged.
 
+**Fixes found by using the platform as a new person would, start to finish.**
+
+- Typing the code from the welcome mail now also confirms your email address. Before, you were active but still "unverified", so the free allowance was refused and Settings said "Not verified".
+- A team made in Workspace › Teams can be sold. Its agents used to be left out, so publishing always failed.
+- The Seller console loads for sellers. It failed for everyone the moment they registered.
+- Buyers can bring a team they got into their workspace. It was always refused, and the dialog now names the terms they accept.
+- A listing shows who comes with a team, and a reviewer reads each agent's role, voice and instructions before approving.
+- Uploading a font works. Every upload from the browser was refused.
+- Adding a provider key says plainly what is wrong. An address XENO won't connect to no longer reads as a bad key.
+- Opening a few pages at once no longer shows "could not be loaded" everywhere. Each signed-in person now has their own allowance, under a larger one for everyone sharing a connection.
+
 ## 2026-11-02
 
 **Database backups in R2 now have a key we hold, and they've been restored to prove it.**

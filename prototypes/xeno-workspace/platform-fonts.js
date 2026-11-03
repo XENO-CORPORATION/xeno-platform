@@ -74,7 +74,10 @@
     if (!yes) return;
     const form = new FormData(); form.append('font', file); form.append('rightsConfirmed', 'true'); if (S.ws) form.append('workspace', S.ws);
     let r, d = null;
-    try { r = await fetch('/api/fonts/uploads', { method: 'POST', credentials: 'same-origin', body: form }); d = await r.json().catch(() => null); } catch { /* reported below */ }
+    // A raw upload carries the CSRF token itself, as every other upload here does: without it a signed-in browser's upload
+    // was refused 403 "CSRF validation failed", so no font could ever be uploaded (dogfooding 2026-11-03).
+    const headers = { 'x-xeno-surface': 'xeno-web' }; const tk = window.XENO_PLATFORM?.csrf?.(); if (tk) headers['x-xeno-csrf'] = tk;
+    try { r = await fetch('/api/fonts/uploads', { method: 'POST', credentials: 'same-origin', headers, body: form }); d = await r.json().catch(() => null); } catch { /* reported below */ }
     if (!r || !r.ok) return toast((d && d.error) || 'The font couldn’t be uploaded.');
     toast(`${d.upload.family} uploaded`); load();
   }
