@@ -5,6 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**Leaving a chat mid-answer now stops it and releases the credits it reserved.**
+
+- The chat server never noticed when a person closed the tab or lost connection during a streamed answer. The answer kept running, could start another model call, and the credits held for it stayed reserved for up to 30 minutes before being returned. Nothing was overcharged, because unused holds are returned, but the balance looked lower until then. Closing the tab now ends the turn and settles or returns its holds at once.
+
 **Chat can run its turns on the XENO Agent's loop. It is off until switched on.**
 
 - With `CHAT_AGENT_RUNTIME=xeno-agent`, the XENO Agent's loop decides when a streamed chat turn calls the model again. The model, its instructions and every tool stay the platform's, and are billed the same way. `CHAT_AGENT_RUNTIME_USERS` limits it to listed accounts.

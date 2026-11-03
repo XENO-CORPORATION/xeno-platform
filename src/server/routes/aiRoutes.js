@@ -708,19 +708,21 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
   // relay loop. `send` is async and awaited in the relay so a full client buffer
   // pauses upstreamReader.read().
   const send = async (obj) => {
-    if (res.writableEnded) return;
+    if (res.writableEnded || res.destroyed) return;
     const ok = res.write(`data: ${JSON.stringify(obj)}\n\n`);
-    if (ok !== false) return;
+    if (ok !== false || res.destroyed) return;
+    // 🔴 `res` 'close', not `req` 'close': express has already read the body, and Node emits the
+    // request's 'close' at that point, so a listener added here never fires (measured on Node 22/24).
     await new Promise((resolve) => {
       const done = () => {
         res.removeListener('drain', done);
         res.removeListener('error', done);
-        req.removeListener('close', done);
+        res.removeListener('close', done);
         resolve();
       };
       res.once('drain', done);
       res.once('error', done);
-      req.once('close', done);
+      res.once('close', done);
     });
   };
   // 🔴 KEEPALIVE. A reasoning model can sit for minutes before its first token, and
@@ -766,8 +768,11 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
    * each controller is single-shot so a double call is a no-op rather than a double-settle.
    */
   const meters = [meter];
+  // Thrown instead of reserving for a person who has left: nobody will read that call's answer.
+  const clientGoneError = () => Object.assign(new Error('client disconnected'), { code: 'CLIENT_GONE' });
   const meterFor = async (iteration) => {
     if (iteration < meters.length) return meters[iteration];
+    if (clientGone) throw clientGoneError();
     const next = ownKey ? freeMeter() : await meterPremiumChatStream(req.db, userId, {
       model, provider: 'xeno', requestId: `${reqIdSeed}:${iteration}`,
       estInputTokens, maxTokens: max_tokens, surface: requestSurface(req),
@@ -776,6 +781,12 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
       callerInputTokens: null,
     });
     meters.push(next);
+    // The person left while this hold was being placed: the disconnect settlement already ran, so
+    // resolve again (it skips settled holds) rather than leave this one reserved until the sweep.
+    if (clientGone) {
+      await settleBestEffort().catch(() => { /* the hold sweep is the backstop */ });
+      throw clientGoneError();
+    }
     return next;
   };
 
@@ -844,6 +855,11 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
     try { upstreamReader?.cancel?.(); } catch { /* noop */ }
     settleBestEffort().catch(() => {});
   };
+  // 🔴 `res` 'close' is the disconnect signal. `req` 'close' already fired when express read the body,
+  // so on its own this handler never ran: holds stayed reserved until the sweep and the turn kept
+  // calling the model after the person left (measured on production, 2026-11-03, both loops).
+  // resolveOnDisconnect ignores the 'close' that follows a normal end (writableEnded).
+  res.on('close', resolveOnDisconnect);
   req.on('close', resolveOnDisconnect);
   res.on('error', resolveOnDisconnect);
 
