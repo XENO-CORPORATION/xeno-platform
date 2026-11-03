@@ -383,8 +383,9 @@ $fn$;
 
 -- SECURITY DEFINER: a writer role (the app, the gateway, the portal) may append to the journal but holds no
 -- privilege on the chain's own records; only this function moves them.
+-- Its search_path is pinned in the statement after these functions, to the schema they are created in.
 CREATE OR REPLACE FUNCTION ledger_chain_append() RETURNS trigger LANGUAGE plpgsql
-  SECURITY DEFINER SET search_path = public, pg_temp AS $fn$
+  SECURITY DEFINER AS $fn$
 DECLARE
   h ledger_chain_heads%ROWTYPE;
   v_prior text; v_count bigint; v_opened timestamp; v_last timestamp; v_hash text;
@@ -446,7 +447,7 @@ $fn$;
 -- the attestation records who and why. Earlier epochs are still verified, so this can never hide an altered entry.
 -- Not executable by the runtime role (database/runtime-role.js); run through scripts/ledger-reseal.mjs.
 CREATE OR REPLACE FUNCTION ledger_chain_reseal(p_account uuid, p_reason text, p_actor text) RETURNS integer
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $fn$
+LANGUAGE plpgsql SECURITY DEFINER AS $fn$
 DECLARE
   h ledger_chain_heads%ROWTYPE;
   e ledger_chain_epochs%ROWTYPE;
@@ -475,6 +476,15 @@ BEGIN
   RETURN h.epoch + 1;
 END
 $fn$;
+
+-- Pin both SECURITY DEFINER functions to the schema they were created in, as credit_grant_payment_origin_guard is.
+-- That is 'public' in production. Pinned in the CREATE itself, a database built in its own schema (the proofs do)
+-- validated ledger_chain_heads%ROWTYPE against public, found nothing, and failed 42P01. This whole file is one
+-- statement batch, which Postgres runs as one transaction, so no session ever sees the functions unpinned.
+DO $chain_path$ BEGIN
+  EXECUTE format('ALTER FUNCTION %I.ledger_chain_append() SET search_path = %I, pg_temp', current_schema(), current_schema());
+  EXECUTE format('ALTER FUNCTION %I.ledger_chain_reseal(uuid, text, text) SET search_path = %I, pg_temp', current_schema(), current_schema());
+END $chain_path$;
 
 DROP TRIGGER IF EXISTS trg_ledger_chain_checkpoints_immutable ON ledger_chain_checkpoints;
 CREATE TRIGGER trg_ledger_chain_checkpoints_immutable BEFORE UPDATE OR DELETE ON ledger_chain_checkpoints
