@@ -5,6 +5,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**XENO Creator has its own address, creator.xenosystem.ai, served the way motion.xenosystem.ai is.**
+
+- The site serves whatever release XENO Creator has published into `/srv/xeno-creator-web` on the server, behind the same invitation gate as the rest of the site. Publishing or rolling back Creator needs no site deploy.
+- Signing in there opens a XENO session on that address (client `xeno-creator-web`, identity only), and the server recognises the app as `creator` when it checks a licence.
+
 **A release's own page now names itself in the browser tab** ("XENO Canvas 0.43.1 release notes"); it showed only "XENOsystem".
 
 **Major releases of XENO products now come with a release post: clips, pictures and what changed.**

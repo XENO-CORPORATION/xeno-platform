@@ -92,6 +92,8 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // Identity only, like tools.: the sign-in becomes a browser session and the token is revoked at once, so a scope
   // here would be unused. Storage is reached as the person through that session.
   'xeno-motion-web': IDENTITY,
+  // XENO Creator in the browser: the same host sign-in as motion., identity only.
+  'xeno-creator-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],
