@@ -34,13 +34,14 @@ import { resolvePrincipal } from './agentIdentity.js';
 import { check } from '../utils/authzReBAC.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
 import { normalizeOwnerScope } from './workforceScope.js';
+import { definitionSafetyFinding, personaOf } from './marketplaceDefinitionSafety.js';
 
 export class TeamPackageError extends Error {
   constructor(code, reason, extra = {}) {
     super(reason);
     this.name = 'TeamPackageError';
     this.code = code;
-    this.status = { bad_input: 400, denied: 403, not_found: 404, conflict: 409 }[code] ?? 500;
+    this.status = { bad_input: 400, denied: 403, not_found: 404, conflict: 409, unsafe: 422 }[code] ?? 500;
     this.details = Object.freeze({ schemaVersion: 1, reason, ...extra });
   }
 }
@@ -112,13 +113,21 @@ export function buildPackage(team, members, { versionLicence, owner }) {
     if (!m.content) { excluded.push({ member: m.name, reason: 'no_definition' }); return; }
     if (imported && !REDISTRIBUTABLE_LICENCES.has(licence)) { excluded.push({ member: m.name, reason: 'not_redistributable', license: licence }); return; }
     const content = m.content;
+    const instructions = typeof content.instructions === 'string' ? content.instructions : '';
+    // WHO the agent is travels with it, as it does for a single agent listing (kind `mind`).
+    const persona = personaOf(content);
+    // A seller's words become a stranger's system prompt. An unsafe member refuses the whole export, naming
+    // the member, rather than being left out quietly: the seller has to see it and fix it.
+    const finding = definitionSafetyFinding(persona, instructions);
+    if (finding) fail('unsafe', finding.reason, { member: String(m.name), ...(finding.rules ? { rules: finding.rules } : {}) });
     out.push({
       key: `member-${out.length + 1}`,
       name: String(m.name),
       role: m.role,
       license: REDISTRIBUTABLE_LICENCES.has(licence) ? licence : null,
+      persona,
       definition: {
-        instructions: typeof content.instructions === 'string' ? content.instructions : '',
+        instructions,
         skills: Array.isArray(content.skills)
           ? content.skills.map((x) => ({ id: String(x.id), version: String(x.version), hash: String(x.hash) })) : [],
         requestedCapabilities: Array.isArray(content.requestedCapabilities) ? content.requestedCapabilities.map(String) : [],
@@ -259,6 +268,8 @@ export function importTeamPackage(pool, { actorUserId, listingVersionId, owner: 
       // The definition as sold. Secrets arrive as names with NO binding: the buyer binds their own.
       const content = { instructions: member.definition.instructions, skills: member.definition.skills,
         requestedCapabilities: member.definition.requestedCapabilities, secretReferences: [] };
+      // Packages built before personas travelled carry none; the agent then has instructions only, as before.
+      if (member.persona) content.persona = { role: member.persona.role, body: member.persona.body };
       const provenance = { source: 'imported', sourceVersion: v.version };
       const license = { identifier: member.license ?? v.license };
       await db.query(`INSERT INTO workforce_agent_versions(resource_id,version,content,content_hash,schema_version,provenance,license,created_by_user_id)

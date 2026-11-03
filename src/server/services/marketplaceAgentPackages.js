@@ -17,11 +17,11 @@
  * A skill pin travels as an id, version and hash, and the buyer may not hold that skill. So an import leaves it out and reports it: an agent with a
  * skill its owner can't read isn't something to hand over quietly.
  */
-import { MIND_FORMAT_VERSION, createMind, serializeMind, validateMindText, scanMind, blockingFindings, composePersonaPrompt } from '@xenosystem/anima-mind';
+import { composePersonaPrompt } from '@xenosystem/anima-mind';
 import * as agents from './platformAgents.js';
 import { REDISTRIBUTABLE_LICENCES, humanActor, managesScope } from './marketplaceTeamPackages.js';
+import { definitionSafetyFinding, personaOf } from './marketplaceDefinitionSafety.js';
 import { authorityTransaction, lockWorkspaceAuthority, operationHash } from './workspaceOperationReceipts.js';
-import { scanBytes } from '../vendor/xeno-corpus/corpus-secret-rules.mjs';
 
 export const AGENT_PACKAGE_FORMAT = 'xeno-agent-package';
 /** A claim older than this belongs to a process that died, so another import may take over. */
@@ -33,15 +33,10 @@ export class AgentPackageError extends Error {
 const refuse = (code, reason, status = 400, extra) => { throw new AgentPackageError(code, reason, status, extra); };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Would running this be safe to hand a stranger? Secret-shaped text, and instructions that try to take the agent over, are refused by the scanners that own those rules. */
+/** Would running this be safe to hand a stranger? The rule is shared with team listings (marketplaceDefinitionSafety.js). */
 function assertSafeToHandOver(persona, instructions) {
-  const text = [persona?.role, persona?.body, instructions].filter(Boolean).join('\n\n');
-  const secrets = scanBytes(Buffer.from(text, 'utf8'));
-  if (secrets.length) refuse('definition_has_secret', 'definition_has_secret', 422, { rules: [...new Set(secrets.map((x) => x.rule))].slice(0, 5) });
-  const base = createMind({ id: 'listing', name: 'Listing', role: persona?.role || undefined });
-  const v = validateMindText(serializeMind({ manifest: { ...base.manifest, xeno_mind_version: MIND_FORMAT_VERSION }, body: { raw: text || base.body.raw, sections: [] } }));
-  const unsafe = v.ok ? blockingFindings(scanMind(v.mind)) : [];
-  if (unsafe.length) refuse('definition_unsafe', 'definition_unsafe', 422);
+  const finding = definitionSafetyFinding(persona, instructions);
+  if (finding) refuse(finding.reason, finding.reason, 422, finding.rules ? { rules: finding.rules } : undefined);
 }
 
 /** The package, read by NAME from what it belongs to and written into a fresh object. No field the allowlist doesn't name reaches the result. */
@@ -51,7 +46,7 @@ export function buildAgentDefinition(resource, version) {
   // an agent bought under terms that forbid passing it on isn't the seller's to sell
   if (version.provenance?.source === 'imported' && !REDISTRIBUTABLE_LICENCES.has(licence)) refuse('not_redistributable', 'not_redistributable', 409, { license: licence });
   const instructions = typeof c.instructions === 'string' ? c.instructions : '';
-  const persona = c.persona && (c.persona.role || c.persona.body) ? { role: String(c.persona.role || ''), body: String(c.persona.body || '') } : null;
+  const persona = personaOf(c);
   if (!instructions.trim() && !persona) refuse('agent_has_no_definition', 'agent_has_no_definition', 409);
   assertSafeToHandOver(persona, instructions);
   return {

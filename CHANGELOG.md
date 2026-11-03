@@ -3,6 +3,14 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-03
+
+**A team sold in the Marketplace keeps who each agent is.**
+
+- Publishing a team now includes each agent's persona (its role, voice and boundaries), the way selling one agent always did. Before, a buyer's copy kept only the instructions.
+- Each agent in a team is now checked like a single agent: instructions or a persona holding a key or password, or trying to take over whoever runs them, stop the export and name the agent to fix.
+- Teams already published are unchanged.
+
 ## 2026-11-02
 
 **Database backups in R2 now have a key we hold, and they've been restored to prove it.**
