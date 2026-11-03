@@ -59,6 +59,7 @@ const NAME_MAP = new Map([
   ['xeno-view', 'view'], ['xenoview', 'view'], ['xeno view', 'view'],
   ['xeno-extension', 'extension'], ['xenoextension', 'extension'], ['xeno extension', 'extension'],
   ['xeno-workshop', 'workshop'], ['xeno-workshop-local', 'workshop'], ['xenoworkshop', 'workshop'],
+  ['xeno-gamedev', 'gamedev'], ['xeno-gamedev-local', 'gamedev'], ['xenogamedev', 'gamedev'],
   ['xenoharbor', 'harbor'],
   ['xeno-places', 'places'], ['xenoplaces', 'places'],
 ]);
