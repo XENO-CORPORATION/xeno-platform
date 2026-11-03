@@ -402,6 +402,238 @@ export const budgetExhaustedPayload = (searches) => ({
 });
 
 /**
+ * One tool call, handled the way every chat turn handles it: budgets, executors, the events the
+ * transcript draws, and the tool result the model reads next.
+ *
+ * Shared by `streamToolLoop` and `streamAgentToolLoop` (the XENO Agent loop), so the two cannot
+ * drift: whichever loop drives the turn, a search, image, code run, project read, browser step or
+ * question behaves identically. `run` yields UI events, pushes the tool result onto `working`,
+ * and returns `{ finished: 'proposal' }` when the turn must end at an image proposal.
+ */
+export function createToolCallRunner({ surface, tools: offered, runSearch, runImage, proposeImage, runCode, runProject, runBrowser, browserLabel = null, browserStepBudget = 25, imageReference = null }) {
+  const budget = budgetFor(surface);
+  const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
+  const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
+  const canDraw = (typeof proposeImage === 'function' || typeof runImage === 'function') && tools.some((tool) => tool?.function?.name === 'generate_image');
+  const canRun = typeof runCode === 'function' && tools.some((tool) => tool?.function?.name === 'run_code');
+  // ask_user needs no executor: the person IS the executor, and the answer arrives as the next turn.
+  const canAsk = tools.some((tool) => tool?.function?.name === 'ask_user');
+  const canReadProject = typeof runProject === 'function' && tools.some((tool) => tool?.function?.name === 'read_project');
+  // Browser tools (docs/CHAT-TOOL-CALLING-PLAN.md → "Browser tools"): every offered `browser_*` name must have
+  // this executor, or the model could name a step the relay never receives.
+  const canBrowse = typeof runBrowser === 'function' && tools.some((tool) => String(tool?.function?.name || '').startsWith('browser_'));
+  const sources = [];
+  const state = { searches: 0, images: 0, codeRuns: 0, projectReads: 0, browserSteps: 0, imageUnavailable: false, cappedOut: false, question: null };
+
+  async function* run(call, { text, working, iteration }) {
+    const name = call?.function?.name;
+    const id = call?.id;
+
+    if (name === 'read_project' && canReadProject) {
+      if (state.projectReads >= 6) { working.push(toolResultMessage(id, { error: 'project_read_limit' })); return {}; }
+      state.projectReads += 1;
+      try {
+        const args = JSON.parse(call.function.arguments || '{}');
+        const data = await runProject(args);
+        const serialized = JSON.stringify(data);
+        const bounded = serialized.length <= 24_000 ? data : {
+          truncated: true, excerpt: serialized.slice(0, 24_000),
+          note: 'Result exceeded the turn limit. Ask for a narrower section.',
+        };
+        working.push(toolResultMessage(id, { untrusted_project_data: true, data: bounded }));
+      } catch {
+        working.push(toolResultMessage(id, { error: 'project_read_failed', message: 'That project section could not be read. Access may have changed.' }));
+      }
+      return {};
+    }
+
+    if (canBrowse && typeof name === 'string' && name.startsWith('browser_')) {
+      if (state.browserSteps >= browserStepBudget) {
+        working.push(toolResultMessage(id, { error: 'browser_step_limit', instruction: `This turn has used its ${browserStepBudget} browser steps. Tell the person what is done and what is left.` }));
+        return {};
+      }
+      let args;
+      try { args = JSON.parse(call?.function?.arguments || '{}'); } catch { args = null; }
+      if (!args || typeof args !== 'object' || Array.isArray(args)) {
+        working.push(toolResultMessage(id, { error: 'invalid_args', message: 'The step arguments were not a JSON object.' }));
+        return {};
+      }
+      const index = state.browserSteps;
+      state.browserSteps += 1;
+      // BEFORE the wait, like every other tool: the row says what is happening in the person's browser.
+      yield { type: 'browser_start', index, tool: name, args, browser: browserLabel };
+      // The relay reports "waiting for approval" while the step is pending; those states are forwarded live so
+      // the transcript can say whose turn it is, instead of showing a stalled step.
+      const states = [];
+      let wake = null;
+      const pending = Promise.resolve(runBrowser({ name, args, index, onState: (state) => { states.push(state); wake?.(); } }))
+        .then((value) => ({ value }), (error) => ({ error }));
+      let settled = null;
+      while (!settled) {
+        settled = await Promise.race([pending, new Promise((resolve) => { wake = () => resolve(null); })]);
+        while (states.length) yield { type: 'browser_state', index, state: states.shift() };
+      }
+      const outcome = settled.error
+        ? { ok: false, error: { code: 'internal', message: 'The browser step could not be completed.' } }
+        : settled.value;
+      if (outcome?.ok) {
+        // Page content is the web's, not the person's: marked untrusted for the model, as project data is.
+        working.push(toolResultMessage(id, { untrusted_page_content: true, browser: browserLabel, data: outcome.output ?? null }));
+        yield { type: 'browser_result', index, output: outcome.output ?? null };
+      } else {
+        const error = outcome?.error || { code: 'tool_error', message: 'The browser step could not be completed.' };
+        working.push(toolResultMessage(id, { error: error.code, message: error.message,
+          instruction: ['denied', 'interrupted'].includes(error.code) ? 'Do not retry this step on your own; tell the person.' : undefined }));
+        yield { type: 'browser_error', index, code: error.code, message: error.message };
+      }
+      return {};
+    }
+
+    if (name === 'ask_user' && canAsk) {
+      // One question per turn. A second one is answered with an error the model can read — it is
+      // never queued, because the turn is about to end at the first.
+      if (state.question) { working.push(toolResultMessage(id, askUserAlreadyPendingPayload())); return {}; }
+      // `text` is what the model wrote this iteration — where it puts the question when it omits the field
+      const args = parseAskUserArguments(call?.function?.arguments, { fallbackText: text });
+      if (!args.ok) { working.push(toolResultMessage(id, { error: args.error })); return {}; }
+      state.question = { toolCallId: typeof id === 'string' ? id : null, question: args.question, options: args.options, multiple: args.multiple };
+      return {};
+    }
+
+    if (name === 'generate_image' && canDraw) {
+      if (state.imageUnavailable) {
+        working.push(toolResultMessage(id, { error: 'image_unavailable', instruction: 'Do not retry this turn. Offer a reusable prompt or retry later. Each new user turn has a fresh image-attempt budget.' }));
+        return {};
+      }
+      if (state.images >= CHAT_IMAGE_BUDGET) {
+        working.push(toolResultMessage(id, imageBudgetExhaustedPayload(state.images)));
+        return {};
+      }
+      const args = parseImageArguments(call?.function?.arguments);
+      if (!args.ok) {
+        working.push(toolResultMessage(id, { error: args.error }));
+        return {};
+      }
+      const index = state.images;
+      state.images += 1;
+      const useReference = Boolean(args.useLatestImage && imageReference?.aspectRatio);
+      const aspectRatio = useReference ? imageReference.aspectRatio : args.aspectRatio;
+      if (typeof proposeImage === 'function') {
+        // Interactive agent generation proposes a server-owned request. No provider or image hold
+        // runs here; only an explicit human approval of that durable record may start generation.
+        try {
+          const generation = await proposeImage({ prompt: args.prompt, aspectRatio, quality: args.quality, index, useReference });
+          yield { type: 'generation_proposal', index, generation };
+          return { finished: 'proposal' };
+        } catch (error) {
+          working.push(toolResultMessage(id, { error: error?.code || 'generation_proposal_failed', instruction: 'No image was generated or charged. Explain the refusal; do not guess the cause.' }));
+          yield { type: 'image_error', index, code: error?.code || 'generation_proposal_failed', http: error?.http || error?.status, message: error?.message || 'The generation request could not be prepared.' };
+        }
+        return {};
+      }
+      // The shape goes out BEFORE the wait: the chat sizes its placeholder to the image that is
+      // coming, so nothing reflows when it lands (an image takes 20-60 s).
+      yield { type: 'image_start', index, prompt: args.prompt, aspectRatio, quality: args.quality, edit: useReference };
+      try {
+        const image = await runImage({ prompt: args.prompt, aspectRatio, quality: args.quality, index, useReference });
+        working.push(toolResultMessage(id, imageResultPayload({ prompt: args.prompt, aspectRatio, model: image?.model, edited: Boolean(image?.edited) })));
+        yield { type: 'image_result', index, image };
+      } catch (error) {
+        // A failed image is a RESULT on both channels, like a failed search: the model can say
+        // so truthfully, and the user sees the attempt rather than a placeholder that vanishes.
+        const message = error?.message || 'unknown error';
+        if (error?.code === 'image_unavailable') state.imageUnavailable = true;
+        working.push(toolResultMessage(id, {
+          error: error?.code === 'image_unavailable' ? 'image_unavailable' : `image generation failed: ${message}`,
+          ...(state.imageUnavailable ? { instruction: message } : {}),
+        }));
+        yield { type: 'image_error', index, code: error?.code || 'image_failed', http: error?.http, message };
+      }
+      return {};
+    }
+
+    if (name === 'run_code' && canRun) {
+      if (state.codeRuns >= CHAT_CODE_BUDGET) {
+        working.push(toolResultMessage(id, codeBudgetExhaustedPayload(state.codeRuns)));
+        return {};
+      }
+      const args = parseCodeArguments(call?.function?.arguments);
+      if (!args.ok) {
+        working.push(toolResultMessage(id, { error: args.error }));
+        return {};
+      }
+      const index = state.codeRuns;
+      state.codeRuns += 1;
+      // The run goes out BEFORE the wait, like a search/image: the UI shows the code is running
+      // rather than a silent pause.
+      yield { type: 'code_start', index, language: args.language, code: args.code };
+      try {
+        const result = await runCode({ language: args.language, code: args.code, index });
+        working.push(toolResultMessage(id, codeResultPayload(result)));
+        yield { type: 'code_result', index, result };
+      } catch (error) {
+        // A failed execution is a RESULT on both channels (like a failed search): a tool message
+        // so the model can speak to it, and an event so the user sees the attempt.
+        const message = error?.message || 'unknown error';
+        working.push(toolResultMessage(id, { error: `code execution failed: ${message}` }));
+        yield { type: 'code_error', index, message };
+      }
+      return {};
+    }
+
+    if (name !== 'web_search' || !canSearch) {
+      working.push(toolResultMessage(id, { error: `unknown tool: ${name}` }));
+      return {};
+    }
+
+    if (state.searches >= budget.maxSearches) {
+      state.cappedOut = true;
+      working.push(toolResultMessage(id, budgetExhaustedPayload(state.searches)));
+      return {};
+    }
+
+    const args = parseToolArguments(call?.function?.arguments);
+    if (!args.ok) {
+      working.push(toolResultMessage(id, { error: args.error }));
+      return {};
+    }
+
+    state.searches += 1;
+    // The query goes out BEFORE the search runs — this is the event that turns a silent
+    // wait into a visible one, and it is the whole reason for streaming this loop.
+    yield { type: 'search_start', iteration: iteration, query: args.query };
+
+    try {
+      const result = await runSearch({ query: args.query, depth: budget.depth });
+      const found = admitSources(sources, Array.isArray(result?.sources) ? result.sources : []);
+      working.push(toolResultMessage(id, searchResultPayload(args.query, found)));
+      yield {
+        type: 'search_result',
+        iteration: iteration,
+        query: args.query,
+        count: found.length,
+        sources: found.map((s) => ({ id: s.id, title: s.title, url: s.url })),
+      };
+    } catch (error) {
+      // A failure is a RESULT on both channels: a tool message so the model can speak to
+      // it truthfully, and an event so the user sees the search was attempted and failed
+      // rather than watching it silently vanish.
+      const message = error?.message || 'unknown error';
+      working.push(toolResultMessage(id, { error: `search failed: ${message}` }));
+      yield {
+        type: 'search_error',
+        iteration: iteration,
+        query: args.query,
+        code: error?.code || 'web_context_unavailable',
+        message,
+      };
+    }
+  }
+
+  return { budget, tools, canBrowse, browserStepBudget, sources, state, run };
+}
+
+/**
  * Run the loop, yielding events as they happen.
  *
  * @param {object}   o
@@ -426,28 +658,10 @@ export const budgetExhaustedPayload = (searches) => ({
  *           'image_error'|'code_start'|'code_result'|'code_error'|'ask_user'|'usage'|'complete', … }
  */
 export async function* streamToolLoop({ messages, surface, turnId, streamModel, runSearch, tools: offered, runImage, proposeImage, runCode, runProject, runBrowser, browserLabel = null, browserStepBudget = 25, imageReference = null }) {
-  const budget = budgetFor(surface);
-  const tools = Array.isArray(offered) ? offered : toolsForSurface(surface);
-  const canSearch = tools.some((tool) => tool?.function?.name === 'web_search');
-  const canDraw = (typeof proposeImage === 'function' || typeof runImage === 'function') && tools.some((tool) => tool?.function?.name === 'generate_image');
-  const canRun = typeof runCode === 'function' && tools.some((tool) => tool?.function?.name === 'run_code');
-  // ask_user needs no executor: the person IS the executor, and the answer arrives as the next turn.
-  const canAsk = tools.some((tool) => tool?.function?.name === 'ask_user');
-  let images = 0;
-  let codeRuns = 0;
-  let projectReads = 0;
-  let imageUnavailable = false;
-  const canReadProject = typeof runProject === 'function' && tools.some((tool) => tool?.function?.name === 'read_project');
-  // Browser tools (docs/CHAT-TOOL-CALLING-PLAN.md → "Browser tools"): every offered `browser_*` name must have
-  // this executor, or the model could name a step the relay never receives.
-  const canBrowse = typeof runBrowser === 'function' && tools.some((tool) => String(tool?.function?.name || '').startsWith('browser_'));
-  let browserSteps = 0;
-
+  const runner = createToolCallRunner({ surface, tools: offered, runSearch, runImage, proposeImage, runCode, runProject, runBrowser, browserLabel, browserStepBudget, imageReference });
+  const { budget, tools, canBrowse, sources, state } = runner;
   const working = [...messages];
-  const sources = [];
-  let searches = 0;
   let iterations = 0;
-  let cappedOut = false;
   let lastUsage = null;
   // text the model wrote on an earlier iteration, before a tool call — the answer that follows needs a break from it
   let narrated = false;
@@ -460,8 +674,8 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
     // Distinct per iteration (holds derive from requestId and are idempotent on it, so a
     // reused id silently collides), deterministic so a retried turn reuses its holds.
     const requestId = `${turnId}:${iterations}`;
-    const { capReached, offerTools } = iterationPlan({ searches, budget, tools });
-    if (capReached) cappedOut = true;
+    const { capReached, offerTools } = iterationPlan({ searches: state.searches, budget, tools });
+    if (capReached) state.cappedOut = true;
 
     let text = '';
     let toolCalls = [];
@@ -503,228 +717,30 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
     iterations += 1;
 
     if (toolCalls.length === 0) {
-      yield { type: 'complete', iterations, searches, images, codeRuns, sources, cappedOut, usage: lastUsage };
+      yield { type: 'complete', iterations, searches: state.searches, images: state.images, codeRuns: state.codeRuns, sources, cappedOut: state.cappedOut, usage: lastUsage };
       return;
     }
 
     working.push(assistantToolCallMessage(text, toolCalls));
     if (text.trim()) narrated = true;
 
-    let question = null;
+    state.question = null;
     for (const call of toolCalls) {
-      const name = call?.function?.name;
-      const id = call?.id;
-
-      if (name === 'read_project' && canReadProject) {
-        if (projectReads >= 6) { working.push(toolResultMessage(id, { error: 'project_read_limit' })); continue; }
-        projectReads += 1;
-        try {
-          const args = JSON.parse(call.function.arguments || '{}');
-          const data = await runProject(args);
-          const serialized = JSON.stringify(data);
-          const bounded = serialized.length <= 24_000 ? data : {
-            truncated: true, excerpt: serialized.slice(0, 24_000),
-            note: 'Result exceeded the turn limit. Ask for a narrower section.',
-          };
-          working.push(toolResultMessage(id, { untrusted_project_data: true, data: bounded }));
-        } catch {
-          working.push(toolResultMessage(id, { error: 'project_read_failed', message: 'That project section could not be read. Access may have changed.' }));
-        }
-        continue;
-      }
-
-      if (canBrowse && typeof name === 'string' && name.startsWith('browser_')) {
-        if (browserSteps >= browserStepBudget) {
-          working.push(toolResultMessage(id, { error: 'browser_step_limit', instruction: `This turn has used its ${browserStepBudget} browser steps. Tell the person what is done and what is left.` }));
-          continue;
-        }
-        let args;
-        try { args = JSON.parse(call?.function?.arguments || '{}'); } catch { args = null; }
-        if (!args || typeof args !== 'object' || Array.isArray(args)) {
-          working.push(toolResultMessage(id, { error: 'invalid_args', message: 'The step arguments were not a JSON object.' }));
-          continue;
-        }
-        const index = browserSteps;
-        browserSteps += 1;
-        // BEFORE the wait, like every other tool: the row says what is happening in the person's browser.
-        yield { type: 'browser_start', index, tool: name, args, browser: browserLabel };
-        // The relay reports "waiting for approval" while the step is pending; those states are forwarded live so
-        // the transcript can say whose turn it is, instead of showing a stalled step.
-        const states = [];
-        let wake = null;
-        const pending = Promise.resolve(runBrowser({ name, args, index, onState: (state) => { states.push(state); wake?.(); } }))
-          .then((value) => ({ value }), (error) => ({ error }));
-        let settled = null;
-        while (!settled) {
-          settled = await Promise.race([pending, new Promise((resolve) => { wake = () => resolve(null); })]);
-          while (states.length) yield { type: 'browser_state', index, state: states.shift() };
-        }
-        const outcome = settled.error
-          ? { ok: false, error: { code: 'internal', message: 'The browser step could not be completed.' } }
-          : settled.value;
-        if (outcome?.ok) {
-          // Page content is the web's, not the person's: marked untrusted for the model, as project data is.
-          working.push(toolResultMessage(id, { untrusted_page_content: true, browser: browserLabel, data: outcome.output ?? null }));
-          yield { type: 'browser_result', index, output: outcome.output ?? null };
-        } else {
-          const error = outcome?.error || { code: 'tool_error', message: 'The browser step could not be completed.' };
-          working.push(toolResultMessage(id, { error: error.code, message: error.message,
-            instruction: ['denied', 'interrupted'].includes(error.code) ? 'Do not retry this step on your own; tell the person.' : undefined }));
-          yield { type: 'browser_error', index, code: error.code, message: error.message };
-        }
-        continue;
-      }
-
-      if (name === 'ask_user' && canAsk) {
-        // One question per turn. A second one is answered with an error the model can read — it is
-        // never queued, because the turn is about to end at the first.
-        if (question) { working.push(toolResultMessage(id, askUserAlreadyPendingPayload())); continue; }
-        // `text` is what the model wrote this iteration — where it puts the question when it omits the field
-        const args = parseAskUserArguments(call?.function?.arguments, { fallbackText: text });
-        if (!args.ok) { working.push(toolResultMessage(id, { error: args.error })); continue; }
-        question = { toolCallId: typeof id === 'string' ? id : null, question: args.question, options: args.options, multiple: args.multiple };
-        continue;
-      }
-
-      if (name === 'generate_image' && canDraw) {
-        if (imageUnavailable) {
-          working.push(toolResultMessage(id, { error: 'image_unavailable', instruction: 'Do not retry this turn. Offer a reusable prompt or retry later. Each new user turn has a fresh image-attempt budget.' }));
-          continue;
-        }
-        if (images >= CHAT_IMAGE_BUDGET) {
-          working.push(toolResultMessage(id, imageBudgetExhaustedPayload(images)));
-          continue;
-        }
-        const args = parseImageArguments(call?.function?.arguments);
-        if (!args.ok) {
-          working.push(toolResultMessage(id, { error: args.error }));
-          continue;
-        }
-        const index = images;
-        images += 1;
-        const useReference = Boolean(args.useLatestImage && imageReference?.aspectRatio);
-        const aspectRatio = useReference ? imageReference.aspectRatio : args.aspectRatio;
-        if (typeof proposeImage === 'function') {
-          // Interactive agent generation proposes a server-owned request. No provider or image hold
-          // runs here; only an explicit human approval of that durable record may start generation.
-          try {
-            const generation = await proposeImage({ prompt: args.prompt, aspectRatio, quality: args.quality, index, useReference });
-            yield { type: 'generation_proposal', index, generation };
-            yield { type: 'complete', sources, searches, images: 0, codeRuns, iterations, cappedOut: false, usage: lastUsage };
-            return;
-          } catch (error) {
-            working.push(toolResultMessage(id, { error: error?.code || 'generation_proposal_failed', instruction: 'No image was generated or charged. Explain the refusal; do not guess the cause.' }));
-            yield { type: 'image_error', index, code: error?.code || 'generation_proposal_failed', http: error?.http || error?.status, message: error?.message || 'The generation request could not be prepared.' };
-          }
-          continue;
-        }
-        // The shape goes out BEFORE the wait: the chat sizes its placeholder to the image that is
-        // coming, so nothing reflows when it lands (an image takes 20-60 s).
-        yield { type: 'image_start', index, prompt: args.prompt, aspectRatio, quality: args.quality, edit: useReference };
-        try {
-          const image = await runImage({ prompt: args.prompt, aspectRatio, quality: args.quality, index, useReference });
-          working.push(toolResultMessage(id, imageResultPayload({ prompt: args.prompt, aspectRatio, model: image?.model, edited: Boolean(image?.edited) })));
-          yield { type: 'image_result', index, image };
-        } catch (error) {
-          // A failed image is a RESULT on both channels, like a failed search: the model can say
-          // so truthfully, and the user sees the attempt rather than a placeholder that vanishes.
-          const message = error?.message || 'unknown error';
-          if (error?.code === 'image_unavailable') imageUnavailable = true;
-          working.push(toolResultMessage(id, {
-            error: error?.code === 'image_unavailable' ? 'image_unavailable' : `image generation failed: ${message}`,
-            ...(imageUnavailable ? { instruction: message } : {}),
-          }));
-          yield { type: 'image_error', index, code: error?.code || 'image_failed', http: error?.http, message };
-        }
-        continue;
-      }
-
-      if (name === 'run_code' && canRun) {
-        if (codeRuns >= CHAT_CODE_BUDGET) {
-          working.push(toolResultMessage(id, codeBudgetExhaustedPayload(codeRuns)));
-          continue;
-        }
-        const args = parseCodeArguments(call?.function?.arguments);
-        if (!args.ok) {
-          working.push(toolResultMessage(id, { error: args.error }));
-          continue;
-        }
-        const index = codeRuns;
-        codeRuns += 1;
-        // The run goes out BEFORE the wait, like a search/image: the UI shows the code is running
-        // rather than a silent pause.
-        yield { type: 'code_start', index, language: args.language, code: args.code };
-        try {
-          const result = await runCode({ language: args.language, code: args.code, index });
-          working.push(toolResultMessage(id, codeResultPayload(result)));
-          yield { type: 'code_result', index, result };
-        } catch (error) {
-          // A failed execution is a RESULT on both channels (like a failed search): a tool message
-          // so the model can speak to it, and an event so the user sees the attempt.
-          const message = error?.message || 'unknown error';
-          working.push(toolResultMessage(id, { error: `code execution failed: ${message}` }));
-          yield { type: 'code_error', index, message };
-        }
-        continue;
-      }
-
-      if (name !== 'web_search' || !canSearch) {
-        working.push(toolResultMessage(id, { error: `unknown tool: ${name}` }));
-        continue;
-      }
-
-      if (searches >= budget.maxSearches) {
-        cappedOut = true;
-        working.push(toolResultMessage(id, budgetExhaustedPayload(searches)));
-        continue;
-      }
-
-      const args = parseToolArguments(call?.function?.arguments);
-      if (!args.ok) {
-        working.push(toolResultMessage(id, { error: args.error }));
-        continue;
-      }
-
-      searches += 1;
-      // The query goes out BEFORE the search runs — this is the event that turns a silent
-      // wait into a visible one, and it is the whole reason for streaming this loop.
-      yield { type: 'search_start', iteration: iterations, query: args.query };
-
-      try {
-        const result = await runSearch({ query: args.query, depth: budget.depth });
-        const found = admitSources(sources, Array.isArray(result?.sources) ? result.sources : []);
-        working.push(toolResultMessage(id, searchResultPayload(args.query, found)));
-        yield {
-          type: 'search_result',
-          iteration: iterations,
-          query: args.query,
-          count: found.length,
-          sources: found.map((s) => ({ id: s.id, title: s.title, url: s.url })),
-        };
-      } catch (error) {
-        // A failure is a RESULT on both channels: a tool message so the model can speak to
-        // it truthfully, and an event so the user sees the search was attempted and failed
-        // rather than watching it silently vanish.
-        const message = error?.message || 'unknown error';
-        working.push(toolResultMessage(id, { error: `search failed: ${message}` }));
-        yield {
-          type: 'search_error',
-          iteration: iterations,
-          query: args.query,
-          code: error?.code || 'web_context_unavailable',
-          message,
-        };
+      const outcome = yield* runner.run(call, { text, working, iteration: iterations });
+      if (outcome?.finished === 'proposal') {
+        yield { type: 'complete', sources, searches: state.searches, images: 0, codeRuns: state.codeRuns, iterations, cappedOut: false, usage: lastUsage };
+        return;
       }
     }
 
-    if (question) {
+    if (state.question) {
       /*
        * The turn ENDS at the question (chatAskUserTool.js): the model is not re-called, because the
        * only thing it can usefully do next is read the answer, and that is the person's next message.
        * Every other tool in this batch has already run and been shown.
        */
-      yield { type: 'ask_user', ...question };
-      yield { type: 'complete', iterations, searches, images, codeRuns, sources, cappedOut, usage: lastUsage, question };
+      yield { type: 'ask_user', ...state.question };
+      yield { type: 'complete', iterations, searches: state.searches, images: state.images, codeRuns: state.codeRuns, sources, cappedOut: state.cappedOut, usage: lastUsage, question: state.question };
       return;
     }
   }
@@ -733,7 +749,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
    * Out of iterations with the model still calling tools: one final pass with no tools, so
    * the turn ends in an answer rather than in silence.
    */
-  cappedOut = true;
+  state.cappedOut = true;
   for await (const event of streamModel({ messages: [...working, finalAnswerNudge()], tools, requestId: `${turnId}:final` })) {
     if (event.type === 'delta') yield { type: 'delta', text: event.text };
     else if (event.type === 'usage') {
@@ -741,7 +757,7 @@ export async function* streamToolLoop({ messages, surface, turnId, streamModel, 
       yield { type: 'usage', usage: event.usage };
     }
   }
-  yield { type: 'complete', iterations: iterations + 1, searches, images, codeRuns, sources, cappedOut, usage: lastUsage };
+  yield { type: 'complete', iterations: iterations + 1, searches: state.searches, images: state.images, codeRuns: state.codeRuns, sources, cappedOut: state.cappedOut, usage: lastUsage };
 }
 
 /**

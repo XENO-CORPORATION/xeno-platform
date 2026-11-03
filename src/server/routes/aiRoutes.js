@@ -21,7 +21,8 @@ import { requestSurface } from '../utils/requestSurface.js';
 import { recordInferenceUsage } from '../utils/recordInferenceUsage.js';
 import { callerInputTokens } from '../utils/billableInput.js';
 import { upstreamFetch } from '../services/upstream.js';
-import { streamToolLoop, addUsage, TOOL_BUDGETS, WEB_SEARCH_TOOL } from '../utils/chatToolLoop.js';
+import { addUsage, TOOL_BUDGETS, WEB_SEARCH_TOOL } from '../utils/chatToolLoop.js';
+import { chatTurnLoop } from '../utils/chatAgentLoop.js';
 import { RUN_CODE_TOOL } from '../utils/chatCodeTool.js';
 import { ASK_USER_TOOL } from '../utils/chatAskUserTool.js';
 import { runInSandbox, codeExecutionAvailable, runCodeMetered } from '../services/sandboxSession.js';
@@ -1038,7 +1039,8 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
         ...tool, function: { ...tool.function, description: 'Prepare an image generation request for the person to review when they ask to make, draw, edit or redesign an image. Write a complete concrete prompt preserving their requested subject, layout, labels and style; choose aspect_ratio and quality, and set use_latest_image when their attached or previous generated image should be the reference. This tool does not draw or spend credits. The person chooses the image model and approves the prompt, references, settings and cost before generation starts. Never claim an image was made by this call.' },
       } : tool);
 
-      for await (const event of streamToolLoop({
+      // CHAT_AGENT_RUNTIME=xeno-agent runs this turn on the XENO Agent loop; anything else keeps streamToolLoop.
+      for await (const event of chatTurnLoop(process.env, userId)({
         messages: finalMessages,
         surface: toolSurface,
         turnId: reqIdSeed,

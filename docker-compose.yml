@@ -265,6 +265,8 @@ services:
       # Cloud Shell (services/cloudShell.js): comma list of emails and @domains, or "all". Unset = closed (fail closed).
       - SHELL_ENABLED=${SHELL_ENABLED:-}
       - SALES_OPEN=${SALES_OPEN:-}
+      - CHAT_AGENT_RUNTIME=${CHAT_AGENT_RUNTIME:-}
+      - CHAT_AGENT_RUNTIME_USERS=${CHAT_AGENT_RUNTIME_USERS:-}
       # XENO Compute machines run on Cloudflare Containers (owner, 2026-10-27). Unset URL = every machine call
       # refuses compute_unavailable, so nothing is started or billed (services/computeBackend.js).
       - XENO_COMPUTE_API_URL=${XENO_COMPUTE_API_URL:-}
