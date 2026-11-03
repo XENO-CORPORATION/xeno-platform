@@ -28,6 +28,11 @@ test('membership receipts share canonical transaction authority, real HTTP/DPoP 
       ALTER TABLE users ADD COLUMN role text DEFAULT 'user';CREATE TABLE agent_identities(user_id uuid PRIMARY KEY,owner_user_id uuid);CREATE TABLE credit_accounts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid UNIQUE,owner_kind text DEFAULT 'user',balance bigint DEFAULT 0,lifetime_earned bigint DEFAULT 0,lifetime_spent bigint DEFAULT 0);`);
     await migrateAccountV2(pool);
     for(const name of ['20260711120000-workspaces.sql','20260904150000-workspace-api-keys.sql','20260904200000-workspace-key-operations.sql','20260904210000-workspace-membership-operations.sql','20260904220000-workspace-operation-abandonment.sql','20260904230000-account-workspace-operations.sql','20261016180000-workspace-root-and-company.sql'])await pool.query((await fs.readFile(new URL(`../src/server/database/migrations/${name}`,import.meta.url),'utf8')).split('-- DOWN')[0]);
+    // The inbox: revoking an invite takes back its notification (2026-10-31). Its table comes from the real migrations:
+    // only the user_notifications part of the Tasks one (the rest needs tasks), then the inbox-state columns.
+    const tasksUp=(await fs.readFile(new URL('../src/server/database/migrations/20261011090000-xeno-tasks-collaboration.sql',import.meta.url),'utf8')).split('-- DOWN')[0];
+    await pool.query(tasksUp.slice(tasksUp.indexOf('CREATE TABLE IF NOT EXISTS user_notifications')));
+    await pool.query((await fs.readFile(new URL('../src/server/database/migrations/20261103090000-inbox-state.sql',import.meta.url),'utf8')).split('-- DOWN')[0]);
     const owner=crypto.randomUUID(),admin=crypto.randomUUID(),member=crypto.randomUUID(),viewer=crypto.randomUUID(),foreignOwner=crypto.randomUUID(),ws=crypto.randomUUID(),foreign=crypto.randomUUID();
     for(const [id,name]of[[owner,'owner'],[admin,'admin'],[member,'member'],[viewer,'viewer'],[foreignOwner,'foreign']])await pool.query('INSERT INTO users(id,username,email,display_name)VALUES($1,$2,$3,$2)',[id,name,`${name}@example.test`]);
     for(const [id,user]of[[ws,owner],[foreign,foreignOwner]])await pool.query(`INSERT INTO workspaces(id,owner_user_id,workspace_type,name,slug,metadata)VALUES($1::uuid,$2,'team','Membership proof',$1::text,$3)`,[id,user,JSON.stringify({billing:{plan:'team',status:'active',seat_limit:50}})]);

@@ -71,6 +71,15 @@ test('payment origins bind settled monetary evidence to the exact lot atomically
     const db=await pool.connect();
     try {
       await db.query('BEGIN');
+      // No account is manufactured during value movement (usageCreditFunding.js): a person without one is refused as such.
+      await assert.rejects(allocateContributionFunding(db,alice,'1'),{code:'CONTRIBUTION_ACCOUNT_UNAVAILABLE'},
+        'a person with no credit account is refused, and none is created for them');
+      assert.equal((await db.query('SELECT count(*)::int n FROM credit_accounts WHERE user_id=$1',[alice])).rows[0].n,0,'no account was manufactured');
+      // Every real signup has one. Checked in order: the account, then the person's consent, then paid credits.
+      await db.query(`INSERT INTO credit_accounts(user_id,owner_kind,balance) VALUES($1,'user',0)`,[alice]);
+      await assert.rejects(allocateContributionFunding(db,alice,'1'),{code:'CONTRIBUTION_CONSENT_REQUIRED'},
+        'bought credits are never used without the person turning it on');
+      await db.query('INSERT INTO usage_credit_preferences(user_id,enabled) VALUES($1,true)',[alice]);
       await assert.rejects(allocateContributionFunding(db,alice,'1'),{code:'INSUFFICIENT_CONTRIBUTABLE_CREDITS'},
         'a fresh installation has no verified payment origin');
     } finally {await db.query('ROLLBACK');db.release();}

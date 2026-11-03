@@ -37,10 +37,13 @@ test('account plan reads preserve billing exports and share one retryable schema
   await assert.rejects(plans.getPlan(db, account), /fixture bootstrap failure/);
   const reading = plans.getPlan(db, account);
   const bootstrapping = ensureSchema(db);
+  // ensureSchema asks whether the tables exist before it creates them, so the CREATE starts a few turns later.
+  for (const end = Date.now() + 5000; attempts < 2 && Date.now() < end;) await new Promise((resolve) => setTimeout(resolve, 5));
   const pendingAttempts = attempts;
   release();
   const results = await Promise.allSettled([reading, bootstrapping]);
-  assert.equal(pendingAttempts, 2, 'reader and billing share the pending schema initialization');
+  assert.equal(pendingAttempts, 2, 'the retry reaches its CREATE while both callers wait');
+  assert.equal(attempts, 2, 'reader and billing share ONE pending schema initialization, not one each');
   assert(results.every(result => result.status === 'fulfilled'), 'schema retry succeeds for both callers');
   assert.deepEqual(results[0].value, { plan: 'free', status: 'none', currentPeriodEnd: null });
   const tables = (await client.query('SELECT table_name FROM information_schema.tables WHERE table_schema=$1 ORDER BY table_name', [schema])).rows.map(row => row.table_name);
