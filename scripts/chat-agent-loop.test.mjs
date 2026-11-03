@@ -18,18 +18,23 @@ const call = (id, name, args) => ({ id, type: 'function', function: { name, argu
 const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
 
 /** Runs one scripted turn through a loop and records everything observable. */
-async function run(loop, { script, tools, surface = 'chat', extra = {} }) {
+async function run(loop, { script, tools, surface = 'chat', extra = {}, failOn = -1, stopAfter = -1, keepPulling = false }) {
   const calls = [];
   const work = [];
   let step = 0;
   const streamModel = async function* ({ messages, tools: offered, requestId }) {
     calls.push({ requestId, tools: (offered || []).map((t) => t.function.name).join(','), messages: messages.length, last: messages.at(-1)?.role });
+    if (step === failOn) { step += 1; throw Object.assign(new Error('insufficient credits'), { status: 402 }); }
     const events = typeof script[step] === 'function' ? script[step]() : (script[step] || [{ type: 'delta', text: 'done' }, { type: 'usage', usage }]);
     step += 1;
     for (const event of events) yield event;
   };
   const events = [];
+  const controller = new AbortController();
+  let error = null;
+  try {
   for await (const event of loop({
+    signal: controller.signal,
     messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'hi' }],
     surface,
     turnId: 'turn-1',
@@ -39,8 +44,18 @@ async function run(loop, { script, tools, surface = 'chat', extra = {} }) {
     runCode: async ({ code }) => { work.push(`code:${code}`); return { stdout: 'ok', exitCode: 0 }; },
     runProject: async (args) => { work.push(`project:${JSON.stringify(args)}`); return { files: ['a.md'] }; },
     ...extra,
-  })) events.push(event);
-  return { calls, work, events: events.map(({ usage: _ignored, ...rest }) => rest) };
+  })) {
+    events.push(event);
+    if (stopAfter >= 0 && calls.length > stopAfter && event.type === 'delta') {
+      controller.abort();
+      // The route breaks on its next event; until then it is still waiting, and only the signal stops a new call.
+      if (!keepPulling) break;
+    }
+  }
+  } catch (caught) { error = caught.message; }
+  // Anything still running after the route stopped pulling would show up as a late call here.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return { calls, work, error, events: events.map(({ usage: _ignored, ...rest }) => rest) };
 }
 
 async function same(scenario) {
@@ -49,6 +64,7 @@ async function same(scenario) {
   assert.deepEqual(after.calls, before.calls, 'billed model calls differ');
   assert.deepEqual(after.work, before.work, 'tool work differs');
   assert.deepEqual(after.events, before.events, 'client events differ');
+  assert.equal(after.error, before.error, 'the turn ends differently');
   return after;
 }
 
@@ -139,4 +155,52 @@ test('🔴 a canary list keeps everyone else on today\'s loop', () => {
   assert.equal(chatTurnLoop(env, 'u-3'), streamToolLoop);
   assert.equal(chatTurnLoop(env, null), streamToolLoop);
   assert.equal(chatTurnLoop({ CHAT_AGENT_RUNTIME: 'off', CHAT_AGENT_RUNTIME_USERS: 'u-1' }, 'u-1'), streamToolLoop);
+});
+
+test('🔴 a failed model call is final: the same billed calls as today, and the same error', async () => {
+  const result = await same({
+    tools: [WEB_SEARCH_TOOL],
+    failOn: 1,
+    script: [[{ type: 'tool_calls', toolCalls: [call('c1', 'web_search', { query: 'xeno' })] }]],
+  });
+  assert.equal(result.calls.length, 2);
+  assert.equal(result.error, 'insufficient credits');
+});
+
+test('🔴 a person who leaves mid-turn causes no further billed call', async () => {
+  const result = await run(streamAgentToolLoop, {
+    tools: [WEB_SEARCH_TOOL],
+    stopAfter: 0,
+    script: [[{ type: 'delta', text: 'Looking.' }, { type: 'tool_calls', toolCalls: [call('c1', 'web_search', { query: 'xeno' })] }], [{ type: 'delta', text: 'never' }]],
+  });
+  assert.equal(result.calls.length, 1);
+  assert.deepEqual(result.work, []);
+});
+
+test('🔴 the leave signal alone stops the next billed call, before the route gets to break', async () => {
+  const result = await run(streamAgentToolLoop, {
+    tools: [WEB_SEARCH_TOOL],
+    stopAfter: 0,
+    keepPulling: true,
+    script: [[{ type: 'delta', text: 'Looking.' }, { type: 'tool_calls', toolCalls: [call('c1', 'web_search', { query: 'xeno' })] }], [{ type: 'delta', text: 'never' }]],
+  });
+  assert.equal(result.calls.length, 1);
+});
+
+test('two calls to the same tool keep their own arguments and ids', async () => {
+  const result = await same({
+    tools: [WEB_SEARCH_TOOL],
+    script: [[{ type: 'tool_calls', toolCalls: [call('first', 'web_search', { query: 'alpha' }), call('second', 'web_search', { query: 'beta' })] }]],
+  });
+  assert.deepEqual(result.work, ['search:alpha', 'search:beta']);
+});
+
+test('a tool that throws ends the turn the same way as today', async () => {
+  const browser = { type: 'function', function: { name: 'browser_open', description: 'Open a page.', parameters: { type: 'object', properties: { url: { type: 'string' } } } } };
+  const result = await same({
+    tools: [browser],
+    extra: { runBrowser: () => { throw new Error('relay gone'); } },
+    script: [[{ type: 'tool_calls', toolCalls: [call('b', 'browser_open', { url: 'https://example.com' })] }]],
+  });
+  assert.equal(result.error, 'relay gone');
 });

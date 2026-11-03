@@ -1,17 +1,21 @@
 /**
- * The chat turn, driven by the XENO Agent — the same agent loop the CLI and the desktop app run.
+ * A streamed chat turn whose loop is the XENO Agent's (the SDK's AgentLoop).
  *
  * It takes exactly what `streamToolLoop` takes and yields exactly the events it yields, so the route
- * and the client do not change. Two things are deliberately NOT the SDK's:
+ * and the client do not change. What is the agent's is the loop: deciding to call the model again
+ * after tools. Everything else stays the platform's:
  *
- *  - **The model call.** Every call goes through the caller's `streamModel`, which is the platform's
- *    metered call: credit holds, spend limits, routing and project context stay where they are. Each
- *    call keeps its distinct, deterministic requestId (`<turnId>:<n>`, then `<turnId>:final`).
- *  - **The tools.** The agent gets a registry holding only this turn's offered tools, each run by the
- *    same `createToolCallRunner` the old loop uses. The SDK's own tools (files, shell, skills) never
- *    exist on the platform server.
+ *  - **The model call.** Every call goes through the caller's `streamModel`, the platform's metered
+ *    call: credit holds, spend limits, routing and project context are untouched. Each call keeps its
+ *    distinct, deterministic requestId (`<turnId>:<n>`, then `<turnId>:final`), and a failed call is
+ *    never retried, because a retry under the same requestId would place a second hold.
+ *  - **The model's view.** The model sees the platform's own message list, not the SDK's prompt or
+ *    history. The agent's identity, compaction and context features therefore do not apply yet.
+ *  - **The tools.** The agent's registry holds only this turn's offered tools, each run by the same
+ *    `createToolCallRunner` the old loop uses. The SDK's own tools (files, shell, skills) never exist
+ *    on the platform server.
  *
- * Selected by `CHAT_AGENT_RUNTIME=xeno-agent`; anything else runs `streamToolLoop` (see `chatRuntime`).
+ * Selected by `CHAT_AGENT_RUNTIME=xeno-agent`; anything else runs `streamToolLoop` (`chatTurnLoop`).
  */
 import { createXenoAgent, ToolRegistry, PermissionEngine } from '@xenosystem/agent-sdk';
 import {
@@ -63,8 +67,15 @@ const parseArguments = (raw) => {
   }
 };
 
+/** Same object, independent of key order: how a tool's input is matched back to the model's call. */
+const canonical = (value) => {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+};
+
 export async function* streamAgentToolLoop(options) {
-  const { messages, turnId, streamModel } = options;
+  const { messages, turnId, streamModel, signal } = options;
   const runner = createToolCallRunner(options);
   const { budget, tools, canBrowse, browserStepBudget, sources, state } = runner;
   const maxIterations = Math.max(budget.maxSearches, canBrowse ? browserStepBudget : 0) + 1;
@@ -73,9 +84,11 @@ export async function* streamAgentToolLoop(options) {
   let iterations = 0;
   let lastUsage = null;
   let narrated = false;
-  // Why the turn is over: the model answered, the turn ended at a question, or at an image proposal.
-  // Once set, any further call the agent makes is answered here and never reaches a billed model.
+  // Why the turn is over: answered, capped, question, proposal, gone (the person left) or failed.
+  // Once set, every further call the agent makes is answered here and never reaches a billed model.
   let finished = null;
+  // What ended the turn with an error, rethrown to the route exactly as the old loop would throw it.
+  let failure = null;
   // The tool calls the model just made, in order, with their raw arguments, for the executors below.
   let pending = [];
   let iterationText = '';
@@ -83,21 +96,22 @@ export async function* streamAgentToolLoop(options) {
   let toolQueue = Promise.resolve();
 
   const ended = () => ({ content: [], stopReason: 'end_turn', inputTokens: 0, outputTokens: 0, usageReported: false });
+  const gone = () => Boolean(signal?.aborted);
 
-  const provider = {
-    id: 'xeno-platform-chat',
-    capabilities: { streaming: true, tools: true, parallelToolCalls: true, textInput: true },
-    async complete() {
-      if (finished) return ended();
-      if (state.question) { finished = 'question'; return ended(); }
-      const final = iterations >= maxIterations;
-      const { capReached, offerTools } = iterationPlan({ searches: state.searches, budget, tools });
-      if (capReached || final) state.cappedOut = true;
-      const requestId = final ? `${turnId}:final` : `${turnId}:${iterations}`;
-      let text = '';
-      let toolCalls = [];
-      let inputTokens = 0;
-      let outputTokens = 0;
+  /** The model call. Never throws: a failure ends the turn and is rethrown after the agent stops. */
+  async function complete() {
+    if (finished) return ended();
+    if (gone()) { finished = 'gone'; return ended(); }
+    if (state.question) { finished = 'question'; return ended(); }
+    const final = iterations >= maxIterations;
+    const { capReached, offerTools } = iterationPlan({ searches: state.searches, budget, tools });
+    if (capReached || final) state.cappedOut = true;
+    const requestId = final ? `${turnId}:final` : `${turnId}:${iterations}`;
+    let text = '';
+    let toolCalls = [];
+    let inputTokens = 0;
+    let outputTokens = 0;
+    try {
       for await (const event of streamModel({ messages: final ? [...working, finalAnswerNudge()] : working, tools: final ? tools : offerTools, requestId })) {
         if (event.type === 'delta') {
           if (narrated && !text) channel.push({ type: 'delta', text: '\n\n' });
@@ -114,30 +128,50 @@ export async function* streamAgentToolLoop(options) {
           channel.push({ type: 'usage', usage: event.usage });
         }
       }
-      if (final || toolCalls.length === 0) {
-        iterations += 1;
-        finished = final ? 'capped' : 'answered';
-        return { content: text ? [{ type: 'text', text }] : [], stopReason: 'end_turn', inputTokens, outputTokens, usageReported: lastUsage !== null };
-      }
-      iterations += 1;
-      working.push(assistantToolCallMessage(text, toolCalls));
-      if (text.trim()) narrated = true;
-      iterationText = text;
-      state.question = null;
-      pending = toolCalls.slice();
-      for (const call of toolCalls) register(call.function?.name, null);
-      return {
-        content: [
-          ...(text ? [{ type: 'text', text }] : []),
-          ...toolCalls.map((call) => ({ type: 'tool_use', id: call.id, name: call.function?.name, input: parseArguments(call.function?.arguments) })),
-        ],
-        stopReason: 'tool_use',
-        inputTokens,
-        outputTokens,
-        usageReported: lastUsage !== null,
-      };
-    },
-  };
+    } catch (error) {
+      failure = error;
+      finished = 'failed';
+      return ended();
+    }
+    iterations += 1;
+    if (final || toolCalls.length === 0) {
+      finished = final ? 'capped' : 'answered';
+      return { content: text ? [{ type: 'text', text }] : [], stopReason: 'end_turn', inputTokens, outputTokens, usageReported: lastUsage !== null };
+    }
+    working.push(assistantToolCallMessage(text, toolCalls));
+    if (text.trim()) narrated = true;
+    iterationText = text;
+    state.question = null;
+    pending = toolCalls.map((call) => ({ call, input: canonical(parseArguments(call.function?.arguments)) }));
+    for (const call of toolCalls) register(call.function?.name, null);
+    return {
+      content: [
+        ...(text ? [{ type: 'text', text }] : []),
+        ...toolCalls.map((call) => ({ type: 'tool_use', id: call.id, name: call.function?.name, input: parseArguments(call.function?.arguments) })),
+      ],
+      stopReason: 'tool_use',
+      inputTokens,
+      outputTokens,
+      usageReported: lastUsage !== null,
+    };
+  }
+
+  /** Drives a runner generator, forwarding each event, and resolves with what it returned. */
+  async function forwardRunner(generator) {
+    for (;;) {
+      const step = await generator.next();
+      if (step.done) return step.value;
+      channel.push(step.value);
+    }
+  }
+
+  /** The model's call this execution belongs to: same name and arguments first, then the name alone. */
+  function takePending(name, input) {
+    const wanted = canonical(input);
+    let index = pending.findIndex((entry) => entry.call.function?.name === name && entry.input === wanted);
+    if (index < 0) index = pending.findIndex((entry) => entry.call.function?.name === name);
+    return index >= 0 ? pending.splice(index, 1)[0].call : { id: `call_${name}`, function: { name, arguments: JSON.stringify(input) } };
+  }
 
   const registry = new ToolRegistry();
   const registered = new Set();
@@ -145,17 +179,27 @@ export async function* streamAgentToolLoop(options) {
   function register(name, declaration) {
     if (!name || registered.has(name)) return;
     registered.add(name);
+    const parameters = declaration?.function?.parameters;
     registry.register({
-      definition: { name, description: declaration?.function?.description || name, input_schema: declaration?.function?.parameters?.properties ? declaration.function.parameters : { type: 'object', properties: {}, additionalProperties: true } },
+      definition: {
+        name,
+        description: declaration?.function?.description || name,
+        input_schema: parameters?.properties ? parameters : { type: 'object', properties: {}, additionalProperties: true },
+      },
       execute: (input) => {
         const run = toolQueue.then(async () => {
-          if (finished === 'proposal') return { success: true, output: '' };
-          const index = pending.findIndex((call) => call.function?.name === name);
-          const call = index >= 0 ? pending.splice(index, 1)[0] : { id: `call_${name}`, function: { name, arguments: JSON.stringify(input) } };
+          if (finished) return { success: true, output: '' };
+          const call = takePending(name, input);
           const before = working.length;
-          const outcome = yield_into(runner.run(call, { text: iterationText, working, iteration: iterations }));
-          const result = await outcome;
-          if (result?.finished === 'proposal') finished = 'proposal';
+          try {
+            const outcome = await forwardRunner(runner.run(call, { text: iterationText, working, iteration: iterations }));
+            if (outcome?.finished === 'proposal') finished = 'proposal';
+          } catch (error) {
+            // The old loop does not catch a runner that throws: the turn ends with that error. Same here.
+            failure = error;
+            finished = 'failed';
+            return { success: true, output: '' };
+          }
           const message = working.length > before ? working[working.length - 1] : null;
           return { success: true, output: typeof message?.content === 'string' ? message.content : '' };
         });
@@ -166,14 +210,13 @@ export async function* streamAgentToolLoop(options) {
   }
   for (const declaration of tools) register(declaration?.function?.name, declaration);
 
-  /** Drives a runner generator, forwarding each event, and resolves with what it returned. */
-  async function yield_into(generator) {
-    for (;;) {
-      const step = await generator.next();
-      if (step.done) return step.value;
-      channel.push(step.value);
-    }
-  }
+  // A provider object rather than the bare function, because that is the SDK's contract. Its capability
+  // list says no retries: a model call that fails is final (see `complete`).
+  const provider = {
+    id: 'xeno-platform-chat',
+    capabilities: { streaming: true, tools: true, parallelToolCalls: true, textInput: true, retryAfter: false },
+    complete,
+  };
 
   const { agent } = await createXenoAgent({
     provider,
@@ -185,18 +228,29 @@ export async function* streamAgentToolLoop(options) {
     reserveFinalSynthesisTurn: false,
     continuationCheckpoints: false,
     backgroundDispatch: false,
+    // Headroom only. The turn's real bound is `maxIterations` above: once `finished` is set, every
+    // further call returns an empty end_turn without reaching the model, so these spare loops are free.
     maxIterations: maxIterations + 3,
     systemPrompt: 'Answer the conversation.',
   });
 
-  let failure = null;
+  let agentFailure = null;
   const done = agent.run('Continue the conversation.')
-    .catch((error) => { failure = error; })
+    .catch((error) => { agentFailure = error; })
     .finally(() => channel.close());
 
-  for await (const event of channel.drain()) yield event;
+  let drained = false;
+  try {
+    for await (const event of channel.drain()) yield event;
+    drained = true;
+  } finally {
+    // The route stopped pulling (the person left, or it broke out): nothing new may start after this.
+    if (!drained && !finished) finished = 'gone';
+  }
   await done;
-  if (failure && !finished) throw failure;
+  if (failure) throw failure;
+  if (agentFailure && !finished) throw agentFailure;
+  if (finished === 'gone') return;
 
   if (finished === 'proposal') {
     yield { type: 'complete', sources, searches: state.searches, images: 0, codeRuns: state.codeRuns, iterations, cappedOut: false, usage: lastUsage };

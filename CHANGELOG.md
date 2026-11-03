@@ -5,9 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
-**Chat can run on the XENO Agent, the same agent as the CLI and desktop app. It is off until switched on.**
+**Chat can run its turns on the XENO Agent's loop. It is off until switched on.**
 
-- With `CHAT_AGENT_RUNTIME=xeno-agent`, a streamed chat turn is driven by the XENO Agent loop instead of the platform's own. Searches, images, code, project reads, the browser and questions behave exactly as before, and every model call is still billed through the same metered call. `CHAT_AGENT_RUNTIME_USERS` limits it to listed accounts.
+- With `CHAT_AGENT_RUNTIME=xeno-agent`, the XENO Agent's loop decides when a streamed chat turn calls the model again. The model, its instructions and every tool stay the platform's, and are billed the same way. `CHAT_AGENT_RUNTIME_USERS` limits it to listed accounts.
+- A failed model call is never retried, a turn stops starting new calls once the person leaves, and two calls to the same tool keep their own arguments.
 - The chat server now uses XENO Agent SDK 0.10.110 and the web-search client 0.1.5.
 
 **Spawn profile sync keeps only what Spawn names.**
