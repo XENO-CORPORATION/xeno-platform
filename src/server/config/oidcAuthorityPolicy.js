@@ -82,6 +82,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // (/api/storage/projects/xeno-workshop/*, which checks both and reaches only the Workshop's own projects).
   'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
   'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  // XENO GameDev: the Workshop's set, for the same reasons. The Director and the image lane run on, and bill, the
+  // person's own account; a game's project lives in the person's XENO Storage (/api/storage/projects/xeno-gamedev/*).
+  'xeno-gamedev': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  'xeno-gamedev-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
   // XENO Tools on its own host: identity only. The platform's host sign-in (authRoutes /api/auth/host/*) uses the code
   // to learn WHO signed in and opens an ordinary browser session on tools.xenosystem.ai; it keeps no token.
   'xeno-tools-web': IDENTITY,

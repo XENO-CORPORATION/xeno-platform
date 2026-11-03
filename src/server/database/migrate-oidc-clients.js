@@ -80,6 +80,12 @@ export const FIRST_PARTY_CLIENTS = [
   // and holds the tokens; the browser only ever has an httpOnly session cookie. A separate
   // client_id from the local one so each deployment can be revoked on its own.
   { id: 'xeno-workshop', name: 'XENO Workshop', loopback: false, redirects: ['https://workshop.xenosystem.ai/auth/callback'] },
+  // XENO GameDev — the Workshop's shape (owner, 2026-11-03: "Yes, like Workshop"; xeno-gamedev
+  // docs/decisions/0001-hosted-studio.md). Hosted: a backend-for-frontend at gamedev.xenosystem.ai whose service
+  // exchanges the code and keeps the tokens; the browser holds only an httpOnly cookie. Local: the studio's own
+  // loopback service on the owner's PC. Two ids so either deployment can be revoked on its own.
+  { id: 'xeno-gamedev', name: 'XENO GameDev', loopback: false, redirects: ['https://gamedev.xenosystem.ai/auth/callback'] },
+  { id: 'xeno-gamedev-local', name: 'XENO GameDev (local)', loopback: true, redirects: ['http://127.0.0.1/auth/callback', 'http://[::1]/auth/callback'] },
   // XENO Tools on its own host — a backend-for-frontend on the platform itself (authRoutes /api/auth/host/*): the
   // code is exchanged in-process and becomes an ordinary browser session on tools.xenosystem.ai; no token is kept.
   { id: 'xeno-tools-web', name: 'XENO Tools', loopback: false, redirects: ['https://tools.xenosystem.ai/api/auth/host/callback'] },
