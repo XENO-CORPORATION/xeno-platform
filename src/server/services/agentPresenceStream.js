@@ -55,7 +55,8 @@ export async function serve(req, res) {
   // time moves presence too; and an agent made or shared since the stream opened joins it
   const tick = setInterval(async () => { await load().catch(() => {}); for (const userId of mine.keys()) await push(userId).catch(() => {}); }, 20_000);
   const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25_000);
-  req.on('close', () => { clearInterval(tick); clearInterval(ping); streams.delete(stream); });
+  // res 'close': a req 'close' listener added after an await never fires, and both timers leaked.
+  res.on('close', () => { clearInterval(tick); clearInterval(ping); streams.delete(stream); });
 }
 
 /** Stop listening (tests, shutdown): releases the shared LISTEN connection. */

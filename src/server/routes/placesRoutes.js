@@ -51,7 +51,8 @@ router.get('/:placeId/events', async (req, res) => {
   };
   const ms = Math.max(500, Number(process.env.PLACES_STREAM_INTERVAL_MS) || 3000);
   const timer = setInterval(() => { tick().catch(() => {}); res.write(': keepalive\n\n'); }, ms);
-  req.on('close', () => { closed = true; clearInterval(timer); live.leave(req.params.placeId, req.me.id); });
+  // res 'close': a req 'close' listener added after an await never fires, and the timer and the presence leaked.
+  res.on('close', () => { closed = true; clearInterval(timer); live.leave(req.params.placeId, req.me.id); });
   await tick(first);
 });
 // the building's devices (services/placesDevices.js): the desk computer, its monitor, the floor TV
