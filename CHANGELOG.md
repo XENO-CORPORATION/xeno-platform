@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**A release's own page now names itself in the browser tab** ("XENO Canvas 0.43.1 release notes"); it showed only "XENOsystem".
+
 **Major releases of XENO products now come with a release post: clips, pictures and what changed.**
 
 - A product's release page shows a major release's key picture and one line, with a link to the full post; the release's own page shows the whole post, with its clips and screenshots from the real app, above the notes. Quick releases keep their notes only.
