@@ -20,6 +20,7 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 **Fixes found by using the platform as a new person would, start to finish.**
 
 - Typing the code from the welcome mail now also confirms your email address. Before, you were active but still "unverified", so the free allowance was refused and Settings said "Not verified".
+- The 11 accounts this had already caught are now marked verified.
 - A team made in Workspace › Teams can be sold. Its agents used to be left out, so publishing always failed.
 - The Seller console loads for sellers. It failed for everyone the moment they registered.
 - Buyers can bring a team they got into their workspace. It was always refused, and the dialog now names the terms they accept.
