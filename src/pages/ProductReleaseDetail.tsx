@@ -5,6 +5,7 @@ import ExperimentalNotice from '../components/product/ExperimentalNotice';
 import { V2Page, useAccent, Eyebrow, INK, MUTED, FAINT, LINE, MONO } from '../components/product/v2/V2Page';
 import { ReleaseMeta, OSES, hasAssets } from '../components/product/v2/ReleaseEntry';
 import { getProduct, fetchReleases, downloadLink, type Release } from '../lib/productCatalog';
+import { ReleasePost } from '../components/product/v2/ReleasePost';
 import { downloadClickHandler } from '../lib/startDownload';
 
 /* /product/:slug/releases/:version — one release's permalink, in the v2 design
@@ -55,6 +56,7 @@ const ProductReleaseDetail: React.FC = () => {
                 {release.title && <p className="mt-6 text-[24px] font-semibold leading-[1.3] tracking-[-0.015em]">{release.title}</p>}
               </div>
 
+              {release.post && <ReleasePost app={product.r2 ?? product.slug} post={release.post} />}
               {release.notes && <div className="mt-6 whitespace-pre-line text-[17px] leading-[1.7]" style={{ color: '#3F3B35' }}>{release.notes}</div>}
 
               {hasAssets(release) && (

@@ -455,6 +455,10 @@ export interface Release {
   severity?: 'normal' | 'critical';
   title?: string;
   notes: string;                 // markdown / plain text
+  /** quick: notes only; major: also a filmed post (owner, 2026-11-03). Absent on releases before then. */
+  kind?: 'quick' | 'major';
+  /** A major release's post, relative to the app's folder: `v<version>/post/post.json` (scripts/lib/release-post.mjs). */
+  post?: string;
   assets?: { windows?: ReleaseAsset[]; mac?: ReleaseAsset[]; linux?: ReleaseAsset[] };
 }
 
