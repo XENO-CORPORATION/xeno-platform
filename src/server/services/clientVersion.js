@@ -40,6 +40,7 @@ const NAME_MAP = new Map([
   ['xeno-hub', 'hub'], ['xenohub', 'hub'], ['xeno hub', 'hub'],
   ['xeno-pixel', 'pixel'], ['xenopixel', 'pixel'],
   ['xeno-motion', 'motion'], ['xenomotion', 'motion'],
+  ['xeno-creator', 'creator'], ['xenocreator', 'creator'],
   ['xeno-canvas', 'canvas'], ['xenocanvas', 'canvas'],
   ['xeno-browser', 'browser'], ['xenobrowser', 'browser'],
   ['xeno-workflow', 'workflow'], ['xenoworkflow', 'workflow'],

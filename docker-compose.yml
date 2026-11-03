@@ -779,6 +779,9 @@ services:
       # XENO Motion's web build (motion.xenosystem.ai, nginx/default.conf). Published by xeno-motion into
       # /srv/xeno-motion-web/releases/<version>/ with a relative `current` link; read-only here.
       - /srv/xeno-motion-web:/usr/share/nginx/motion:ro
+      # XENO Creator's web build (creator.xenosystem.ai, nginx/default.conf). Published by xeno-creator into
+      # /srv/xeno-creator-web/releases/<version>-<sha>/ with a relative `current` link; read-only here.
+      - /srv/xeno-creator-web:/usr/share/nginx/creator:ro
     environment:
       - NODE_ENV=production
       - REACT_APP_API_URL=http://backend:8080

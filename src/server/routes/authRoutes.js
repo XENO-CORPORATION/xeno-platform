@@ -3183,6 +3183,8 @@ export const HOST_SIGNIN_CLIENTS = Object.freeze({
   'tools.xenosystem.ai': 'xeno-tools-web',
   // XENO Motion in the browser (owner 2026-10-31/11-02; xeno-motion docs/decisions/0001-motion-on-the-web.md)
   'motion.xenosystem.ai': 'xeno-motion-web',
+  // XENO Creator in the browser (owner 2026-11-03: "bring it live at creator.xenosystem.ai the same way … motion.xenosystem.ai is")
+  'creator.xenosystem.ai': 'xeno-creator-web',
 });
 const HOST_STATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-xeno_host_signin' : 'xeno_host_signin';
 const hostOf = (req) => String(req.headers.host || '').toLowerCase().split(':')[0];

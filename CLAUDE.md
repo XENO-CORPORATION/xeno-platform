@@ -252,6 +252,16 @@ xeno-workshop #26). The tools themselves, their signing (key #2 since 2026-10-28
 person's own tool is never signed by XENO and only runs sealed are in `../xeno-tools/CLAUDE.md` §🌐. Design:
 https://claude.ai/artifact/EYy1EHJsDN8nFDecuBvi21 · test: `prototypes/xeno-workspace/tests/tools-test.mjs`.
 
+## 🌐 Web apps on their own host, from a mounted release: motion., creator. (2026-11-02 / 11-03)
+
+`motion.xenosystem.ai` and `creator.xenosystem.ai` are served by this frontend container from a release the PRODUCT
+publishes, never from this image: `/srv/xeno-<app>-web/releases/<version>-<sha>/` plus a relative `current` link, mounted
+read-only (`docker-compose.yml`) and served by its own `server` block in `nginx/default.conf` (site gate, `/api/` to the
+backend, `/login` → the host sign-in). Each host is one entry in `HOST_SIGNIN_CLIENTS` (`routes/authRoutes.js`), one
+identity-only client in `migrate-oidc-clients.js` + `oidcAuthorityPolicy.js`, and one test
+(`scripts/oidc-<app>-web-client.test.mjs`). Cloudflare: a tunnel route `<app>.xenosystem.ai → http://localhost:4040` and a
+proxied CNAME to the platform tunnel. A release or rollback of the app needs no platform deploy. Precedent: #1091 (Motion).
+
 ## 🛟 XENO support lives HERE — Help ▸ Contact support (2026-10-20)
 
 Private requests to XENO: `services/supportTickets.js` (the one service), `routes/supportRoutes.js` (`/api/support`),
