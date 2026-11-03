@@ -5,6 +5,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**Chat can run on the XENO Agent, the same agent as the CLI and desktop app. It is off until switched on.**
+
+- With `CHAT_AGENT_RUNTIME=xeno-agent`, a streamed chat turn is driven by the XENO Agent loop instead of the platform's own. Searches, images, code, project reads, the browser and questions behave exactly as before, and every model call is still billed through the same metered call. `CHAT_AGENT_RUNTIME_USERS` limits it to listed accounts.
+- The chat server now uses XENO Agent SDK 0.10.110 and the web-search client 0.1.5.
+
 **Spawn profile sync keeps only what Spawn names.**
 
 - Your account now stores only the settings and instruction files Spawn syncs (`settings.json`, `CLAUDE.md`, `AGENTS.md`, `config.toml` and similar, plus your own agents, commands, prompts and output styles). Device files an older Spawn uploaded (Claude Code's `.claude.json`, with your email, machine ID and local project paths, and its paste cache) are no longer stored or sent to your other devices, and copies already stored are left out when they are read.

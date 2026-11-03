@@ -21,10 +21,10 @@
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.3",
-    "@xenosystem/agent-sdk": "0.10.0",
+    "@xenosystem/agent-sdk": "0.10.110",
     "@xenosystem/anima-mind": "0.0.15",
     "@xenosystem/orchestrator": "file:vendor/xenosystem-orchestrator-0.1.0-f838e9f5.tgz",
-    "@xenosystem/web-context-client": "0.1.1",
+    "@xenosystem/web-context-client": "0.1.5",
     "bcryptjs": "^2.4.3",
     "bull": "^4.16.5",
     "cheerio": "^1.0.0",
