@@ -5,6 +5,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**Chat can run on the XENO Agent, the same agent as the CLI and desktop app. It is off until switched on.**
+
+- With `CHAT_AGENT_RUNTIME=xeno-agent`, a streamed chat turn is driven by the XENO Agent loop instead of the platform's own. Searches, images, code, project reads, the browser and questions behave exactly as before, and every model call is still billed through the same metered call. `CHAT_AGENT_RUNTIME_USERS` limits it to listed accounts.
+- The chat server now uses XENO Agent SDK 0.10.110 and the web-search client 0.1.5.
+
 **A team sold in the Marketplace keeps who each agent is.**
 
 - Publishing a team now includes each agent's persona (its role, voice and boundaries), the way selling one agent always did. Before, a buyer's copy kept only the instructions.
