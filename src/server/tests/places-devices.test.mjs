@@ -78,6 +78,12 @@ async function main() {
   assert.ok(turn.ok, JSON.stringify(turn));
   assert.match(turn.result.body.systemPrompt, /You are Builder/);
   assert.match(turn.result.body.systemPrompt, /Ship small, verified changes\./, 'the agent instructions come from its record');
+  // 🔴 Who it is: the persona a task run reads (identityOf) is the persona at its desk too.
+  await agents.update(pool, O, made.id, { persona: { role: 'Release engineer', body: 'I speak plainly and check every claim before I make it.' } });
+  const withPersona = await devices.prepareAgentTurn(pool, O, placeId, agentDev, { messages: [{ role: 'user', content: 'Who are you?' }] });
+  assert.match(withPersona.result.body.systemPrompt, /release engineer/i, 'the persona role reaches the desk');
+  assert.match(withPersona.result.body.systemPrompt, /check every claim before I make it/, 'the persona body reaches the desk');
+  assert.match(withPersona.result.body.systemPrompt, /Ship small, verified changes\./, 'its own instructions still follow the persona');
   assert.ok(!JSON.stringify(turn.result.body).includes('IGNORE YOUR RULES'), 'a client systemPrompt never survives');
   assert.equal((await devices.prepareAgentTurn(pool, M, placeId, agentDev, { messages: [{ role: 'user', content: 'hi' }] })).error.reason, 'cannot_talk');
   assert.equal((await devices.prepareAgentTurn(pool, O, placeId, agentDev, { messages: [{ role: 'system', content: 'x' }] })).error.code, 'bad_input');
