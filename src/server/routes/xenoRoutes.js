@@ -821,7 +821,7 @@ router.get('/remote/runs/:runId/attach', async (req, res) => {
     if (isRemoteTerminalEvent(event)) res.end();
   };
   run.subscribers.add(subscriber);
-  req.on('close', () => run.subscribers.delete(subscriber));
+  res.on('close', () => run.subscribers.delete(subscriber));   // res 'close': req 'close' may already have fired
   if (['completed', 'failed', 'cancelled'].includes(run.status)) res.end();
 });
 

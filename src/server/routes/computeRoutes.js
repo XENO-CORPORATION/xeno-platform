@@ -81,7 +81,9 @@ router.post('/machines/:id/exec/stream', ...A, async (req, res) => {
   }
   res.status(200).set({ 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no' });
   const reader = upstream.body.getReader();
-  req.on('close', () => reader.cancel().catch(() => {}));   // caller gone: the machine kills the command
+  // caller gone: the machine kills the command. res 'close', not req 'close': Node has already emitted req 'close' by
+  // the time this runs (the body was read before the await above), so a req listener added here never fired.
+  res.on('close', () => reader.cancel().catch(() => {}));
   try { for (;;) { const { done, value } = await reader.read(); if (done) break; res.write(Buffer.from(value)); } }
   catch { /* upstream closed */ }
   res.end();
