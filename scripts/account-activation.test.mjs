@@ -206,6 +206,22 @@ test('a code is single-use and time-boxed', () => {
   assert.match(verify, /expires_at/, 'expiry is never checked');
 });
 
+test('🔴 the right code (or link) also verifies the mailbox it was sent to', async () => {
+  // Dogfooding 2026-11-03: a new person typed the code, was activated, and stayed "unverified" -- refused the free
+  // allowance, shown "Not verified". Driven, not grepped: a recording db sees what activate() writes.
+  const seen = [];
+  const db = { query: async (q, params) => { seen.push({ q: q.replace(/\s+/g, ' '), params }); return { rows: [] }; } };
+  const { activate } = await import('../src/server/services/accountActivation.js');
+  await activate(db, UID, { method: 'email_link' });
+  assert.ok(seen.some((s) => /UPDATE users SET email_verified = true WHERE id = \$1/.test(s.q) && s.params[0] === UID),
+    'activating from the mail must mark that address verified');
+  seen.length = 0;
+  await activate(db, UID, { method: 'admin' });
+  assert.ok(!seen.some((s) => /email_verified/.test(s.q)), 'an admin activation proves nothing about the mailbox');
+  const verify = svc.slice(svc.indexOf('export async function verifyCode'));
+  assert.match(verify, /await activate\(db, userId, \{ method: 'email_link'/, 'the code path must go through activate() as email_link');
+});
+
 test('minting invalidates the previous live code', () => {
   const mint = svc.slice(svc.indexOf('export async function mintCode'), svc.indexOf('export async function verifyCode'));
   assert.match(mint, /UPDATE account_activation_codes SET consumed_at = NOW\(\)/,

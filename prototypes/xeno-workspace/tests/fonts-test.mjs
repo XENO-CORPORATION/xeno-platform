@@ -21,6 +21,8 @@ const tmp = path.join(os.tmpdir(), `xeno-font-${process.pid}.ttf`); fs.writeFile
 
 const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
 const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+// the real server refuses a signed-in browser's write without the CSRF token (middleware/browserSession.js); so does this stand-in
+await p.setCookie({ name: 'xeno_csrf', value: 'csrf-tok', url: base });
 await p.setRequestInterception(true);
 p.on('request', (q) => { const u = new URL(q.url()); const json = (body, status = 200) => q.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
   if (!u.pathname.startsWith('/api/')) return q.continue();
@@ -34,6 +36,7 @@ p.on('request', (q) => { const u = new URL(q.url()); const json = (body, status 
   if (u.pathname === '/api/fonts' && M === 'GET') return json({ success: true, catalogue: db.mine.map((id) => ({ ...CAT.find((f) => f.id === id), agentAdded: false })), uploads: db.uploads });
   if (u.pathname === '/api/fonts/families' && M === 'POST') { const s = JSON.parse(q.postData()); db.mine.push(s.family); return json({ success: true, font: {} }); }
   if (u.pathname.startsWith('/api/fonts/families/') && M === 'DELETE') { db.mine = db.mine.filter((x) => x !== u.pathname.split('/').pop()); return json({ success: true, removed: true }); }
+  if (u.pathname === '/api/fonts/uploads' && M === 'POST' && q.headers()['x-xeno-csrf'] !== 'csrf-tok') { db.calls.push('upload-without-csrf'); return json({ success: false, error: 'CSRF validation failed' }, 403); }
   if (u.pathname === '/api/fonts/uploads' && M === 'POST') { db.multipart = q.postData() || ''; db.calls.push('upload'); if (db.refuse) return json({ success: false, code: 'font_restricted', error: db.refuse }, 422); const up = { id: '66666666-6666-4666-8666-666666666666', family: 'Acme', style: 'Bold', weight: 700, italic: false, format: 'ttf', contentUrl: '/api/library/assets/x/content', rightsConfirmedBy: 'Test Person' }; db.uploads.push(up); return json({ success: true, upload: up }); }
   return json({ success: false, error: 'not found' }, 404); });
 const open = async (addr) => { await p.goto(base + addr, { waitUntil: 'domcontentloaded' }); await wait(1800); };

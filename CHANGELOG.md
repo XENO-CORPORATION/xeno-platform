@@ -10,11 +10,29 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - With `CHAT_AGENT_RUNTIME=xeno-agent`, a streamed chat turn is driven by the XENO Agent loop instead of the platform's own. Searches, images, code, project reads, the browser and questions behave exactly as before, and every model call is still billed through the same metered call. `CHAT_AGENT_RUNTIME_USERS` limits it to listed accounts.
 - The chat server now uses XENO Agent SDK 0.10.110 and the web-search client 0.1.5.
 
+**Spawn profile sync keeps only what Spawn names.**
+
+- Your account now stores only the settings and instruction files Spawn syncs (`settings.json`, `CLAUDE.md`, `AGENTS.md`, `config.toml` and similar, plus your own agents, commands, prompts and output styles). Device files an older Spawn uploaded (Claude Code's `.claude.json`, with your email, machine ID and local project paths, and its paste cache) are no longer stored or sent to your other devices, and copies already stored are left out when they are read.
+- Environment variables and credential helpers in `settings.json` are not stored.
+- An older Spawn keeps syncing: the files it may not send are dropped and named in the reply, not refused.
+
 **A team sold in the Marketplace keeps who each agent is.**
 
 - Publishing a team now includes each agent's persona (its role, voice and boundaries), the way selling one agent always did. Before, a buyer's copy kept only the instructions.
 - Each agent in a team is now checked like a single agent: instructions or a persona holding a key or password, or trying to take over whoever runs them, stop the export and name the agent to fix.
 - Teams already published are unchanged.
+
+**Fixes found by using the platform as a new person would, start to finish.**
+
+- Typing the code from the welcome mail now also confirms your email address. Before, you were active but still "unverified", so the free allowance was refused and Settings said "Not verified".
+- The 11 accounts this had already caught are now marked verified.
+- A team made in Workspace › Teams can be sold. Its agents used to be left out, so publishing always failed.
+- The Seller console loads for sellers. It failed for everyone the moment they registered.
+- Buyers can bring a team they got into their workspace. It was always refused, and the dialog now names the terms they accept.
+- A listing shows who comes with a team, and a reviewer reads each agent's role, voice and instructions before approving.
+- Uploading a font works. Every upload from the browser was refused.
+- Adding a provider key says plainly what is wrong. An address XENO won't connect to no longer reads as a bad key.
+- Opening a few pages at once no longer shows "could not be loaded" everywhere. Each signed-in person now has their own allowance, under a larger one for everyone sharing a connection.
 
 ## 2026-11-02
 

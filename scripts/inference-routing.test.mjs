@@ -366,3 +366,23 @@ test('an endpoint that is XENO itself is refused at save time (the recursion sto
   assert.ok(assertSafeEndpointUrl('https://notxenostudio.ai/v1'), 'a suffix match is not a substring match');
   assert.equal(isXenoHost('xenostudio.ai.evil.example'), false, 'our name as a subdomain of someone else is not us');
 });
+
+test('🔴 a refused key or endpoint is explained in words a person acts on, and the right thing is blamed', async () => {
+  // Dogfooding 2026-11-03: the key form said "the provider did not accept that key (endpoint_forbidden_address)" for an
+  // address XENO refused before any provider was asked. Driven against createCredential, not grepped.
+  process.env.SECRET_BOX_KEY ||= 'MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=';
+  const { createCredential, REFUSAL_WORDS } = await import('../src/server/services/providerCredentials.js');
+  const tryAdd = async (baseUrl) => { try { await createCredential(fakeDb(), 'u1', { provider: 'compatible', label: 'x', secret: 'abcdefgh-1234', baseUrl }); return null; } catch (e) { return e; } };
+  // refused before any request (structurally private)
+  for (const [url, code] of [['https://10.0.0.5/v1', 'endpoint_forbidden_address'], ['http://api.example.com/v1', 'endpoint_not_https'], ['https://user:pw@api.example.com/v1', 'endpoint_has_credentials']]) {
+    const e = await tryAdd(url);
+    assert.equal(e?.code, code, `${url} → ${code} (got ${e?.code})`);
+    assert.equal(e.message, REFUSAL_WORDS[code], `${url} reads as a sentence, not "${e.message}"`);
+    assert.ok(!/did not accept that key/.test(e.message), 'an address problem never blames the key');
+  }
+  // refused at connect time: a name that resolves to this machine
+  const local = await tryAdd('https://localhost:9/v1');
+  assert.equal(local?.code, 'endpoint_forbidden_address', `localhost → endpoint_forbidden_address (got ${local?.code}: ${local?.message})`);
+  assert.equal(local.message, REFUSAL_WORDS.endpoint_forbidden_address);
+  for (const [k, v] of Object.entries(REFUSAL_WORDS)) assert.match(v, /^[A-Z][^]*[.]$/, `${k} is a sentence`);
+});

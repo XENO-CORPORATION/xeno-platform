@@ -66,7 +66,11 @@ test('a device name is one line with no control characters, at most 120 characte
 
 test('the route is mounted behind the same account auth as the profiles route', () => {
   const index = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
-  assert.match(index, /app\.use\('\/api\/v2\/spawn\/devices', databaseMiddleware, oidcAuth, spawnDeviceRoutes\)/);
+  // The SAME chain as the profiles route, whatever it grows to (requireDpopIfBound was added to both after this test was written).
+  const chain = (/** @type {string} */ path) => (index.match(new RegExp(`app\\.use\\('${path.replace(/\//g, '\\/')}', ([^)]*)\\)`)) ?? [])[1]?.split(',').map(s => s.trim()).slice(0, -1);
+  const devices = chain('/api/v2/spawn/devices'), profiles = chain('/api/v2/spawn/profiles');
+  assert.ok(devices && devices.includes('oidcAuth'), `the devices route sits behind account auth: ${devices}`);
+  assert.deepEqual(devices, profiles);
   const migration = readFileSync(new URL('../database/migrations/20261101090000-spawn-sync-devices.sql', import.meta.url), 'utf8');
   assert.match(migration, /PRIMARY KEY \(user_id, device_id\)/);
   assert.match(migration, /-- DOWN\s+DROP TABLE IF EXISTS spawn_sync_devices;/);
