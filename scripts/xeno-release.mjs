@@ -45,6 +45,7 @@ import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { updatesOrigin } from '../src/server/config/hosts.js';
 import { R2Publisher, GateError } from './lib/r2-upload.mjs';
+import { validateReleasePost, PostError } from './lib/release-post.mjs';
 import {
   deriveChannel,
   channelFeedNames,
@@ -176,7 +177,7 @@ export function findFeedFile(searchDirs, version, declaredChannel, exists = exis
 
 const KNOWN_FLAGS = new Set(['app', 'version', 'date', 'channel', 'type', 'severity', 'title', 'notes', 'notes-file', 'win', 'mac', 'linux',
   'artifact-dir', 'updater-url', 'updater-layout', 'rollout-percent', 'rollback', 'dry-run',
-  'allow-unscannable-payload', 'allow-overwrite', 'allow-no-updater-feed', 'allow-no-artifacts']);
+  'allow-unscannable-payload', 'allow-overwrite', 'allow-no-updater-feed', 'allow-no-artifacts', 'kind', 'post']);
 
 async function publish(opts) {
   // Before anything else: an ignored flag once published a version whose installer did not exist (Corpus 0.3.1).
@@ -197,6 +198,19 @@ async function publish(opts) {
   if (opts['notes-file']) notes = readFileSync(opts['notes-file'], 'utf8').trim();
   else if (typeof opts.notes === 'string') notes = opts.notes;
   if (!notes) fail('notes required (--notes "..." or --notes-file FILE)');
+
+  // Two kinds (owner, 2026-11-03): a QUICK release ships with its notes; a MAJOR one also carries a filmed post (scripts/lib/release-post.mjs).
+  const kind = opts.kind === undefined ? 'quick' : opts.kind;
+  if (!['quick', 'major'].includes(kind)) fail('--kind is quick or major');
+  const postDir = opts.post && opts.post !== true ? opts.post : null;
+  if (kind === 'major' && !postDir) fail('a major release carries its post: pass --post <folder with post.json and its files>');
+  if (kind === 'quick' && postDir) fail('--post is for a major release: pass --kind major, or leave the post out of a quick one');
+  /** @type {null | ReturnType<typeof validateReleasePost>} */
+  let releasePost = null;
+  if (postDir) {
+    try { releasePost = validateReleasePost(postDir); }
+    catch (e) { if (e instanceof PostError) fail(e.message); throw e; }
+  }
 
   const r2 = new R2Publisher({
     remote: R2_REMOTE,
@@ -248,13 +262,25 @@ async function publish(opts) {
       uploadedByVersionDir.push(bm);
     }
   }
+  // The post: gated and checked for overwrite like an installer, uploaded beside it under v<version>/post/.
+  const postKeyDir = `apps/${app}/v${version}/post`;
+  if (releasePost) {
+    console.log(`
+  post: "${releasePost.post.title}" (${releasePost.files.length} files, ${(releasePost.files.reduce((n, f) => n + f.size, 0) / 1048576).toFixed(1)} MB)`);
+    for (const file of releasePost.files) {
+      await r2.gate(file.path, { requireStructural: false });
+      r2.assertNotClobbering(file.path, `${postKeyDir}/${file.name}`);
+      pendingArtifacts.push([file.path, `${postKeyDir}/${file.name}`, `v${version}/post/${file.name}`]);
+    }
+  }
   console.log(`  ✓ ${r2.coverageSummary()}`);
 
   // ── 2) Release object ──────────────────────────────────────────────────────
   const release = {
     version, date,
     latest: channel === 'stable',
-    type, channel, severity,
+    type, channel, severity, kind,
+    ...(releasePost ? { post: `v${version}/post/post.json` } : {}),
     ...(opts.title ? { title: opts.title } : {}),
     notes,
     ...(Object.keys(assets).length ? { assets } : {}),
@@ -371,7 +397,20 @@ async function publish(opts) {
       throw new ReleaseRefused('the published auto-update chain does not resolve', 3);
     }
     console.log('  ✓ auto-update chain resolves end to end.');
-  } else if (dryRun) {
+  }
+  if (!dryRun && releasePost) {
+    // The post is what the product page shows: every file must come back from the public URL at its exact size.
+    let missing = 0;
+    for (const file of releasePost.files) {
+      const url = `${R2_PUBLIC}/${postKeyDir}/${file.name}?x=${Date.now()}`;
+      const res = await fetch(url).catch(() => null);
+      const size = res && res.ok ? (await res.arrayBuffer()).byteLength : -1;
+      if (size !== file.size) { missing++; console.error(`  ✖ post file ${file.name}: ${res ? res.status : 'no answer'}, ${size} of ${file.size} bytes`); }
+    }
+    if (missing) throw new ReleaseRefused(`${missing} post file(s) do not resolve from the public URL`, 3);
+    console.log(`  ✓ post resolves: ${releasePost.files.length} files at ${R2_PUBLIC}/${postKeyDir}/`);
+  }
+  if (dryRun) {
     console.log('\n  live verification: SKIPPED (dry-run — nothing was uploaded).');
     console.log('  Every other gate ran for real against the local artifacts.');
   }

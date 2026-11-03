@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { V2Page, useAccent, Eyebrow, H1, INK, MUTED, FAINT, LINE, MONO } from '../components/product/v2/V2Page';
 import { ReleaseMeta, ReleaseDownloads, PermalinkRow } from '../components/product/v2/ReleaseEntry';
 import { getProduct, fetchReleases, type Release } from '../lib/productCatalog';
+import { ReleasePostTeaser } from '../components/product/v2/ReleasePost';
 
 /* /product/:slug/releases — every release, patch and hotfix, newest first, in the
    v2 design language. Filterable by kind (and channel, when a beta exists); each
@@ -95,6 +96,7 @@ const ProductReleases: React.FC = () => {
                       </button>
                       <div className="grid transition-[grid-template-rows] duration-300" style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}>
                         <div className="min-h-0 overflow-hidden">
+                          {r.post && <ReleasePostTeaser app={product.r2 ?? product.slug} post={r.post} href={`/product/${product.slug}/releases/${r.version}`} color={accent.text} />}
                           {r.notes && <div className="mt-3 max-w-[720px] whitespace-pre-line text-[15.5px] leading-[1.65]" style={{ color: MUTED }}>{r.notes}</div>}
                           <ReleaseDownloads release={r} slug={product.slug} />
                           <PermalinkRow slug={product.slug} version={r.version} color={accent.text} />

@@ -5,6 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**Major releases of XENO products now come with a release post: clips, pictures and what changed.**
+
+- A product's release page shows a major release's key picture and one line, with a link to the full post; the release's own page shows the whole post, with its clips and screenshots from the real app, above the notes. Quick releases keep their notes only.
+- Posts are read from the update server beside the release's installers, so a new post needs no site deploy.
+- The release script takes `--kind quick|major` and `--post <folder>`, checks the post before anything is uploaded (every named file present, nothing unnamed, images and video only, a clip needs its poster, at least one picture or clip) and reads every file back from the public address afterwards.
+
 **A cloud run that uses up its budget now says it stopped, not that it failed.**
 
 - The Run dialog promises a run stops when it has used its budget. It did stop, but showed as failed with a raw API error. It now shows as stopped, with a note to run it again with a bigger budget to carry on.
