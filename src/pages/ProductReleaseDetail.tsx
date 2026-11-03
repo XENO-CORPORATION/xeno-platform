@@ -25,6 +25,15 @@ const ProductReleaseDetail: React.FC = () => {
     fetchReleases(product).then((rs) => { setReleases(rs); setLoading(false); });
   }, [product, version]);
 
+  // A version page is not prerendered (its address depends on releases), so it names itself: the list page's
+  // prerendered title is "Releases <product>", and this one is "<product> <version> release notes".
+  useEffect(() => {
+    if (!product || !version) return;
+    const before = document.title;
+    document.title = `${product.name} ${version} release notes`;
+    return () => { document.title = before; };
+  }, [product, version]);
+
   if (!product) return <Navigate to="/" replace />;
 
   const i = releases.findIndex((r) => r.version === version);
