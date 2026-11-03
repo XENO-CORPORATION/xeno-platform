@@ -26,6 +26,7 @@ import { agentsApiBaseUrl, mintDelegatedAccessToken, revokeDelegatedSession } fr
 import { readScoped } from './scopedReads.js';
 import { PLATFORM_DEFAULT_MODEL } from './workspaceArea.js';
 import { RUN_ACTOR } from './agentCloudRuns.js';
+import { conversationBriefOf } from './agentGuidance.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIVE = ['starting', 'queued', 'running'];
@@ -74,8 +75,11 @@ export async function prepareAgentTurn(db, me, placeId, pid, body = {}) {
   }
   if (messages[messages.length - 1].role !== 'user') return err('bad_input', 'messages_invalid', 'The last message is the person’s.');
   const model = (a.runtime && a.runtime.model) || (typeof body.model === 'string' && MODEL.test(body.model) ? body.model : PLATFORM_DEFAULT_MODEL);
+  // Who it is comes from the same rows a task run reads (persona, then its own instructions), so the agent you talk to
+  // at a desk is the agent that works your tasks. The opening line only says where it is and who it is talking to.
+  const brief = await conversationBriefOf(db, pid);
   const systemPrompt = [`You are ${a.name}, a XENO agent working in ${o.place.name}. You are talking with ${me.name || 'a colleague'} at your desk. Answer as ${a.name}.`,
-    a.instructions ? `Your instructions:\n${a.instructions}` : ''].filter(Boolean).join('\n\n');
+    brief.text || (a.instructions ? `Your instructions:\n${a.instructions}` : '')].filter(Boolean).join('\n\n');
   return { ok: true, result: { agentId: a.id, body: { model, messages, systemPrompt, ...(typeof body.requestId === 'string' && body.requestId.length <= 100 ? { requestId: body.requestId } : {}) } } };
 }
 

@@ -86,4 +86,19 @@ export async function guidanceFor(db, t, agentUserId) {
   return { layers: layers.map((l) => l.from), text };
 }
 
+/**
+ * What the agent is told when someone simply TALKS to it (a Places desk, a chat), with no task: who it is and its own
+ * instructions, from the same rows a task run reads, so the agent is the same person everywhere. The task layers
+ * (XENO's way of working a task, project, area, folders) are left out because there is no task.
+ */
+export async function conversationBriefOf(db, agentUserId) {
+  const layers = [];
+  const who = await identityOf(db, agentUserId); if (who) layers.push({ from: 'identity', text: who });
+  const own = await agentInstructions(db, agentUserId); if (own) layers.push({ from: 'agent', text: own });
+  const label = { identity: 'Who you are', agent: 'Your own instructions' };
+  let text = layers.map((l) => `${label[l.from]}:\n${l.text}`).join('\n\n');
+  if (text.length > MAX) text = text.slice(0, MAX) + '\n…';
+  return { layers: layers.map((l) => l.from), text };
+}
+
 export const _internals = { DEFAULT };

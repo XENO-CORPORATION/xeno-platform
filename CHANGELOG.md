@@ -5,6 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-03
 
+**An agent you talk to at its desk is the same agent that works your tasks.**
+
+- In Places, talking to an agent now gives it its persona (its role, voice and boundaries) as well as its instructions, read from the same record its task runs use. Before, a desk conversation knew only its name and instructions.
+
 **Leaving a chat mid-answer now stops it and releases the credits it reserved.**
 
 - The chat server never noticed when a person closed the tab or lost connection during a streamed answer. The answer kept running, could start another model call, and the credits held for it stayed reserved for up to 30 minutes before being returned. Nothing was overcharged, because unused holds are returned, but the balance looked lower until then. Closing the tab now ends the turn and settles or returns its holds at once.
