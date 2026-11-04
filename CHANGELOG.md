@@ -5,6 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-04
 
+**XENO Company's dashboard is live at xenosystem.ai/company.**
+
+- It opens on your own XENO session, with no second sign-in. If you're signed out, it sends you to sign in and brings you back to the same address.
+- Every company and person has a real address, so refresh, Back and shared links land in the same place. Corpo › Company has an Open dashboard button.
+- The dashboard publishes on its own: an update or rollback needs no platform deploy.
+
 **XENO Company's dashboard has its whole backend.**
 
 - Everything the dashboard calls now works against the platform: found a company, members and invitations, employ agents and set what they may do, activity, the wallet and transactions. It reads the same records the workspace shows, so there is nothing to keep in sync.
@@ -12,7 +18,7 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 - A registered company can issue invoices and credit notes in its own currency, with no tax or any rate, checked against the common invoice rules plus a country's own rules where we have them (Romania so far). Meeting local tax law stays the company's job, and the dashboard says so. Only a person who manages the company can. Numbers have no gaps, even when several invoices are issued at once or one is refused.
 - An issued invoice can't be changed or deleted by anyone, in the app or the database. A mistake is corrected with a credit note.
 - An employed agent's role is checked like everyone else's, and its capabilities are enforced each time it runs.
-- XENO sends invoices to no tax authority, and national e-invoicing is no longer planned (owner's decision, 2026-11-04). The dashboard itself still needs its sign-in connected and somewhere to be hosted before a browser can use any of this.
+- XENO sends invoices to no tax authority, and national e-invoicing is no longer planned (owner's decision, 2026-11-04).
 - A UK company can now record its own GB VAT number, and Corpo › Company lists every country.
 
 ## 2026-11-03

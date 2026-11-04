@@ -782,6 +782,9 @@ services:
       # XENO Creator's web build (creator.xenosystem.ai, nginx/default.conf). Published by xeno-creator into
       # /srv/xeno-creator-web/releases/<version>-<sha>/ with a relative `current` link; read-only here.
       - /srv/xeno-creator-web:/usr/share/nginx/creator:ro
+      # XENO Company's dashboard (xenosystem.ai/company, nginx/default.conf). Published by xeno-company into
+      # /srv/xeno-company-web/releases/<version>-<sha>/ with a relative `current` link; read-only here.
+      - /srv/xeno-company-web:/usr/share/nginx/company:ro
     environment:
       - NODE_ENV=production
       - REACT_APP_API_URL=http://backend:8080
