@@ -1130,7 +1130,7 @@
   }
   function crumbs() {
     const liveChat = !!(window.XENO_CHAT && window.XENO_CHAT.served);
-    if (S.view === 'zone') return `<span>${M[zoneKey()].name}</span><span class="sep">/</span>${zoneNow().of ? `<span>${M[zoneNow().of].name}</span><span class="sep">/</span>` : ''}${S.item ? `<span>${esc(zoneNow().label)}</span><span class="sep">/</span><b>${esc((zoneLive(zoneNow()) || {}).label ? zoneLive(zoneNow()).label(S.item) : S.item)}</b>` : `<b>${esc(zoneNow().label)}</b>`}`;
+    if (S.view === 'zone') { const leaf = S.item ? ((zoneLive(zoneNow()) || {}).label ? zoneLive(zoneNow()).label(S.item) : S.item) : ''; return `<span>${M[zoneKey()].name}</span><span class="sep">/</span>${zoneNow().of ? `<span>${M[zoneNow().of].name}</span><span class="sep">/</span>` : ''}${leaf ? `<span>${esc(zoneNow().label)}</span><span class="sep">/</span><b>${esc(leaf)}</b>` : `<b>${esc(zoneNow().label)}</b>`}`; }
     const sep = '<span class="sep">/</span>';
     if (S.view === 'dashboard') return '<b>Overview</b>';
     if (S.view === 'adaptive') return '<b>Adaptive</b><span class="sep">·</span><span>Beta</span>';

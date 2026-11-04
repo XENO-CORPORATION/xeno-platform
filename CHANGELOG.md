@@ -5,6 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-04
 
+**Found by setting up XENO on XENO.**
+
+- Creating a company now opens Corpo › Company, not a second page for the same thing.
+- Company's tabs stay still when you pick one. In a narrow window the page path gives way so the tabs stay usable, on every page with tabs.
+- A company with nothing filled in gets an Add a registration button on Invoices, and no longer reads about "this country".
+
 **XENO Company lives in the workspace.**
 
 - Corpo › Company now has Overview, Invoices, Wallet and Activity in its header, in the workspace's own design. People, Agents and Divisions stay on their own pages.

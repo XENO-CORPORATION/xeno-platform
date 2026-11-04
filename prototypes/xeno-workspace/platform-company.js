@@ -115,17 +115,17 @@
   const statusOf = (i) => (i.invoice.typeCode === '381' ? 'Credit note' : i.creditedBy ? 'Reversed' : 'Issued');
   /** Why this company can't issue yet, the same two facts the server refuses on. */
   function blocked(d) {
-    if (!d.registration) return ['Add a registration or a tax number first', 'An invoice names the company by its legal identity.'];
+    if (!d.registration) return ['Add a registration or a tax number first', 'An invoice names the company by its legal identity.', ['Add a registration', 'data-co2="addReg"']];
     const o = d.registration.registeredOffice;
-    if (!o?.line1 || !o?.city || !/^[A-Z]{2}$/.test(o?.country || '')) return ['Add the registered office first', 'It goes on every invoice.'];
+    if (!o?.line1 || !o?.city || !/^[A-Z]{2}$/.test(o?.country || '')) return ['Add the registered office first', 'It goes on every invoice.', ['Edit details', 'data-co2="profile"']];
     return null;
   }
   function invoices(h, d, c, list, head, bar, name) {
     const number = itemNow().split('/')[1], stop = blocked(d), make = c && !stop ? h.btn('New invoice', 'data-co2="newInvoice"', false, 'plus') : '';
     if (!number) {
-      const scope = d.registration?.jurisdiction === 'RO' ? 'Checked against the common invoice rules and Romania’s own.' : 'Checked against the common invoice rules, not this country’s own.';
+      const scope = !d.registration ? 'Checked against the common invoice rules.' : d.registration.jurisdiction === 'RO' ? 'Checked against the common invoice rules and Romania’s own.' : 'Checked against the common invoice rules, not this country’s own.';
       return h.page(head(make, name) + bar + list('inv', 'invoices', (rows) => {
-        if (!rows.length) return h.box('doc', stop ? stop[0] : 'No invoices yet', stop ? stop[1] : 'What the company issues appears here, numbered without gaps.', stop && c ? h.btn('Edit details', 'data-co2="profile"', true) : make);
+        if (!rows.length) return h.box('doc', stop ? stop[0] : 'No invoices yet', stop ? stop[1] : 'What the company issues appears here, numbered without gaps.', stop && c ? h.btn(stop[2][0], stop[2][1], true) : make);
         return h.table(['Invoice', 'Customer', 'Issued', 'Amount', 'Status'], rows.map((i) => h.tr(`data-co2-open="${esc(i.number)}"`, [`<b>${esc(i.number)}</b>`, esc(i.invoice.buyer.name), esc(day(i.issuedAt)), esc(money(i.invoice.totals.payableAmount, i.invoice.currency)), esc(statusOf(i))])));
       }) + `<p class="pg-dim set-p">${scope} Meeting local tax law is the company’s responsibility, and XENO sends invoices to no tax authority.</p>`);
     }
@@ -258,7 +258,7 @@
   }, true);
   document.addEventListener('keydown', (e) => { const row = e.key === 'Enter' && e.target.closest?.('[data-co2-open]'); if (row) goItem(`invoices/${row.dataset.co2Open}`); });
   const live = window.XENO_ZONE_LIVE = window.XENO_ZONE_LIVE || {};
-  live['corpo.company'] = { served: true, items: true, label: (item) => { const [v, n] = String(item || '').split('/'); return n ? `No. ${n.split('-').pop()}` : (VIEWS.find((x) => x[0] === v) || [, ''])[1]; }, work: () => null, badge: () => null, page, state: () => ({ status: S.status, view: viewOf() }), reload: () => load() };
+  live['corpo.company'] = { served: true, items: true, label: (item) => { const n = String(item || '').split('/')[1]; return n ? `No. ${n.split('-').pop()}` : ''; }, work: () => null, badge: () => null, page, state: () => ({ status: S.status, view: viewOf() }), reload: () => load() };
   P.lazyZone(live['corpo.company'], () => load());
   window.XENO_COMPANY = { served: true, route: (it) => (it === 'Company' ? page() : null) };
 })();
