@@ -81,6 +81,13 @@ try {
 
   await tab('Overview');
   await press('data-co2="profile"');
+  await p.$eval('#xdf-trade', (e) => { e.value = ''; }); await fill(p, 'trade', 'Northwind Studio');
+  await submit(p); await wait(2200);
+  ok(/Trading as/.test(await text(p, '#main')) && /Northwind Studio/.test(await text(p, '#main')), 'a business can change the name it trades under', (await text(p, '#main')).slice(0, 400));
+  await tab('Invoices'); await p.click('#main [data-co2-open]'); await wait(1500);
+  ok(/Northwind Media/.test(await text(p, '#main')), 'and an invoice already issued keeps the old one', (await text(p, '#main')).slice(0, 700));
+  await tab('Overview');
+  await press('data-co2="profile"');
   await choose('tax', 'standard');
   await submit(p); await wait(1500);
   await tab('Invoices');

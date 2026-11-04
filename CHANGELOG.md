@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-04
 
+**A business can change its trading name.** Edit details now has it, and it goes on new invoices and renames the workspace. Invoices already issued keep the old name. Before, no screen could rename a business.
+
 **An invoice a customer can actually use.**
 
 - Print or save any invoice as a PDF, from exactly what was issued, in German for customers in German-speaking countries and English for everyone else. Before, the only copy was UBL XML.
