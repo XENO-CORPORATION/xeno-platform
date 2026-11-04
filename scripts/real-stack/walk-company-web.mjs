@@ -12,23 +12,33 @@ const press = async (attr) => { await p.waitForSelector(`#main [${attr}]`, { tim
 const confirm = async () => { await p.waitForSelector('.xd [data-xd-ok]', { timeout: 10000 }); await p.click('.xd:last-of-type [data-xd-ok]'); await wait(2500); };
 try {
   await newPerson(p, 'Cora');
-  const id = await p.evaluate(async () => {
-    const csrf = document.cookie.match(/xeno_csrf=([^;]+)/)?.[1];
-    const r = await fetch('/api/orgs', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-xeno-surface': 'xeno-web', ...(csrf ? { 'x-xeno-csrf': decodeURIComponent(csrf) } : {}) }, body: JSON.stringify({ name: 'Northwind', slug: `northwind-${Date.now()}` }) });
-    return (await r.json()).id;
-  });
+  await go(p, '/workspace/corpo/spaces/company', 3000);
+  await press('data-xa="newCompany"');
+  await fill(p, 'name', 'Northwind');
+  await submit(p); await wait(3000);
+  ok(/\/workspace\/corpo\/spaces\/company/.test(p.url()), 'creating a company opens Corpo › Company', p.url());
+  const id = await p.evaluate(() => window.XENO_SCOPE?.uuid?.());
   ok(!!id, 'a company exists for this person', id);
-  const home = `/workspace/corpo/spaces/company?ws=${id}`;
-  await go(p, home, 3000);
   let t = await text(p, '#main');
   ok(['Overview', 'Invoices', 'Wallet', 'Activity'].every((l) => t.includes(l)), 'the company’s views are tabs on the workspace page', t.slice(0, 300));
   ok(await p.evaluate(() => !!document.querySelector('[data-co2-view]')?.closest('.pg-tabs')), 'and they are the workspace’s own tab bar');
   ok(!(await p.$('.xc-app')), 'nothing of the old dashboard is on it');
+  const tabAt = () => p.evaluate(() => Math.round(document.querySelector('[data-co2-view="overview"]').getBoundingClientRect().left));
+  const x0 = await tabAt();
 
   await tab('Invoices');
+  ok((await tabAt()) === x0, 'the tabs stay where they are when one is chosen', `${x0} vs ${await tabAt()}`);
   t = await text(p, '#main');
   ok(/Add a registration or a tax number first/.test(t), 'before it has a legal identity, Invoices says what to add', t.slice(0, 300));
   ok(!(await p.$('#main [data-co2="newInvoice"]')), 'and offers no invoice it would refuse');
+  ok(!!(await p.$('#main .pg-box [data-co2="addReg"], #main [data-co2="addReg"]')), 'and its button adds that');
+  ok(!/this country/.test(t), 'and it doesn’t talk about a country it doesn’t have', t.slice(-300));
+
+  await p.setViewport({ width: 760, height: 900 }); await wait(800);
+  const narrow = await p.evaluate(() => { const l = document.querySelector('.pg-top-left').getBoundingClientRect(), b = document.querySelector('.topbar.pg-top').getBoundingClientRect(); return { tabs: Math.round(l.width), right: Math.round(l.right), bar: Math.round(b.right) }; });
+  ok(narrow.tabs >= 200 && narrow.right <= narrow.bar, 'in a narrow window the tabs keep their room', JSON.stringify(narrow));
+  await shot('narrow');
+  await p.setViewport({ width: 1400, height: 900 }); await wait(800);
 
   await tab('Overview');
   await press('data-co2="profile"');

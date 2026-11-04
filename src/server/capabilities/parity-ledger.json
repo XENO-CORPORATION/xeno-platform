@@ -11152,6 +11152,13 @@
       "scope": "none",
       "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
     },
+    "ui:platform-company.js:data-co2=addReg": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
     "ui:platform-company.js:data-co2=retry": {
       "status": "excluded",
       "category": "view-state",

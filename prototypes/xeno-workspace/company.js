@@ -89,7 +89,7 @@
   };
   document.addEventListener('click', (e) => { const t = e.target.closest('[data-co]'); if (!t || t.closest('.xd')) return; e.preventDefault(); e.stopPropagation(); window.XENO_NET?.begin('company', t.dataset.co, t); Promise.resolve(ACT[t.dataset.co]?.(t.dataset.arg)).finally(() => window.XENO_NET?.clear(t)); }, true);
   // a new company lands on its own setup page instead of a toast
-  const orig = window.XA.newCompany; window.XA.newCompany = async (...a) => { const before = window.XA.workspaces().length; await orig(...a); if (window.XA.workspaces().length > before) X().go('global', { global: 'workspace', item: 'Company' }); };
+  const orig = window.XA.newCompany; window.XA.newCompany = async (...a) => { const before = window.XA.workspaces().length; await orig(...a); if (window.XA.workspaces().length > before) { window.XENO_ADDR?.setWorkspace?.(window.XENO_SCOPE?.uuid?.()); X().go('zone', { zone: 'company' }); } };
   window.XENO_ROLE?.gate('co', ['topup'], 'billing', 'Only the owner adds money to the company wallet');
   window.XENO_ROLE?.gate('co', ['edit', 'addReg', 'addId', 'rmId', 'allocate', 'employ', 'title'], 'manage', 'Owners and admins manage the company');
   window.XENO_COMPANY = { route: (it) => (it === 'Company' ? page() : null), co, balance };
