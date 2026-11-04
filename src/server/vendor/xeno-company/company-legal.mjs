@@ -1,9 +1,9 @@
 // GENERATED from xeno-company/packages/legal. Do not edit: change it there, then scripts/company-legal-vendor.mjs --sync --confirm.
-// ../xeno-company-neutral-invoices/packages/legal/src/types.ts
+// ../xeno-company-sole/packages/legal/src/types.ts
 var ok = (normalised) => ({ code: "ok", normalised });
 var fail = (code, message) => ({ code, message });
 
-// ../xeno-company-neutral-invoices/packages/legal/src/connector.ts
+// ../xeno-company-sole/packages/legal/src/connector.ts
 function isIsoDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
@@ -17,7 +17,7 @@ var ConnectorError = class extends Error {
   }
 };
 
-// ../xeno-company-neutral-invoices/packages/legal/src/packs/ro.ts
+// ../xeno-company-sole/packages/legal/src/packs/ro.ts
 function cuiChecksum(digits) {
   if (!/^\d{2,10}$/.test(digits)) return false;
   const KEY = "753217532";
@@ -131,7 +131,7 @@ var RO = {
   cius: "RO_CIUS (EN 16931 national narrowing)"
 };
 
-// ../xeno-company-neutral-invoices/packages/legal/src/connectors/anaf.ts
+// ../xeno-company-sole/packages/legal/src/connectors/anaf.ts
 var TVA_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva";
 var REGISTRU_URL = "https://webservicesp.anaf.ro/api/registruroefactura/v1/interogare";
 var ANAF_BATCH_LIMIT = 100;
@@ -266,7 +266,7 @@ function addressOf(r) {
   };
 }
 
-// ../xeno-company-neutral-invoices/packages/legal/src/connectors/vies.ts
+// ../xeno-company-sole/packages/legal/src/connectors/vies.ts
 var BASE = "https://ec.europa.eu/taxation_customs/vies/rest-api/ms";
 var RETRYABLE = /* @__PURE__ */ new Set([
   "MS_UNAVAILABLE",
@@ -343,7 +343,7 @@ var ViesValidator = class {
   }
 };
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/money.ts
+// ../xeno-company-sole/packages/legal/src/invoice/money.ts
 var minor = (n) => {
   if (!Number.isInteger(n)) throw new RangeError(`Minor units must be an integer, got ${n}`);
   if (!Number.isSafeInteger(n)) throw new RangeError(`Amount ${n} exceeds safe integer range`);
@@ -390,7 +390,7 @@ function lineAmount(quantity, unitPriceMinor, decimals = 2) {
   return minor(rounded === 0 ? 0 : rounded);
 }
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/model.ts
+// ../xeno-company-sole/packages/legal/src/invoice/model.ts
 function toPostalAddress(address) {
   const { region, ...rest } = address;
   return { ...rest, ...region ? { countrySubdivision: region } : {} };
@@ -398,7 +398,7 @@ function toPostalAddress(address) {
 var NO_VAT_CATEGORIES = ["E", "AE", "K", "G", "O"];
 var ZERO_RATE_CATEGORIES = ["Z", "E", "AE", "K", "G", "O"];
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/rules.ts
+// ../xeno-company-sole/packages/legal/src/invoice/rules.ts
 var v = (rule, message, term) => term === void 0 ? { rule, message } : { rule, term, message };
 var ZERO = 0;
 function mismatch(actual, expected) {
@@ -549,7 +549,7 @@ function categoryRules(b, inv) {
   return out;
 }
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/ubl.ts
+// ../xeno-company-sole/packages/legal/src/invoice/ubl.ts
 var NS = {
   inv: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
   cac: "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
@@ -583,6 +583,7 @@ function partyXml(tag, p) {
     // namespaces and go in different UBL elements. Putting a CUI where a VAT id
     // belongs states that a company is VAT-registered when it may not be.
     p.vatId ? `<cac:PartyTaxScheme>${el("cbc:CompanyID", p.vatId)}<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>` : "",
+    p.taxRegistrationId ? `<cac:PartyTaxScheme>${el("cbc:CompanyID", p.taxRegistrationId)}<cac:TaxScheme><cbc:ID>FC</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>` : "",
     "<cac:PartyLegalEntity>",
     el("cbc:RegistrationName", p.name),
     p.legalRegistrationId ? el(
@@ -662,7 +663,7 @@ function toUbl(inv) {
   return `<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="${NS.inv}" xmlns:cac="${NS.cac}" xmlns:cbc="${NS.cbc}">` + body + "</Invoice>";
 }
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/build.ts
+// ../xeno-company-sole/packages/legal/src/invoice/build.ts
 var InvoiceBuildError = class extends Error {
   constructor(message) {
     super(message);
@@ -826,7 +827,7 @@ var InvoiceSeries = class {
   }
 };
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/cius-ro.ts
+// ../xeno-company-sole/packages/legal/src/invoice/cius-ro.ts
 var CIUS_RO_ID = "urn:cen.eu:en16931:2017#compliant#urn:efactura.mfinante.ro:CIUS-RO:1.0.1";
 var v2 = (rule, message, term) => term === void 0 ? { rule, message } : { rule, term, message };
 function validateRoInvoice(inv) {
@@ -889,7 +890,7 @@ function validateRoInvoice(inv) {
 }
 var RO_VAT_RATES = [21, 19, 11, 9, 5];
 
-// ../xeno-company-neutral-invoices/packages/legal/src/invoice/profile.ts
+// ../xeno-company-sole/packages/legal/src/invoice/profile.ts
 var EN16931_ID = "urn:cen.eu:en16931:2017";
 var CORE = { specificationId: EN16931_ID, validate: validateInvoice, localRules: null };
 var ADD_ONS = /* @__PURE__ */ new Map([
@@ -897,7 +898,7 @@ var ADD_ONS = /* @__PURE__ */ new Map([
 ]);
 var invoiceProfileFor = (jurisdiction) => ADD_ONS.get(jurisdiction) ?? CORE;
 
-// ../xeno-company-neutral-invoices/packages/legal/src/countries.ts
+// ../xeno-company-sole/packages/legal/src/countries.ts
 var COUNTRY_CODES = "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW".split(" ");
 var KNOWN = new Set(COUNTRY_CODES);
 var isCountryCode = (v3) => typeof v3 === "string" && KNOWN.has(v3);
@@ -911,7 +912,7 @@ function countryName(code, locale = "en") {
   }
 }
 
-// ../xeno-company-neutral-invoices/packages/legal/src/registration.ts
+// ../xeno-company-sole/packages/legal/src/registration.ts
 var text = (v3, max) => {
   const s = typeof v3 === "string" ? v3.trim() : "";
   return s.length <= max ? s : "";
@@ -970,16 +971,18 @@ function sellerParty(org) {
   const legalName = org.registrationEvidence?.verifiedName ?? reg.legalName ?? org.name;
   const vat = reg.identifiers.find((i) => i.kind === "vat")?.value;
   const registry = reg.identifiers.find((i) => i.kind === "registry")?.value;
+  const taxNumber = reg.identifiers.find((i) => i.kind === "national")?.value;
   return {
     name: legalName,
     ...legalName !== org.name ? { tradingName: org.name } : {},
     ...vat ? { vatId: vat } : {},
+    ...!vat && taxNumber ? { taxRegistrationId: taxNumber } : {},
     ...registry ? { legalRegistrationId: registry, ...reg.register ? { legalRegistrationScheme: reg.register } : {} } : {},
     address: toPostalAddress(reg.registeredOffice)
   };
 }
 
-// ../xeno-company-neutral-invoices/packages/legal/src/index.ts
+// ../xeno-company-sole/packages/legal/src/index.ts
 var PACKS = { RO };
 var packFor = (j) => Object.hasOwn(PACKS, j) ? PACKS[j] : void 0;
 var checkRegistration2 = (r) => checkRegistration(r, packFor);

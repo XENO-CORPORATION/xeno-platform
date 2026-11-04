@@ -5,6 +5,13 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-04
 
+**One person can run a business on XENO.**
+
+- Corpo › Company now handles a sole proprietor: a Kleingewerbe, a PFA, a sole trader. The page reads as the owner trading under the business name, and says plainly that the owner and the business are the same legal person.
+- A small business that charges no VAT states that once, with its own wording, and every invoice carries the note with no tax added. Tax can't be charged by mistake, and the day the exemption ends it's one setting. Invoices already issued keep what they said.
+- A tax number now reaches the invoice when it's the only number a seller has, written as a tax number and never as a VAT ID.
+- Invoices show the seller's and customer's postal code on screen.
+
 **Found by setting up XENO on XENO.**
 
 - Creating a company now opens Corpo › Company, not a second page for the same thing.

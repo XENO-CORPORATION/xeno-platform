@@ -1,7 +1,7 @@
 {
   "package": "@xenosystem/company-legal",
   "repo": "xeno-company",
-  "commit": "b8e994c8d86a0ab872cc6a61bf7d892163931de4",
-  "sourceHash": "281bc3f64d91b4358e9090a7507a97774a89728fe8c557326516a7d6b42e8521",
-  "bundleHash": "0bfb64cf5d9a1783e0cfec9c89e28f72aa86ba08968654612f245ef6d581dfea"
+  "commit": "9f3ebd91e15974ac9c4ad5c958587efca0fcc082",
+  "sourceHash": "47e81a9428597b53b61f707c823b334d7e44150db035fd0fa0b2c036e7384efb",
+  "bundleHash": "865fbdcf6923ee95b7429a9e6e8b8131fade7fd1276c971e15cfb69b4bd1404e"
 }

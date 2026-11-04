@@ -67,7 +67,7 @@ export async function read(db, me, workspaceId) {
   return {
     org: { id: w.id, kind: w.workspace_type, name: w.name, slug: w.slug, status: w.status, ownerUserId: w.owner_user_id, createdAt: w.created_at },
     canManage: manage && w.workspace_type !== 'personal',
-    profile: { legalName: p.legal_name || null, legalForm: p.legal_form || null, governingRegime: p.governing_regime || null, registeredOffice: p.registered_office || null, centralAdministration: p.central_administration || null },
+    profile: { entityKind: p.entity_kind || 'company', taxStatus: p.tax_status || 'standard', taxStatusNote: p.tax_status_note || null, legalName: p.legal_name || null, legalForm: p.legal_form || null, governingRegime: p.governing_regime || null, registeredOffice: p.registered_office || null, centralAdministration: p.central_administration || null },
     registrations: regs.rows.map((r) => ({ id: r.id, jurisdiction: r.jurisdiction, register: r.register_name, number: r.national_number, euid: r.euid, role: r.role })),
     tax: tax.rows.map((t) => ({ id: t.id, scheme: t.scheme, prefix: t.prefix, number: t.number, jurisdiction: t.jurisdiction, check: t.result ? { result: t.result, consultationNumber: t.consultation_number, at: t.checked_at } : null })),
     customs: customs.rows.map((c) => ({ id: c.id, scheme: c.scheme, number: c.number, jurisdiction: c.jurisdiction })),
@@ -78,9 +78,15 @@ export async function read(db, me, workspaceId) {
 
 export async function saveProfile(db, me, workspaceId, body = {}) {
   await manager(db, me, workspaceId);
-  await db.query(`INSERT INTO org_profiles (workspace_id, legal_name, legal_form, governing_regime, registered_office, central_administration, updated_at) VALUES ($1,$2,$3,$4,$5,$6, now())
-    ON CONFLICT (workspace_id) DO UPDATE SET legal_name = EXCLUDED.legal_name, legal_form = EXCLUDED.legal_form, governing_regime = EXCLUDED.governing_regime, registered_office = EXCLUDED.registered_office, central_administration = EXCLUDED.central_administration, updated_at = now()`,
-  [workspaceId, text(body.legalName, 300, 'The legal name', { optional: true }), text(body.legalForm, 120, 'The legal form', { optional: true }), text(body.governingRegime, 120, 'The governing law', { optional: true }), address(body.registeredOffice, 'Registered office'), address(body.centralAdministration, 'Central administration')]);
+  // Left out, these two keep what they were. Issued invoices keep what they said: each is a document of its day.
+  const kind = body.entityKind ?? null, status = body.taxStatus ?? null;
+  if (kind && !['company', 'sole_proprietor'].includes(kind)) throw new CompanyError('Choose a company or a sole proprietor.', 'bad_input');
+  if (status && !['standard', 'small_business'].includes(status)) throw new CompanyError('Choose how this business handles tax.', 'bad_input');
+  const note = status === 'small_business' ? text(body.taxStatusNote, 300, 'What invoices say about tax') : null;
+  await db.query(`INSERT INTO org_profiles (workspace_id, legal_name, legal_form, governing_regime, registered_office, central_administration, entity_kind, tax_status, tax_status_note, updated_at) VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7,'company'), COALESCE($8,'standard'), $9, now())
+    ON CONFLICT (workspace_id) DO UPDATE SET legal_name = EXCLUDED.legal_name, legal_form = EXCLUDED.legal_form, governing_regime = EXCLUDED.governing_regime, registered_office = EXCLUDED.registered_office, central_administration = EXCLUDED.central_administration,
+      entity_kind = COALESCE($7, org_profiles.entity_kind), tax_status = COALESCE($8, org_profiles.tax_status), tax_status_note = CASE WHEN $8::text IS NULL THEN org_profiles.tax_status_note ELSE $9 END, updated_at = now()`,
+  [workspaceId, text(body.legalName, 300, 'The legal name', { optional: true }), text(body.legalForm, 120, 'The legal form', { optional: true }), text(body.governingRegime, 120, 'The governing law', { optional: true }), address(body.registeredOffice, 'Registered office'), address(body.centralAdministration, 'Central administration'), kind, status, note]);
   return read(db, me, workspaceId);
 }
 
