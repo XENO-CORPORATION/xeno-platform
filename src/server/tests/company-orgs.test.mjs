@@ -139,6 +139,29 @@ async function main() {
   ok(await refused(() => orgs.issueInvoice(pool, O, id, { currency: 'RON', buyer: BUYER, lines: [{ ...LINE, vatRate: 7 }] }), 'invalid_invoice'), 'a Romanian company still gets Romania’s rules');
   ok((await orgs.issueInvoice(pool, O, us.id, { currency: 'USD', buyer: buyerIn('US'), lines: [{ ...LINE, vatRate: 7 }] })).invoice.vatBreakdown[0].rate === 7, 'and nobody else does');
 
+  // one person is a business too: a Kleingewerbe, a PFA, a sole trader
+  const solo = await orgs.createOrg(pool, O, { name: 'Northwind Media', slug: `${tag}-solo` });
+  await company.saveProfile(pool, O, solo.id, { entityKind: 'sole_proprietor', legalName: 'Erika Mustermann', legalForm: 'Kleingewerbe', registeredOffice: office('DE') });
+  ok((await company.read(pool, O, solo.id)).profile.entityKind === 'sole_proprietor', 'a business can be one person');
+  ok(await refused(() => company.saveProfile(pool, O, solo.id, { entityKind: 'trust' }), 'bad_input'), 'and it’s one of the kinds we know');
+  ok(await refused(() => company.saveProfile(pool, O, solo.id, { taxStatus: 'small_business' }), 'bad_input'), 'a small business has to say what its invoices say');
+  await company.addTax(pool, O, solo.id, { scheme: 'tin', jurisdiction: 'DE', number: '12/345/67890' });
+  const NOTE = 'Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG';
+  await company.saveProfile(pool, O, solo.id, { entityKind: 'sole_proprietor', taxStatus: 'small_business', taxStatusNote: NOTE, legalName: 'Erika Mustermann', legalForm: 'Kleingewerbe', registeredOffice: office('DE') });
+  const SOLD = { quantity: 1, unitPrice: 10000, itemName: 'Editing' };
+  ok(await refused(() => orgs.issueInvoice(pool, O, solo.id, { currency: 'EUR', buyer: buyerIn('DE'), lines: [{ ...SOLD, vatCategory: 'S', vatRate: 19 }] }), 'small_business_no_tax'), 'a small business can’t charge tax by mistake');
+  const soloInv = await orgs.issueInvoice(pool, O, solo.id, { currency: 'EUR', buyer: buyerIn('DE'), lines: [SOLD] });
+  ok(soloInv.invoice.seller.name === 'Erika Mustermann' && soloInv.invoice.seller.tradingName === 'Northwind Media', 'the seller is the person, trading under the business’s name');
+  ok(soloInv.invoice.seller.taxRegistrationId === '12/345/67890' && !soloInv.invoice.seller.vatId, 'with their tax number, never written as a VAT id');
+  ok(soloInv.invoice.vatBreakdown[0].category === 'E' && soloInv.invoice.vatBreakdown[0].exemptionReason === NOTE, 'and the note is on the invoice without being typed');
+  ok(soloInv.invoice.totals.payableAmount === 10000, 'with no tax added');
+  await company.saveProfile(pool, O, solo.id, { taxStatus: 'standard', legalName: 'Erika Mustermann', legalForm: 'Kleingewerbe', registeredOffice: office('DE') });
+  const after19 = await company.read(pool, O, solo.id);
+  ok(after19.profile.taxStatus === 'standard' && !after19.profile.taxStatusNote && after19.profile.entityKind === 'sole_proprietor', 'it can stop being a small business, and stays a sole proprietor');
+  const taxed = await orgs.issueInvoice(pool, O, solo.id, { currency: 'EUR', buyer: buyerIn('DE'), lines: [{ ...SOLD, vatCategory: 'S', vatRate: 19 }] });
+  ok(taxed.invoice.totals.payableAmount === 11900, 'then it charges tax');
+  ok((await orgs.listInvoices(pool, O, solo.id)).find((i) => i.number === soloInv.number).invoice.vatBreakdown[0].exemptionReason === NOTE, 'and the invoice from before still says what it said');
+
   // D18: employment is an admission plus a title
   const agent = await orgs.employAgent(pool, O, id, { mindId: 'mind-1', displayName: 'Clerk', role: 'admin', capabilities: ['files.read', 'files.read', ' tasks.write '] });
   ok(agent.role === 'admin' && agent.employment.mindId === 'mind-1', 'an agent is employed with a role and a Mind');

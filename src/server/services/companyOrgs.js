@@ -398,12 +398,17 @@ export async function issueInvoice(pool, me, id, input = {}) {
   if (!Array.isArray(input.lines) || !input.lines.length) throw refuse('An invoice needs at least one line.', 'no_lines');
   if (!isCurrency(input.currency)) throw refuse('Choose the invoice’s currency.', 'invalid_currency');
   const profile = invoiceProfileFor(org.registration.jurisdiction);
+  // A small business charges no tax on anything, for one reason it has stated once. Category E, because O forbids a seller VAT id.
+  const tax = (await pool.query('SELECT tax_status, tax_status_note FROM org_profiles WHERE workspace_id = $1', [id])).rows[0];
+  const small = tax?.tax_status === 'small_business';
+  if (small && input.lines.some((l) => Number(l.vatRate) > 0)) throw refuse('This business is set as a small business, which charges no tax. Change that in its details first.', 'small_business_no_tax');
+  const lines = small ? input.lines.map(({ vatRate, ...l }) => ({ ...l, vatCategory: 'E', exemptionReason: tax.tax_status_note })) : input.lines;
   return authorityTransaction(pool, async (db) => {
     const issuedAt = new Date().toISOString();
     const number = await nextNumber(db, org, issuedAt);
     let invoice;
     try {
-      invoice = buildInvoice({ specificationId: profile.specificationId, id: number, issueDate: issuedAt.slice(0, 10), currency: input.currency, seller: sellerParty(org), buyer: input.buyer, lines: input.lines,
+      invoice = buildInvoice({ specificationId: profile.specificationId, id: number, issueDate: issuedAt.slice(0, 10), currency: input.currency, seller: sellerParty(org), buyer: input.buyer, lines,
         ...(input.dueDate ? { dueDate: input.dueDate } : {}), ...(input.paymentTerms ? { paymentTerms: input.paymentTerms } : {}), ...(input.note ? { note: input.note } : {}), ...(input.orderReference ? { orderReference: input.orderReference } : {}) });
     } catch (e) { throw refuse(e instanceof Error ? e.message : 'That invoice isn’t valid.', 'invalid_invoice'); }
     // Checked before it is stored. Refusing here rolls the number back, so an invalid invoice never leaves a gap.

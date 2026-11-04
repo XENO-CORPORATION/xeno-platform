@@ -78,32 +78,35 @@
     if (S.status !== 'ready') return h.page(head() + h.box('x', 'The company couldn’t be loaded', 'Nothing was changed.', h.btn('Try again', 'data-co2="retry"', true), 'sm'));
     const d = S.d, c = d.canManage, btn = (label, a, arg = '', ghost = true) => (c ? h.btn(label, `data-co2="${a}" data-arg="${esc(arg)}"`, ghost) : '');
     if (d.org.kind === 'personal') return h.page(head() + h.box('building', 'This is your personal workspace', 'A company has its own people, wallet and legal entity. Create one, or switch to one you belong to.', h.btn('Create a company', 'data-xa="newCompany"', false, 'plus')));
-    const p = d.profile, drop = (kind, id) => btn('Remove', 'remove', `${kind}|${id}`), view = viewOf(), bar = h.tabs(VIEWS, view, 'data-co2-view'), name = p.legalName || d.org.name;
+    const p = d.profile, solo = p.entityKind === 'sole_proprietor', noun = solo ? 'business' : 'company', drop = (kind, id) => btn('Remove', 'remove', `${kind}|${id}`), view = viewOf(), bar = h.tabs(VIEWS, view, 'data-co2-view'), name = p.legalName || d.org.name;
     if (view === 'invoices') return invoices(h, d, c, list, head, bar, name);
     if (view === 'activity') return h.page(head('', name) + bar + list('act', 'activity', (rows) => (rows.length ? h.table(['Who or what', 'What happened', 'When'], rows.map((a) => h.tr('', [esc([a.subject, a.detail].filter(Boolean).join(' · ')), esc(ACTIVITY[a.kind] || a.kind), esc(day(a.at))]))) : h.box('clock', 'Nothing yet', 'What happens in the company appears here.', '', 'sm'))));
     const regs = d.registrations.map((r) => row(`${esc(country(r.jurisdiction))} ${r.role === 'primary' ? '<span class="set-tag on">Primary</span>' : '<span class="set-tag">Branch</span>'}`, `${esc(r.register)} · ${esc(r.number)}${r.euid ? ` · EUID ${esc(r.euid)}` : ''}`, drop('registrations', r.id))).join('') || '<p class="pg-dim set-p">Not registered anywhere yet.</p>';
     const tax = d.tax.map((t) => row(`${t.scheme === 'vat' ? esc(t.prefix) : ''}${esc(t.number)} <span class="set-tag">${t.scheme === 'vat' ? 'VAT' : t.scheme === 'oss' ? 'OSS' : 'Tax'}</span>${t.check ? ` <span class="set-tag${t.check.result === 'valid' ? ' on' : ''}">${esc(CHECK[t.check.result])}</span>` : ''}`,
       `${esc(country(t.jurisdiction))}${t.check ? ` · checked ${esc(new Date(t.check.at).toLocaleDateString())}${t.check.consultationNumber ? ` · consultation ${esc(t.check.consultationNumber)}` : ''}` : ''}`,
       `${t.scheme === 'vat' ? btn('Check with VIES', 'check', t.id) : ''} ${drop('tax', t.id)}`)).join('') || '<p class="pg-dim set-p">No tax numbers yet.</p>';
-    const customs = d.customs.map((x) => row(esc(x.number), `EORI · ${esc(country(x.jurisdiction))}`, drop('customs', x.id))).join('') || '<p class="pg-dim set-p">None. Add an EORI when the company imports or exports.</p>';
-    const fin = d.financial.map((x) => row(`${esc(x.number)} <span class="set-tag${x.status === 'ISSUED' ? ' on' : ''}">${esc(x.status)}</span>`, `LEI${x.nextRenewal ? ` · renews ${esc(x.nextRenewal)}` : ''}`, drop('financial', x.id))).join('') || '<p class="pg-dim set-p">None. Add an LEI when the company trades on financial markets.</p>';
+    const customs = d.customs.map((x) => row(esc(x.number), `EORI · ${esc(country(x.jurisdiction))}`, drop('customs', x.id))).join('') || `<p class="pg-dim set-p">None. Add an EORI when the ${noun} imports or exports.</p>`;
+    const fin = d.financial.map((x) => row(`${esc(x.number)} <span class="set-tag${x.status === 'ISSUED' ? ' on' : ''}">${esc(x.status)}</span>`, `LEI${x.nextRenewal ? ` · renews ${esc(x.nextRenewal)}` : ''}`, drop('financial', x.id))).join('') || `<p class="pg-dim set-p">None. Add an LEI when the ${noun} trades on financial markets.</p>`;
     const mandates = d.mandates.map((m) => row(`${esc(m.name)} <span class="set-tag">${m.authority === 'sole' ? 'Acts alone' : 'Acts jointly'}</span>`, [esc(m.role), m.scope ? esc(m.scope) : '', m.validUntil ? `until ${esc(m.validUntil)}` : '', m.dateOfBirth ? `born ${esc(m.dateOfBirth)}` : ''].filter(Boolean).join(' · '), drop('mandates', m.id))).join('') || '<p class="pg-dim set-p">Nobody recorded yet.</p>';
     const b = S.bill;
     const walletCard = b ? `<section class="pg-sec"><div class="pg-sec-h"><h3>Wallet</h3></div><div class="pg-card-s" data-co2-wallet>${row(`${(b.wallet.available_credits || 0).toLocaleString()} credits`, `${b.wallet.pending_credits ? `${b.wallet.pending_credits.toLocaleString()} reserved for work running now · ` : ''}${b.seats} ${b.seats === 1 ? 'seat' : 'seats'}${b.wallet.is_frozen ? ' · frozen' : ''}`)}</div></section>` : '';
     if (view === 'wallet') return h.page(head('', name) + bar + (walletCard || h.box('x', 'The wallet couldn’t be loaded', 'Nothing was changed.', '', 'sm')) + `<section class="pg-sec"><div class="pg-sec-h"><h3>Ledger</h3></div>${list('tx', 'transactions', (rows) => (rows.length ? h.table(['What', 'Kind', 'When', 'Credits'], rows.map((t) => h.tr('', [esc(t.description || ''), esc(t.kind), esc(day(t.at)), esc(`${t.kind === 'grant' ? '+' : '−'}${t.amount.toLocaleString()}`)]))) : '<p class="pg-dim set-p">No entries yet. Credits appear here as the company’s products spend them.</p>'))}</section>`);
     return h.page(head(btn('Edit details', 'profile', '', true), esc(name)) + bar + `<div class="pg-cols"><div>`
       + `
-      <section class="pg-sec"><div class="pg-sec-h"><h3>Legal entity</h3></div><div class="pg-card-s">
-        ${row('Legal name', '', esc(p.legalName || '') || '<span class="pg-dim">Not set</span>')}
-        ${row('Legal form', p.governingRegime ? `Under ${esc(p.governingRegime)}` : '', esc(p.legalForm || '') || '<span class="pg-dim">Not set</span>')}
-        ${row('Registered office', '', addr(p.registeredOffice) || '<span class="pg-dim">Not set</span>')}
-        ${row('Central administration', 'Where it’s actually run. It can differ from the registered office.', addr(p.centralAdministration) || '<span class="pg-dim">Not set</span>')}
+      <section class="pg-sec"><div class="pg-sec-h"><h3>${solo ? 'Business' : 'Legal entity'}</h3></div><div class="pg-card-s">
+        ${row('What it is', solo ? 'You and the business are the same legal person, so its debts and contracts are yours.' : '', solo ? 'Sole proprietor' : 'Company')}
+        ${row(solo ? 'Owner' : 'Legal name', '', esc(p.legalName || '') || '<span class="pg-dim">Not set</span>')}
+        ${solo ? row('Trading as', '', esc(d.org.name)) : ''}
+        ${row(solo ? 'Business type' : 'Legal form', p.governingRegime ? `Under ${esc(p.governingRegime)}` : '', esc(p.legalForm || '') || '<span class="pg-dim">Not set</span>')}
+        ${row(solo ? 'Business address' : 'Registered office', '', addr(p.registeredOffice) || '<span class="pg-dim">Not set</span>')}
+        ${solo ? '' : row('Central administration', 'Where it’s actually run. It can differ from the registered office.', addr(p.centralAdministration) || '<span class="pg-dim">Not set</span>')}
+        ${row('Tax on invoices', p.taxStatus === 'small_business' ? esc(p.taxStatusNote || '') : '', p.taxStatus === 'small_business' ? 'Small business, no tax charged' : 'Charged per line')}
       </div></section>
       <section class="pg-sec"><div class="pg-sec-h"><h3>Registrations</h3>${btn('Add', 'addReg')}</div><div class="pg-card-s">${regs}</div></section>
       <section class="pg-sec"><div class="pg-sec-h"><h3>Tax</h3>${btn('Add', 'addTax')}</div><div class="pg-card-s">${tax}</div></section>
       <section class="pg-sec"><div class="pg-sec-h"><h3>Customs</h3>${btn('Add', 'addCustoms')}</div><div class="pg-card-s">${customs}</div></section>
       <section class="pg-sec"><div class="pg-sec-h"><h3>Financial markets</h3>${btn('Add', 'addFin')}</div><div class="pg-card-s">${fin}</div></section>
-      <section class="pg-sec"><div class="pg-sec-h"><h3>Who may act for the company</h3>${btn('Add', 'addMandate')}</div><div class="pg-card-s">${mandates}</div></section>
+      <section class="pg-sec"><div class="pg-sec-h"><h3>Who may act for the ${noun}</h3>${btn('Add', 'addMandate')}</div><div class="pg-card-s">${mandates}</div></section>
     </div><aside>${walletCard}
       <section class="pg-sec"><div class="pg-sec-h"><h3>Staff</h3></div><div class="pg-card-s">
         ${row('People', '', '<button class="pg-link" data-pg-ws="Members">Open</button>')}
@@ -115,9 +118,10 @@
   const statusOf = (i) => (i.invoice.typeCode === '381' ? 'Credit note' : i.creditedBy ? 'Reversed' : 'Issued');
   /** Why this company can't issue yet, the same two facts the server refuses on. */
   function blocked(d) {
-    if (!d.registration) return ['Add a registration or a tax number first', 'An invoice names the company by its legal identity.', ['Add a registration', 'data-co2="addReg"']];
+    const solo = d.profile.entityKind === 'sole_proprietor';
+    if (!d.registration) return solo ? ['Add your tax number first', 'An invoice names who is selling by their tax number.', ['Add a tax number', 'data-co2="addTax"']] : ['Add a registration or a tax number first', 'An invoice names the company by its legal identity.', ['Add a registration', 'data-co2="addReg"']];
     const o = d.registration.registeredOffice;
-    if (!o?.line1 || !o?.city || !/^[A-Z]{2}$/.test(o?.country || '')) return ['Add the registered office first', 'It goes on every invoice.', ['Edit details', 'data-co2="profile"']];
+    if (!o?.line1 || !o?.city || !/^[A-Z]{2}$/.test(o?.country || '')) return [`Add the ${solo ? 'business address' : 'registered office'} first`, 'It goes on every invoice.', ['Edit details', 'data-co2="profile"']];
     return null;
   }
   function invoices(h, d, c, list, head, bar, name) {
@@ -132,7 +136,7 @@
     const body = list('inv', 'invoices', (rows) => {
       const i = rows.find((x) => x.number === number);
       if (!i) return h.page(head('', name) + bar + h.box('x', 'No such invoice', `This company has no invoice ${esc(number)}.`, h.btn('All invoices', 'data-co2-view="invoices"', true), 'sm'));
-      const v = i.invoice, cur = v.currency, party = (x) => [x.name, x.tradingName && x.tradingName !== x.name ? `trading as ${x.tradingName}` : '', x.address?.line1, x.address?.city, x.address?.countrySubdivision, x.address?.country ? country(x.address.country) : '', x.vatId, x.legalRegistrationId].filter(Boolean).map(esc).join('<br>');
+      const v = i.invoice, cur = v.currency, party = (x) => [x.name, x.tradingName && x.tradingName !== x.name ? `trading as ${x.tradingName}` : '', x.address?.line1, [x.address?.postalCode, x.address?.city].filter(Boolean).join(' '), x.address?.countrySubdivision, x.address?.country ? country(x.address.country) : '', x.vatId, x.taxRegistrationId ? `Tax number ${x.taxRegistrationId}` : '', x.legalRegistrationId].filter(Boolean).map(esc).join('<br>');
       const canCredit = c && v.typeCode !== '381' && !i.creditedBy;
       const acts = h.btn('Download UBL', `data-co2="ubl" data-arg="${esc(number)}"`, true) + (canCredit ? h.btn('Credit note', `data-co2="credit" data-arg="${esc(number)}"`, true) : '');
       return h.page(head(acts, number) + bar + `<div class="pg-cols"><div>
@@ -165,15 +169,15 @@
     retry: () => { S.status = 'idle'; S.d = null; load(); },
     reread: (key) => { S[key] = null; paint(); },
     async newInvoice() {
-      const o = S.d.registration?.registeredOffice?.country || '', last = Array.isArray(S.inv) && S.inv[0]?.invoice.currency;
-      await D().form({ title: 'New invoice', sub: 'The seller is this company. Once issued it can’t be changed, only reversed by a credit note.', submit: 'Review', fields: [
+      const o = S.d.registration?.registeredOffice?.country || '', last = Array.isArray(S.inv) && S.inv[0]?.invoice.currency, small = S.d.profile.taxStatus === 'small_business';
+      await D().form({ title: 'New invoice', sub: `${small ? `No tax is charged. It will say: ${S.d.profile.taxStatusNote}` : `The seller is this ${S.d.profile.entityKind === 'sole_proprietor' ? 'business' : 'company'}.`} Once issued it can’t be changed, only reversed by a credit note.`, submit: 'Review', fields: [
         { id: 'b', label: 'Customer', required: true, max: 200 }, { id: 'bt', label: 'Customer’s tax number', max: 40 },
         { id: 'bc', label: 'City', required: true, max: 120 }, { id: 'br', label: 'State or region', max: 120 },
         { id: 'bk', label: 'Country', type: 'select', value: o, options: [['', 'Choose…'], ...COUNTRIES.filter(([c]) => c.length === 2)], required: true },
         { id: 'cur', label: 'Currency', type: 'select', value: last || 'EUR', options: CURRENCIES.map((c) => [c, c]) },
         { id: 'item', label: 'Item', required: true, max: 200 }, { id: 'q', label: 'Quantity', value: '1', max: 12 }, { id: 'price', label: 'Unit price', required: true, max: 20, placeholder: '100.00' },
-        { id: 'rate', label: 'Tax rate %', value: '0', max: 6 }, { id: 'reason', label: 'If no tax: why', max: 200, hint: 'An invoice that charges no tax has to say why.' },
-        { id: 'more', label: 'More lines', type: 'textarea', rows: 2, max: 2000, placeholder: 'Item; quantity; unit price; tax %', hint: 'One per line.' },
+        ...(small ? [] : [{ id: 'rate', label: 'Tax rate %', value: '0', max: 6 }, { id: 'reason', label: 'If no tax: why', max: 200, hint: 'An invoice that charges no tax has to say why.' }]),
+        { id: 'more', label: 'More lines', type: 'textarea', rows: 2, max: 2000, placeholder: small ? 'Item; quantity; unit price' : 'Item; quantity; unit price; tax %', hint: 'One per line.' },
         { id: 'due', label: 'Due date', max: 10, placeholder: 'YYYY-MM-DD' }, { id: 'note', label: 'Note', max: 500 },
       ], onSubmit: async (v) => {
         const cur = v.cur, lines = [], line = (item, q, price, rate) => {
@@ -181,11 +185,12 @@
           if (unitPrice === null) return `“${price}” isn’t an amount in ${cur} (${decimals(cur)} decimals).`;
           if (!(quantity > 0)) return `“${q}” isn’t a quantity.`;
           if (!(r >= 0 && r <= 100)) return `“${rate}” isn’t a tax rate.`;
+          if (small) { lines.push({ itemName: item, quantity, unitPrice }); return null; }
           if (r === 0 && !v.reason) return 'Say why no tax is charged.';
           lines.push({ itemName: item, quantity, unitPrice, ...(r > 0 ? { vatCategory: 'S', vatRate: r } : { vatCategory: 'O', exemptionReason: v.reason }) });
           return null;
         };
-        const bad = line(v.item, v.q, v.price, v.rate) || v.more.split('\n').map((x) => x.trim()).filter(Boolean).reduce((e, x) => { if (e) return e; const [a, b, p, r] = x.split(';').map((y) => y.trim()); return a && b && p ? line(a, b, p, r) : `Write “${x}” as: item; quantity; unit price; tax %.`; }, null);
+        const bad = line(v.item, v.q, v.price, v.rate) || v.more.split('\n').map((x) => x.trim()).filter(Boolean).reduce((e, x) => { if (e) return e; const [a, b, p, r] = x.split(';').map((y) => y.trim()); return a && b && p ? line(a, b, p, r) : `Write “${x}” as: item; quantity; unit price${small ? '' : '; tax %'}.`; }, null);
         if (bad) return bad;
         if (v.due && !/^\d{4}-\d{2}-\d{2}$/.test(v.due)) return 'Write the due date as YYYY-MM-DD.';
         const total = lines.reduce((n, l) => { const net = Math.round(l.quantity * l.unitPrice); return n + net + Math.round(net * (l.vatRate || 0) / 100); }, 0);
@@ -207,10 +212,13 @@
     },
     async profile() {
       const p = S.d.profile;
-      await D().form({ title: 'Company details', sub: 'As the register has them. They appear on what the company issues.', submit: 'Save', fields: [
-        { id: 'name', label: 'Legal name', max: 300, value: p.legalName || '' }, { id: 'form', label: 'Legal form', max: 120, value: p.legalForm || '', placeholder: 'e.g. SRL, GmbH, FZ-LLC' }, { id: 'regime', label: 'Governing law', max: 120, value: p.governingRegime || '', placeholder: 'e.g. Romanian law' },
-        ...addrFields('o', 'Registered office', p.registeredOffice), ...addrFields('a', 'Central administration', p.centralAdministration)],
-      onSubmit: async (v) => { const r = await api('PUT', `/api/orgs/${S.d.org.id}/profile`, { legalName: v.name, legalForm: v.form, governingRegime: v.regime, registeredOffice: addrOf(v, 'o'), centralAdministration: addrOf(v, 'a') }).catch(() => null); if (!r || !r.ok) return why(r, 'That couldn’t be saved.'); await load(); return null; } });
+      await D().form({ title: 'Details', sub: 'As the register or tax office has them. They appear on what this business issues.', submit: 'Save', fields: [
+        { id: 'kind', label: 'What it is', type: 'choice', cols: 2, value: p.entityKind, options: [['company', 'Company', 'Its own legal person: an SRL, a GmbH, an LLC.'], ['sole_proprietor', 'Sole proprietor', 'One person trading: a PFA, a Kleingewerbe, a sole trader.']] },
+        { id: 'name', label: 'Legal name', max: 300, value: p.legalName || '', hint: 'For a sole proprietor, the owner’s full name.' }, { id: 'form', label: 'Legal form', max: 120, value: p.legalForm || '', placeholder: 'e.g. SRL, GmbH, FZ-LLC, PFA, Kleingewerbe' }, { id: 'regime', label: 'Governing law', max: 120, value: p.governingRegime || '', placeholder: 'e.g. Romanian law' },
+        { id: 'tax', label: 'Tax on invoices', type: 'choice', cols: 2, value: p.taxStatus, options: [['standard', 'Charged per line', 'Each line has its own rate.'], ['small_business', 'Small business, none', 'Exempt, with one note on every invoice.']], hint: 'Change this the day the business stops being exempt. Invoices already issued stay as they are.' },
+        { id: 'note', label: 'What invoices say when no tax is charged', max: 300, value: p.taxStatusNote || '', placeholder: 'e.g. Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG', hint: 'Use your country’s own wording. Your tax office or adviser can confirm it.' },
+        ...addrFields('o', p.entityKind === 'sole_proprietor' ? 'Business address' : 'Registered office', p.registeredOffice), ...addrFields('a', 'Central administration', p.centralAdministration)],
+      onSubmit: async (v) => { if (v.tax === 'small_business' && !v.note.trim()) return 'Say what invoices should state about tax.'; const r = await api('PUT', `/api/orgs/${S.d.org.id}/profile`, { entityKind: v.kind, taxStatus: v.tax, taxStatusNote: v.note, legalName: v.name, legalForm: v.form, governingRegime: v.regime, registeredOffice: addrOf(v, 'o'), centralAdministration: addrOf(v, 'a') }).catch(() => null); if (!r || !r.ok) return why(r, 'That couldn’t be saved.'); await load(); return null; } });
     },
     async addReg() {
       const has = S.d.registrations.some((r) => r.role === 'primary');
