@@ -70,22 +70,24 @@ async function membership(pool, workspaceId, me, action, input) {
 // ---------- the org ----------
 const noNulls = (o) => (o ? Object.fromEntries(Object.entries(o).filter(([, v]) => v != null)) : o);
 async function registrationOf(db, w) {
-  const tin = (await db.query(`SELECT id, number, jurisdiction FROM org_tax_identifiers WHERE workspace_id = $1 AND scheme = 'tin' ORDER BY created_at LIMIT 1`, [w.id])).rows[0];
-  if (!tin) return {};
-  const [profile, primary, vat, check] = await Promise.all([
+  // A company set up in Corpo › Company may hold a registration or a VAT number and no separate tax id, and that is enough.
+  const [tinRow, profile, primary, vat] = await Promise.all([
+    db.query(`SELECT id, number, jurisdiction FROM org_tax_identifiers WHERE workspace_id = $1 AND scheme = 'tin' ORDER BY created_at LIMIT 1`, [w.id]),
     db.query('SELECT legal_name, legal_form, registered_office, central_administration FROM org_profiles WHERE workspace_id = $1', [w.id]),
-    db.query(`SELECT register_name, national_number, euid FROM org_registrations WHERE workspace_id = $1 AND role = 'primary'`, [w.id]),
+    db.query(`SELECT jurisdiction, register_name, national_number, euid FROM org_registrations WHERE workspace_id = $1 AND role = 'primary'`, [w.id]),
     db.query(`SELECT prefix, number, jurisdiction FROM org_tax_identifiers WHERE workspace_id = $1 AND scheme = 'vat' ORDER BY created_at`, [w.id]),
-    db.query(`SELECT raw_response FROM org_identifier_checks WHERE tax_identifier_id = $1 AND result = 'valid' ORDER BY checked_at DESC LIMIT 1`, [tin.id]),
   ]);
-  const p = profile.rows[0] || {}, reg = primary.rows[0], j = tin.jurisdiction;
+  const tin = tinRow.rows[0];
+  if (!tin && !primary.rows.length && !vat.rows.length) return {};
+  const check = tin ? await db.query(`SELECT raw_response FROM org_identifier_checks WHERE tax_identifier_id = $1 AND result = 'valid' ORDER BY checked_at DESC LIMIT 1`, [tin.id]) : { rows: [] };
+  const p = profile.rows[0] || {}, reg = primary.rows[0], j = tin?.jurisdiction ?? reg?.jurisdiction ?? vat.rows[0].jurisdiction;
   const registration = {
     jurisdiction: j,
     legalForm: p.legal_form || '',
     ...(p.legal_name ? { legalName: p.legal_name } : {}),
     ...(reg?.register_name ? { register: reg.register_name } : {}),
     identifiers: [
-      { kind: 'national', value: tin.number, jurisdiction: j },
+      ...(tin ? [{ kind: 'national', value: tin.number, jurisdiction: j }] : []),
       ...(reg ? [{ kind: 'registry', value: reg.national_number, jurisdiction: j }] : []),
       ...(reg?.euid ? [{ kind: 'euid', value: reg.euid, jurisdiction: j }] : []),
       ...vat.rows.map((v) => ({ kind: 'vat', value: `${v.prefix ?? ''}${v.number}`, jurisdiction: v.jurisdiction })),

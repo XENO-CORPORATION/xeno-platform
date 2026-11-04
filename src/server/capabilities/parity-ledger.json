@@ -11103,6 +11103,55 @@
       "scope": "none",
       "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
     },
+    "ui:platform-company.js:data-co2-view=invoices": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "moves between this screen’s tabs; the data each shows is already covered"
+    },
+    "ui:platform-company.js:data-co2-open": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "opens an invoice on this screen; reading invoices is already covered"
+    },
+    "ui:platform-company.js:data-co2=reread": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "reads this screen’s list again; the data it shows is already covered"
+    },
+    "ui:platform-company.js:data-co2=ubl": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "saves the UBL of an invoice already read through the covered route"
+    },
+    "ui:platform-company.js:data-co2=newInvoice": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "an invoice is a legal document a company answers for; the service refuses an agent"
+    },
+    "ui:platform-company.js:data-co2=credit": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "a credit note is a legal document a company answers for; the service refuses an agent"
+    },
+    "ui:platform-company.js:data-co2=profile": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
     "ui:platform-company.js:data-co2=retry": {
       "status": "excluded",
       "category": "view-state",
