@@ -5,11 +5,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-04
 
-**XENO Company's dashboard is live at xenosystem.ai/company.**
+**XENO Company lives in the workspace.**
 
-- It opens on your own XENO session, with no second sign-in. If you're signed out, it sends you to sign in and brings you back to the same address.
-- Every company and person has a real address, so refresh, Back and shared links land in the same place. Corpo › Company has an Open dashboard button.
-- The dashboard publishes on its own: an update or rollback needs no platform deploy.
+- Corpo › Company now has Overview, Invoices, Wallet and Activity in its header, in the workspace's own design. People, Agents and Divisions stay on their own pages.
+- Issue an invoice from Invoices. Each invoice has its own address, with its lines, totals and UBL download, and a mistake is reversed with a credit note.
+- The workspace's company forms no longer assume Romania. A company set up there can invoice with a VAT number or a registration alone.
+- /company sends you to the workspace page.
 
 **XENO Company's dashboard has its whole backend.**
 

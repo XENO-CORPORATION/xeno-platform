@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import pg from 'pg';
 import { runAllMigrations } from '../services/migrationRunner.js';
+import * as company from '../services/companyEntity.js';
 import * as orgs from '../services/companyOrgs.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -124,6 +125,11 @@ async function main() {
   ok(await refused(() => orgs.createOrg(pool, O, { name: 'Nowhere', slug: `${tag}-zz`, registration: { jurisdiction: 'ZZ', legalForm: 'LLC', nationalId: '1' } }), 'invalid_jurisdiction'), 'a country that doesn’t exist is refused');
   ok(await refused(() => orgs.createOrg(pool, O, { name: 'Greek', slug: `${tag}-gr`, registration: { jurisdiction: 'GR', legalForm: 'AE', nationalId: '1', vatId: 'GR123456789' } }), 'bad_prefix'), 'the identifier rules hold at founding too');
   ok((await pool.query('SELECT count(*)::int n FROM workspaces WHERE slug = $1', [`${tag}-gr`])).rows[0].n === 0, 'and a refused founding leaves nothing behind');
+  const corpo = await orgs.createOrg(pool, O, { name: 'Set Up In Corpo', slug: `${tag}-corpo` });
+  await company.saveProfile(pool, O, corpo.id, { legalName: 'Corpo Ltd', legalForm: 'Ltd', registeredOffice: office('NZ') });
+  await company.addTax(pool, O, corpo.id, { scheme: 'vat', prefix: 'NZ', number: '123456789', jurisdiction: 'NZ' });
+  const corpoInv = await orgs.issueInvoice(pool, O, corpo.id, { currency: 'NZD', buyer: buyerIn('NZ'), lines: [NO_TAX] });
+  ok(corpoInv.invoice.seller.name === 'Corpo Ltd' && corpoInv.invoice.seller.vatId === 'NZ123456789', 'a company set up in the workspace’s own screen invoices with no separate tax id');
   const bare = await orgs.createOrg(pool, O, { name: 'No Office', slug: `${tag}-bare`, registration: { jurisdiction: 'DE', legalForm: 'GmbH', nationalId: '123' } });
   ok(await refused(() => orgs.issueInvoice(pool, O, bare.id, { currency: 'EUR', buyer: buyerIn('DE'), lines: [NO_TAX] }), 'no_registered_office'), 'an invoice needs the registered office, whatever the country');
   const beforeBad = await orgs.listInvoices(pool, O, us.id);
