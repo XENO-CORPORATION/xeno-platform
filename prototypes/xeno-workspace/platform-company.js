@@ -53,7 +53,7 @@
     const mandates = d.mandates.map((m) => row(`${esc(m.name)} <span class="set-tag">${m.authority === 'sole' ? 'Acts alone' : 'Acts jointly'}</span>`, [esc(m.role), m.scope ? esc(m.scope) : '', m.validUntil ? `until ${esc(m.validUntil)}` : '', m.dateOfBirth ? `born ${esc(m.dateOfBirth)}` : ''].filter(Boolean).join(' · '), drop('mandates', m.id))).join('') || '<p class="pg-dim set-p">Nobody recorded yet.</p>';
     const b = S.bill;
     const money = b ? `<section class="pg-sec"><div class="pg-sec-h"><h3>Wallet</h3></div><div class="pg-card-s" data-co2-wallet>${row(`${(b.wallet.available_credits || 0).toLocaleString()} credits`, `${b.wallet.pending_credits ? `${b.wallet.pending_credits.toLocaleString()} reserved for work running now · ` : ''}${b.seats} ${b.seats === 1 ? 'seat' : 'seats'}${b.wallet.is_frozen ? ' · frozen' : ''}`)}</div></section>` : '';
-    return h.page(head(btn('Edit details', 'profile', '', true), esc(p.legalName || d.org.name)) + `<div class="pg-cols"><div>
+    return h.page(head(h.btn('Open dashboard', 'data-co2="dashboard"', true) + btn('Edit details', 'profile', '', true), esc(p.legalName || d.org.name)) + `<div class="pg-cols"><div>
       <section class="pg-sec"><div class="pg-sec-h"><h3>Legal entity</h3></div><div class="pg-card-s">
         ${row('Legal name', '', esc(p.legalName || '') || '<span class="pg-dim">Not set</span>')}
         ${row('Legal form', p.governingRegime ? `Under ${esc(p.governingRegime)}` : '', esc(p.legalForm || '') || '<span class="pg-dim">Not set</span>')}
@@ -83,6 +83,7 @@
   const addrOf = (v, id) => (v[`${id}1`].trim() ? { line1: v[`${id}1`], city: v[`${id}C`], postalCode: v[`${id}P`], country: v[`${id}K`] } : null);
   const ACT = {
     retry: () => { S.status = 'idle'; S.d = null; load(); },
+    dashboard: () => { location.assign(`/company/${encodeURIComponent(window.XENO_SCOPE?.uuid?.() || '')}`); },
     async profile() {
       const p = S.d.profile;
       await D().form({ title: 'Company details', sub: 'As the register has them. They appear on what the company issues.', submit: 'Save', fields: [
