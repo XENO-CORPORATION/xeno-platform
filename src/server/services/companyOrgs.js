@@ -14,6 +14,10 @@
  * Only issued invoices are new, and they are legal documents: built by the vendored @xenosystem/company-legal, numbered
  * inside the transaction that stores them so the series is gapless, immutable once out (a DB trigger), corrected only by a
  * credit note. Changing a company, issuing and crediting are a person's acts, as in companyEntity.js.
+ *
+ * A company can be registered in any country (owner, 2026-11-04). What it states is enough; a register, where one is
+ * connected, confirms it. A country's rules are an add-on picked by `invoiceProfileFor`, and nothing here submits
+ * anything to a tax authority.
  */
 import * as company from './companyEntity.js';
 import * as agents from './platformAgents.js';
@@ -23,7 +27,7 @@ import { mutateWorkspaceMembership } from './workspaceMembershipOperations.js';
 import { authorityTransaction } from './workspaceOperationReceipts.js';
 import { ensureWorkspaceWallet, walletBalance } from './walletService.js';
 import { listObjectTuples, writeTuples, ROLE_RANK } from '../utils/authzReBAC.js';
-import { AnafConnector, CIUS_RO_ID, InvoiceSeries, PACKS, buildCreditNote, buildInvoice, toPostalAddress, toUbl, validateRoInvoice } from '../vendor/xeno-company/company-legal.mjs';
+import { AnafConnector, InvoiceSeries, buildCreditNote, buildInvoice, checkRegistration, countryOf, invoiceBlocker, invoiceProfileFor, isCurrency, sellerParty, toUbl } from '../vendor/xeno-company/company-legal.mjs';
 
 const { CompanyError, can, companyOf, manager } = company;
 export { CompanyError };
@@ -69,8 +73,8 @@ async function registrationOf(db, w) {
   const tin = (await db.query(`SELECT id, number, jurisdiction FROM org_tax_identifiers WHERE workspace_id = $1 AND scheme = 'tin' ORDER BY created_at LIMIT 1`, [w.id])).rows[0];
   if (!tin) return {};
   const [profile, primary, vat, check] = await Promise.all([
-    db.query('SELECT legal_form, registered_office, central_administration FROM org_profiles WHERE workspace_id = $1', [w.id]),
-    db.query(`SELECT national_number, euid FROM org_registrations WHERE workspace_id = $1 AND role = 'primary'`, [w.id]),
+    db.query('SELECT legal_name, legal_form, registered_office, central_administration FROM org_profiles WHERE workspace_id = $1', [w.id]),
+    db.query(`SELECT register_name, national_number, euid FROM org_registrations WHERE workspace_id = $1 AND role = 'primary'`, [w.id]),
     db.query(`SELECT prefix, number, jurisdiction FROM org_tax_identifiers WHERE workspace_id = $1 AND scheme = 'vat' ORDER BY created_at`, [w.id]),
     db.query(`SELECT raw_response FROM org_identifier_checks WHERE tax_identifier_id = $1 AND result = 'valid' ORDER BY checked_at DESC LIMIT 1`, [tin.id]),
   ]);
@@ -78,13 +82,15 @@ async function registrationOf(db, w) {
   const registration = {
     jurisdiction: j,
     legalForm: p.legal_form || '',
+    ...(p.legal_name ? { legalName: p.legal_name } : {}),
+    ...(reg?.register_name ? { register: reg.register_name } : {}),
     identifiers: [
       { kind: 'national', value: tin.number, jurisdiction: j },
       ...(reg ? [{ kind: 'registry', value: reg.national_number, jurisdiction: j }] : []),
       ...(reg?.euid ? [{ kind: 'euid', value: reg.euid, jurisdiction: j }] : []),
-      ...vat.rows.map((v) => ({ kind: 'vat', value: `${v.prefix}${v.number}`, jurisdiction: v.jurisdiction })),
+      ...vat.rows.map((v) => ({ kind: 'vat', value: `${v.prefix ?? ''}${v.number}`, jurisdiction: v.jurisdiction })),
     ],
-    registeredOffice: noNulls(p.registered_office) || { line1: '', city: '', postalCode: '', country: j },
+    registeredOffice: noNulls(p.registered_office) || { line1: '', city: '', postalCode: '', country: countryOf(j) },
     ...(p.central_administration ? { centralAdministration: noNulls(p.central_administration) } : {}),
   };
   const evidence = check.rows[0]?.raw_response;
@@ -107,12 +113,9 @@ export async function listOrgs(db, me) {
 
 function cleanRegistration(r) {
   if (r == null) return null;
-  const pack = PACKS[r.jurisdiction];
-  if (!pack) throw refuse(`XENO Company doesn’t support ${String(r.jurisdiction)} yet.`, 'unsupported_jurisdiction');
-  const v = pack.validateNationalId(String(r.nationalId ?? ''));
-  if (v.code !== 'ok') throw refuse(v.message || 'That tax id isn’t valid.', 'invalid_national_id');
-  if (!pack.legalForms.includes(r.legalForm)) throw refuse(`“${r.legalForm}” isn’t a ${pack.displayName} legal form (${pack.legalForms.join(', ')}).`, 'invalid_legal_form');
-  return { jurisdiction: r.jurisdiction, legalForm: r.legalForm, nationalId: v.normalised, legalName: typeof r.legalName === 'string' && r.legalName.trim() ? r.legalName.trim() : null };
+  const v = checkRegistration(r);
+  if (!v.ok) throw refuse(v.message, v.code);
+  return v;
 }
 
 export async function createOrg(pool, me, input = {}, { connector = defaultConnector } = {}) {
@@ -126,8 +129,14 @@ export async function createOrg(pool, me, input = {}, { connector = defaultConne
     workspace = await authorityTransaction(pool, async (db) => {
       const w = await createAccountWorkspace(db, me.id, name, 'company', input.slug);
       if (reg) {
-        await db.query('INSERT INTO org_profiles(workspace_id, legal_name, legal_form) VALUES($1,$2,$3)', [w.id, reg.legalName, reg.legalForm]);
+        await db.query('INSERT INTO org_profiles(workspace_id, legal_name, legal_form, registered_office) VALUES($1,$2,$3,$4)', [w.id, reg.legalName ?? null, reg.legalForm, reg.registeredOffice ?? null]);
         await db.query(`INSERT INTO org_tax_identifiers(workspace_id, scheme, number, jurisdiction) VALUES($1,'tin',$2,$3)`, [w.id, reg.nationalId, reg.jurisdiction]);
+        // Through the service Corpo › Company uses, so its rules are the same ones.
+        if (reg.registryNumber) await company.addRegistration(db, me, w.id, { jurisdiction: reg.jurisdiction, register: reg.register || `${reg.jurisdiction} register`, number: reg.registryNumber });
+        if (reg.vatId) {
+          const m = /^([A-Z]{2})(.+)$/.exec(reg.vatId);
+          await company.addTax(db, me, w.id, { scheme: 'vat', jurisdiction: reg.jurisdiction, prefix: m?.[1] ?? countryOf(reg.jurisdiction), number: m?.[2] ?? reg.vatId });
+        }
       }
       return w;
     });
@@ -145,7 +154,7 @@ export async function verifyRegistration(pool, me, id, { connector = defaultConn
   const tin = (await pool.query(`SELECT id, number, jurisdiction FROM org_tax_identifiers WHERE workspace_id = $1 AND scheme = 'tin' ORDER BY created_at LIMIT 1`, [id])).rows[0];
   if (!tin) throw refuse('This company has no registration to verify.', 'no_registration');
   const register = connector(tin.jurisdiction);
-  if (!register) throw refuse('No register is connected for this country.', 'no_register', 503);
+  if (!register) throw refuse('No register is connected for this country, so what the company states stands.', 'no_register', 503);
   let r;
   try { r = await register.lookupEntity(tin.number); }
   catch { r = { status: 'unavailable', evidence: { checkedAt: new Date().toISOString(), asOf: new Date().toISOString().slice(0, 10), source: 'register' } }; }
@@ -162,7 +171,7 @@ export async function verifyRegistration(pool, me, id, { connector = defaultConn
     [id, e.legalName, e.address ?? null]);
     if (e.registryId) {
       await db.query(`INSERT INTO org_registrations(workspace_id, jurisdiction, register_name, national_number, role) VALUES($1,$2,$3,$4,'primary')
-        ON CONFLICT (workspace_id) WHERE role = 'primary' DO UPDATE SET national_number = EXCLUDED.national_number`, [id, tin.jurisdiction, 'ONRC', e.registryId]);
+        ON CONFLICT (workspace_id) WHERE role = 'primary' DO UPDATE SET national_number = EXCLUDED.national_number`, [id, tin.jurisdiction, register.registerName ?? `${tin.jurisdiction} register`, e.registryId]);
     }
     // Only when the register says so: a company can hold a tax id and no VAT number (§4.2 rule 1).
     if (e.vatRegistered) {
@@ -370,13 +379,6 @@ export async function listTransactions(db, me, id) {
 }
 
 // ---------- invoices: legal documents ----------
-/** The seller comes from the company, never from the request: the one party nobody may mistype on their own invoice. */
-function sellerOf(org) {
-  const reg = org.registration;
-  const vat = reg.identifiers.find((i) => i.kind === 'vat')?.value, registry = reg.identifiers.find((i) => i.kind === 'registry')?.value;
-  const verified = org.registrationEvidence?.verifiedName;
-  return { name: verified ?? org.name, ...(verified && verified !== org.name ? { tradingName: org.name } : {}), ...(vat ? { vatId: vat } : {}), ...(registry ? { legalRegistrationId: registry, legalRegistrationScheme: 'ONRC' } : {}), address: toPostalAddress(reg.registeredOffice) };
-}
 /** The next number, taken under the series row's lock in the caller's transaction: a rollback gives it back. */
 async function nextNumber(db, org, issuedAt) {
   const series = `${org.slug.toUpperCase().slice(0, 8)}-${new Date(issuedAt).getUTCFullYear()}`;
@@ -389,18 +391,21 @@ const invoiceShape = (orgId, r) => ({ number: r.number, orgId, issuedAt: iso(r.i
 export async function issueInvoice(pool, me, id, input = {}) {
   const w = await manager(pool, me, id);
   const org = await orgShape(pool, w);
-  if (!org.registration) throw refuse('Only a registered company can issue an invoice: add its legal registration first.', 'not_registered');
+  const blocked = invoiceBlocker(org.registration);
+  if (blocked) throw refuse(blocked, org.registration ? 'no_registered_office' : 'not_registered');
   if (!Array.isArray(input.lines) || !input.lines.length) throw refuse('An invoice needs at least one line.', 'no_lines');
+  if (!isCurrency(input.currency)) throw refuse('Choose the invoice’s currency.', 'invalid_currency');
+  const profile = invoiceProfileFor(org.registration.jurisdiction);
   return authorityTransaction(pool, async (db) => {
     const issuedAt = new Date().toISOString();
     const number = await nextNumber(db, org, issuedAt);
     let invoice;
     try {
-      invoice = buildInvoice({ specificationId: CIUS_RO_ID, id: number, issueDate: issuedAt.slice(0, 10), currency: 'RON', seller: sellerOf(org), buyer: input.buyer, lines: input.lines,
+      invoice = buildInvoice({ specificationId: profile.specificationId, id: number, issueDate: issuedAt.slice(0, 10), currency: input.currency, seller: sellerParty(org), buyer: input.buyer, lines: input.lines,
         ...(input.dueDate ? { dueDate: input.dueDate } : {}), ...(input.paymentTerms ? { paymentTerms: input.paymentTerms } : {}), ...(input.note ? { note: input.note } : {}), ...(input.orderReference ? { orderReference: input.orderReference } : {}) });
     } catch (e) { throw refuse(e instanceof Error ? e.message : 'That invoice isn’t valid.', 'invalid_invoice'); }
     // Checked before it is stored. Refusing here rolls the number back, so an invalid invoice never leaves a gap.
-    const check = validateRoInvoice(invoice);
+    const check = profile.validate(invoice);
     if (!check.valid) throw refuse(`The invoice fails validation: ${check.violations.map((v) => `${v.rule} ${v.message}`).join('; ')}`, 'invalid_invoice');
     const row = (await db.query(`INSERT INTO org_issued_invoices(workspace_id, number, kind, document, ubl, issued_at, issued_by_user_id) VALUES($1,$2,'invoice',$3,$4,$5,$6) RETURNING *`,
       [id, number, invoice, toUbl(invoice), issuedAt, me.id])).rows[0];

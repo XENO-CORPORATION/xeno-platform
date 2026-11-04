@@ -1,9 +1,9 @@
 // GENERATED from xeno-company/packages/legal. Do not edit: change it there, then scripts/company-legal-vendor.mjs --sync --confirm.
-// ../xeno-company-pr/packages/legal/src/types.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/types.ts
 var ok = (normalised) => ({ code: "ok", normalised });
 var fail = (code, message) => ({ code, message });
 
-// ../xeno-company-pr/packages/legal/src/connector.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/connector.ts
 function isIsoDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
@@ -17,7 +17,7 @@ var ConnectorError = class extends Error {
   }
 };
 
-// ../xeno-company-pr/packages/legal/src/packs/ro.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/packs/ro.ts
 function cuiChecksum(digits) {
   if (!/^\d{2,10}$/.test(digits)) return false;
   const KEY = "753217532";
@@ -131,12 +131,13 @@ var RO = {
   cius: "RO_CIUS (EN 16931 national narrowing)"
 };
 
-// ../xeno-company-pr/packages/legal/src/connectors/anaf.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/connectors/anaf.ts
 var TVA_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva";
 var REGISTRU_URL = "https://webservicesp.anaf.ro/api/registruroefactura/v1/interogare";
 var ANAF_BATCH_LIMIT = 100;
 var AnafConnector = class {
   jurisdiction = "RO";
+  registerName = "ONRC";
   requiresCredentials = false;
   #fetch;
   #now;
@@ -265,7 +266,7 @@ function addressOf(r) {
   };
 }
 
-// ../xeno-company-pr/packages/legal/src/connectors/vies.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/connectors/vies.ts
 var BASE = "https://ec.europa.eu/taxation_customs/vies/rest-api/ms";
 var RETRYABLE = /* @__PURE__ */ new Set([
   "MS_UNAVAILABLE",
@@ -342,7 +343,7 @@ var ViesValidator = class {
   }
 };
 
-// ../xeno-company-pr/packages/legal/src/invoice/money.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/money.ts
 var minor = (n) => {
   if (!Number.isInteger(n)) throw new RangeError(`Minor units must be an integer, got ${n}`);
   if (!Number.isSafeInteger(n)) throw new RangeError(`Amount ${n} exceeds safe integer range`);
@@ -359,6 +360,11 @@ function parseAmount(value, decimals = 2) {
   const padded = frac.padEnd(decimals, "0");
   const n = Number(whole) * 10 ** decimals + Number(padded || "0");
   return minor(neg ? -n : n);
+}
+var currencyCodes = () => Intl.supportedValuesOf("currency");
+var isCurrency = (code) => typeof code === "string" && currencyCodes().includes(code);
+function currencyDecimals(code) {
+  return new Intl.NumberFormat("en", { style: "currency", currency: code }).resolvedOptions().maximumFractionDigits ?? 2;
 }
 function formatAmount(m, decimals = 2) {
   const neg = m < 0;
@@ -384,7 +390,7 @@ function lineAmount(quantity, unitPriceMinor, decimals = 2) {
   return minor(rounded === 0 ? 0 : rounded);
 }
 
-// ../xeno-company-pr/packages/legal/src/invoice/model.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/model.ts
 function toPostalAddress(address) {
   const { region, ...rest } = address;
   return { ...rest, ...region ? { countrySubdivision: region } : {} };
@@ -392,7 +398,7 @@ function toPostalAddress(address) {
 var NO_VAT_CATEGORIES = ["E", "AE", "K", "G", "O"];
 var ZERO_RATE_CATEGORIES = ["Z", "E", "AE", "K", "G", "O"];
 
-// ../xeno-company-pr/packages/legal/src/invoice/rules.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/rules.ts
 var v = (rule, message, term) => term === void 0 ? { rule, message } : { rule, term, message };
 var ZERO = 0;
 function mismatch(actual, expected) {
@@ -543,7 +549,7 @@ function categoryRules(b, inv) {
   return out;
 }
 
-// ../xeno-company-pr/packages/legal/src/invoice/ubl.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/ubl.ts
 var NS = {
   inv: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",
   cac: "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
@@ -553,7 +559,7 @@ function esc(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 var el = (tag, value, attrs = "") => value === void 0 || value === "" ? "" : `<${tag}${attrs}>${esc(value)}</${tag}>`;
-var amt = (tag, minorValue, currency) => `<${tag} currencyID="${esc(currency)}">${formatAmount(minorValue)}</${tag}>`;
+var amt = (tag, minorValue, currency) => `<${tag} currencyID="${esc(currency)}">${formatAmount(minorValue, currencyDecimals(currency))}</${tag}>`;
 function addressXml(p) {
   const a = p.address;
   return [
@@ -656,7 +662,7 @@ function toUbl(inv) {
   return `<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="${NS.inv}" xmlns:cac="${NS.cac}" xmlns:cbc="${NS.cbc}">` + body + "</Invoice>";
 }
 
-// ../xeno-company-pr/packages/legal/src/invoice/build.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/build.ts
 var InvoiceBuildError = class extends Error {
   constructor(message) {
     super(message);
@@ -689,6 +695,9 @@ function breakdown(lines, reasons) {
 function buildInvoice(draft) {
   if (!draft.lines.length) {
     throw new InvoiceBuildError("An invoice needs at least one line (BR-16)");
+  }
+  if (!isCurrency(draft.currency)) {
+    throw new InvoiceBuildError(`"${draft.currency}" is not a currency (BR-5)`);
   }
   const reasons = /* @__PURE__ */ new Map();
   const lines = draft.lines.map((d, i) => {
@@ -817,7 +826,7 @@ var InvoiceSeries = class {
   }
 };
 
-// ../xeno-company-pr/packages/legal/src/invoice/cius-ro.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/cius-ro.ts
 var CIUS_RO_ID = "urn:cen.eu:en16931:2017#compliant#urn:efactura.mfinante.ro:CIUS-RO:1.0.1";
 var v2 = (rule, message, term) => term === void 0 ? { rule, message } : { rule, term, message };
 function validateRoInvoice(inv) {
@@ -880,37 +889,140 @@ function validateRoInvoice(inv) {
 }
 var RO_VAT_RATES = [21, 19, 11, 9, 5];
 
-// ../xeno-company-pr/packages/legal/src/index.ts
+// ../xeno-company-neutral-invoices/packages/legal/src/invoice/profile.ts
+var EN16931_ID = "urn:cen.eu:en16931:2017";
+var CORE = { specificationId: EN16931_ID, validate: validateInvoice, localRules: null };
+var ADD_ONS = /* @__PURE__ */ new Map([
+  ["RO", { specificationId: CIUS_RO_ID, validate: validateRoInvoice, localRules: "RO" }]
+]);
+var invoiceProfileFor = (jurisdiction) => ADD_ONS.get(jurisdiction) ?? CORE;
+
+// ../xeno-company-neutral-invoices/packages/legal/src/countries.ts
+var COUNTRY_CODES = "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW".split(" ");
+var KNOWN = new Set(COUNTRY_CODES);
+var isCountryCode = (v3) => typeof v3 === "string" && KNOWN.has(v3);
+var isJurisdiction = (v3) => typeof v3 === "string" && /^[A-Z]{2}(-[A-Z0-9]{1,6})?$/.test(v3) && KNOWN.has(v3.slice(0, 2));
+var countryOf = (jurisdiction) => jurisdiction.slice(0, 2);
+function countryName(code, locale = "en") {
+  try {
+    return new Intl.DisplayNames([locale], { type: "region" }).of(countryOf(code)) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+// ../xeno-company-neutral-invoices/packages/legal/src/registration.ts
+var text = (v3, max) => {
+  const s = typeof v3 === "string" ? v3.trim() : "";
+  return s.length <= max ? s : "";
+};
+var no = (code, message) => ({ ok: false, code, message });
+function checkRegistration(r, packFor2) {
+  const jurisdiction = r?.jurisdiction;
+  if (!isJurisdiction(jurisdiction)) return no("invalid_jurisdiction", "Choose a country.");
+  const pack = packFor2(jurisdiction);
+  let nationalId = text(r?.nationalId, 60);
+  if (pack) {
+    const v3 = pack.validateNationalId(String(r?.nationalId ?? ""));
+    if (v3.code !== "ok") return no("invalid_national_id", v3.message ?? "That tax number isn\u2019t valid.");
+    nationalId = v3.normalised ?? nationalId;
+  } else if (!nationalId) return no("invalid_national_id", "Give the company\u2019s tax or company number.");
+  const legalForm = text(r?.legalForm, 120);
+  if (!legalForm) return no("invalid_legal_form", "Give the legal form.");
+  if (pack && !pack.legalForms.includes(legalForm)) {
+    return no("invalid_legal_form", `\u201C${legalForm}\u201D isn\u2019t a ${pack.displayName} legal form (${pack.legalForms.join(", ")}).`);
+  }
+  const out = { jurisdiction, legalForm, nationalId };
+  const legalName = text(r?.legalName, 300);
+  if (legalName) out.legalName = legalName;
+  const register = text(r?.register, 200);
+  if (register) out.register = register;
+  const registry = text(r?.registryNumber, 60);
+  if (registry) {
+    const v3 = pack?.validateRegistryId(registry);
+    if (v3 && v3.code !== "ok") return no("invalid_registry_number", v3.message ?? "That registration number isn\u2019t valid.");
+    out.registryNumber = v3?.normalised ?? registry;
+  }
+  const vat = text(r?.vatId, 40).replace(/\s/g, "");
+  if (vat) {
+    const v3 = pack?.validateVatId(vat);
+    if (v3 && v3.code !== "ok") return no("invalid_vat_id", v3.message ?? "That VAT number isn\u2019t valid.");
+    out.vatId = v3?.normalised ?? vat;
+  }
+  if (r?.registeredOffice != null) {
+    const a = r.registeredOffice;
+    const line1 = text(a.line1, 200), city = text(a.city, 120), country = a.country ?? countryOf(jurisdiction);
+    if (!line1 || !city) return no("invalid_address", "The registered office needs a street and a city.");
+    if (!isCountryCode(country)) return no("invalid_address", "The registered office needs a country.");
+    const line2 = text(a.line2, 200), region = text(a.region, 120);
+    out.registeredOffice = { line1, ...line2 ? { line2 } : {}, city, ...region ? { region } : {}, postalCode: text(a.postalCode, 20), country };
+  }
+  return { ok: true, ...out };
+}
+function invoiceBlocker(registration) {
+  if (!registration) return "Only a registered company can issue an invoice: add its legal registration first.";
+  const o = registration.registeredOffice;
+  if (!o.line1.trim() || !o.city.trim() || !isCountryCode(o.country)) return "Add the company\u2019s registered office first: it goes on every invoice.";
+  return null;
+}
+function sellerParty(org) {
+  const reg = org.registration;
+  const legalName = org.registrationEvidence?.verifiedName ?? reg.legalName ?? org.name;
+  const vat = reg.identifiers.find((i) => i.kind === "vat")?.value;
+  const registry = reg.identifiers.find((i) => i.kind === "registry")?.value;
+  return {
+    name: legalName,
+    ...legalName !== org.name ? { tradingName: org.name } : {},
+    ...vat ? { vatId: vat } : {},
+    ...registry ? { legalRegistrationId: registry, ...reg.register ? { legalRegistrationScheme: reg.register } : {} } : {},
+    address: toPostalAddress(reg.registeredOffice)
+  };
+}
+
+// ../xeno-company-neutral-invoices/packages/legal/src/index.ts
 var PACKS = { RO };
-var packFor = (j) => PACKS[j];
-var SUPPORTED = Object.keys(PACKS);
+var packFor = (j) => Object.hasOwn(PACKS, j) ? PACKS[j] : void 0;
+var checkRegistration2 = (r) => checkRegistration(r, packFor);
 export {
   ANAF_BATCH_LIMIT,
   AnafConnector,
   CIUS_RO_ID,
+  COUNTRY_CODES,
   ConnectorError,
+  EN16931_ID,
   InvoiceBuildError,
   InvoiceSeries,
   NO_VAT_CATEGORIES,
   PACKS,
   RO,
   RO_VAT_RATES,
-  SUPPORTED,
   ViesValidator,
   ZERO_RATE_CATEGORIES,
   add,
   buildCreditNote,
   buildInvoice,
+  checkRegistration2 as checkRegistration,
+  checkRegistration as checkRegistrationWith,
+  countryName,
+  countryOf,
   cuiChecksum,
+  currencyCodes,
+  currencyDecimals,
   fail,
   formatAmount,
+  invoiceBlocker,
+  invoiceProfileFor,
+  isCountryCode,
+  isCurrency,
   isIsoDate,
+  isJurisdiction,
   lineAmount,
   minor,
   ok,
   packFor,
   parseAmount,
   percentOf,
+  sellerParty,
   sub,
   toPostalAddress,
   toUbl,
