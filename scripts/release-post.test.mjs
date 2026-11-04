@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateReleasePost, PostError } from './lib/release-post.mjs';
+import { validateReleasePost, withReleasePost, PostError } from './lib/release-post.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'xeno-release.mjs');
 const run = (...args) => spawnSync(process.execPath, [SCRIPT, 'publish', ...args], { encoding: 'utf8', timeout: 60_000 });
@@ -79,4 +79,17 @@ test('the publisher: a major release with a complete post passes every gate (dry
     r = run(...base);
     assert.equal(r.status, 0, r.stderr + r.stdout);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+const shipped = [{ version: '2.0.0', latest: true, kind: 'quick', channel: 'stable' }, { version: '1.0.0', kind: 'quick' }];
+
+test('attaching a post changes only that release', () => {
+  const next = withReleasePost(shipped, '1.0.0', 'stable', 'v1.0.0/post/post.json');
+  assert.deepEqual(next[1], { version: '1.0.0', kind: 'major', post: 'v1.0.0/post/post.json' });
+  assert.deepEqual(next[0], shipped[0]);
+});
+
+test('attaching refuses a missing release and never replaces a post', () => {
+  assert.throws(() => withReleasePost(shipped, '3.0.0', 'stable', 'x'), /no stable release/);
+  assert.throws(() => withReleasePost([{ version: '1.0.0', post: 'old' }], '1.0.0', 'stable', 'x'), /already has a post/);
 });

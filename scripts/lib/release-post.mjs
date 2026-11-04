@@ -96,3 +96,14 @@ export function validateReleasePost(dir) {
   if (problems.length) throw new PostError(`the release post is not ready:\n  - ${problems.join('\n  - ')}`);
   return { post, files, videos };
 }
+
+/** The release list with one shipped release turned major. Refuses a release that is missing or already has a post. */
+export function withReleasePost(list, version, channel, post) {
+  const rows = Array.isArray(list) ? list : list?.releases;
+  if (!Array.isArray(rows)) throw new PostError('releases.json is not a list');
+  const row = rows.find((release) => release.version === version && (release.channel ?? 'stable') === channel);
+  if (!row) throw new PostError(`no ${channel} release ${version} to attach a post to`);
+  if (row.post) throw new PostError(`release ${version} already has a post`);
+  const next = rows.map((release) => (release === row ? { ...release, kind: 'major', post } : release));
+  return Array.isArray(list) ? next : { ...list, releases: next };
+}
