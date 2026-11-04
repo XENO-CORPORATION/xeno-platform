@@ -18,7 +18,7 @@ async function activeAccount(db, actor) {
 }
 /** Called within a transaction. Account serialization also protects lazy personal
  * provisioning. No random workspace is used as an account operation namespace. */
-export async function createAccountWorkspace(db, actor, name, type='team') {
+export async function createAccountWorkspace(db, actor, name, type='team', requestedSlug=null) {
   if(!uuid.test(actor)||!['personal','team','company'].includes(type)||typeof name!=='string'||!name.trim()||name.trim().length>200)throw operationError(400,'invalid_workspace_request');
   await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`account-workspace-creation:${actor}`]);
   await activeAccount(db,actor);
@@ -32,7 +32,7 @@ export async function createAccountWorkspace(db, actor, name, type='team') {
     }
   }
   const created=!workspace;
-  if(created)workspace=(await db.query('INSERT INTO workspaces(owner_user_id,workspace_type,name,slug) VALUES($1,$2,$3,$4) RETURNING *',[actor,type,name.trim(),slug(name)])).rows[0];
+  if(created)workspace=(await db.query('INSERT INTO workspaces(owner_user_id,workspace_type,name,slug) VALUES($1,$2,$3,$4) RETURNING *',[actor,type,name.trim(),requestedSlug||slug(name)])).rows[0];
   await writeTuples(db,{writes:[{object:`workspace:${workspace.id}`,subject:`user:${actor}`,relation:'owner'}]});
   if(created&&type!=='personal'){   // an organization's wallet is made with it (xeno-company/SPEC.md §4.1b ordering invariant)
     const ins=await db.query(`INSERT INTO credit_accounts(user_id,owner_kind,balance,lifetime_earned,lifetime_spent) VALUES($1,'workspace',0,0,0) ON CONFLICT(user_id) DO NOTHING RETURNING id`,[workspace.id]);

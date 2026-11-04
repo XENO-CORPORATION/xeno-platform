@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
-const walks = ['walk-signup', 'walk-twostep', 'walk-forms', 'walk-providers', 'walk-market', 'walk-libraries'];
+const walks = ['walk-signup', 'walk-twostep', 'walk-forms', 'walk-providers', 'walk-market', 'walk-libraries', 'walk-company'];
 const only = process.argv[2];
 let failed = 0;
 for (const w of walks.filter((x) => !only || x.includes(only))) {
