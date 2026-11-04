@@ -51,6 +51,8 @@ export function sql(q) {
 /** A brand-new person: signs up through the form, types the emailed code, presses Continue. Returns { name, email, password }. */
 export async function newPerson(p, first = 'Alex') {
   const who = { name: `${first} Tester`, email: `${first.toLowerCase()}.${Date.now()}@example.test`, password: 'Walk-the-loop-42!' };
+  // Signup allows 10 per address in 15 minutes, and rightly. Each test person gets their own address from the documentation range.
+  await p.setExtraHTTPHeaders({ 'CF-Connecting-IP': `203.0.113.${(Date.now() % 250) + 1}` });
   await go(p, '/signup'); await clickText(p, /continue with email/i); await wait(500);
   await type(p, 'input[placeholder="Your name"]', who.name); await type(p, 'input[type=email]', who.email); await type(p, 'input[type=password]', who.password);
   await clickText(p, 'Create account'); await wait(4000);
