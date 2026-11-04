@@ -11448,6 +11448,111 @@
       "status": "planned",
       "class": "reversible",
       "scope": "marketplace:write"
+    },
+    "route:companyRoutes.js:GET /": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/members": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/invites": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/activity": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/wallet": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/transactions": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/invoices": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:POST /": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/registration/verify": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a company states about itself to authorities is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:DELETE /:id/members/:subject": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:PATCH /:id/members/:subject": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/invites": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "external",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:DELETE /:id/invites/:inviteId": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/agents": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:PUT /:id/agents/:agentId/capabilities": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "founding a company, its people and what its agents may do are a person’s decisions; the service refuses an agent"
+    },
+    "route:companyRoutes.js:POST /:id/invoices": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "an invoice is a legal document a company answers for, immutable once issued; only a person who manages the company issues one"
+    },
+    "route:companyRoutes.js:POST /:id/invoices/:number/credit": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "a credit note is a legal document a company answers for, immutable once issued; only a person who manages the company issues one"
     }
   }
 }

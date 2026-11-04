@@ -16,7 +16,7 @@ const publicUuid = (v) => UUID.test(String(v || ''));
 export class CompanyError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
 }
-const can = async (db, userId, workspaceId, relation) => (await check(db, { object: `workspace:${workspaceId}`, relation, subject: `user:${userId}` })).allowed;
+export const can = async (db, userId, workspaceId, relation) => (await check(db, { object: `workspace:${workspaceId}`, relation, subject: `user:${userId}` })).allowed;
 const text = (v, max, field, { optional = false } = {}) => {
   const s = typeof v === 'string' ? v.trim() : '';
   if (!s && optional) return null;
@@ -33,13 +33,13 @@ const address = (a, field) => {
   return { line1, line2: text(a.line2, 200, field, { optional: true }), city, region: text(a.region, 120, field, { optional: true }), postalCode, country };
 };
 
-async function companyOf(db, me, workspaceId) {
+export async function companyOf(db, me, workspaceId) {
   if (!publicUuid(workspaceId)) throw new CompanyError('Company not found', 'not_found', 404);
   const w = (await db.query('SELECT id, name, slug, workspace_type, status, owner_user_id, created_at FROM workspaces WHERE id = $1', [workspaceId])).rows[0];
   if (!w || !await can(db, me.id, workspaceId, 'viewer')) throw new CompanyError('Company not found', 'not_found', 404);
   return w;
 }
-async function manager(db, me, workspaceId) {
+export async function manager(db, me, workspaceId) {
   const w = await companyOf(db, me, workspaceId);
   if (w.workspace_type === 'personal') throw new CompanyError('A personal workspace has no legal entity.', 'not_a_company', 409);
   const p = await resolvePrincipal(db, me.id);

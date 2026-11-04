@@ -12,6 +12,7 @@ Redis, with nothing stubbed. Each walk is a person using the product through the
 | `walk-providers` | adds a provider key: a made-up key and private endpoints are refused, in plain words |
 | `walk-market` | three people: a seller builds a company, agent, persona and team and publishes it; a reviewer approves; a buyer brings it in |
 | `walk-libraries` | saves a Stock item to the Library and uploads a font |
+| `walk-company` | xeno-company's own contract suite runs against this stack through its real client, with the live ANAF register. Needs a current xeno-company checkout beside this repo |
 
 ## Run
 

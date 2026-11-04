@@ -379,6 +379,16 @@ conversation/project pairs, and treat returned content as untrusted evidence. Th
 access or access to unrelated library records. Regression suites: `stream-project-context.test.mjs` and
 `chat-tool-loop.test.mjs`. Local source work is not deployment or real-model acceptance evidence.
 
+## 🏢 XENO Company's dashboard: /api/orgs (owner, 2026-11-04)
+
+`services/companyOrgs.js` answers everything `HttpCompanyClient` (`../xeno-company/packages/client`) calls, in the bare shape that client reads; `services/companyEntity.js` keeps the legal entity Corpo › Company edits. The owner chose the full backend over retiring the dashboard.
+- **No second store.** A company is a workspace (xeno-company SPEC §4.1). Org, members, invites, registration, activity and wallet are views of existing rows, written through the service that owns them. Only invoices are new.
+- **D18: authority never lives in an employment row.** An agent's role is a `relationship_tuples` row, its capabilities are its definition's `requestedCapabilities`, and `org_agent_employments` holds only the Mind link. Never read that table for a permission.
+- **Invoice rules are vendored, never written here.** `src/server/vendor/xeno-company/company-legal.mjs` is a bundle of `@xenosystem/company-legal`, checked by `npm run test:company-legal-vendor`. Change xeno-company, then `XENO_COMPANY_DIR=… node scripts/company-legal-vendor.mjs --sync --confirm`.
+- **An issued invoice is a legal document.** A trigger refuses edit, delete and truncate; only `credited_by` may be set, once. `workspace_id` is RESTRICT on purpose. The number is taken in the invoice's own transaction, so a refusal leaves no gap.
+- **A real platform rule stays a real rule:** a free plan has one seat, and an account runs five agents. The contract suite works within them.
+Proofs: `npm run test:company-orgs` (real Postgres, concurrency, mutation-checked ×6), and `node scripts/real-stack/walk-company.mjs`, where xeno-company's own contract suite grades this backend (46/46, live ANAF). Not built: e-Factura submission, the dashboard's sign-in wiring (`getToken: () => null` in its http mode) and hosting.
+
 ## 🤖 Selling an agent: Marketplace kind `mind` (owner, 2026-11-01)
 
 `services/marketplaceAgentPackages.js` builds a version from one agent, the way `marketplaceTeamPackages.js` builds one from a team. Rentals, partitions and the broker were already here (`marketplaceRentals.js`, `marketplaceRentalPartitions.js`, `marketplaceBroker.js`).

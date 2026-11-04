@@ -229,7 +229,7 @@ function personaOf(p) {
 // jsonb stores keys in its own order, so compare the fields, never the serialised text
 const samePersona = (x, y) => (!x && !y) || (!!x && !!y && (x.role || '') === (y.role || '') && (x.body || '') === (y.body || ''));
 
-export async function update(db, me, publicId, { name, description, instructions, runtime, persona, skills: skillChoices } = {}) {
+export async function update(db, me, publicId, { name, description, instructions, runtime, persona, skills: skillChoices, requestedCapabilities } = {}) {
   const r = await owned(db, me, publicId, 'editor');
   if (name !== undefined) {
     const label = String(name || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60);
@@ -245,7 +245,7 @@ export async function update(db, me, publicId, { name, description, instructions
   }
   // skills: [{ id, version? }] → pinned {id, version, hash}, each one the person may read (skills.js)
   const pins = skillChoices !== undefined ? await resolvePins(db, me, skillChoices) : undefined;
-  if (instructions !== undefined || runtime !== undefined || persona !== undefined || pins !== undefined) {
+  if (instructions !== undefined || runtime !== undefined || persona !== undefined || pins !== undefined || requestedCapabilities !== undefined) {
     const cur = (await db.query('SELECT max(version)::int AS v FROM workforce_agent_versions WHERE resource_id = $1', [r.workforce_resource_id])).rows[0].v;
     if (String(instructions || '').length > 32768) throw new AgentError('The instructions are longer than 32,768 characters', 'instructions_too_long');
     const last = (await db.query('SELECT content FROM workforce_agent_versions WHERE resource_id = $1 AND version = $2', [r.workforce_resource_id, cur])).rows[0];
@@ -253,11 +253,13 @@ export async function update(db, me, publicId, { name, description, instructions
     const nextRt = runtime !== undefined ? (runtime || {}) : (last ? last.content.runtime || {} : {});
     const nextPersona = persona !== undefined ? personaOf(persona) : (last ? last.content.persona || null : null);
     const nextSkills = pins !== undefined ? pins : (last ? last.content.skills || [] : []);
+    const nextCaps = requestedCapabilities !== undefined ? requestedCapabilities : (last ? last.content.requestedCapabilities || [] : []);
+    const sameCaps = JSON.stringify([...(last ? last.content.requestedCapabilities || [] : [])].sort()) === JSON.stringify([...nextCaps].sort());
     const sameSkills = (x, y) => x.length === y.length && x.every((p, i) => p.id === y[i].id && p.version === y[i].version && p.hash === y[i].hash && (p.bundleDigest || null) === (y[i].bundleDigest || null));
-    if (!last || (last.content.instructions || '') !== nextInstr || JSON.stringify(last.content.runtime || {}) !== JSON.stringify(nextRt) || !samePersona(last.content.persona || null, nextPersona) || !sameSkills(last.content.skills || [], nextSkills)) {
+    if (!last || (last.content.instructions || '') !== nextInstr || JSON.stringify(last.content.runtime || {}) !== JSON.stringify(nextRt) || !samePersona(last.content.persona || null, nextPersona) || !sameSkills(last.content.skills || [], nextSkills) || !sameCaps) {
       try {
         await reviseAgentDefinition(db, ctx(me), { operationId: randomUUID(), resourceId: String(r.workforce_resource_id), baseVersion: cur,
-          definition: { schemaVersion: 1, instructions: nextInstr, ...(nextPersona ? { persona: nextPersona } : {}), ...(Object.keys(nextRt).length ? { runtime: nextRt } : {}), secretReferences: last ? last.content.secretReferences || [] : [], skills: nextSkills, requestedCapabilities: last ? last.content.requestedCapabilities || [] : [] } });
+          definition: { schemaVersion: 1, instructions: nextInstr, ...(nextPersona ? { persona: nextPersona } : {}), ...(Object.keys(nextRt).length ? { runtime: nextRt } : {}), secretReferences: last ? last.content.secretReferences || [] : [], skills: nextSkills, requestedCapabilities: nextCaps } });
       } catch (e) { if (e && e.details && /persona/.test(e.details.reason || '')) throw new AgentError('The persona is not valid (a role of up to 200 characters and a body of up to 32,768)', 'invalid_persona'); if (e && e.details && /effort|identifier|runtime|list/.test(e.details.reason || '')) throw new AgentError('The runtime config is not valid (model and tools are identifiers; effort is minimal, low, medium, high or max)', 'invalid_runtime'); throw asAgentError(e, 'The instructions could not be saved'); }
     }
   }
