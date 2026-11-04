@@ -11542,6 +11542,51 @@
       "class": "safe",
       "scope": "workspace:read"
     },
+    "route:companyRoutes.js:GET /:id/invoices/:number/document": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:GET /:id/revenue": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
+    "route:companyRoutes.js:PUT /:id/payment-account": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "where a business is paid goes on its legal documents, so it is a person’s act; the service refuses an agent"
+    },
+    "route:companyRoutes.js:PUT /:id/revenue-limit": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a business watches its own tax position against is a person’s statement; the service refuses an agent"
+    },
+    "ui:platform-company.js:data-co2=limit": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "what a business watches its own tax position against is a person’s statement; the service refuses an agent"
+    },
+    "ui:platform-company.js:data-co2=rereadRev": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "reads this screen’s total again; the data it shows is already covered"
+    },
+    "ui:platform-company.js:data-co2=print": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "reversible",
+      "scope": "none",
+      "because": "prints an invoice already read through the covered route"
+    },
     "route:companyRoutes.js:GET /:id/invoices": {
       "status": "planned",
       "class": "safe",

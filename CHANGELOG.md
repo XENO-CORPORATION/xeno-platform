@@ -5,6 +5,15 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-04
 
+**An invoice a customer can actually use.**
+
+- Print or save any invoice as a PDF, from exactly what was issued, in German for customers in German-speaking countries and English for everyone else. Before, the only copy was UBL XML.
+- New invoice asks for the customer’s street and postal code, the date of supply or a period, and always a due date.
+- Add your bank account once under Getting paid and it goes on every invoice with the invoice number as the payment reference. A mistyped IBAN is refused. Invoices already issued keep what they said.
+- A small business can set its limit and see the year’s invoiced total against it. Only invoices issued here count, and the page says so.
+- Germany has its own checks now: over 250 euros an invoice needs the customer’s full address, the date of supply and the seller’s tax number. Up to 250 euros the shorter rules apply.
+- Every invoice with money owed now states a due date or payment terms, as the European standard requires.
+
 **One person can run a business on XENO.**
 
 - Corpo › Company now handles a sole proprietor: a Kleingewerbe, a PFA, a sole trader. The page reads as the owner trading under the business name, and says plainly that the owner and the business are the same legal person.

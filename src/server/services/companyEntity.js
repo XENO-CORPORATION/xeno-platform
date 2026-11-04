@@ -10,6 +10,7 @@
  */
 import { check } from '../utils/authzReBAC.js';
 import { resolvePrincipal } from './agentIdentity.js';
+import { checkPaymentAccount, isCurrency } from '../vendor/xeno-company/company-legal.mjs';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const publicUuid = (v) => UUID.test(String(v || ''));
 
@@ -67,7 +68,9 @@ export async function read(db, me, workspaceId) {
   return {
     org: { id: w.id, kind: w.workspace_type, name: w.name, slug: w.slug, status: w.status, ownerUserId: w.owner_user_id, createdAt: w.created_at },
     canManage: manage && w.workspace_type !== 'personal',
-    profile: { entityKind: p.entity_kind || 'company', taxStatus: p.tax_status || 'standard', taxStatusNote: p.tax_status_note || null, legalName: p.legal_name || null, legalForm: p.legal_form || null, governingRegime: p.governing_regime || null, registeredOffice: p.registered_office || null, centralAdministration: p.central_administration || null },
+    profile: { entityKind: p.entity_kind || 'company', taxStatus: p.tax_status || 'standard', taxStatusNote: p.tax_status_note || null, legalName: p.legal_name || null, legalForm: p.legal_form || null, governingRegime: p.governing_regime || null, registeredOffice: p.registered_office || null, centralAdministration: p.central_administration || null,
+      paymentAccount: p.payment_account ? { account: p.payment_account, bic: p.payment_bic || null, name: p.payment_account_name || null } : null,
+      revenueLimit: p.revenue_limit_minor ? { amount: Number(p.revenue_limit_minor), currency: p.revenue_limit_currency } : null },
     registrations: regs.rows.map((r) => ({ id: r.id, jurisdiction: r.jurisdiction, register: r.register_name, number: r.national_number, euid: r.euid, role: r.role })),
     tax: tax.rows.map((t) => ({ id: t.id, scheme: t.scheme, prefix: t.prefix, number: t.number, jurisdiction: t.jurisdiction, check: t.result ? { result: t.result, consultationNumber: t.consultation_number, at: t.checked_at } : null })),
     customs: customs.rows.map((c) => ({ id: c.id, scheme: c.scheme, number: c.number, jurisdiction: c.jurisdiction })),
@@ -87,6 +90,31 @@ export async function saveProfile(db, me, workspaceId, body = {}) {
     ON CONFLICT (workspace_id) DO UPDATE SET legal_name = EXCLUDED.legal_name, legal_form = EXCLUDED.legal_form, governing_regime = EXCLUDED.governing_regime, registered_office = EXCLUDED.registered_office, central_administration = EXCLUDED.central_administration,
       entity_kind = COALESCE($7, org_profiles.entity_kind), tax_status = COALESCE($8, org_profiles.tax_status), tax_status_note = CASE WHEN $8::text IS NULL THEN org_profiles.tax_status_note ELSE $9 END, updated_at = now()`,
   [workspaceId, text(body.legalName, 300, 'The legal name', { optional: true }), text(body.legalForm, 120, 'The legal form', { optional: true }), text(body.governingRegime, 120, 'The governing law', { optional: true }), address(body.registeredOffice, 'Registered office'), address(body.centralAdministration, 'Central administration'), kind, status, note]);
+  return read(db, me, workspaceId);
+}
+
+/** Where this business is paid. It goes on every invoice from now on; ones already issued keep what they said. Empty removes it. */
+export async function savePaymentAccount(db, me, workspaceId, body = {}) {
+  await manager(db, me, workspaceId);
+  let row = [null, null, null];
+  if (String(body.account ?? '').trim()) {
+    const c = checkPaymentAccount(body.account, body.bic);
+    if (!c.ok) throw new CompanyError(c.message, 'bad_input');
+    row = [c.account, c.bic ?? null, text(body.name, 200, 'The account holder', { optional: true })];
+  }
+  await db.query(`INSERT INTO org_profiles (workspace_id, payment_account, payment_bic, payment_account_name, updated_at) VALUES ($1,$2,$3,$4, now())
+    ON CONFLICT (workspace_id) DO UPDATE SET payment_account = $2, payment_bic = $3, payment_account_name = $4, updated_at = now()`, [workspaceId, ...row]);
+  return read(db, me, workspaceId);
+}
+
+/** The figure a small business wants to stay under. It's theirs, because every country sets its own. No amount removes it. */
+export async function saveRevenueLimit(db, me, workspaceId, body = {}) {
+  await manager(db, me, workspaceId);
+  const amount = body.amount == null || body.amount === '' ? null : Number(body.amount);
+  if (amount !== null && !(Number.isSafeInteger(amount) && amount > 0)) throw new CompanyError('Give the limit as an amount.', 'bad_input');
+  if (amount !== null && !isCurrency(body.currency)) throw new CompanyError('Choose the limit’s currency.', 'bad_input');
+  await db.query(`INSERT INTO org_profiles (workspace_id, revenue_limit_minor, revenue_limit_currency, updated_at) VALUES ($1,$2,$3, now())
+    ON CONFLICT (workspace_id) DO UPDATE SET revenue_limit_minor = $2, revenue_limit_currency = $3, updated_at = now()`, [workspaceId, amount, amount === null ? null : body.currency]);
   return read(db, me, workspaceId);
 }
 

@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2049 actions · 236 agent capability · 1381 planned (debt) · 432 excluded · **coverage 14.6%** of the 1617 owed.
+**Total:** 2056 actions · 236 agent capability · 1383 planned (debt) · 437 excluded · **coverage 14.6%** of the 1619 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -12,9 +12,9 @@ Every action a person can take on the platform, and whether an agent can take it
 | agents | 204 | 0 | 142 | 62 | 0% |
 | commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
-| workspace | 193 | 23 | 106 | 64 | 17.8% |
+| workspace | 197 | 23 | 108 | 66 | 17.6% |
 | chat | 104 | 0 | 102 | 2 | 0% |
-| workspace-ui | 188 | 4 | 101 | 83 | 3.8% |
+| workspace-ui | 191 | 4 | 101 | 86 | 3.8% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 93 | 5 | 85 | 3 | 5.6% |
 | account | 117 | 4 | 58 | 55 | 6.5% |
@@ -1286,7 +1286,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:workforce.js:data-wf=win`
 - `ui:workforce.js:data-wf=withdraw`
 
-## workspace — 106 planned
+## workspace — 108 planned
 
 - `route:accountWorkspaceOperationRoutes.js:GET /:operationId (accountWorkspaceOperationRoutes)`
 - `route:accountWorkspaceOperationRoutes.js:POST /:operationId/:phase (accountWorkspaceOperationRoutes)`
@@ -1295,7 +1295,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:companyRoutes.js:GET /:id/activity`
 - `route:companyRoutes.js:GET /:id/invites`
 - `route:companyRoutes.js:GET /:id/invoices`
+- `route:companyRoutes.js:GET /:id/invoices/:number/document`
 - `route:companyRoutes.js:GET /:id/members`
+- `route:companyRoutes.js:GET /:id/revenue`
 - `route:companyRoutes.js:GET /:id/transactions`
 - `route:companyRoutes.js:GET /:id/wallet`
 - `route:modesRoutes.js:DELETE /:modeId (meModesRouter)`

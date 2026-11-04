@@ -3,6 +3,8 @@
  *
  *   GET    /:id                         the entity: profile, registrations, identifiers, mandates
  *   PUT    /:id/profile                 legal name, form, governing law, registered office, central administration
+ *   PUT    /:id/payment-account         where it's paid, which goes on every invoice
+ *   PUT    /:id/revenue-limit           the figure a small business wants to stay under
  *   POST   /:id/registrations | /tax | /customs | /financial | /mandates     add one
  *   DELETE /:id/:kind/:itemId           remove one
  *   POST   /:id/tax/:itemId/check       ask VIES, and keep the answer
@@ -19,6 +21,8 @@
  *   POST /:id/agents  ·  PUT /:id/agents/:a/capabilities employ an agent; what it may do
  *   GET  /:id/activity | /wallet | /transactions         read only
  *   GET|POST /:id/invoices  ·  POST /:id/invoices/:n/credit   legal documents, corrected only by a credit note
+ *   GET  /:id/invoices/:n/document?lang=en|de            one as a page to print
+ *   GET  /:id/revenue?year=                              what was invoiced that year, against its limit
  */
 import express from 'express';
 import * as company from '../services/companyEntity.js';
@@ -62,11 +66,15 @@ router.get('/:id/wallet', bare((req) => orgs.getWallet(req.db, me(req), req.para
 router.get('/:id/transactions', bare((req) => orgs.listTransactions(req.db, me(req), req.params.id)));
 router.get('/:id/invoices', bare((req) => orgs.listInvoices(req.db, me(req), req.params.id)));
 router.post('/:id/invoices', bare((req) => orgs.issueInvoice(req.db, me(req), req.params.id, req.body || {}), 201));
+router.get('/:id/invoices/:number/document', bare((req) => orgs.invoiceDocument(req.db, me(req), req.params.id, req.params.number, req.query.lang)));
+router.get('/:id/revenue', bare((req) => orgs.revenue(req.db, me(req), req.params.id, req.query.year ?? undefined)));
 router.post('/:id/invoices/:number/credit', bare((req) => orgs.creditInvoice(req.db, me(req), req.params.id, req.params.number, req.body?.reason), 201));
 
 // The entity for Corpo › Company, and the Org the dashboard reads, in one answer: neither has a key the other uses.
 router.get('/:id', handled(async (req) => ({ ...(await company.read(req.db, me(req), req.params.id)), ...(await orgs.getOrg(req.db, me(req), req.params.id)) })));
 router.put('/:id/profile', handled((req) => company.saveProfile(req.db, me(req), req.params.id, req.body || {})));
+router.put('/:id/payment-account', handled((req) => company.savePaymentAccount(req.db, me(req), req.params.id, req.body || {})));
+router.put('/:id/revenue-limit', handled((req) => company.saveRevenueLimit(req.db, me(req), req.params.id, req.body || {})));
 router.post('/:id/registrations', handled((req) => company.addRegistration(req.db, me(req), req.params.id, req.body || {})));
 router.post('/:id/tax', handled((req) => company.addTax(req.db, me(req), req.params.id, req.body || {})));
 router.post('/:id/customs', handled((req) => company.addCustoms(req.db, me(req), req.params.id, req.body || {})));

@@ -38,10 +38,26 @@ try {
   await press('data-co2="addTax"');
   await select('s', 'tin'); await select('j', 'DE'); await fill(p, 'n', '12/345/67890');
   await submit(p); await wait(1800);
+  await tab('Overview');
+  await press('data-co2="bank"');
+  await fill(p, 'acc', 'DE89 3704 0044 0532 0130 01');
+  await submit(p); await wait(1200);
+  ok(/IBAN isn’t valid/.test(await text(p, '.xd')), 'a mistyped IBAN is caught');
+  await p.$eval('#xdf-acc', (e) => { e.value = ''; }); await fill(p, 'acc', 'DE89 3704 0044 0532 0130 00'); await fill(p, 'bic', 'COBADEFFXXX');
+  await submit(p); await wait(1500);
+  t = await text(p, '#main');
+  ok(/DE89370400440532013000/.test(t), 'the account is on the page', t.slice(0, 600));
+  await tab('Invoices');
+  await press('data-co2="limit"');
+  await fill(p, 'amt', '25000');
+  await submit(p); await wait(1800);
+  ok(/of €25,000\.00/.test(await text(p, '#main')), 'a small business sees its year against its limit', (await text(p, '#main')).slice(0, 400));
   await press('data-co2="newInvoice"');
   ok(!(await p.$('#xdf-rate')) && !(await p.$('#xdf-reason')), 'a new invoice doesn’t ask about tax');
+  ok(await p.$eval('#xdf-sup', (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.value)) && await p.$eval('#xdf-due', (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.value)), 'it offers the date of supply and a due date');
+  ok(/§ 19 UStG\. Once issued/.test(await text(p, '.xd')), 'and its note reads as a sentence');
   ok((await text(p, '.xd')).includes(NOTE), 'and shows what it will say');
-  await fill(p, 'b', 'A Client GmbH'); await fill(p, 'bc', 'Berlin'); await select('bk', 'DE'); await select('cur', 'EUR');
+  await fill(p, 'b', 'A Client GmbH'); await fill(p, 'bs', 'Hafenstraße 2'); await fill(p, 'bp', '20095'); await fill(p, 'bc', 'Hamburg'); await select('bk', 'DE'); await select('cur', 'EUR');
   await fill(p, 'item', 'Video edit'); await fill(p, 'price', '250');
   await fill(p, 'more', 'Thumbnail; 2; 25');
   await submit(p);
@@ -51,7 +67,17 @@ try {
   ok(/Tax number 12\/345\/67890/.test(t), 'with their tax number', t.slice(0, 600));
   ok(/10115 Musterstadt/.test(t), 'and their whole address', t.slice(0, 600));
   ok(t.includes(NOTE) && /300\.00/.test(t), 'the note is on it, and no tax was added', t.slice(0, 700));
+  ok(/20095 Hamburg/.test(t), 'the customer’s whole address is on it', t.slice(0, 900));
+  ok(/DE89370400440532013000/.test(t) && /Supplied/.test(t), 'with where to pay and when it was supplied', t.slice(0, 900));
   await shot('invoice');
+  const made = await new Promise((res) => { b.once('targetcreated', res); p.click('#main [data-co2="print"]'); });
+  await wait(1800);
+  const doc = await made.page();
+
+  const printed = await doc.evaluate(() => document.body.innerText);
+  ok(/Rechnung/.test(printed) && /Erika Mustermann/.test(printed) && /A Client GmbH/.test(printed) && /Leistungsdatum/.test(printed) && /DE89370400440532013000/.test(printed) && printed.includes(NOTE), 'it opens as a page to print, in the customer’s language', printed.slice(0, 600));
+  if (process.env.SHOTS) await doc.screenshot({ path: path.join(process.env.SHOTS, 'solo-printed.png') });
+  await doc.close();
 
   await tab('Overview');
   await press('data-co2="profile"');

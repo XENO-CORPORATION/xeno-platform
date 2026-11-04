@@ -27,7 +27,7 @@ import { mutateWorkspaceMembership } from './workspaceMembershipOperations.js';
 import { authorityTransaction } from './workspaceOperationReceipts.js';
 import { ensureWorkspaceWallet, walletBalance } from './walletService.js';
 import { listObjectTuples, writeTuples, ROLE_RANK } from '../utils/authzReBAC.js';
-import { AnafConnector, InvoiceSeries, buildCreditNote, buildInvoice, checkRegistration, countryOf, invoiceBlocker, invoiceProfileFor, isCurrency, sellerParty, toUbl } from '../vendor/xeno-company/company-legal.mjs';
+import { AnafConnector, InvoiceSeries, buildCreditNote, buildInvoice, checkRegistration, countryOf, invoiceBlocker, invoiceLanguage, invoiceProfileFor, isCurrency, paymentInstructions, sellerParty, toHtml, toUbl } from '../vendor/xeno-company/company-legal.mjs';
 
 const { CompanyError, can, companyOf, manager } = company;
 export { CompanyError };
@@ -399,7 +399,7 @@ export async function issueInvoice(pool, me, id, input = {}) {
   if (!isCurrency(input.currency)) throw refuse('Choose the invoice’s currency.', 'invalid_currency');
   const profile = invoiceProfileFor(org.registration.jurisdiction);
   // A small business charges no tax on anything, for one reason it has stated once. Category E, because O forbids a seller VAT id.
-  const tax = (await pool.query('SELECT tax_status, tax_status_note FROM org_profiles WHERE workspace_id = $1', [id])).rows[0];
+  const tax = (await pool.query('SELECT tax_status, tax_status_note, payment_account, payment_bic, payment_account_name FROM org_profiles WHERE workspace_id = $1', [id])).rows[0];
   const small = tax?.tax_status === 'small_business';
   if (small && input.lines.some((l) => Number(l.vatRate) > 0)) throw refuse('This business is set as a small business, which charges no tax. Change that in its details first.', 'small_business_no_tax');
   const lines = small ? input.lines.map(({ vatRate, ...l }) => ({ ...l, vatCategory: 'E', exemptionReason: tax.tax_status_note })) : input.lines;
@@ -408,8 +408,12 @@ export async function issueInvoice(pool, me, id, input = {}) {
     const number = await nextNumber(db, org, issuedAt);
     let invoice;
     try {
-      invoice = buildInvoice({ specificationId: profile.specificationId, id: number, issueDate: issuedAt.slice(0, 10), currency: input.currency, seller: sellerParty(org), buyer: input.buyer, lines,
-        ...(input.dueDate ? { dueDate: input.dueDate } : {}), ...(input.paymentTerms ? { paymentTerms: input.paymentTerms } : {}), ...(input.note ? { note: input.note } : {}), ...(input.orderReference ? { orderReference: input.orderReference } : {}) });
+      const seller = sellerParty(org);
+      // Where to pay comes from the company, like the seller: nobody types their own account onto one invoice.
+      const payment = tax?.payment_account ? { payment: paymentInstructions({ account: tax.payment_account, bic: tax.payment_bic, name: tax.payment_account_name || seller.name }, { id: number, currency: input.currency }) } : {};
+      const period = input.invoicingPeriod?.start || input.invoicingPeriod?.end ? { invoicingPeriod: { ...(input.invoicingPeriod.start ? { start: input.invoicingPeriod.start } : {}), ...(input.invoicingPeriod.end ? { end: input.invoicingPeriod.end } : {}) } } : {};
+      invoice = buildInvoice({ specificationId: profile.specificationId, id: number, issueDate: issuedAt.slice(0, 10), currency: input.currency, seller, buyer: input.buyer, lines, ...payment, ...period,
+        ...(input.dueDate ? { dueDate: input.dueDate } : {}), ...(input.deliveryDate ? { deliveryDate: input.deliveryDate } : {}), ...(input.paymentTerms ? { paymentTerms: input.paymentTerms } : {}), ...(input.note ? { note: input.note } : {}), ...(input.orderReference ? { orderReference: input.orderReference } : {}) });
     } catch (e) { throw refuse(e instanceof Error ? e.message : 'That invoice isn’t valid.', 'invalid_invoice'); }
     // Checked before it is stored. Refusing here rolls the number back, so an invalid invoice never leaves a gap.
     const check = profile.validate(invoice);
@@ -424,6 +428,32 @@ export async function issueInvoice(pool, me, id, input = {}) {
 export async function listInvoices(db, me, id) {
   await companyOf(db, me, id);
   return (await db.query('SELECT * FROM org_issued_invoices WHERE workspace_id = $1 ORDER BY issued_at DESC, number DESC', [id])).rows.map((r) => invoiceShape(id, r));
+}
+
+/** One issued invoice as a page to print, from exactly what was issued. Its language follows the customer unless asked for another. */
+export async function invoiceDocument(db, me, id, number, language) {
+  await companyOf(db, me, id);
+  const row = (await db.query('SELECT document FROM org_issued_invoices WHERE workspace_id = $1 AND number = $2', [id, number])).rows[0];
+  if (!row) throw refuse(`There is no invoice ${number}.`, 'invoice_not_found', 404);
+  const lang = language === 'en' || language === 'de' ? language : invoiceLanguage(row.document);
+  return { number, language: lang, html: toHtml(row.document, lang) };
+}
+
+/**
+ * What was invoiced in a calendar year, net, by currency, against the limit the business set. Credit notes count, negative, in
+ * the year they were issued. Sales invoiced anywhere else aren't here, so this is never a business's whole turnover.
+ */
+export async function revenue(db, me, id, year = new Date().getUTCFullYear()) {
+  await companyOf(db, me, id);
+  const y = Number(year);
+  if (!Number.isInteger(y) || y < 2000 || y > 2100) throw refuse('Choose a year.', 'bad_input');
+  const [rows, limit] = await Promise.all([
+    db.query(`SELECT document->>'currency' AS currency, sum((document->'totals'->>'taxExclusiveAmount')::bigint) AS net, count(*)::int AS documents
+       FROM org_issued_invoices WHERE workspace_id = $1 AND issued_at >= make_date($2, 1, 1) AND issued_at < make_date($2 + 1, 1, 1) GROUP BY 1 ORDER BY 1`, [id, y]),
+    db.query('SELECT revenue_limit_minor, revenue_limit_currency FROM org_profiles WHERE workspace_id = $1', [id]),
+  ]);
+  const l = limit.rows[0];
+  return { year: y, byCurrency: rows.rows.map((r) => ({ currency: r.currency, net: Number(r.net), documents: r.documents })), limit: l?.revenue_limit_minor ? { amount: Number(l.revenue_limit_minor), currency: l.revenue_limit_currency } : null };
 }
 
 export async function creditInvoice(pool, me, id, number, reason) {
