@@ -55,7 +55,7 @@ try {
 
   await tab('Invoices');
   await press('data-co2="newInvoice"');
-  await fill(p, 'b', 'A Client GmbH'); await fill(p, 'bc', 'Berlin'); await select('bk', 'DE'); await select('cur', 'USD');
+  await fill(p, 'b', 'A Client GmbH'); await fill(p, 'bs', '1 Client Street'); await fill(p, 'bc', 'Berlin'); await select('bk', 'DE'); await select('cur', 'USD');
   await fill(p, 'item', 'Design'); await fill(p, 'price', '100.5');
   await submit(p); await wait(500);
   ok(/why no tax/i.test(await dialogWarn(p)), 'no tax has to say why', await dialogWarn(p));
@@ -80,7 +80,7 @@ try {
   t = await text(p, '#main');
   await shot('invoices');
   ok(/-0001/.test(t) && /-0002/.test(t) && /Reversed/.test(t), 'the list shows both, and the first as reversed', t.slice(0, 500));
-  ok(/not this country’s own/.test(t) && /no tax authority/.test(t), 'and says what was checked', t.slice(-300));
+  ok(/Local rules for United States weren’t checked/.test(t) && /no tax authority/.test(t), 'and says what was checked', t.slice(-300));
 
   await tab('Wallet'); await wait(800);
   ok(/credits/i.test(await text(p, '#main')), 'the wallet reads'); await shot('wallet');
