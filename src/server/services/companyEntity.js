@@ -114,7 +114,8 @@ export async function addTax(db, me, workspaceId, body = {}) {
     prefix = String(body.prefix || '').trim().toUpperCase();
     if (!/^[A-Z]{2}$/.test(prefix)) throw new CompanyError('Give the VAT prefix.', 'bad_input');
     if (prefix === 'GR') throw new CompanyError('Greece’s VAT prefix is EL.', 'bad_prefix');
-    if (prefix === 'GB') throw new CompanyError('GB is no longer in VIES. Northern Ireland’s prefix is XI.', 'bad_prefix');
+    // GB left VIES, but it is still a UK company's own VAT number. Only a company in the UK can hold one.
+    if (prefix === 'GB' && !j.startsWith('GB')) throw new CompanyError('GB is the UK’s prefix. Northern Ireland’s EU prefix is XI.', 'bad_prefix');
     if (!/^[0-9A-Za-z+*.]{2,12}$/.test(number)) throw new CompanyError('A VAT number is 2 to 12 characters, without its prefix.', 'bad_number');
   }
   try { return { id: (await db.query('INSERT INTO org_tax_identifiers (workspace_id, scheme, prefix, number, jurisdiction) VALUES ($1,$2,$3,$4,$5) RETURNING id', [workspaceId, scheme, prefix, number, j])).rows[0].id }; }

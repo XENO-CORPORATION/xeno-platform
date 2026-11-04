@@ -5,7 +5,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs'; import path from 'node:path';
 import { browser, page, ok, failures, newPerson, sql, SITE, here } from './lib.mjs';
-const company = path.resolve(here, '../../../xeno-company');
+const company = process.env.XENO_COMPANY_DIR ? path.resolve(process.env.XENO_COMPANY_DIR) : path.resolve(here, '../../../xeno-company');
 const b = await browser(); const p = await page(b);
 try {
   const suite = path.join(company, 'packages/client/src/__tests__/contract.test.ts');

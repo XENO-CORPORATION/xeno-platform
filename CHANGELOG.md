@@ -8,11 +8,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 **XENO Company's dashboard has its whole backend.**
 
 - Everything the dashboard calls now works against the platform: found a company, members and invitations, employ agents and set what they may do, activity, the wallet and transactions. It reads the same records the workspace shows, so there is nothing to keep in sync.
-- A company can be checked against the Romanian register (ANAF). The register's name, address, registration and VAT numbers are used, and each answer is kept. If the register is down, the company is founded anyway and reads as not yet verified, never as invalid.
-- A registered company can issue invoices and credit notes, in UBL for e-Factura. Only a person who manages the company can. Numbers have no gaps, even when several invoices are issued at once or one is refused.
+- A company can be registered in any country. It states its own legal form, numbers and registered office, and that is enough. Where a register is connected, which today is Romania's, it confirms them.
+- A registered company can issue invoices and credit notes in its own currency, with no tax or any rate, checked against the common invoice rules plus a country's own rules where we have them (Romania so far). Meeting local tax law stays the company's job, and the dashboard says so. Only a person who manages the company can. Numbers have no gaps, even when several invoices are issued at once or one is refused.
 - An issued invoice can't be changed or deleted by anyone, in the app or the database. A mistake is corrected with a credit note.
 - An employed agent's role is checked like everyone else's, and its capabilities are enforced each time it runs.
-- Not yet sent to ANAF: invoices are issued and stored, and e-Factura submission is still to build. The dashboard itself still needs its sign-in wired up and a place to be hosted.
+- XENO sends invoices to no tax authority, and national e-invoicing is no longer planned (owner's decision, 2026-11-04). The dashboard itself still needs its sign-in connected and somewhere to be hosted before a browser can use any of this.
+- A UK company can now record its own GB VAT number, and Corpo › Company lists every country.
 
 ## 2026-11-03
 

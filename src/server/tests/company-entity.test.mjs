@@ -62,7 +62,8 @@ async function main() {
 
   // identifiers
   ok(await refused(() => company.addTax(pool, O, ws, { scheme: 'vat', prefix: 'GR', number: '123456789', jurisdiction: 'GR' }), 'bad_prefix'), 'Greece’s prefix is EL, not GR');
-  ok(await refused(() => company.addTax(pool, O, ws, { scheme: 'vat', prefix: 'GB', number: '123456789', jurisdiction: 'GB' }), 'bad_prefix'), 'GB isn’t a VIES prefix any more');
+  ok(await refused(() => company.addTax(pool, O, ws, { scheme: 'vat', prefix: 'GB', number: '123456789', jurisdiction: 'DE' }), 'bad_prefix'), 'only a company in the UK holds a GB number');
+  ok((await company.addTax(pool, O, ws, { scheme: 'vat', prefix: 'GB', number: '123456789', jurisdiction: 'GB' })).id, 'and a company there can');
   ok(await refused(() => company.addTax(pool, O, ws, { scheme: 'vat', prefix: 'RO', number: 'way-too-long-for-a-vat', jurisdiction: 'RO' }), 'bad_number'), 'a VAT number is at most twelve characters');
   const nl = await company.addTax(pool, O, ws, { scheme: 'vat', prefix: 'NL', number: '1234567 89B01', jurisdiction: 'NL' });
   ok(!!nl.id, 'letters are fine in a VAT number');
@@ -76,7 +77,7 @@ async function main() {
   await company.addFinancial(pool, O, ws, { number: '5493001KJTIIGC8Y1R12', status: 'LAPSED', nextRenewal: '2027-01-01' });
   const read1 = await company.read(pool, O, ws);
   ok(read1.financial[0].status === 'LAPSED' && read1.financial[0].nextRenewal === '2027-01-01', 'a lapsed LEI says lapsed, with its renewal date');
-  ok(read1.customs.length === 1 && read1.tax.length === 4, 'each namespace is its own list');
+  ok(read1.customs.length === 1 && read1.tax.length === 5, 'each namespace is its own list');
 
   // who may act
   await company.addMandate(pool, O, ws, { name: 'Ada', role: 'Director', authority: 'sole', dateOfBirth: '1815-12-10' });

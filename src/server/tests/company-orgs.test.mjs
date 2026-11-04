@@ -65,20 +65,20 @@ async function main() {
   for (const [name, fn] of [['members', () => orgs.listMembers(pool, S, id)], ['the wallet', () => orgs.getWallet(pool, S, id)], ['transactions', () => orgs.listTransactions(pool, S, id)], ['invoices', () => orgs.listInvoices(pool, S, id)], ['activity', () => orgs.listActivity(pool, S, id)]]) ok(await refused(fn, 'not_found'), `nor can they read ${name}`);
   ok((await orgs.listMembers(pool, M, id)).length >= 2, 'a member reads the roster');
   ok(await refused(() => orgs.listInvites(pool, M, id), 'forbidden'), 'but the addresses of people invited are for those who manage it');
-  ok(await refused(() => orgs.issueInvoice(pool, M, id, { buyer: BUYER, lines: [LINE] }), 'forbidden'), 'a member can’t issue an invoice');
-  ok(await refused(() => orgs.issueInvoice(pool, B, id, { buyer: BUYER, lines: [LINE] }), 'person_only'), 'nor can an agent, even an admin one');
+  ok(await refused(() => orgs.issueInvoice(pool, M, id, { currency: 'RON', buyer: BUYER, lines: [LINE] }), 'forbidden'), 'a member can’t issue an invoice');
+  ok(await refused(() => orgs.issueInvoice(pool, B, id, { currency: 'RON', buyer: BUYER, lines: [LINE] }), 'person_only'), 'nor can an agent, even an admin one');
   ok(await refused(() => orgs.verifyRegistration(pool, M, id, { connector: register('found') }), 'forbidden'), 'a member can’t re-verify the company');
 
   // numbers are gapless
-  const first = await orgs.issueInvoice(pool, O, id, { buyer: BUYER, lines: [LINE] });
+  const first = await orgs.issueInvoice(pool, O, id, { currency: 'RON', buyer: BUYER, lines: [LINE] });
   const n = (x) => Number(x.number.split('-').pop());
   ok(n(first) === 1, 'the first invoice is number 1');
   ok(first.invoice.seller.address.countrySubdivision === 'Cluj', 'the register’s county reaches the invoice, which RO e-invoicing requires');
   ok(first.invoice.seller.name === 'ACME TRADING SRL', 'it names the REGISTERED company, not the trading name');
-  ok(await refused(() => orgs.issueInvoice(pool, O, id, { buyer: { ...BUYER, address: { ...BUYER.address, countrySubdivision: '' } }, lines: [LINE] }), 'invalid_invoice'), 'an invoice that fails Romanian rules is refused');
-  const after = await orgs.issueInvoice(pool, O, id, { buyer: BUYER, lines: [LINE] });
+  ok(await refused(() => orgs.issueInvoice(pool, O, id, { currency: 'RON', buyer: { ...BUYER, address: { ...BUYER.address, countrySubdivision: '' } }, lines: [LINE] }), 'invalid_invoice'), 'an invoice that fails Romanian rules is refused');
+  const after = await orgs.issueInvoice(pool, O, id, { currency: 'RON', buyer: BUYER, lines: [LINE] });
   ok(n(after) === 2, 'and took no number: the next one is 2, with no gap');
-  const race = await Promise.all(Array.from({ length: 8 }, () => orgs.issueInvoice(pool, O, id, { buyer: BUYER, lines: [LINE] })));
+  const race = await Promise.all(Array.from({ length: 8 }, () => orgs.issueInvoice(pool, O, id, { currency: 'RON', buyer: BUYER, lines: [LINE] })));
   ok(race.map(n).sort((a, b) => a - b).join() === '3,4,5,6,7,8,9,10', 'eight invoices issued at once get eight consecutive numbers');
 
   // an issued invoice is a legal document
@@ -97,7 +97,41 @@ async function main() {
   ok(await refused(() => orgs.creditInvoice(pool, O, id, cn.number), 'not_an_invoice'), 'a credit note can’t be credited');
   ok(await dbRefused(`UPDATE org_issued_invoices SET credited_by = 'OTHER' WHERE number = $1`, [first.number]), 'and what credited it can’t be rewritten');
   const noReg = await orgs.createOrg(pool, O, { name: 'Plain', slug: `${tag}-plain` });
-  ok(await refused(() => orgs.issueInvoice(pool, O, noReg.id, { buyer: BUYER, lines: [LINE] }), 'not_registered'), 'a company with no registration has nothing to put on a tax document');
+  ok(await refused(() => orgs.issueInvoice(pool, O, noReg.id, { currency: 'RON', buyer: BUYER, lines: [LINE] }), 'not_registered'), 'a company with no registration has nothing to put on a tax document');
+
+  // a company anywhere: what it states is enough, in its own currency, and nothing Romanian reaches it
+  const office = (country, region) => ({ line1: '1 Main Street', city: 'Capital', postalCode: '10001', ...(region ? { region } : {}), country });
+  const buyerIn = (country) => ({ name: 'A Client', address: { city: 'Elsewhere', country } });
+  const NO_TAX = { quantity: 2, unitPrice: 5000, itemName: 'Design', vatCategory: 'O', exemptionReason: 'No sales tax on this service' };
+  const us = await orgs.createOrg(pool, O, { name: 'Northwind', slug: `${tag}-us`, registration: { jurisdiction: 'US', legalForm: 'LLC', nationalId: '12-3456789', legalName: 'Northwind Holdings LLC', registryNumber: '7654321', register: 'Delaware Division of Corporations', registeredOffice: office('US', 'DE') } });
+  ok(us.registration.jurisdiction === 'US' && !us.registrationEvidence, 'a company in the United States is founded on what it states');
+  ok(await refused(() => orgs.verifyRegistration(pool, O, us.id), 'no_register'), 'there is no register to ask, and that isn’t a failure of the company');
+  const usd = await orgs.issueInvoice(pool, O, us.id, { currency: 'USD', buyer: buyerIn('US'), lines: [NO_TAX] });
+  ok(usd.invoice.currency === 'USD' && usd.invoice.specificationId === 'urn:cen.eu:en16931:2017', 'it invoices in dollars under the common rules, declaring no Romanian profile');
+  ok(usd.invoice.seller.name === 'Northwind Holdings LLC' && usd.invoice.seller.tradingName === 'Northwind', 'the seller is the legal name it stated');
+  ok(usd.invoice.seller.legalRegistrationScheme === 'Delaware Division of Corporations' && usd.invoice.seller.legalRegistrationId === '7654321', 'and its register is its own, not ONRC');
+  ok(usd.invoice.seller.address.countrySubdivision === 'DE' && usd.invoice.seller.address.country === 'US', 'at its own address');
+  ok(usd.ubl.includes('<cbc:TaxExemptionReason>No sales tax on this service</cbc:TaxExemptionReason>') || usd.invoice.vatBreakdown[0].exemptionReason === 'No sales tax on this service', 'an invoice charging no tax says why');
+  const usCredit = await orgs.creditInvoice(pool, O, us.id, usd.number);
+  ok(usCredit.invoice.currency === 'USD' && usCredit.invoice.totals.payableAmount === -usd.invoice.totals.payableAmount, 'and a credit note reverses it exactly');
+  const jp = await orgs.createOrg(pool, O, { name: 'Hikari', slug: `${tag}-jp`, registration: { jurisdiction: 'JP', legalForm: 'KK', nationalId: '1234567890123', registeredOffice: office('JP') } });
+  const yen = await orgs.issueInvoice(pool, O, jp.id, { currency: 'JPY', buyer: buyerIn('JP'), lines: [{ quantity: 2, unitPrice: 5000, itemName: 'Design', vatCategory: 'S', vatRate: 10 }] });
+  ok(yen.ubl.includes('<cbc:PayableAmount currencyID="JPY">11000</cbc:PayableAmount>'), 'yen have no decimals, so 11000 is written as 11000');
+  const uk = await orgs.createOrg(pool, O, { name: 'Albion', slug: `${tag}-uk`, registration: { jurisdiction: 'GB', legalForm: 'Ltd', nationalId: '01234567', vatId: 'GB123456789', registeredOffice: office('GB') } });
+  ok(uk.registration.identifiers.some((i) => i.kind === 'vat' && i.value === 'GB123456789'), 'a UK company records its own VAT number');
+  const dxb = await orgs.createOrg(pool, O, { name: 'Gulf', slug: `${tag}-dxb`, registration: { jurisdiction: 'AE-DXB', legalForm: 'LLC', nationalId: '123', registeredOffice: office('AE') } });
+  ok(dxb.registration.jurisdiction === 'AE-DXB' && dxb.registration.registeredOffice.country === 'AE', 'a free zone keeps its jurisdiction, and its address the country');
+  ok(await refused(() => orgs.createOrg(pool, O, { name: 'Nowhere', slug: `${tag}-zz`, registration: { jurisdiction: 'ZZ', legalForm: 'LLC', nationalId: '1' } }), 'invalid_jurisdiction'), 'a country that doesn’t exist is refused');
+  ok(await refused(() => orgs.createOrg(pool, O, { name: 'Greek', slug: `${tag}-gr`, registration: { jurisdiction: 'GR', legalForm: 'AE', nationalId: '1', vatId: 'GR123456789' } }), 'bad_prefix'), 'the identifier rules hold at founding too');
+  ok((await pool.query('SELECT count(*)::int n FROM workspaces WHERE slug = $1', [`${tag}-gr`])).rows[0].n === 0, 'and a refused founding leaves nothing behind');
+  const bare = await orgs.createOrg(pool, O, { name: 'No Office', slug: `${tag}-bare`, registration: { jurisdiction: 'DE', legalForm: 'GmbH', nationalId: '123' } });
+  ok(await refused(() => orgs.issueInvoice(pool, O, bare.id, { currency: 'EUR', buyer: buyerIn('DE'), lines: [NO_TAX] }), 'no_registered_office'), 'an invoice needs the registered office, whatever the country');
+  const beforeBad = await orgs.listInvoices(pool, O, us.id);
+  ok(await refused(() => orgs.issueInvoice(pool, O, us.id, { buyer: buyerIn('US'), lines: [NO_TAX] }), 'invalid_currency'), 'a currency is never guessed');
+  ok(await refused(() => orgs.issueInvoice(pool, O, us.id, { currency: 'NOPE', buyer: buyerIn('US'), lines: [NO_TAX] }), 'invalid_currency'), 'nor made up');
+  ok((await orgs.listInvoices(pool, O, us.id)).length === beforeBad.length, 'and neither takes a number');
+  ok(await refused(() => orgs.issueInvoice(pool, O, id, { currency: 'RON', buyer: BUYER, lines: [{ ...LINE, vatRate: 7 }] }), 'invalid_invoice'), 'a Romanian company still gets Romania’s rules');
+  ok((await orgs.issueInvoice(pool, O, us.id, { currency: 'USD', buyer: buyerIn('US'), lines: [{ ...LINE, vatRate: 7 }] })).invoice.vatBreakdown[0].rate === 7, 'and nobody else does');
 
   // D18: employment is an admission plus a title
   const agent = await orgs.employAgent(pool, O, id, { mindId: 'mind-1', displayName: 'Clerk', role: 'admin', capabilities: ['files.read', 'files.read', ' tasks.write '] });
