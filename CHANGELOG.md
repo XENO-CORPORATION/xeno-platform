@@ -11,6 +11,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 **The account menu tells the truth about connected accounts.** Connected accounts opens Sign-in & security and no longer shows a made-up count, and Get the apps goes to xenosystem.ai.
 
+## 2026-11-05
+
+**Remote control from a phone.** remote.xenosystem.ai opens XENO Agent on your own PC from any browser, with nothing to install. It has its own address and its own sign-in, which can reach remote control and nothing else on your account.
+
 ## 2026-11-04
 
 **A business can change its trading name.** Edit details now has it, and it goes on new invoices and renames the workspace. Invoices already issued keep the old name. Before, no screen could rename a business.

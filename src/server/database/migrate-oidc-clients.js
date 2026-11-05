@@ -96,6 +96,9 @@ export const FIRST_PARTY_CLIENTS = [
   // XENO Places — a public browser SPA (no backend): authorization code + PKCE-S256 in the browser, access token in
   // memory only. One exact-match redirect; no localhost redirect (no other web client registers one).
   { id: 'xeno-places', name: 'XENO Places', loopback: false, redirects: ['https://places.xenosystem.ai/auth/callback'] },
+  // XENO Agent remote control in a browser: a public SPA on its own host, code + PKCE, its token bound to a key the page
+  // cannot read (xeno-agent-interface decision 0006). One exact-match redirect, like Places.
+  { id: 'xeno-remote-web', name: 'XENO Agent Remote', loopback: false, redirects: ['https://remote.xenosystem.ai/callback'] },
   // XENO Mail — web relying party; mail-core (backend) handles the code exchange.
   { id: 'xeno-mail', name: 'XENO Mail', loopback: false, redirects: ['https://mail-api.xenostudio.ai/api/auth/xeno/callback'] },
   // Mobile (registered ahead of build; app-scheme redirect)

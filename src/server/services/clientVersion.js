@@ -63,6 +63,7 @@ const NAME_MAP = new Map([
   ['xeno-gamedev', 'gamedev'], ['xeno-gamedev-local', 'gamedev'], ['xenogamedev', 'gamedev'],
   ['xenoharbor', 'harbor'],
   ['xeno-places', 'places'], ['xenoplaces', 'places'],
+  ['xeno-remote-web', 'agent-remote'],
 ]);
 
 const canonical = (raw) => {
