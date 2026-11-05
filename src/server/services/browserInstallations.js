@@ -36,7 +36,7 @@ function readRegistration(body, noun = 'browser') {
 const VIEW = `SELECT id, installation_id AS "installationId", dpop_jkt, label, browser, os, enabled,
    extension_version AS "extensionVersion", tools, last_seen_at AS "lastSeenAt",
    created_at AS "createdAt", updated_at AS "updatedAt", revoked_at AS "revokedAt",
-   surface, projects, offered_tools AS "offeredTools" FROM browser_installations`;
+   surface, projects, offered_tools AS "offeredTools", remote_role AS "remoteRole" FROM browser_installations`;
 
 /** What a caller may see: the VIEW minus the key thumbprint. The binding is ours to check, never to publish. */
 const publicView = ({ dpop_jkt: _jkt, surface, projects, offeredTools, ...rest }) => (surface === 'browser' ? rest : { ...rest, projects, offeredTools });
@@ -54,7 +54,11 @@ const publicView = ({ dpop_jkt: _jkt, surface, projects, offeredTools, ...rest }
  * the same installation id stays refused and the app has to mint a new one when the person asks to connect again.
  */
 export async function register(db, userId, body, proofJkt, surface = 'browser') {
-  const { installationId, label, browser, os } = readRegistration(body, surface === 'corpus' ? 'PC' : 'browser');
+  const { installationId, label, browser, os } = readRegistration(body, surface === 'corpus' ? 'PC' : surface === 'remote' ? 'device' : 'browser');
+  const remoteRole = surface === 'remote' ? body?.role : null;
+  if (surface === 'remote' && remoteRole !== 'host' && remoteRole !== 'device') {
+    throw new InstallationError('Say whether this device is the host or a remote.', 'invalid_role');
+  }
   if (!proofJkt) {
     throw new InstallationError('Register with a proof from this browser’s key so only it can connect.', 'dpop_bound_required', 403);
   }
@@ -73,17 +77,17 @@ export async function register(db, userId, body, proofJkt, surface = 'browser') 
         WHERE id = $1 RETURNING id`, [live.id, label, browser, os])).rows[0];
     return { installation: await get(db, userId, updated.id, surface), created: false };
   }
-  if (surface === 'corpus' && (await db.query(`SELECT 1 FROM browser_installations WHERE user_id = $1 AND installation_id = $2 AND surface = 'corpus' AND revoked_at IS NOT NULL`, [userId, installationId])).rows[0]) {
+  if (surface !== 'browser' && (await db.query(`SELECT 1 FROM browser_installations WHERE user_id = $1 AND installation_id = $2 AND surface = 'corpus' AND revoked_at IS NOT NULL`, [userId, installationId])).rows[0]) {
     throw new InstallationError('This PC was removed from your XENO account.', 'installation_removed', 403);
   }
 
   // One live row per (person, installation). A row that was revoked is not live, so a browser that
   // reconnects after a revoke is a NEW row with a new id — old links keep pointing at the old one.
   const { rows } = await db.query(
-    `INSERT INTO browser_installations (user_id, installation_id, dpop_jkt, label, browser, os, enabled, surface)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `INSERT INTO browser_installations (user_id, installation_id, dpop_jkt, label, browser, os, enabled, surface, remote_role)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (user_id, installation_id) WHERE revoked_at IS NULL DO NOTHING
-     RETURNING id`, [userId, installationId, proofJkt, label, browser, os, surface === 'corpus', surface]);
+     RETURNING id`, [userId, installationId, proofJkt, label, browser, os, surface !== 'browser', surface, remoteRole]);
   if (!rows[0]) throw new InstallationError('That browser is already connected. Reload your account page.', 'conflict', 409);
   return { installation: await get(db, userId, rows[0].id, surface), created: true };
 }

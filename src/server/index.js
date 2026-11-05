@@ -154,7 +154,7 @@ import spawnCanvasRoutes from './routes/spawnCanvasRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
-import browserRelayRoutes, { accountBrowserRouter, corpusRelayRoutes, accountCorpusRouter } from './routes/browserRelayRoutes.js';
+import browserRelayRoutes, { accountBrowserRouter, corpusRelayRoutes, remoteRelayRoutes, accountCorpusRouter } from './routes/browserRelayRoutes.js';
 import { sweepForgottenCalls } from './services/browserRelay.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
 import { handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade as authenticatePortUpgrade } from './services/computePorts.js';
@@ -820,6 +820,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/account/browsers', databaseMiddleware, authMiddleware, accountBrowserRouter);
   // XENO Corpus on a person's PC, over the same relay (services/corpusLocalMcp.js)
   app.use('/api/v2/corpus', databaseMiddleware, authMiddleware, corpusRelayRoutes);
+  app.use('/api/v2/remote', databaseMiddleware, authMiddleware, remoteRelayRoutes);
   app.use('/api/account/corpus-pcs', databaseMiddleware, authMiddleware, accountCorpusRouter);
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)

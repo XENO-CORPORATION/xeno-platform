@@ -400,7 +400,7 @@ export async function sweepForgottenCalls(db) {
 
 /** A Corpus PC's socket closed, so it stops counting as connected now: a call would otherwise wait out its deadline on a PC that isn't there. */
 export async function markCorpusGone(db, installationId) {
-  await db.query(`UPDATE browser_installations SET last_seen_at = now() - interval '61 seconds' WHERE id = $1 AND surface = 'corpus' AND revoked_at IS NULL`, [installationId]).catch(() => {});
+  await db.query(`UPDATE browser_installations SET last_seen_at = now() - interval '61 seconds' WHERE id = $1 AND surface <> 'browser' AND revoked_at IS NULL`, [installationId]).catch(() => {});
 }
 
 export async function touch(db, installationId) {

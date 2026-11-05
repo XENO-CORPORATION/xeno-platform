@@ -22,12 +22,13 @@ test('the Agent is a first-party public loopback client', () => {
   // conversation collaboration") because the Agent joins live conversations and Shell does
   // not. This asserted plain equality with xeno-shell and went red on that commit: correct
   // code, stale test. Asserting the difference keeps the property this was guarding -- no
-  // authority the agent surfaces do not already hold, apart from that one named scope.
+  // authority the agent surfaces do not already hold, apart from the named scopes. `remote:connect` is
+  // the second (decision 0006, 2026-11-05): the Agent app holds the remote control socket and Shell does not.
   const shell = new Set(scopesForClient('xeno-shell'));
   const own = scopesForClient(client.id);
   assert.ok([...shell].every((scope) => own.includes(scope)), 'the Agent lost authority the agent surfaces hold');
-  assert.deepEqual(own.filter((scope) => !shell.has(scope)), ['collaboration:use'],
-    'the Agent holds authority beyond the agent surfaces other than the one deliberate addition');
+  assert.deepEqual(own.filter((scope) => !shell.has(scope)), ['collaboration:use', 'remote:connect'],
+    'the Agent holds authority beyond the agent surfaces other than the deliberate additions');
   assert.equal(client.secret, undefined, 'the migration must not invent a client secret');
   assert.equal(CLIENT_AUTHORITY[client.id].includes('openid'), true);
   assert.doesNotThrow(assertAuthorityPolicy);

@@ -17,13 +17,14 @@
  * compare it byte for byte, then discard it.
  */
 import crypto from 'node:crypto';
-import { parseFrame, parseAuth, parseResult, parseApproval, parseTools, outbound, CLOSE, RelayProtocolError, parseProjects, RELAY_SURFACES } from '../utils/browserRelayProtocol.js';
+import { parseFrame, parseAuth, parseResult, parseApproval, parseTools, parseSealed, outbound, CLOSE, RelayProtocolError, parseProjects, RELAY_SURFACES } from '../utils/browserRelayProtocol.js';
 import { verifyDpopProof } from '../utils/dpop.js';
 import { resolveAuthedUser } from '../middleware/auth.js';
 import { issuer } from '../config/hosts.js';
 import { pool } from '../middleware/database.js';
 import * as relay from '../services/browserRelay.js';
 import * as installations from '../services/browserInstallations.js';
+import { openRemoteSession, remoteRelayEnabled } from '../services/remoteRelay.js';
 
 const AUTH_WINDOW_MS = 10_000;
 const PING_INTERVAL_MS = 20_000;
@@ -68,8 +69,10 @@ export async function handleRelayConnection(ws, req, db = pool, { pingMs = PING_
   let userId = null;
   let authed = false;
   let ping = null;
+  let remote = null;
 
   const spec = surfaceForPath(String(req.url || '')) || RELAY_SURFACES.browser;
+  if (spec.surface === 'remote' && !remoteRelayEnabled()) return closeWith(ws, CLOSE.FORBIDDEN, spec.off);
   const url = new URL(String(req.url || RELAY_PATH), 'https://relay.invalid');
   const requestedId = url.searchParams.get('installation');
 
@@ -83,7 +86,8 @@ export async function handleRelayConnection(ws, req, db = pool, { pingMs = PING_
   ws.on('close', () => {
     clearTimeout(authTimer);
     if (ping) clearInterval(ping);
-    if (authed && relay.detach(ws) && spec.surface === 'corpus') relay.markCorpusGone(req.db, installationId);
+    if (remote) remote.close().catch(() => {});
+    if (authed && relay.detach(ws) && spec.surface !== 'browser') relay.markCorpusGone(req.db, installationId);
   });
   ws.on('error', () => {});
 
@@ -118,10 +122,10 @@ export async function handleRelayConnection(ws, req, db = pool, { pingMs = PING_
         // 3. Does the person own this installation, is it still enabled, and is it THIS key?
         if (!requestedId) return closeWith(ws, CLOSE.FORBIDDEN, 'installation id required');
         // A browser names the row it was given at registration. A PC names the id it generated, scoped to the person holding the token.
-        if (spec.surface === 'corpus' && !installations.INSTALLATION_ID.test(requestedId)) return closeWith(ws, CLOSE.FORBIDDEN, 'installation id required');
-        const row = (await (spec.surface === 'corpus'
-          ? req.db.query(`SELECT id, user_id, dpop_jkt, enabled, label, revoked_at, surface FROM browser_installations
-              WHERE user_id = $1 AND installation_id = $2 AND surface = 'corpus' ORDER BY revoked_at IS NULL DESC, created_at DESC LIMIT 1`, [resolved.user.id, requestedId])
+        if (spec.surface !== 'browser' && !installations.INSTALLATION_ID.test(requestedId)) return closeWith(ws, CLOSE.FORBIDDEN, 'installation id required');
+        const row = (await (spec.surface !== 'browser'
+          ? req.db.query(`SELECT id, user_id, dpop_jkt, enabled, label, revoked_at, surface, remote_role FROM browser_installations
+              WHERE user_id = $1 AND installation_id = $2 AND surface = '${spec.surface}' ORDER BY revoked_at IS NULL DESC, created_at DESC LIMIT 1`, [resolved.user.id, requestedId])
           : req.db.query(`SELECT id, user_id, dpop_jkt, enabled, label, revoked_at, surface FROM browser_installations WHERE id = $1`, [requestedId]))).rows[0];
         if (!row || row.revoked_at || row.surface !== spec.surface) return closeWith(ws, CLOSE.FORBIDDEN, 'installation revoked');
         if (String(row.user_id) !== String(resolved.user.id)) return closeWith(ws, CLOSE.FORBIDDEN, 'not yours');
@@ -133,6 +137,14 @@ export async function handleRelayConnection(ws, req, db = pool, { pingMs = PING_
         userId = String(resolved.user.id);
         clearTimeout(authTimer);
         relay.attach({ db: req.db, installation: row, installationId, socket: ws, np: nonce });
+        if (spec.surface === 'remote') {
+          remote = openRemoteSession({
+            db: req.db, installationId, userId, role: row.remote_role,
+            deliver: (message) => send(ws, outbound.sealed(message)),
+            onOverload: () => closeWith(ws, CLOSE.OVERLOADED, 'too many frames'),
+          });
+          await remote.ready;
+        }
         send(ws, outbound.ready({ id: installationId, label: row.label, enabled: row.enabled }));
         // A browser that reconnects picks up whatever its conversation left waiting: the row survived
         // the socket, which is the reason the row exists at all.
@@ -147,7 +159,7 @@ export async function handleRelayConnection(ws, req, db = pool, { pingMs = PING_
         await relay.touch(req.db, installationId);
         ping = setInterval(() => {
           // this stamp says the PC is there, so it needs the PC to have said something: a dead peer's socket can look open for minutes
-          if (spec.surface === 'corpus' && Date.now() - heardAt > silentMs) { try { ws.terminate(); } catch {} return; }
+          if (spec.surface !== 'browser' && Date.now() - heardAt > silentMs) { try { ws.terminate(); } catch {} return; }
           send(ws, outbound.pong()); relay.touch(req.db, installationId);
         }, pingMs);
         if (typeof ping.unref === 'function') ping.unref();
@@ -165,6 +177,13 @@ export async function handleRelayConnection(ws, req, db = pool, { pingMs = PING_
     try {
       switch (frame.type) {
         case 'ping': return send(ws, outbound.pong());
+        case 'sealed': {
+          if (!remote) return send(ws, outbound.error('unknown_frame', 'This connection carries no sealed frames.'));
+          const sealed = parseSealed(frame);
+          const outcome = await remote.send(sealed);
+          if (outcome !== 'delivered') send(ws, outbound.undelivered(sealed.to, outcome));
+          return;
+        }
         case 'hello': {
           const tools = parseTools(frame.tools);
           if (spec.surface === 'corpus') {

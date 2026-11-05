@@ -37,6 +37,7 @@
     "test:export-audit": "node --test scripts/export-audit-awaited.test.mjs",
     "test:corpus-pcs-ui": "node prototypes/xeno-workspace/tests/corpus-pcs-test.mjs",
     "test:corpus-relay": "node src/server/tests/corpus-relay.test.mjs",
+    "test:remote-relay": "node src/server/tests/remote-relay.test.mjs",
     "test:marketplace-agents": "node --test src/server/tests/marketplace-agents.test.mjs",
     "test:marketplace-agents-ui": "node prototypes/xeno-workspace/tests/market-agents-test.mjs",
     "test:stock": "node src/server/tests/stock.test.mjs",
