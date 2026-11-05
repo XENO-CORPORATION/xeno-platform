@@ -7,6 +7,8 @@ import { shot } from './shot.mjs';
 //   3. Send posts {key, text}; a reply posts replyTo; Hand to agent posts the chat's hand-off from a dialog.
 //   4. New message → a direct message, addressed …/message/dm/<id>.
 //   5. Unconfigured server: an honest state, never sample rows.
+//   6. Your own messages show one tick, two, or two in green; the count shows while only some have read; other people's
+//      show none. Opening a conversation says you've seen it. @ offers who is here, and Enter picks rather than sends.
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
@@ -43,6 +45,7 @@ async function open(addr) {
     if (u.pathname === '/api/message/direct') { db.dms = [{ conversationId: DM, with: { id: 'u2', name: 'Ada', kind: 'human' }, unread: false }]; return json({ success: true, conversationId: DM, with: { id: 'u2', name: 'Ada' } }); }
     if (u.pathname === '/api/message/handoff') return json({ success: true, note: 'Handed to Atlas as T-9', handoff: { delegated: true, task: { key: 'T-9' } } });
     if (u.pathname === '/api/message/realtime') return json({ success: true, realtime: false });
+    if (u.pathname === '/api/message/members') return json({ success: true, members: [{ id: 'u2', name: 'Ada', kind: 'human', handle: 'ada' }, { id: 'u3', name: 'Atlas', kind: 'agent', handle: 'atlas.ada' }] });
     if (u.pathname.startsWith('/api/message/')) return json({ success: false, error: 'unexpected ' + u.pathname }, 500);
     if (u.pathname === '/api/agents') return json({ success: true, agents: [{ id: 'agt_atlas', name: 'Atlas' }] });
     if (u.pathname === '/api/notifications') return json({ success: true, unread: 0, items: [] });
@@ -91,6 +94,32 @@ try {
     ok(await path0(p) === `/workspace/social/spaces/message/dm/${DM}`, `a direct message has its own address (${await path0(p)})`);
     ok(db.calls.some((c) => c[0] === 'POST' && c[1].startsWith('/api/message/direct') && c[2].userId === 'u2'), 'it was started with the chosen person');
     ok(!errs.length, `no page errors (${errs.join(' | ')})`);
+    await p.close(); }
+
+  { const me = { id: '7', name: 'Test Person', kind: 'human' }, at = new Date().toISOString(), mine = (id, status, read, extra = {}) => ({ id, author: me, text: `Mine ${status}`, createdAt: at, replies: 0, mentions: [], receipt: { status, of: 3, delivered: status === 'sent' ? 0 : 3, read, readBy: read ? ['Ada'] : [] }, ...extra });
+    const T1 = 'aaaaaaaa-0000-4000-8000-000000000001', T2 = 'aaaaaaaa-0000-4000-8000-000000000002', T3 = 'aaaaaaaa-0000-4000-8000-000000000003', T4 = 'aaaaaaaa-0000-4000-8000-000000000004';
+    db.msgs[CONV].push(mine(T1, 'sent', 0), mine(T2, 'delivered', 1), mine(T3, 'read', 3, { text: 'Over to you @atlas.ada', mentions: [{ id: 'u3', name: 'Atlas', kind: 'agent', handle: 'atlas.ada' }] }), { id: T4, author: { id: 'u2', name: 'Ada', kind: 'human' }, text: 'Hello <b>@ada</b>', createdAt: at, replies: 0, mentions: [] });
+    db.calls.length = 0;
+    const { p, errs } = await open(`/workspace/social/spaces/message/team/${TEAM}`); await p.bringToFront(); await wait(600);
+    const t = await p.evaluate((a) => { const q = (id) => document.querySelector(`[data-ms-tick="${id}"]`); const lines = (id) => q(id)?.querySelectorAll('path').length; return { sent: lines(a[0]), deliv: lines(a[1]), read: lines(a[2]), status: q(a[2])?.dataset.msStatus, color: getComputedStyle(q(a[2])).color, plain: getComputedStyle(q(a[0])).color, part: q(a[1])?.textContent, title: q(a[2])?.title, others: q(a[3])?.dataset.msStatus || null, at: document.querySelector(`[data-ms-msg="${a[2]}"] [data-ms-mention]`)?.textContent, raw: !!document.querySelector(`[data-ms-msg="${a[3]}"] [data-ms-body] b`) }; }, [T1, T2, T3, T4]);
+    ok(t.sent === 1 && t.deliv === 2 && t.read === 2, `one tick for sent, two for delivered and read (${JSON.stringify(t)})`);
+    ok(t.color === "rgb(34, 197, 94)" && t.status === "read", `a read message’s ticks are green (${t.color})`);
+    ok(/1 of 3 read/.test(t.part) && /Read by 3 of 3/.test(t.title), 'a group shows the count, and hovering says who');
+    ok(t.others === null, 'someone else’s message has no ticks');
+    ok(t.at === '@atlas.ada' && !t.raw, 'a mention is marked, and text is still text');
+    ok(db.calls.some((c) => c[0] === 'GET' && c[1].includes('/api/message/messages') && c[1].includes('seen=1')), 'opening a conversation says you’ve seen it');
+    await p.focus('[data-ms-compose=""] [data-ms-text]'); await p.keyboard.type('Hello @a'); await wait(300);
+    const list = await p.$$eval('[data-ms-at] li', (x) => x.map((n) => n.innerText));
+    ok(list.length === 2 && list.some((x) => /agent/.test(x)), `@ offers who is here, agents marked (${list.join(' / ')})`);
+    await p.keyboard.press('ArrowDown'); await p.keyboard.press('Enter'); await wait(200);
+    const v = await p.$eval('[data-ms-compose=""] [data-ms-text]', (x) => x.value);
+    ok(v === 'Hello @atlas.ada ', `Enter picks the name instead of sending (${v})`);
+    ok(!(await p.$('[data-ms-at]')), 'and the list closes');
+    await p.evaluate(() => window.XW.render()); await wait(200);
+    ok((await p.$eval('[data-ms-compose=""] [data-ms-text]', (x) => x.value)) === 'Hello @atlas.ada ', 'a repaint keeps what you were typing');
+    await p.keyboard.type('x');
+    ok(!errs.length, `no page errors (${errs.join(' | ')})`);
+    await shot(p, 'message-ticks');
     await p.close(); }
 
   { db.configured = false; const { p } = await open('/workspace/social/spaces/message');

@@ -3,6 +3,12 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-05
+
+**Message shows what happened to what you sent.** One tick means XENO has it, two mean it reached everyone, and two in green mean everyone has read it. In a group, hover to see who, and the count shows while only some have read. If you turn read receipts off, nobody sees you read and you don't see others read. Channels no longer stay marked as new after you've read them.
+
+**@ names someone in a conversation, people and agents alike.** Type @ to pick from who's there. It lands in their inbox, and an agent reads its own inbox with its tools. An agent can name another agent the same way. Naming an agent doesn't start it running.
+
 ## 2026-11-04
 
 **A business can change its trading name.** Edit details now has it, and it goes on new invoices and renames the workspace. Invoices already issued keep the old name. Before, no screen could rename a business.

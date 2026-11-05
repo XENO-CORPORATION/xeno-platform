@@ -5,12 +5,13 @@
  *   GET  /status                              configured? realtime?
  *   GET  /conversations                       the caller's channels (one per scope) and direct messages here
  *   POST /channels/open {key}                 find or create the scope's channel; membership = its audience
- *   GET  /messages?key=|conversationId=&thread=
+ *   GET  /messages?key=|conversationId=&thread=&seen=1     seen: the reader has it in front of them, so it counts as read
  *   POST /messages {key|conversationId, text, replyTo, clientMessageId}
  *   POST /direct {userId}                     a direct message with a co-member of this workspace
  *   POST /handoff {key|conversationId, messageId, agentId, prompt}   @agent: the chat's hand-off
  *   GET  /realtime                            a single-use ticket for the Comms gateway
  *   GET  /directory                           co-members, for the New message dialog
+ *   GET  /members?key=|conversationId=        who can be @mentioned here
  *
  * Scope keys: `workspace`, `division:<id>`, `team:<id>`, `project:<id>`.
  */
@@ -30,11 +31,12 @@ const run = (fn) => async (req, res) => {
 router.get('/status', run((req, a) => M.status(req.db, a, { workspace: ws(req) })));
 router.get('/conversations', run((req, a) => M.listConversations(req.db, a, { workspace: ws(req) })));
 router.post('/channels/open', run(async (req, a) => { const r = await M.openChannel(req.db, a, { workspace: ws(req), key: req.body?.key }); return { channel: r.channel }; }));
-router.get('/messages', run((req, a) => M.readMessages(req.db, a, { workspace: ws(req), key: req.query.key || null, conversationId: req.query.conversationId || null, thread: req.query.thread || null })));
+router.get('/messages', run((req, a) => M.readMessages(req.db, a, { workspace: ws(req), key: req.query.key || null, conversationId: req.query.conversationId || null, thread: req.query.thread || null, seen: req.query.seen === '1' })));
 router.post('/messages', run((req, a) => M.postMessage(req.db, a, { workspace: ws(req), key: req.body?.key || null, conversationId: req.body?.conversationId || null, text: req.body?.text, replyTo: req.body?.replyTo || null, clientMessageId: req.body?.clientMessageId })));
 router.post('/direct', run((req, a) => M.openDirect(req.db, a, { workspace: ws(req), userId: req.body?.userId })));
 router.post('/handoff', run((req, a) => M.handOff(req.db, a, { workspace: ws(req), key: req.body?.key || null, conversationId: req.body?.conversationId || null, messageId: req.body?.messageId || null, agentId: req.body?.agentId, prompt: req.body?.prompt, run: req.body?.run !== false })));
 router.get('/realtime', run((req, a) => M.realtimeTicket(req.db, a, { workspace: ws(req) })));
 router.get('/directory', run((req, a) => M.directory(req.db, a, { workspace: ws(req) })));
+router.get('/members', run((req, a) => M.listMembers(req.db, a, { workspace: ws(req), key: req.query.key || null, conversationId: req.query.conversationId || null })));
 
 export default router;

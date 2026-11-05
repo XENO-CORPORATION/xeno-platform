@@ -12,7 +12,9 @@
  *     Comms is called; a channel's Comms membership is exactly the scope's audience, and a person removed from a team
  *     is removed from its channel on the next open — even their own Comms client loses it;
  *   - threads (replyTo), direct messages only between co-members, @agent hand-off = the chat's own task hand-off;
- *   - MCP: an agent lists, reads and posts in channels it belongs to and nowhere else.
+ *   - MCP: an agent lists, reads and posts in channels it belongs to and nowhere else;
+ *   - ticks: sent, delivered, read, from each member's watermark and only on your own messages;
+ *   - @mentions reach members of the conversation only, in their inbox, an agent's included, and run nothing.
  *
  * Run: DATABASE_URL=postgresql://… node tests/message-xeno-comms.test.mjs
  */
@@ -46,7 +48,7 @@ const idServer = http.createServer(idApp);
 let identityUrl;
 
 // ── the fake Comms
-const C = { users: new Map(), bySubject: new Map(), devices: new Map(), convs: new Map(), msgs: [], seen: [] };
+const C = { users: new Map(), bySubject: new Map(), devices: new Map(), convs: new Map(), msgs: [], seen: [], read: new Map(), delivered: new Map(), mentions: [], hidden: new Set() };
 const uuid = () => crypto.randomUUID();
 const digest = (members) => crypto.createHash('sha256').update(members.map((m) => `${m.subject}\t${m.kind}\t${m.ownerSubject || ''}\t${m.displayName}\t${m.handle || ''}`).sort().join('\n')).digest('hex');
 async function verify(req) {
@@ -96,6 +98,20 @@ const fake = http.createServer(async (req, res) => {
       if (!cv) { cv = { id: uuid(), kind: 'dm', title: null, members: new Set([me, other]) }; C.convs.set(cv.id, cv); }
       return send(200, { id: cv.id, kind: 'dm' });
     }
+    const rc = req.url.match(/^\/v1\/conversations\/([^/]+)\/(receipts|mentions)(?:\/(read|delivered))?(\?.*)?$/);
+    if (rc) {
+      const cv = C.convs.get(rc[1]);
+      if (!cv || !active(cv)) return send(404, { error: 'conversation not found' });
+      if (rc[2] === 'mentions') {
+        const by = new Map();
+        for (const x of C.mentions.filter((y) => y.conversationId === cv.id)) by.set(x.messageId, [...(by.get(x.messageId) || []), x.userId]);
+        return send(200, [...by].map(([messageId, userIds]) => ({ messageId, userIds })));
+      }
+      if (req.method === 'POST') { (rc[3] === 'read' ? C.read : C.delivered).set(`${me}:${cv.id}`, body.messageId); return send(200, { conversationId: cv.id, messageId: body.messageId, userId: me }); }
+      // the watermark Comms hides: a member who doesn't share receipts, and everyone from a viewer who doesn't
+      return send(200, { conversationId: cv.id, members: [...cv.members].map((id) => ({ userId: id, lastDeliveredMessageId: C.delivered.get(`${id}:${cv.id}`) || null,
+        lastReadMessageId: id === me || (!C.hidden.has(id) && !C.hidden.has(me)) ? C.read.get(`${id}:${cv.id}`) || null : null, sharesReadReceipts: !C.hidden.has(id) })) });
+    }
     const mm = req.url.match(/^\/v1\/conversations\/([^/]+)\/messages(\?.*)?$/);
     if (mm) {
       const cv = C.convs.get(mm[1]);
@@ -104,6 +120,7 @@ const fake = http.createServer(async (req, res) => {
       const dup = C.msgs.find((m) => m.clientMessageId === body.clientMessageId && m.senderUserId === me);
       if (dup) return send(200, dup);
       const m = { id: uuid(), conversationId: cv.id, senderUserId: me, kind: 'text', body: body.body, replyToMessageId: body.replyToMessageId || null, clientMessageId: body.clientMessageId, createdAt: new Date(Date.now() + C.msgs.length).toISOString() };
+      for (const id of body.mentionedUserIds || []) { if (!cv.members.has(id)) return send(400, { error: 'only members of this conversation can be mentioned' }); C.mentions.push({ conversationId: cv.id, messageId: m.id, userId: id }); }
       C.msgs.push(m); cv.last = m.id; cv.lastAt = m.createdAt; return send(200, m);
     }
     return send(404, { error: 'unknown' });
@@ -240,6 +257,66 @@ async function main() {
   await refuses(Mcp.callTool(pool, A, 'post_message', { ...w, key: `team:${team}`, text: 'x', request_key: crypto.randomUUID() }), 'not_in_channel', 'and cannot post in a channel it is not in');
   await refuses(Mcp.callTool(pool, A, 'post_message', { ...w, key: 'workspace', text: 'x', request_key: 'nope' }), 'invalid_request_key', 'a post needs a request key');
   ok(!Mcp.TOOLS.some((t) => /direct|handoff|hand_off/.test(t.name)), 'there is no agent tool for direct messages or hand-offs');
+
+  // ── ticks
+  const lets = crypto.randomUUID().slice(0, 8);
+  const tickRoom = { ...w, key: 'workspace' };
+  const sent = (await M.postMessage(pool, H(ada), { ...tickRoom, text: `Ticks ${lets}` })).message;
+  const mineNow = async (who = H(ada)) => (await M.readMessages(pool, who, tickRoom)).messages.find((m) => m.id === sent.id);
+  const members = (await M.listMembers(pool, H(ada), tickRoom)).members;
+  const others = members.length - 1;
+  ok(others >= 1, 'the channel has someone else to read it');
+  let r = (await mineNow()).receipt;
+  ok(r && r.status === 'sent' && r.of === others && r.read === 0, 'a new message is one tick: XENO has it');
+  const everyone = [...C.convs.values()].find((c) => c.scope && c.scope.endsWith('|workspace')), adaC = C.bySubject.get(ada);
+  const rest = [...everyone.members].filter((id) => id !== adaC);
+  for (const id of rest) C.delivered.set(`${id}:${everyone.id}`, sent.id);
+  r = (await mineNow()).receipt;
+  ok(r.status === 'delivered' && r.delivered === others, 'two ticks once it reached every other member');
+  C.read.set(`${rest[0]}:${everyone.id}`, sent.id);
+  r = (await mineNow()).receipt;
+  ok(rest.length > 1 ? r.status === 'delivered' && r.read === 1 : r.status === 'read', 'one reader of several is a count, not a read mark');
+  for (const id of rest) C.read.set(`${id}:${everyone.id}`, sent.id);
+  r = (await mineNow()).receipt;
+  ok(r.status === 'read' && r.read === others && r.readBy.length === others, 'read once everyone has read it, and it names them');
+  for (const id of rest) { C.read.delete(`${id}:${everyone.id}`); C.delivered.delete(`${id}:${everyone.id}`); }
+  const earlier = C.msgs.find((m) => m.conversationId === everyone.id && m.id !== sent.id);
+  C.read.set(`${rest[0]}:${everyone.id}`, sent.id); const newer = (await M.postMessage(pool, H(ada), { ...tickRoom, text: 'A later one' })).message;
+  ok((await M.readMessages(pool, H(ada), tickRoom)).messages.find((m) => m.id === newer.id).receipt.read === 0, 'reading one message does not read a later one');
+  ok(!!earlier && (await M.readMessages(pool, H(ada), tickRoom)).messages.find((m) => m.id === earlier.id).receipt.read >= 1, 'and it does read every earlier one');
+  C.hidden.add(rest[0]);
+  ok((await mineNow()).receipt.read === 0, 'someone who hides read receipts is not seen reading');
+  C.hidden.delete(rest[0]);
+  const agentActor = { id: atlas.userId };
+  const seenBy = (await M.readMessages(pool, agentActor, tickRoom)).messages.find((m) => m.id === sent.id);
+  ok(!seenBy.receipt, 'ticks are the sender’s: nobody else gets them');
+  ok(C.read.get(`${C.bySubject.get(atlas.userId)}:${everyone.id}`) !== newer.id, 'looking without seeing marks nothing read');
+  await Mcp.callTool(pool, agentActor, 'read_channel', { ...tickRoom });
+  ok(C.read.get(`${C.bySubject.get(atlas.userId)}:${everyone.id}`) === newer.id, 'an agent that reads a channel has read it');
+  C.convs.get(everyone.id).last = newer.id; const posts = C.seen.length;
+  await M.listConversations(pool, H(bo), w); await M.listConversations(pool, H(bo), w);
+  ok(C.seen.slice(posts).filter((x) => x.method === 'POST' && x.url === `/v1/conversations/${everyone.id}/receipts/delivered`).length === 1, 'listing marks it delivered once, however often a page lists');
+
+  // ── @mentions
+  const atlasHandle = members.find((m) => m.id === String(atlas.userId)).handle;
+  ok(!!atlasHandle && members.find((m) => m.id === String(atlas.userId)).kind === 'agent', 'an agent can be named');
+  ok(JSON.stringify(M.mentionedHandles(`hi @${atlasHandle}. and (@Bob-1) a@b.co @@x`)) === JSON.stringify([atlasHandle.toLowerCase(), 'bob-1']), 'a handle ends where the sentence does, and an email is not one');
+  const inbox = async (id) => (await pool.query(`SELECT title, detail, ref, actor_kind FROM user_notifications WHERE user_id = $1 AND source = 'message' AND kind = 'mentioned' ORDER BY created_at DESC`, [id])).rows;
+  const named = (await M.postMessage(pool, H(ada), { ...tickRoom, text: `Can you take this, @${atlasHandle}?` })).message;
+  ok(named.mentions.length === 1 && named.mentions[0].id === String(atlas.userId), 'naming someone in the conversation reaches them');
+  ok(C.mentions.some((x) => x.messageId === named.id && x.userId === C.bySubject.get(atlas.userId)), 'and Comms keeps it with the message');
+  const row = (await inbox(atlas.userId))[0];
+  ok(row && row.title.includes('mentioned you') && row.ref.includes(`/t/${named.id}`) && row.ref.includes('?ws='), 'the agent’s own inbox says so and opens the message');
+  ok((await M.readMessages(pool, H(bo), tickRoom)).messages.find((m) => m.id === named.id).mentions[0].handle === atlasHandle, 'readers see who was named');
+  const back = (await Mcp.callTool(pool, agentActor, 'post_message', { ...tickRoom, text: `@${members.find((m) => m.id === String(bo)).handle} done`, request_key: crypto.randomUUID() })).structuredContent.message;
+  ok(back.mentions.length === 1 && (await inbox(bo))[0].actor_kind === 'agent', 'an agent can name a member the same way');
+  const before = C.mentions.length;
+  await M.postMessage(pool, H(ada), { ...tickRoom, text: `hello @${atlasHandle.toUpperCase()} and @nobody_here_${lets}` });
+  ok(C.mentions.length === before + 1, 'a handle matches however it is typed, and a stranger’s name reaches nobody');
+  const self = (await M.postMessage(pool, H(ada), { ...tickRoom, text: `note to @${members.find((m) => m.id === String(ada)).handle}` })).message;
+  ok(self.mentions.length === 0, 'naming yourself tells nobody');
+  ok(!C.seen.some((x) => /agent-runs|\/runs/.test(x.url)) && (await pool.query(`SELECT count(*)::int AS n FROM agent_cloud_runs`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n === 0, 'naming an agent starts nothing running');
+  ok((await Mcp.callTool(pool, agentActor, 'list_members', tickRoom)).structuredContent.members.length === members.length, 'an agent can see who it can name');
 
   // ── nothing of the conversation is stored on the platform
   const cols = (await pool.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_name LIKE 'comms\\_%' AND column_name ~ '(body|text|content|message)'`)).rows;

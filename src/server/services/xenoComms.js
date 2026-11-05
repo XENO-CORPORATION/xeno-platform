@@ -32,6 +32,7 @@ import { check, ROLE_RANK } from '../utils/authzReBAC.js';
 import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { delegateWork, HandoffError } from './chatHandoff.js';
+import { tell } from './inbox.js';
 
 export class MessageError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'MessageError'; this.code = code; this.status = status; }
@@ -270,15 +271,64 @@ async function call(db, p, method, path, opts = {}) {
 const nameMap = async (db, commsIds) => {
   const ids = [...new Set(commsIds.filter((x) => UUID.test(String(x || ''))))];
   if (!ids.length) return new Map();
-  const rows = (await db.query(`SELECT m.comms_user_id, u.id, COALESCE(u.display_name, u.username) AS name, (ai.user_id IS NOT NULL) AS agent
+  const rows = (await db.query(`SELECT m.comms_user_id, u.id, u.username AS handle, COALESCE(u.display_name, u.username) AS name, (ai.user_id IS NOT NULL) AS agent
     FROM comms_members m JOIN users u ON u.id = m.platform_user_id LEFT JOIN agent_identities ai ON ai.user_id = u.id WHERE m.comms_user_id = ANY($1::uuid[])`, [ids])).rows;
-  return new Map(rows.map((r) => [String(r.comms_user_id), { id: String(r.id), name: r.name || 'Member', kind: r.agent ? 'agent' : 'human' }]));
+  return new Map(rows.map((r) => [String(r.comms_user_id), { id: String(r.id), name: r.name || 'Member', kind: r.agent ? 'agent' : 'human', handle: r.handle || null }]));
 };
 const messageOf = (m, names) => ({
   id: String(m.id), author: names.get(String(m.senderUserId)) || { id: null, name: 'Someone', kind: 'human' },
   text: m.deletedAt ? '' : String(m.body || ''), encrypted: !m.body && !!m.encryptedPayload, deleted: !!m.deletedAt,
   replyTo: m.replyToMessageId ? String(m.replyToMessageId) : null, createdAt: m.createdAt || null, editedAt: m.editedAt || null,
 });
+
+// ─────────────────────────────────────────── receipts and mentions
+
+/** Comms before receipts answers 404 for these. A conversation still reads, with no ticks. */
+const optional = (p) => p.catch((e) => { if (e instanceof MessageError && e.code === 'comms_not_found') return null; throw e; });
+
+/**
+ * One sent message's ticks, from each other member's watermarks. A watermark is a message id, compared by position in
+ * this list, so a message that arrived just before someone marked read is not called read. Reading counts as delivered.
+ *   sent       Comms has it
+ *   delivered  it reached every other member
+ *   read       every other member has read it
+ */
+export function receiptOf(senderUserId, index, members, position, names = new Map()) {
+  const others = (members || []).filter((x) => String(x.userId) !== String(senderUserId));
+  const at = (id) => (id && position.has(String(id)) ? position.get(String(id)) : -1);
+  const read = others.filter((x) => at(x.lastReadMessageId) >= index);
+  const delivered = others.filter((x) => Math.max(at(x.lastDeliveredMessageId), at(x.lastReadMessageId)) >= index);
+  const status = others.length && read.length === others.length ? 'read' : others.length && delivered.length === others.length ? 'delivered' : 'sent';
+  return { status, of: others.length, delivered: delivered.length, read: read.length, readBy: read.map((x) => (names.get(String(x.userId)) || { name: 'Member' }).name).slice(0, 20) };
+}
+
+/** Handles a message names. The handles themselves carry dots (`bot.ada`), so a sentence's last dot is not part of one. */
+export function mentionedHandles(text) {
+  const out = new Set();
+  for (const m of String(text ?? '').matchAll(/(?:^|[^\w@.])@([a-z0-9][a-z0-9._-]{0,63})/gi)) out.add(m[1].replace(/[._-]+$/, '').toLowerCase());
+  return [...out];
+}
+
+/** Who can be named here: the channel's audience, or the two people in a direct message. */
+async function membersOf(db, t) {
+  if (t.channel) return (await audienceOf(db, t.ctx.workspaceId, t.channel.key)).members.map((m) => ({ id: m.subject, name: m.displayName, kind: m.kind, handle: m.handle || null }));
+  const d = (await db.query('SELECT user_low, user_high FROM comms_direct_messages WHERE comms_conversation_id = $1', [t.conversationId])).rows[0];
+  const people = [];
+  for (const id of d ? [d.user_low, d.user_high] : []) { const p = await resolvePrincipal(db, id); if (p) people.push({ id: String(p.id), name: p.displayName || p.handle || 'Member', kind: p.kind, handle: p.handle || null }); }
+  return people;
+}
+
+/** What a member's inbox opens: the message itself, in the workspace it was said in. */
+const addressOf = (t, messageId) => `/workspace/social/spaces/message/${t.channel ? t.channel.key.replace(':', '/') : `dm/${t.conversationId}`}/t/${messageId}?ws=${t.ctx.workspaceId}`;
+
+// Delivered is sent once per member, conversation and message, however often a page lists conversations.
+const delivered = new Map();
+function firstDelivery(me, conversationId, messageId) {
+  const k = `${me}:${conversationId}`;
+  if (delivered.get(k) === messageId) return false;
+  if (delivered.size > 20000) delivered.clear();
+  delivered.set(k, messageId); return true;
+}
 
 // ─────────────────────────────────────────── operations (REST, MCP and the screen all call these)
 
@@ -296,6 +346,9 @@ export async function listConversations(db, actor, { workspace, fetchImpl } = {}
   if (commsApiBase()) comms = (await call(db, ctx.me, 'GET', '/v1/conversations', { fetchImpl })) || [];
   const byId = new Map((Array.isArray(comms) ? comms : []).map((c) => [String(c.id), c]));
   const unread = (c) => !!(c && c.lastMessageId && c.lastMessageId !== c.lastReadMessageId);
+  // Listing is what proves a message reached this member, so it is what marks it delivered.
+  const arrived = (Array.isArray(comms) ? comms : []).filter((c) => unread(c) && firstDelivery(ctx.me.id, c.id, c.lastMessageId)).slice(0, 20);
+  await Promise.allSettled(arrived.map((c) => call(db, ctx.me, 'POST', `/v1/conversations/${c.id}/receipts/delivered`, { json: { messageId: c.lastMessageId }, fetchImpl })));
   const channels = scopes.map((s) => {
     const l = linked.get(s.key), c = l && byId.get(String(l.comms_conversation_id));
     return { key: s.key, kind: s.kind, title: titleFor(s, ctx.workspaceName), conversationId: l ? String(l.comms_conversation_id) : null, lastMessageAt: c ? c.lastMessageAt || null : null, unread: unread(c) };
@@ -340,12 +393,29 @@ async function target(db, actor, { workspace, key, conversationId, fetchImpl }) 
 }
 
 /** Messages, oldest first. `thread` = a message id: that message and its replies. Otherwise top-level messages with reply counts. */
-export async function readMessages(db, actor, { workspace, key, conversationId, thread, fetchImpl } = {}) {
+export async function readMessages(db, actor, { workspace, key, conversationId, thread, seen = false, fetchImpl } = {}) {
   const t = await target(db, actor, { workspace, key, conversationId, fetchImpl });
   const raw = (await call(db, t.ctx.me, 'GET', `/v1/conversations/${t.conversationId}/messages?limit=100`, { fetchImpl })) || [];
   const list = (Array.isArray(raw) ? raw : []).slice().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-  const names = await nameMap(db, list.map((m) => m.senderUserId));
-  const msgs = list.map((m) => messageOf(m, names));
+  const [state, said] = await Promise.all([
+    optional(call(db, t.ctx.me, 'GET', `/v1/conversations/${t.conversationId}/receipts`, { fetchImpl })),
+    optional(call(db, t.ctx.me, 'GET', `/v1/conversations/${t.conversationId}/mentions?limit=200`, { fetchImpl })),
+  ]);
+  const mine = await memberRow(db, t.ctx.me.id), members = state && Array.isArray(state.members) ? state.members : [];
+  // `seen`: this reader really has the newest message in front of them. A person's screen says so; an agent that read it has.
+  const newest = list.at(-1), self = members.find((x) => String(x.userId) === String(mine && mine.comms_user_id));
+  if (seen && newest && state && !(self && String(self.lastReadMessageId) === String(newest.id))) {
+    await call(db, t.ctx.me, 'POST', `/v1/conversations/${t.conversationId}/receipts/read`, { json: { messageId: newest.id }, fetchImpl });
+  }
+  const mentions = new Map((Array.isArray(said) ? said : []).map((x) => [String(x.messageId), (x.userIds || []).map(String)]));
+  const names = await nameMap(db, [...list.map((m) => m.senderUserId), ...members.map((x) => x.userId), ...[...mentions.values()].flat()]);
+  const position = new Map(list.map((m, i) => [String(m.id), i]));
+  const msgs = list.map((m, i) => ({
+    ...messageOf(m, names),
+    mentions: (mentions.get(String(m.id)) || []).map((id) => names.get(id)).filter(Boolean),
+    // ticks are the sender's: nobody else is told who has read someone else's message
+    ...(state && mine && String(m.senderUserId) === String(mine.comms_user_id) ? { receipt: receiptOf(m.senderUserId, i, members, position, names) } : {}),
+  }));
   const byId = new Map(msgs.map((m) => [m.id, m]));
   const rootOf = (m) => { let x = m, n = 0; while (x.replyTo && byId.has(x.replyTo) && n++ < 50) x = byId.get(x.replyTo); return x.id; };
   if (thread) {
@@ -364,8 +434,22 @@ export async function postMessage(db, actor, { workspace, key, conversationId, t
   const t = await target(db, actor, { workspace, key, conversationId, fetchImpl });
   if (replyTo && !UUID.test(String(replyTo))) throw new MessageError('Invalid reply', 'invalid_reply');
   const body = { kind: 'text', body: asText(text), ...(replyTo ? { replyToMessageId: String(replyTo) } : {}), clientMessageId: UUID.test(String(clientMessageId || '')) ? String(clientMessageId) : crypto.randomUUID() };
+  // A name is resolved here, from who is really in this conversation: text can't reach anyone outside it.
+  const named = new Set(mentionedHandles(body.body));
+  const hits = named.size ? (await membersOf(db, t)).filter((x) => x.handle && named.has(String(x.handle).toLowerCase()) && x.id !== String(t.ctx.me.id)).slice(0, 20) : [];
+  const ids = [];
+  for (const h of hits) { const r = await memberRow(db, h.id); if (r) ids.push(String(r.comms_user_id)); }
+  if (ids.length) body.mentionedUserIds = ids;
   const m = await call(db, t.ctx.me, 'POST', `/v1/conversations/${t.conversationId}/messages`, { json: body, fetchImpl });
-  return { conversationId: t.conversationId, message: messageOf(m || {}, await nameMap(db, [m && m.senderUserId])) };
+  const author = t.ctx.me.displayName || t.ctx.me.handle || 'Someone', place = t.channel ? `#${t.channel.title}` : 'a direct message';
+  if (m && m.id) for (const h of hits) await tell(db, { userId: h.id, source: 'message', kind: 'mentioned', ref: addressOf(t, m.id), title: `${author} mentioned you in ${place}`, detail: body.body, actorId: t.ctx.me.id, actorKind: t.ctx.me.kind, dedupeKey: `comms:${m.id}` });
+  return { conversationId: t.conversationId, message: { ...messageOf(m || {}, await nameMap(db, [m && m.senderUserId])), mentions: hits.map(({ id, name, kind, handle }) => ({ id, name, kind, handle })) } };
+}
+
+/** Who can be @mentioned in this conversation. A member without a handle can't be named. */
+export async function listMembers(db, actor, { workspace, key, conversationId, fetchImpl } = {}) {
+  const t = await target(db, actor, { workspace, key, conversationId, fetchImpl });
+  return { conversationId: t.conversationId, members: (await membersOf(db, t)).filter((x) => x.handle) };
 }
 
 /** A direct message with a co-member of this workspace (never anyone outside it). */

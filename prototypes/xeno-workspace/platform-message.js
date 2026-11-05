@@ -10,6 +10,8 @@
  *                                                  (<scope> = workspace | division/<id> | team/<id> | project/<id> | dm/<id>)
  *   a thread            ?thread=<message id>       address: …/message/<scope>/t/<message id>
  *   post · reply        POST /messages {key|conversationId, text, replyTo}
+ *   ticks               your own messages carry receipt {status: sent|delivered|read}; `seen=1` says you have it open
+ *   @mention            GET /members; the server resolves @handle against who is really in the conversation
  *   New message         POST /direct {userId}      (the header's primary action, in a dialog)
  *   Hand to agent       POST /handoff              the chat's own @agent hand-off: a task delegated to the agent
  *   live                GET /realtime → the Comms gateway socket; the screen refetches as itself on each event
@@ -25,7 +27,7 @@
   const toast = (m) => X()?.toast?.(m);
   const said = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const S = { status: 'idle', ws: undefined, list: null, tab: 'channels', open: null, openRef: null, thread: null, threadRef: null, error: null };
+  const S = { status: 'idle', ws: undefined, list: null, tab: 'channels', open: null, openRef: null, thread: null, threadRef: null, error: null, members: [], drafts: {} };
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served ? window.XENO_SCOPE.uuid() : null);
   const here = () => { const s = X()?.S; return !!(s && s.view === 'zone' && s.zone === 'message'); };
   const wq = () => (S.ws ? `workspace=${encodeURIComponent(S.ws)}` : '');
@@ -49,7 +51,12 @@
   const unread = () => (S.list ? [...S.list.channels, ...S.list.dms].filter((c) => c.unread).length : 0);
 
   // ─────────────────────────────── text → markup (escaped first)
-  const text = (body) => esc(body).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, '<br>');
+  const quote = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const text = (body, mentions = []) => {
+    let out = esc(body).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, '<br>');
+    for (const m of mentions) if (m && m.handle) out = out.replace(new RegExp(`(^|[\\s(>])@${quote(esc(m.handle))}(?![\\w-])`, 'gi'), (a, b) => `${b}<b class="ms-at" data-ms-mention>@${esc(m.handle)}</b>`);
+    return out;
+  };
   window.XENO_MESSAGE_TEXT = text;   // for the browser test
 
   // ─────────────────────────────── data
@@ -62,9 +69,19 @@
   }
   async function openRef(ref) {
     S.openRef = ref; S.open = null; paint();
-    const r = await api('GET', `/api/message/messages?${[wq(), refQ(ref)].filter(Boolean).join('&')}`).catch(() => null);
+    const seen = document.visibilityState === 'visible' && document.hasFocus();
+    const r = await api('GET', `/api/message/messages?${[wq(), refQ(ref), seen ? 'seen=1' : ''].filter(Boolean).join('&')}`).catch(() => null);
     if (!same(S.openRef, ref)) return;
     S.open = r && r.ok ? r.d : { error: said(r, 'This conversation could not be opened.') }; paint(); live();
+    const m = await api('GET', `/api/message/members?${[wq(), refQ(ref)].filter(Boolean).join('&')}`).catch(() => null);
+    if (same(S.openRef, ref)) S.members = (m && m.ok && m.d.members) || [];
+  }
+  // A receipt changes one mark, not the page: what someone is typing stays where it is.
+  async function ticks() {
+    const ref = S.openRef; if (!ref || !S.open || S.open.error) return;
+    const r = await api('GET', `/api/message/messages?${[wq(), refQ(ref)].filter(Boolean).join('&')}`).catch(() => null);
+    if (!r || !r.ok || !same(S.openRef, ref)) return;
+    for (const m of r.d.messages) { const el = document.querySelector(`[data-ms-tick="${m.id}"]`); if (el) el.outerHTML = tick(m); const had = S.open.messages.find((x) => x.id === m.id); if (had) had.receipt = m.receipt; }
   }
   async function openThread(ref, id) {
     S.threadRef = id;
@@ -84,7 +101,7 @@
     if (!t || !t.ok || !t.d.realtime) return;
     try { sock = new WebSocket(`${t.d.url}/websocket?vsn=2.0.0&token=${encodeURIComponent(t.d.token)}&device_id=${encodeURIComponent(t.d.deviceId)}`); } catch { sock = null; return; }
     sock.onopen = () => { hb = setInterval(() => send0('phoenix', 'heartbeat', {}), 30000); const c = S.open && S.open.conversationId; if (c) join(c); };
-    sock.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } const [, , topic, event] = m; if (String(topic).startsWith('conversation:') && /^message\./.test(event)) { clearTimeout(live.t); live.t = setTimeout(refresh, 150); } };
+    sock.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } const [, , topic, event] = m; if (!String(topic).startsWith('conversation:')) return; if (/^message\./.test(event)) { clearTimeout(live.t); live.t = setTimeout(refresh, 150); } else if (/^receipt\./.test(event)) { clearTimeout(ticks.t); ticks.t = setTimeout(ticks, 300); } };
     sock.onclose = () => { clearInterval(hb); sock = null; sockTopic = null; };
   }
   const send0 = (topic, event, payload, joinRef = null) => { if (sock && sock.readyState === 1) sock.send(JSON.stringify([joinRef, String(++ref), topic, event, payload])); };
@@ -129,12 +146,23 @@
     const groups = ['workspace', 'division', 'team', 'project'].map((k) => [k, L.channels.filter((c) => c.kind === k)]).filter(([, cs]) => cs.length);
     return `<aside class="ms-side">${groups.map(([k, cs]) => `<div class="ms-sec">${esc(KIND[k])}${cs.length > 1 ? 's' : ''}</div><ul class="ms-list" data-ms-channels="${k}">${cs.map((c) => `<li class="ms-ch${S.openRef && S.openRef.key === c.key ? ' on' : ''}"><a href="#" data-ms-ch="${esc(c.key)}"><span># ${esc(c.title)}</span>${c.unread ? '<b class="ms-n" data-ms-unread>•</b>' : ''}</a></li>`).join('')}</ul>`).join('')}</aside>`;
   }
-  function msg(m, { inThread = false } = {}) {
-    const body = m.deleted ? '<i class="ms-gone">This message was deleted.</i>' : m.encrypted ? '<i class="ms-gone">End-to-end encrypted — open it in XENO Comms.</i>' : `<div class="ms-body" data-ms-body>${text(m.text)}</div>`;
-    const acts = m.deleted ? '' : `${inThread ? '' : btn(`data-ms-reply="${esc(m.id)}"`, m.replies ? `${m.replies} ${m.replies === 1 ? 'reply' : 'replies'}` : 'Reply')}${btn(`data-ms-handoff="${esc(m.id)}"`, 'Hand to agent')}`;
-    return `<li class="ms-msg" data-ms-msg="${esc(m.id)}"><div class="ms-meta"><b>${esc(m.author ? m.author.name : 'Someone')}</b>${m.author && m.author.kind === 'agent' ? ' <small class="ms-agent">agent</small>' : ''} <small>${esc(when(m.createdAt))}${m.editedAt ? ' · edited' : ''}</small></div>${body}<div class="ms-acts">${acts}</div></li>`;
+  // one tick: XENO has it · two: it reached everyone · two in green: everyone has read it
+  const CHECK = (x) => `<path d="M${x} 6.5 L${x + 3} 9.5 L${x + 9} 2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+  function tick(m) {
+    const r = m.receipt;
+    if (!r || m.deleted) return `<span data-ms-tick="${esc(m.id)}"></span>`;
+    const word = { sent: 'Sent', delivered: 'Delivered', read: 'Read' }[r.status] || 'Sent';
+    const group = r.of > 1, who = r.readBy && r.readBy.length ? `: ${r.readBy.join(', ')}` : '';
+    const title = group ? `Read by ${r.read} of ${r.of}${who} · reached ${r.delivered}` : word;
+    const part = group && r.status !== 'read' && r.read ? `<small>${r.read} of ${r.of} read</small>` : '';
+    return `<span class="ms-tick ${esc(r.status)}" data-ms-tick="${esc(m.id)}" data-ms-status="${esc(r.status)}" title="${esc(title)}" aria-label="${esc(title)}"><svg viewBox="0 0 ${r.status === 'sent' ? 12 : 17} 12" width="${r.status === 'sent' ? 12 : 17}" height="12" aria-hidden="true">${CHECK(1)}${r.status === 'sent' ? '' : CHECK(6)}</svg>${part}</span>`;
   }
-  const composer = (parentId) => `<div class="ms-compose" data-ms-compose="${parentId ? esc(parentId) : ''}"><textarea class="in" data-ms-text placeholder="${parentId ? 'Reply in thread' : 'Message'}" aria-label="${parentId ? 'Reply' : 'Message'}" rows="2" maxlength="8000"></textarea><div class="ms-row">${btn(`data-ms-send${parentId ? `="${esc(parentId)}"` : ''}`, 'Send', 'btn')}</div></div>`;
+  function msg(m, { inThread = false } = {}) {
+    const body = m.deleted ? '<i class="ms-gone">This message was deleted.</i>' : m.encrypted ? '<i class="ms-gone">End-to-end encrypted — open it in XENO Comms.</i>' : `<div class="ms-body" data-ms-body>${text(m.text, m.mentions)}</div>`;
+    const acts = m.deleted ? '' : `${inThread ? '' : btn(`data-ms-reply="${esc(m.id)}"`, m.replies ? `${m.replies} ${m.replies === 1 ? 'reply' : 'replies'}` : 'Reply')}${btn(`data-ms-handoff="${esc(m.id)}"`, 'Hand to agent')}`;
+    return `<li class="ms-msg" data-ms-msg="${esc(m.id)}"><div class="ms-meta"><b>${esc(m.author ? m.author.name : 'Someone')}</b>${m.author && m.author.kind === 'agent' ? ' <small class="ms-agent">agent</small>' : ''} <small>${esc(when(m.createdAt))}${m.editedAt ? ' · edited' : ''}</small> ${tick(m)}</div>${body}<div class="ms-acts">${acts}</div></li>`;
+  }
+  const composer = (parentId) => `<div class="ms-compose" data-ms-compose="${parentId ? esc(parentId) : ''}"><textarea class="in" data-ms-text placeholder="${parentId ? 'Reply in thread' : 'Message'}, @ to name someone" aria-label="${parentId ? 'Reply' : 'Message'}" rows="2" maxlength="8000">${esc(S.drafts[parentId || ''] || '')}</textarea><div class="ms-row">${btn(`data-ms-send${parentId ? `="${esc(parentId)}"` : ''}`, 'Send', 'btn')}</div></div>`;
   function main() {
     if (!S.openRef) return '<div class="pj-empty">Choose a channel or a direct message.</div>';
     const o = S.open;
@@ -197,11 +225,40 @@
       if (!ta.value.trim()) return toast('Write something first');
       const r = await call('POST', '/api/message/messages', { ...S.openRef, text: ta.value, ...(parentId ? { replyTo: parentId } : {}), clientMessageId: crypto.randomUUID() });
       if (!r) return;
-      ta.value = '';
+      ta.value = ''; delete S.drafts[parentId || ''];
       const keep = S.openRef; await openRef(keep); if (parentId) await openThread(keep, parentId);
     }
   }, true);
+  // @: who is in this conversation, narrowed as you type. The server still decides who a name reaches.
+  const atQuery = (ta) => { const m = ta.value.slice(0, ta.selectionStart).match(/(?:^|\s)@([\w.-]*)$/); return m ? m[1].toLowerCase() : null; };
+  const closeAt = () => document.querySelector('[data-ms-at]')?.remove();
+  function showAt(ta) {
+    closeAt();
+    const q = atQuery(ta); if (q === null) return;
+    const hits = S.members.filter((m) => m.handle.toLowerCase().includes(q) || String(m.name).toLowerCase().includes(q)).slice(0, 6);
+    if (!hits.length) return;
+    ta.closest('[data-ms-compose]').insertAdjacentHTML('beforeend', `<ul class="ms-at-list" data-ms-at role="listbox">${hits.map((m, i) => `<li role="option" class="${i ? '' : 'on'}" data-ms-at-pick="${esc(m.handle)}"><b>${esc(m.name)}</b>${m.kind === 'agent' ? ' <small class="ms-agent">agent</small>' : ''} <small>@${esc(m.handle)}</small></li>`).join('')}</ul>`);
+  }
+  function pickAt(ta, handle) {
+    const head = ta.value.slice(0, ta.selectionStart).replace(/@[\w.-]*$/, `@${handle} `), tail = ta.value.slice(ta.selectionStart);
+    ta.value = head + tail; ta.selectionStart = ta.selectionEnd = head.length; S.drafts[ta.closest('[data-ms-compose]').dataset.msCompose] = ta.value; closeAt(); ta.focus();
+  }
+  document.addEventListener('input', (e) => {
+    if (!e.target.matches?.('[data-ms-text]')) return;
+    S.drafts[e.target.closest('[data-ms-compose]').dataset.msCompose] = e.target.value; showAt(e.target);
+  }, true);
+  document.addEventListener('mousedown', (e) => {
+    const li = e.target.closest?.('[data-ms-at-pick]'); if (!li) return;
+    e.preventDefault(); pickAt(li.closest('[data-ms-compose]').querySelector('[data-ms-text]'), li.dataset.msAtPick);
+  }, true);
   document.addEventListener('keydown', (e) => {
+    const list = e.target.matches?.('[data-ms-text]') && document.querySelector('[data-ms-at]');
+    if (list) {
+      const items = [...list.children], i = items.findIndex((x) => x.classList.contains('on'));
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[i].classList.remove('on'); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].classList.add('on'); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return pickAt(e.target, items[i].dataset.msAtPick); }
+      if (e.key === 'Escape') { e.preventDefault(); return closeAt(); }
+    }
     if (e.key === 'Enter' && !e.shiftKey && e.target.matches?.('[data-ms-text]')) { e.preventDefault(); e.target.closest('[data-ms-compose]').querySelector('[data-ms-send]')?.click(); }
   }, true);
 

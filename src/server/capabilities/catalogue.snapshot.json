@@ -1780,6 +1780,20 @@
    ]
   },
   {
+   "name": "message.member.list",
+   "wire": "message__member__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "message:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "message_list_members"
+   ]
+  },
+  {
    "name": "mail.thread.search",
    "wire": "mail__thread__search",
    "version": "1.0.0",
