@@ -20,6 +20,9 @@ export const OIDC_SCOPES = Object.freeze([
   // XENO Corpus desktop: hold the connection that lets agents on XENO MCP read a project the person turned on, on this PC. Also its own
   // authority: reading someone's documents is not spending their credits.
   'corpus:connect',
+  // XENO Agent desktop: hold the socket remote control runs over (decision 0006). Its own scope: reaching a person's PC
+  // is a different authority from spending their credits, and the app asks for it only when the person turns this on.
+  'remote:connect',
   // XENO workspace agent surface (WORKSPACE AGENT SURFACE SPEC P2, approved 2026-10-20): the per-area scopes a
   // self-registered client may hold on the 'xeno-workspace' audience (capabilities/scopes.js, minus the two Tasks ones above)
   ...WORKSPACE_SCOPES.filter((s) => s !== 'tasks:read' && s !== 'tasks:write'),
@@ -65,7 +68,7 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // Standalone Agent is a public loopback PKCE client. Keep its authority identical
   // to the existing agent surfaces; unsupported requested scopes are downscoped by
   // the provider, never added to the policy by guesswork.
-  'xeno-agent-interface': [...AGENT_PRODUCT, 'collaboration:use'],
+  'xeno-agent-interface': [...AGENT_PRODUCT, 'collaboration:use', 'remote:connect'],
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
   'xeno-agent-cli': AGENT_PRODUCT,
   // XENO Spawn: identity, read the credits balance, and run inference through the XENO

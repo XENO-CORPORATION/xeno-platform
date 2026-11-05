@@ -20,6 +20,9 @@
 /** A frame larger than this is refused before it is parsed. A browser tool result can hold page text. */
 export const MAX_FRAME_BYTES = 1024 * 1024;
 
+/** One sealed Noise message, 65,535 bytes at most, in base64. */
+export const MAX_SEALED_BASE64 = 87_400;
+
 /** Tool names must survive a round trip through every provider's function-name rule (§3.1). */
 export const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
@@ -147,6 +150,7 @@ export function parseResult(frame) {
  */
 export const RELAY_SURFACES = Object.freeze({
   browser: Object.freeze({ surface: 'browser', path: '/api/v2/browser/connect', scope: 'browser:connect', noun: 'browser', off: 'XENO chats are not allowed to use this browser', signIn: 'Connecting a browser needs a sign-in bound to this browser’s key. Sign in from the extension.' }),
+  remote: Object.freeze({ surface: 'remote', path: '/api/v2/remote/connect', scope: 'remote:connect', noun: 'device', off: 'Remote control is turned off.', signIn: 'Sign in on this device to use remote control.' }),
   corpus: Object.freeze({ surface: 'corpus', path: '/api/v2/corpus/connect', scope: 'corpus:connect', noun: 'PC', off: 'This PC is turned off in your XENO account', signIn: 'Connecting a PC needs a sign-in bound to this PC’s key. Sign in from XENO Corpus.', recordCap: 400_000, note: 'The answer was too long and this is only its start. Ask a narrower question.' }),
 });
 
@@ -158,6 +162,8 @@ export const outbound = {
     conversationId: call.conversationId ?? null, turnId: call.turnId ?? null, tabGroup: call.tabGroup ?? null,
   }),
   pong: () => ({ type: 'pong' }),
+  sealed: ({ from, data }) => ({ type: 'sealed', from, data }),
+  undelivered: (to, reason) => ({ type: 'undelivered', to, reason }),
   error: (code, message) => ({ type: 'error', code, message }),
 };
 
@@ -167,11 +173,25 @@ export const outbound = {
  * settings; 4408 the client is broken, retry immediately; 4409 stop — another connection for this
  * installation has taken over, and reconnecting would flap the two against each other.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+/** A frame for another of this person's devices. Its contents are sealed: only its shape can be checked here. */
+export function parseSealed(frame) {
+  const { to, data } = frame;
+  if (typeof to !== 'string' || !UUID.test(to)) throw new RelayProtocolError('bad_frame', 'A sealed frame names its device.');
+  if (typeof data !== 'string' || !data || data.length > MAX_SEALED_BASE64 || !BASE64.test(data)) {
+    throw new RelayProtocolError('bad_frame', 'A sealed frame carries one Noise message in base64.');
+  }
+  return { to, data };
+}
+
 export const CLOSE = Object.freeze({
   UNAUTHORIZED: 4401,
   FORBIDDEN: 4403,
   NO_AUTH: 4408,
   REPLACED: 4409,
+  OVERLOADED: 4429,
 });
 
 /** The most a result is allowed to say about itself on the wire vs on the record. A page can be

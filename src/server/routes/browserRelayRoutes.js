@@ -24,6 +24,7 @@ import * as relay from '../services/browserRelay.js';
 import { requireDpopIfBound } from '../middleware/dpopResource.js';
 import { recordSecurityEventTransactional, EVENTS } from '../services/securityEvents.js';
 import { RELAY_SURFACES } from '../utils/browserRelayProtocol.js';
+import { remoteRelayEnabled } from '../services/remoteRelay.js';
 
 const mutateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false, validate: { ip: false },
@@ -100,7 +101,7 @@ export function installationRoutes(spec) {
       const { installation } = await installations.patch(req.db, req.user.id, req.params.id, req.body, spec.surface);
       // Turning the switch OFF must take effect now, not at the next reconnect: the socket is closed and
       // queued calls fail, so a browser the person just disabled cannot act on a step already in flight.
-      if (installation.enabled === false) await (spec.surface === 'corpus' ? relay.disconnect(req.db, req.params.id, 'turned_off', spec.off, spec.off) : relay.disconnect(req.db, req.params.id, 'revoked')).catch(() => {});
+      if (installation.enabled === false) await (spec.surface !== 'browser' ? relay.disconnect(req.db, req.params.id, 'turned_off', spec.off, spec.off) : relay.disconnect(req.db, req.params.id, 'revoked')).catch(() => {});
       res.json({ installation });
     } catch (e) { sendError(res, e); }
   });
@@ -123,6 +124,10 @@ const router = installationRoutes(RELAY_SURFACES.browser);
 
 /** XENO Corpus on a person's PC (services/corpusLocalMcp.js): the same routes on its own scope and rows. */
 export const corpusRelayRoutes = installationRoutes(RELAY_SURFACES.corpus);
+
+/** Remote control (services/remoteRelay.js). Absent, not refused, until the deployment turns it on. */
+const remoteInstallations = installationRoutes(RELAY_SURFACES.remote);
+export const remoteRelayRoutes = (req, res, next) => (remoteRelayEnabled() ? remoteInstallations(req, res, next) : res.status(404).json({ error: { code: 'not_found', message: 'Remote control is not available.' } }));
 
 /** §12.1 rule 2 — a mutating verb needs a reading verb. This is how a caller (or the account page)
  *  answers "what is that step doing?" without polling the socket. */
