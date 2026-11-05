@@ -69,6 +69,8 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // to the existing agent surfaces; unsupported requested scopes are downscoped by
   // the provider, never added to the policy by guesswork.
   'xeno-agent-interface': [...AGENT_PRODUCT, 'collaboration:use', 'remote:connect'],
+  // A browser reaching the person's own PC. It spends nothing and reads nothing here: the relay is all it needs.
+  'xeno-remote-web': [...IDENTITY, 'remote:connect'],
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
   'xeno-agent-cli': AGENT_PRODUCT,
   // XENO Spawn: identity, read the credits balance, and run inference through the XENO

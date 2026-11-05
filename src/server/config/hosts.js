@@ -321,6 +321,8 @@ export function updatesUrl(pathname) {
  */
 export const PATH_SCOPED_ORIGINS = Object.freeze({
   'https://places.xenosystem.ai': Object.freeze(['/api/oauth2', '/api/places']),
+  // XENO Agent remote control in a browser (xeno-agent-interface apps/remote-web): sign-in and its own relay routes, nothing else.
+  'https://remote.xenosystem.ai': Object.freeze(['/api/oauth2', '/api/v2/remote']),
 });
 
 /** True when `origin` is path-scoped and `path` is one of its prefixes (the prefix itself, or below it). */
