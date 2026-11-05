@@ -3174,6 +3174,12 @@
       "scope": "message:read",
       "because": "the New message picker for people; agents do not start direct messages"
     },
+    "route:messageRoutes.js:GET /members": {
+      "status": "capability",
+      "capability": "message.member.list",
+      "class": "safe",
+      "scope": "message:read"
+    },
     "route:messageRoutes.js:GET /messages": {
       "status": "capability",
       "capability": "message.channel.read",
