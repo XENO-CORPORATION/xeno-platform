@@ -1,5 +1,5 @@
 /* message.css — Social › Message (platform-message.js), a front-end to XENO Comms. Workspace tokens only; emphasis by
-   surface and text brightness, never hue (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens. */
+   surface and text brightness, never hue, except the status green of a read mark (DESIGN_SYSTEM.md). Text inputs take no focus ring: the border brightens. */
 .ms-wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;min-height:60vh}
 .ms-wrap.with-thread{grid-template-columns:240px minmax(0,1fr) 320px}
 .ms-side,.ms-main,.ms-thread{background:var(--n20);border-radius:8px;padding:10px;min-width:0;display:flex;flex-direction:column}
@@ -22,7 +22,14 @@
 .ms-gone{color:var(--muted);font-size:12px}
 .ms-acts{display:flex;gap:6px;margin-top:4px}
 .ms-acts .btn{padding:2px 8px;font-size:12px}
-.ms-compose{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.ms-compose{position:relative;display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.ms-tick{display:inline-flex;align-items:center;gap:4px;vertical-align:-1px;color:var(--muted)}
+.ms-tick.read{color:#22c55e}
+.ms-at{color:var(--text);background:var(--n38);border-radius:3px;padding:0 3px;font-weight:600}
+.ms-at-list{position:absolute;left:0;bottom:100%;margin:0 0 4px;padding:4px;list-style:none;min-width:240px;max-width:100%;background:var(--n30);border-radius:6px;z-index:5}
+.ms-at-list li{padding:5px 8px;border-radius:4px;font-size:13px;color:var(--text);cursor:pointer}
+.ms-at-list li small{color:var(--muted);font-size:11px}
+.ms-at-list li.on,.ms-at-list li:hover{background:var(--n38)}
 .ms-row{display:flex;justify-content:flex-end;gap:6px}
 [data-ms-page] .in{padding:7px 10px;border-radius:6px;background:var(--n26);border:1px solid var(--n38);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;outline:0;box-shadow:none;resize:vertical}
 [data-ms-page] .in:focus{border-color:var(--n58);outline:0}

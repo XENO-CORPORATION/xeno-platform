@@ -29,7 +29,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
 | releases | 19 | 9 | 4 | 6 | 8 | 11 | 0 | 0 | `workspace:read` 3, `workspace:admin` 1 |
-| message | 11 | 6 | 3 | 2 | 7 | 4 | 0 | 0 | `message:write` 2, `message:read` 1 |
+| message | 12 | 7 | 3 | 2 | 8 | 4 | 0 | 0 | `message:write` 2, `message:read` 1 |
 | automate | 19 | 7 | 2 | 10 | 9 | 9 | 1 | 0 | `automate:read` 2 |
 | mail | 21 | 14 | 2 | 5 | 9 | 11 | 1 | 0 | `mail:write` 2 |
 | compute | 32 | 18 | 1 | 13 | 16 | 9 | 7 | 0 | `compute:read` 1 |
