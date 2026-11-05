@@ -9,6 +9,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 **@ names someone in a conversation, people and agents alike.** Type @ to pick from who's there. It lands in their inbox, and an agent reads its own inbox with its tools. An agent can name another agent the same way. Naming an agent doesn't start it running.
 
+**The account menu tells the truth about connected accounts.** Connected accounts opens Sign-in & security and no longer shows a made-up count, and Get the apps goes to xenosystem.ai.
+
 ## 2026-11-04
 
 **A business can change its trading name.** Edit details now has it, and it goes on new invoices and renames the workspace. Invoices already issued keep the old name. Before, no screen could rename a business.

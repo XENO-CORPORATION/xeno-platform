@@ -1487,7 +1487,7 @@
   function openAccount() {
     const ws = store.get('workspace', 'personal'), left = usageLeft();
     const W = window.XA.workspaces().map((w) => [w.id, w.name, w.sub, w.initial]);   // the ONE workspace list (actions.js)
-    const links = [['settings', 'gear', 'Settings', '<kbd>Ctrl ,</kbd>'], ['plan', 'star', 'Plan & credits', `<span class="acc-meta">${left == null ? '' : fmt(left) + ' credits'}</span>`], ['accounts', 'flow', 'Connected accounts', '<span class="acc-meta">3</span>'], ['apps', 'download', 'Get the apps', '']];
+    const links = [['settings', 'gear', 'Settings', '<kbd>Ctrl ,</kbd>'], ['plan', 'star', 'Plan & credits', `<span class="acc-meta">${left == null ? '' : fmt(left) + ' credits'}</span>`], ['accounts', 'flow', 'Connected accounts', ''], ['apps', 'download', 'Get the apps', '']];
     const m = railPopOpen('account', 'accm', `<header class="pl acc-id">
         <span class="acc-av">E</span>
         <span class="acc-who"><b>${window.XENO_ME.nameHtml()}</b><small>${window.XENO_ME.emailHtml()}</small></span>
@@ -1506,7 +1506,7 @@
       const b = e.target.closest('[data-act]'); if (!b) return;
       if (b.dataset.act === 'plan') { hidePops(); return openUsage(); } // the credits line opens the Usage popover — the real thing, not a toast
       if (b.dataset.act === 'settings') { hidePops(); return window.XD.settings(); }
-      hidePops(); ({ settings: () => window.XA.settings('general'), accounts: () => window.XA.settings('account'), apps: () => window.open('https://xenostudio.ai/download', '_blank', 'noopener'), company: () => window.XA.newCompany(), signout: () => window.XA.signOut() }[b.dataset.act] || (() => {}))();
+      hidePops(); ({ settings: () => window.XA.settings('general'), accounts: () => window.XA.settings('security'), apps: () => window.open('https://xenosystem.ai/download', '_blank', 'noopener'), company: () => window.XA.newCompany(), signout: () => window.XA.signOut() }[b.dataset.act] || (() => {}))();
     };
     popKeys(m, '.acc-ws, .acc-li, .acc-close, .acc-out');
     m.querySelector('.acc-ws.on')?.focus({ preventScroll: true });

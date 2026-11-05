@@ -152,7 +152,7 @@
   // ---------- apps signed in with this account ----------
   function appsSection(h) {
     const e = lazy('apps', async () => need(await api('GET', '/api/account/apps')).apps || []);
-    const pointers = h.card('Sign-in methods', '<p class="pg-dim set-p">Google and GitHub sign-in are managed in <a data-set="go" data-arg="security">Sign-in & security</a>.</p>')
+    const pointers = h.card('Sign-in methods', '<p class="pg-dim set-p">Google, GitHub and X sign-in are managed in <a data-set="go" data-arg="security">Sign-in & security</a>.</p>')
       + h.card('Connections', '<p class="pg-dim set-p">Services your workspace connects to live in <a data-set="go" data-arg="connections">Connections</a>.</p>');
     if (e.status === 'loading') return loadingCard(h);
     if (e.status === 'error') return failedCard(h, 'Apps you’re signed into', 'apps') + pointers;
