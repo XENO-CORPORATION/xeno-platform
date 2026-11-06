@@ -5,6 +5,8 @@
  * canvas. Opened from Tasks: Board | List | Canvas. Addresses (id-based, parent in the path):
  *   /workspace/<area>/tasks/canvas                 the canvases of this area (Overview: all)
  *   /workspace/<area>/tasks/canvas/<canvas id>     one canvas
+ *   /workspace/projects/<pid>/canvas               the project's own canvas: the whole project, kept complete
+ *   /workspace/projects/<pid>/canvas/<canvas id>   any other canvas of that project (a tasks address lands here)
  *
  * Cards: tasks, Library files, chats, and the workforce — projects, divisions, objectives and runs (admissions). Every
  * card is a pointer: its name and status are read live with each load, and moving it changes only the layout. A
@@ -48,7 +50,10 @@
     const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (C.id !== id) return;
     if (!r || !r.ok) { C.state = r && r.status === 404 ? 'missing' : 'error'; return paint(); }
-    take(r.d.canvas); C.state = 'ready'; try { X()?.render?.(); } catch {}
+    take(r.d.canvas); C.state = 'ready';
+    // a project's canvas belongs to the project: an old link under Tasks lands there, with no extra Back step
+    if (C.project && /\/tasks\/canvas\//.test(location.pathname)) { history.replaceState(history.state, '', `/workspace/projects/${C.project.id}/canvas/${id}${location.search}`); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); }
+    try { X()?.render?.(); } catch {}
     loadDeps().then((g) => { if (g && C.id === id) draw(); });
     if (!saved) fit();
     paint();
@@ -245,7 +250,7 @@
     const ro = !C.can.edit;
     return `<div class="cv" data-cv>
       <div class="cv-bar">
-        ${window.XENO_TASKS?.layoutSeg ? window.XENO_TASKS.layoutSeg('canvas') : ''}
+        ${!C.project && window.XENO_TASKS?.layoutSeg ? window.XENO_TASKS.layoutSeg('canvas') : ''}
         <button class="cv-name" data-cv-act="rename"${ro ? ' disabled' : ''} title="Rename">${esc(C.name)}</button>
         ${ro ? '<small class="tk-chip">View only</small>' : `<span class="cv-tools" role="toolbar" aria-label="Add to the canvas">
           <button class="tk-tool" data-cv-act="add-task" title="Put an existing task on the canvas · T">${ic('check')}Task</button>
@@ -281,9 +286,38 @@
     const root = document.querySelector('#main [data-cv-root]'); if (!root) return;
     const id = root.dataset.cvRoot;
     root.innerHTML = id ? canvasPage(id) : listPage();
-    if (id) { draw(); const b = document.querySelector('#main .crumbs b'); if (b && C.name) b.textContent = C.name; const h1 = document.querySelector('#main .pg-h h1'); if (h1 && C.name) h1.textContent = C.name; }
+    if (id && root.hasAttribute('data-cv-project')) draw();
+    else if (id) { draw(); const b = document.querySelector('#main .crumbs b'); if (b && C.name) b.textContent = C.name; const h1 = document.querySelector('#main .pg-h h1'); if (h1 && C.name) h1.textContent = C.name; }
   }
-  const goCanvas = (id) => X().go('global', { global: 'tasks', item: id ? `canvas/${id}` : 'canvas' });
+  const projectItem = (p, tab) => `${(window.XENO_PG_PROJECTS?.items || []).find((x) => String(x.id) === String(p.id))?.name || p.id}${tab ? '/' + tab : ''}`;
+  const projectOf = (id) => (C.id === id && C.project) || (L.list || []).find((c) => c.id === id)?.project || null;
+  const goCanvas = (id) => { const p = id && projectOf(id); if (p) return X().go('global', { global: 'projects', item: projectItem(p, `Canvas/${id}`), zoneOf: 'overview' }); X().go('global', { global: 'tasks', item: id ? `canvas/${id}` : 'canvas' }); };
+  // a canvas that was in a project goes back to that project, the rest to the list under Tasks
+  const leave = (p) => (p ? X().go('global', { global: 'projects', item: projectItem(p), zoneOf: 'overview' }) : goCanvas(null));
+
+  // The project's tab. Opening it asks the server for the map each time someone arrives, which also adds what's new in
+  // the project; repaints while they're on it don't ask again, so nothing moves under them.
+  const PM = { project: null, id: null, state: 'idle', error: null, at: 0 };
+  function mapOf(pid) {
+    const arriving = PM.state === 'ready' && !document.querySelector('#main [data-cv-root]') && Date.now() - PM.at > 2000;
+    if (PM.project === pid && !arriving) return PM;
+    Object.assign(PM, { id: PM.project === pid ? PM.id : null, project: pid, state: 'loading', error: null });
+    api('POST', '/api/canvases/open-as', { kind: 'project', id: pid }).catch(() => null).then((r) => {
+      if (PM.project !== pid) return;
+      PM.at = Date.now();
+      if (!r || !r.ok) Object.assign(PM, { state: 'error', error: said(r, 'The canvas couldn’t be opened.') });
+      else { Object.assign(PM, { id: r.d.canvas.id, state: 'ready' }); if (C.id === PM.id && !C.dirty && String(C.rev) !== String(r.d.canvas.revision)) C.id = null; }
+      L.list = null; try { X()?.render?.(); } catch {}
+    });
+    return PM;
+  }
+  function projectTab(sub, rec) {
+    const named = /^[0-9a-f-]{36}$/i.test(String(sub || '')) ? String(sub) : null, m = named ? null : mapOf(String(rec.id)), id = named || m.id;
+    if (!id) return `<p class="tk-msg">${m.state === 'error' ? esc(m.error) : 'Opening the canvas…'}</p>`;
+    setTimeout(draw, 0);
+    return `<div data-cv-root="${esc(id)}" data-cv-project>${canvasPage(id)}</div>`;
+  }
+  if (window.XENO_PROJECT_TABS && !window.XENO_PROJECT_TABS.includes('Canvas')) window.XENO_PROJECT_TABS.splice(window.XENO_PROJECT_TABS.indexOf('Tasks') + 1, 0, 'Canvas');
 
   // ───────────────────────── actions
   async function addTask() {
@@ -390,7 +424,8 @@
     if (!(await D().confirm({ title: `Delete “${C.name}”?`, body: 'The canvas goes away for everyone who can see it. The tasks on it are not touched.', action: 'Delete canvas' }))) return;
     const r = await api('DELETE', '/api/canvases/' + encodeURIComponent(C.id)).catch(() => null);
     if (!r || !r.ok) return toast(said(r, 'It couldn’t be deleted'));
-    toast('Canvas deleted'); L.list = null; C.id = null; goCanvas(null);
+    const was = C.project; if (was) PM.project = null;
+    toast('Canvas deleted'); L.list = null; C.id = null; leave(was);
   }
   async function newCanvas() {
     const projs = await api('GET', '/api/tasks/projects').catch(() => null);
@@ -499,7 +534,7 @@
     'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
-    deps: () => layoutDeps(), back: () => goCanvas(null), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
+    deps: () => layoutDeps(), back: () => leave(C.project), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
   };
   addEventListener('click', (e) => {
     const o = e.target.closest?.('[data-cv-open]'); if (o) { e.preventDefault(); return X().go('global', { global: 'tasks', item: o.dataset.cvOpen }); }
@@ -529,5 +564,5 @@
     if (!r || !r.ok) return toast(said(r, 'It could not be opened as a canvas.'));
     L.list = null; goCanvas(r.d.canvas.id);
   }, true);
-  window.XENO_CANVAS = { served: true, nameOf, route, open, state: () => ({ id: C.id, state: C.state, nodes: C.doc ? C.doc.nodes.length : 0, edges: C.doc ? C.doc.edges.length : 0, rev: C.rev, dirty: C.dirty, conflict: C.conflict, view: { ...C.view } }), save };
+  window.XENO_CANVAS = { served: true, nameOf, route, open, projectTab, state: () => ({ id: C.id, state: C.state, nodes: C.doc ? C.doc.nodes.length : 0, edges: C.doc ? C.doc.edges.length : 0, rev: C.rev, dirty: C.dirty, conflict: C.conflict, view: { ...C.view } }), save };
 })();

@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**A project has its own canvas.** Canvas is now a tab in the project, at the project's own address, instead of opening under Tasks. It shows the whole project (objectives, tasks, files, conversations and active runs) and stays complete: what's added to the project appears on the map the next time it's opened. Cards you've moved stay where you put them, and a card you've taken off stays off. Old links land in the right place.
+
 **A wake answers and stops.** An agent named in a channel used to take a task, report, comment and send it for review around its reply, and each step was another paid model call. Now it answers, reads the channel only if it needs to, and its task closes by itself, so a reply no longer lands in your review list. It can still raise a task if the work needs one.
 
 **Tools that use AI run on the website again.** A tool on tools.xenosystem.ai that does not choose a model, such as Motion 2D, failed with "The model `auto` does not exist". It now uses your default model.

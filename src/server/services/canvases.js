@@ -17,12 +17,15 @@
  *
  * OPEN AS CANVAS (openAsCanvas): a project or a division laid out on a canvas, its objects placed in columns.
  * Opening it again opens the same canvas. A project's map is a project canvas; a division's is the reader's own,
- * built from the division HOME so it holds only what that reader may see.
+ * built from the division HOME so it holds only what that reader may see. A project's map stays complete: each open by
+ * an editor adds what's new in the project to its column. Nothing already placed moves, and `map_seen` remembers what
+ * was offered, so a card someone took off the map stays off.
  *
  * WIRES BETWEEN TASKS: an edge between two task refs with `xeno.link` set ('blocks' | 'relates' | 'duplicates')
  * is a real task link. Saving creates it through Tasks' own addLink, so the same permission rules apply and the
  * link shows on both task pages. A plain edge is only a drawing.
  */
+import crypto from 'node:crypto';
 import { check } from '../utils/authzReBAC.js';
 import * as tasks from './xenoTasks.js';
 import { latestFor } from './storageVersions.js';
@@ -270,7 +273,7 @@ export async function deleteCanvas(db, me, id) {
 }
 
 // ───────────── open a project or a division as a canvas
-const CARD = { project: [300, 120], division: [300, 120], objective: [280, 120], run: [260, 100], task: [260, 120], chat: [260, 100] };
+const CARD = { project: [300, 120], division: [300, 120], objective: [280, 120], run: [260, 100], task: [260, 120], chat: [260, 100], file: [260, 100] };
 /** Columns of cards, one per kind, left to right, the root above them all. Layout only: positions, never records. */
 export function layoutMap(root, columns) {
   const nodes = [], edges = [];
@@ -293,6 +296,57 @@ export function layoutMap(root, columns) {
   return { nodes, edges };
 }
 
+/** What's new goes under its column, or a new column to the right. Pure: returns the content, and what it added. */
+export function growMap(content, columns, seen) {
+  const nodes = [...content.nodes], on = new Set(nodes.filter((n) => n.type === 'xeno-ref').map((n) => `${n.ref.kind}:${n.ref.id}`));
+  let added = 0;
+  for (const col of columns) {
+    const fresh = col.items.filter((id) => !seen.has(`${col.kind}:${id}`) && !on.has(`${col.kind}:${id}`));
+    if (!fresh.length) continue;
+    const [w, h] = CARD[col.kind], gid = `group-${col.kind}`;
+    let at = nodes.findIndex((n) => n.id === gid);
+    if (at < 0) {
+      const x = nodes.reduce((m, n) => Math.max(m, n.x + n.width), 0) + 60;
+      nodes.push({ id: gid, type: 'group', label: col.label, x, y: 180, width: w + 40, height: 60 });
+      at = nodes.length - 1;
+    }
+    for (const id of fresh) {
+      if (nodes.length >= MAX_NODES) return { content: { ...content, nodes }, added };
+      const g = nodes[at];
+      nodes.push({ id: `${col.kind}-${crypto.randomUUID().slice(0, 12)}`, type: 'xeno-ref', ref: { kind: col.kind, id }, x: g.x + 20, y: g.y + g.height - 20, width: w, height: h });
+      nodes[at] = { ...g, height: g.height + h + 20 };
+      added += 1;
+    }
+  }
+  return { content: { ...content, nodes }, added };
+}
+
+/** Everything in a project that has a card, one column per kind. */
+async function projectColumns(db, key) {
+  const tasks = (await db.query(`SELECT 'T-' || number AS k FROM tasks WHERE project_id = $1 AND deleted_at IS NULL ORDER BY (status IN ('done','wont_do')), created_at LIMIT 60`, [key])).rows.map((r) => r.k);
+  const chats = (await db.query('SELECT id FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NULL ORDER BY COALESCE(last_message_at, updated_at) DESC LIMIT 30', [key])).rows.map((r) => String(r.id));
+  const objectives = (await db.query('SELECT DISTINCT objective_id AS id FROM project_goals WHERE project_id = $1 AND objective_id IS NOT NULL', [key])).rows.map((r) => String(r.id));
+  const runs = (await db.query(`SELECT a.id FROM workforce_run_admissions a WHERE a.project_id = $1
+    AND NOT EXISTS (SELECT 1 FROM workforce_run_revocations v WHERE v.admission_id = a.id) ORDER BY a.admitted_at DESC LIMIT 30`, [key])).rows.map((r) => String(r.id));
+  const files = (await db.query(`WITH RECURSIVE tree AS (SELECT folder_id AS id, 0 AS depth FROM project_folders WHERE app = 'projects' AND project_id = $1
+      UNION ALL SELECT c.id, t.depth + 1 FROM storage_folders c JOIN tree t ON c.parent_id = t.id WHERE t.depth < 64)
+    SELECT DISTINCT COALESCE(f.file_id, f.id) AS id FROM tree JOIN storage_item_folders i ON i.folder_id = tree.id AND i.source = 'file'
+      JOIN user_files f ON f.id = i.source_id AND f.deleted_at IS NULL LIMIT 60`, [key])).rows.map((r) => String(r.id));
+  return [{ kind: 'objective', label: 'Objectives', items: objectives }, { kind: 'task', label: 'Tasks', items: tasks }, { kind: 'file', label: 'Files', items: files },
+    { kind: 'chat', label: 'Conversations', items: chats }, { kind: 'run', label: 'Active runs', items: runs }];
+}
+const refsIn = (columns) => columns.flatMap((c) => c.items.map((id) => `${c.kind}:${id}`));
+
+/** An editor's open keeps the map complete. If someone saved in between, this waits for the next open. */
+async function completeMap(db, id, key) {
+  const c = (await db.query('SELECT content, revision, map_seen FROM canvases WHERE id = $1', [id])).rows[0];
+  const columns = await projectColumns(db, key), now = refsIn(columns);
+  const seen = new Set(c.map_seen || []), { content, added } = growMap(c.content, columns, seen);
+  if (!added && c.map_seen && now.every((r) => seen.has(r))) return;
+  await db.query('UPDATE canvases SET content = $3, map_seen = $4, revision = revision + 1, updated_at = now() WHERE id = $1 AND revision = $2',
+    [id, c.revision, JSON.stringify(cleanContent(content)), [...new Set([...seen, ...now])]]);
+}
+
 async function existingMap(db, where, params) {
   return (await db.query(`SELECT id FROM canvases WHERE deleted_at IS NULL AND ${where} ORDER BY created_at LIMIT 1`, params)).rows[0] || null;
 }
@@ -307,17 +361,14 @@ export async function openAsCanvas(db, me, { kind, id } = {}) {
   if (kind === 'project') {
     if (!(await rel(db, me.id, key, 'viewer'))) throw new CanvasError('Project not found', 'project_not_found', 404);
     const found = await existingMap(db, `project_id = $1 AND content->'nodes' @> $2::jsonb`, [key, marker]);
-    if (found) return { canvas: await getCanvas(db, me, found.id), created: false };
-    if (!(await rel(db, me.id, key, 'editor'))) throw new CanvasError('Only a project editor can lay it out on a canvas', 'not_allowed', 403);
+    const editor = await rel(db, me.id, key, 'editor');
+    if (found) { if (editor) await completeMap(db, found.id, key); return { canvas: await getCanvas(db, me, found.id), created: false }; }
+    if (!editor) throw new CanvasError('Only a project editor can lay it out on a canvas', 'not_allowed', 403);
     const p = (await db.query('SELECT name FROM chat_projects WHERE id = $1', [key])).rows[0];
-    const tasks = (await db.query(`SELECT 'T-' || number AS k FROM tasks WHERE project_id = $1 AND deleted_at IS NULL ORDER BY (status IN ('done','wont_do')), created_at LIMIT 60`, [key])).rows.map((r) => r.k);
-    const chats = (await db.query('SELECT id FROM chat_conversations WHERE project_id = $1 AND deleted_at IS NULL ORDER BY COALESCE(last_message_at, updated_at) DESC LIMIT 30', [key])).rows.map((r) => String(r.id));
-    const objectives = (await db.query('SELECT DISTINCT objective_id AS id FROM project_goals WHERE project_id = $1 AND objective_id IS NOT NULL', [key])).rows.map((r) => String(r.id));
-    const runs = (await db.query(`SELECT a.id FROM workforce_run_admissions a WHERE a.project_id = $1
-      AND NOT EXISTS (SELECT 1 FROM workforce_run_revocations v WHERE v.admission_id = a.id) ORDER BY a.admitted_at DESC LIMIT 30`, [key])).rows.map((r) => String(r.id));
-    const content = layoutMap({ kind: 'project', id: key }, [{ kind: 'objective', label: 'Objectives', items: objectives }, { kind: 'task', label: 'Tasks', items: tasks },
-      { kind: 'chat', label: 'Conversations', items: chats }, { kind: 'run', label: 'Active runs', items: runs }]);
-    return { canvas: await createCanvas(db, me, { name: `${String(p.name).slice(0, 100)} — map`, projectId: key, content }), created: true };
+    const columns = await projectColumns(db, key);
+    const made = await createCanvas(db, me, { name: `${String(p.name).slice(0, 100)} — map`, projectId: key, content: layoutMap({ kind: 'project', id: key }, columns) });
+    await db.query('UPDATE canvases SET map_seen = $2 WHERE id = $1', [made.id, refsIn(columns)]);
+    return { canvas: made, created: true };
   }
   // a division: the reader's own canvas, built from what the HOME lets this reader see
   let d;
