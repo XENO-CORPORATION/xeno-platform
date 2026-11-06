@@ -9,6 +9,7 @@
  *   - `people` wakes for people only; `everyone` lets other agents wake it too
  *   - a run of agents waking agents stops at MAX_CHAIN, and a channel takes CHANNEL_PER_HOUR wakes
  *   - an agent takes `per_day` wakes, and one live run per channel: mentions during a run wait, then fold into one wake
+ *   - an agent that can't reach Message isn't woken: it could work but never answer, and its person would still pay
  *
  * postMessage only queues. The leader's worker (workers/mentionWakeWorker.js) starts wakes one at a time, so nobody's
  * send waits on the runner, and a run that can't start reaches the person who pays, in their inbox. A wake is never
@@ -63,6 +64,7 @@ const TOLD = {
   chain_limit: (a) => `${a} wasn’t woken: agents had already woken each other ${MAX_CHAIN} times in a row`,
   channel_limit: (a) => `${a} wasn’t woken: the channel reached ${CHANNEL_PER_HOUR} wakes this hour`,
   daily_limit: (a) => `${a} reached its wakes for today`,
+  cannot_answer: (a) => `${a} wasn’t woken: it can’t reach Message, so it couldn’t answer`,
 };
 
 /** Named agents, from postMessage. Nothing is written for an agent that isn't listening. Never throws at the sender. */
@@ -120,11 +122,22 @@ export async function drain(db, { limit = 5, ...opts } = {}) {
   return started;
 }
 
+/** An agent with no connection yet gets every service on its first call, so only a saved one can be missing Message. */
+async function canAnswer(db, publicId) {
+  const c = (await db.query('SELECT categories, paused_at FROM mcp_connections WHERE client_id = $1 AND revoked_at IS NULL', [`agent:${publicId}`])).rows[0];
+  return !c || (!c.paused_at && c.categories.includes('message'));
+}
+
 async function startOne(db, w, opts) {
   const a = (await db.query(`SELECT ai.public_id, ai.status, COALESCE(u.display_name, u.username) AS name, s.mode, s.budget_credits, s.per_day
     FROM agent_identities ai JOIN users u ON u.id = ai.user_id LEFT JOIN agent_mention_settings s ON s.agent_user_id = ai.user_id WHERE ai.user_id = $1`, [w.agent_user_id])).rows[0];
   // turned off, or narrowed, after the mention was queued
   if (!a || a.status !== 'active' || !wakes(a.mode, w.sender_kind)) { await end(db, w.id, 'cancelled', { reason: 'turned_off' }); return false; }
+  if (!(await canAnswer(db, a.public_id))) {
+    await end(db, w.id, 'refused', { reason: 'cannot_answer' });
+    await tell(db, { userId: w.owner_user_id, source: 'message', kind: 'mention_wake', ref: w.ref, title: TOLD.cannot_answer(a.name), detail: 'Turn on Message or resume its connection on the agent’s page.', dedupeKey: `mention-wake:cannot-answer:${w.agent_user_id}:${new Date().toISOString().slice(0, 10)}` });
+    return false;
+  }
   const merged = (await db.query(`UPDATE agent_mention_wakes SET state = 'merged', message_text = NULL
     WHERE agent_user_id = $1 AND conversation_id = $2 AND state = 'queued' AND id <> $3 RETURNING id`, [w.agent_user_id, w.conversation_id, w.id])).rows.length;
   const today = (await db.query(`SELECT count(*)::int AS n FROM agent_mention_wakes WHERE agent_user_id = $1 AND state = 'started' AND created_at > now() - interval '24 hours'`, [w.agent_user_id])).rows[0].n;
