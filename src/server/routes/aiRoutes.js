@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import path from 'path';
 import { generateSignedUrl } from '../middleware/cdnOptimization.js';
 import { resolveRoute, normalizePath, catalogPaths } from '../utils/modelPaths.js';
+import { chatModelFor } from '../services/chatModel.js';
 import { meterPremiumChat, meterPremiumChatStream, meterMediaGeneration } from '../utils/inferenceMeter.js';
 import { streamCallSettlement } from '../utils/streamCallSettlement.js';
 import { estimateChatCostMicro, estimateMessageTokens, getCreditCost } from '../utils/creditCosts.js';
@@ -190,9 +191,9 @@ function setAdmissionHeaders(res, admitted) {
 router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
   // No default temperature, for the same reason as /chat/stream below: Claude Opus 5 refuses ANY value
   // (400 unsupported_sampling_parameter). An undefined value is omitted from the upstream body.
-  const { model, messages, temperature, max_tokens = 4096, path: reqPath, requestId, tools, tool_choice } = req.body;
+  const { model: namedModel, messages, temperature, max_tokens = 4096, path: reqPath, requestId, tools, tool_choice } = req.body;
 
-  if (!model || !Array.isArray(messages) || messages.length === 0) {
+  if (!namedModel || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Model and messages are required' });
   }
 
@@ -204,6 +205,8 @@ router.post('/chat', requireEntitlement('canUse'), async (req, res) => {
     : {};
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
+  // 'auto' is what a XENO tool sends when it names no model (src/toolHost/webHost.ts). It is not a gateway id.
+  const model = await chatModelFor(req.db, userId, namedModel);
 
   const requestedPath = reqPath != null && String(reqPath).trim() !== '' ? normalizePath(reqPath) : null;
   const surface = requestSurface(req);
