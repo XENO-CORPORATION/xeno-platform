@@ -32,6 +32,7 @@ const handler = (q) => {
   const method = q.method(); let b = {}; try { b = q.postData() ? JSON.parse(q.postData()) : {}; } catch { b = {}; }
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
+  if (u.pathname === '/api/canvases/open-as' && method === 'POST') { db.openAs = b.id; return json(200, { success: true, created: false, canvas: { ...out(db.canvases[0]), content: db.canvases[0].content, records: { tasks: recs(db.canvases[0]) } } }); }
   if (u.pathname === '/api/canvases' && method === 'GET') return json(200, { success: true, canvases: db.canvases.map(out) });
   if (u.pathname === '/api/canvases' && method === 'POST') { const c = { id: '00000000-0000-4000-8000-' + String(db.canvases.length + 1).padStart(12, '0'), name: b.name, revision: 1, content: { nodes: [], edges: [] } }; db.canvases.push(c); return json(201, { success: true, canvas: out(c) }); }
   const cm = u.pathname.match(/^\/api\/canvases\/([\w-]+)$/);
@@ -166,6 +167,17 @@ try {
   ok(nodeOf('T-1').x < nodeOf('T-2').x && nodeOf('T-2').x < nodeOf('T-3').x, 'laid out left → right in the order the work can happen');
   ok(!!(await p.$('[data-cv-task="T-1"] [data-cv-ready="yes"]')) && !!(await p.$('[data-cv-task="T-3"] [data-cv-ready="no"]')), 'cards say Ready / Waiting, from the server’s ready set');
   ok(!sd.conflict, 'and the layout saved');
+
+  // a project's canvas lives in the project, at the project's address
+  const pid = db.canvases[0].project.id, pc = db.canvases[0].id;
+  await p.goto(`${base}/workspace/tasks/canvas/${pc}`, { waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid}/canvas/${pc}`, `an old link under Tasks lands in the project (${await p.evaluate(() => location.pathname)})`);
+  ok(!!(await p.$('[data-cv-project] [data-cv-stage]')) && !(await p.$('[data-cv-root] .tk-seg')), 'it is the infinite canvas, inside the project, without the Tasks layout switch');
+  ok(await p.$eval('.pg--canvas [data-cv-stage]', (e) => e.getBoundingClientRect().height > 300), 'and it fills the page');
+  await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
+  ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid}/canvas/${pc}` && !!(await p.$('[data-cv-project] [data-cv-stage]')), 'refresh lands on the same canvas');
+  await p.goto(`${base}/workspace/projects/${pid}/canvas`, { waitUntil: 'domcontentloaded' }); await settle(2000);
+  ok(db.openAs === pid && !!(await p.$('[data-cv-project] [data-cv-stage]')), 'the Canvas tab opens the projectâ€™s own map');
 
   // view-only
   db.canvases[0].readonly = true; await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);

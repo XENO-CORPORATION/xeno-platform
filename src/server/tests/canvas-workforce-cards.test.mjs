@@ -32,6 +32,7 @@ import { admitAccountRun, readRunnablePin } from '../services/workforceRunAdmiss
 import { revokeRun } from '../services/workforceRunAuthority.js';
 import { createObjective } from '../services/projectWorktree.js';
 import { createTask } from '../services/xenoTasks.js';
+import { growMap } from '../services/canvases.js';
 import * as canvasMcp from '../services/canvasMcp.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production';
@@ -115,6 +116,20 @@ async function main() {
       'a project opens as a project canvas with its card and its tasks laid out');
     const again = await call('POST', '/api/canvases/open-as', { token: A, body: { kind: 'project', id: shared } });
     ok(again.s === 200 && again.j.created === false && again.j.canvas.id === pm.j.canvas.id, 'opening it again returns the same canvas');
+    const reopen = async () => (await call('POST', '/api/canvases/open-as', { token: A, body: { kind: 'project', id: shared } })).j.canvas;
+    const later = await createTask(pool, { id: ada, kind: 'human' }, { title: 'Added after the map', projectId: shared });
+    const grown = await reopen(), cardOf = (cv, k) => cv.content.nodes.find((n) => n.ref?.id === k);
+    ok(grown.id === pm.j.canvas.id && cardOf(grown, later.key), 'what is added to the project appears on its map the next time it opens');
+    const firstCard = cardOf(grown, task.key), kept = { ...grown.content, nodes: grown.content.nodes.filter((n) => n.ref?.id !== later.key).map((n) => (n.id === firstCard.id ? { ...n, x: 1234, y: 777 } : n)) };
+    const edit = await call('PUT', `/api/canvases/${grown.id}`, { token: A, body: { content: kept, revision: grown.revision } });
+    ok(edit.s === 200, 'a card can be moved, and one taken off the map');
+    const third = await createTask(pool, { id: ada, kind: 'human' }, { title: 'Added after that', projectId: shared });
+    const back = await reopen();
+    ok(!cardOf(back, later.key), 'a card someone took off stays off');
+    ok(cardOf(back, task.key).x === 1234 && cardOf(back, task.key).y === 777, 'and a card someone moved stays where they put it');
+    ok(cardOf(back, third.key) && !back.content.nodes.some((n, i) => back.content.nodes.findIndex((m) => m.id === n.id) !== i), 'while new work still arrives, each card once');
+    const steady = await reopen();
+    ok(steady.revision === back.revision, 'nothing new means nothing is written');
     ok((await call('POST', '/api/canvases/open-as', { token: B, body: { kind: 'project', id: secret } })).s === 404, 'a project the reader cannot view cannot be opened as a canvas');
     const dmA = (await call('POST', '/api/canvases/open-as', { token: A, body: { kind: 'division', id: dev.id } })).j.canvas;
     const dmB = await call('POST', '/api/canvases/open-as', { token: B, body: { kind: 'division', id: dev.id } });
@@ -122,6 +137,9 @@ async function main() {
     ok(kindsOf(dmA, 'project').length === 2 && kindsOf(dmA, 'objective').includes(obj.objectiveId), 'a division opens with its projects and objectives laid out');
     ok(dmB.s === 201 && kindsOf(dmB.j.canvas, 'project').length === 1 && kindsOf(dmB.j.canvas, 'project')[0] === shared && dmB.j.canvas.id !== dmA.id, 'a member’s division map holds only what their home shows them, on their own canvas');
     ok((await call('POST', '/api/canvases/open-as', { token: E, body: { kind: 'division', id: dev.id } })).s === 404, 'a stranger cannot open the division as a canvas');
+
+    const offered = growMap({ nodes: [{ id: 'root-project', type: 'xeno-ref', ref: { kind: 'project', id: shared }, x: 0, y: 0, width: 300, height: 120 }], edges: [] }, [{ kind: 'file', label: 'Files', items: ['a', 'b'] }], new Set(['file:b']));
+    ok(offered.added === 1 && offered.content.nodes.some((n) => n.id === 'group-file' && n.x >= 300 && n.label === 'Files'), 'a kind with no column yet gets a new column, and only what was not offered before');
 
     // 6. MCP
     const mv = JSON.parse((await canvasMcp.callTool(pool, { id: ada, kind: 'human' }, 'get', { canvas: cid })).content[0].text);
