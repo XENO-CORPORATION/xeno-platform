@@ -433,6 +433,17 @@ async function main() {
   ok((await cats(client)).filter((c) => c === 'message').length === 1, 'an agent older than Message gets it, once');
   ok(!(await cats(`agent:${vega.id}`)).includes('message'), 'a connection that turned it off keeps that');
 
+  // a workspace's project can be given to an agent, and that puts the agent in its channel
+  const newProject = (await pool.query(`INSERT INTO chat_projects (workspace_id, name) VALUES ($1, 'Launch') RETURNING id`, [ws])).rows[0].id;
+  await writeTuples(pool, { writes: [{ object: `project:${newProject}`, relation: 'parent', subject: `workspace:${ws}` }] });
+  const hermes = await agents.create(pool, H(owner), { name: 'Hermes', instructions: 'Answer briefly.' });
+  const choice = (await agents.projectChoices(pool, H(owner), hermes.id)).find((p) => p.id === String(newProject));
+  ok(choice && choice.canGive, 'a project made in a workspace is offered for its agents');
+  const outsider = await agents.create(pool, H(stranger), { name: 'Outsider', instructions: 'Answer briefly.' });
+  ok(!(await agents.projectChoices(pool, H(stranger), outsider.id)).some((p) => p.id === String(newProject)), 'and not to someone outside it');
+  await agents.addProject(pool, H(owner), hermes.id, newProject);
+  ok((await M.listMembers(pool, H(owner), { ...w, key: `project:${newProject}` })).members.some((m) => m.id === String(hermes.userId)), 'the agent is then in the project’s channel');
+
   // ── nothing of the conversation is stored on the platform
   const cols = (await pool.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_name LIKE 'comms\\_%' AND column_name ~ '(body|text|content|message)'`)).rows;
   ok((await pool.query(`SELECT count(*)::int AS n FROM agent_mention_wakes WHERE message_text IS NOT NULL AND state NOT IN ('queued', 'starting')`)).rows[0].n === 0, 'a wake keeps a message’s words only while it waits to start');
