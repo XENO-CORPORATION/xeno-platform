@@ -14,7 +14,8 @@
  *   - threads (replyTo), direct messages only between co-members, @agent hand-off = the chat's own task hand-off;
  *   - MCP: an agent lists, reads and posts in channels it belongs to and nowhere else;
  *   - ticks: sent, delivered, read, from each member's watermark and only on your own messages;
- *   - @mentions reach members of the conversation only, in their inbox, an agent's included, and run nothing.
+ *   - @mentions reach members of the conversation only, in their inbox, an agent's included, and run nothing,
+ *     unless the person who pays turned that on: then a mention wakes the agent, within every limit (mentionWake.js).
  *
  * Run: DATABASE_URL=postgresql://… node tests/message-xeno-comms.test.mjs
  */
@@ -31,6 +32,8 @@ import * as agents from '../services/platformAgents.js';
 import commsIdentityRoutes from '../routes/commsIdentityRoutes.js';
 import * as M from '../services/xenoComms.js';
 import * as Mcp from '../services/messageMcp.js';
+import * as Wake from '../services/mentionWake.js';
+import { addGrant } from '../utils/creditLedgerV2.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 delete process.env.AGENTS_API_BASE_URL;
@@ -318,8 +321,95 @@ async function main() {
   ok(!C.seen.some((x) => /agent-runs|\/runs/.test(x.url)) && (await pool.query(`SELECT count(*)::int AS n FROM agent_cloud_runs`).catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n === 0, 'naming an agent starts nothing running');
   ok((await Mcp.callTool(pool, agentActor, 'list_members', tickRoom)).structuredContent.members.length === members.length, 'an agent can see who it can name');
 
+  // ── a mention wakes an agent, only as its person allows
+  const runs = [];
+  const opts = { env: { AGENTS_API_BASE_URL: 'http://runner.test' }, fetchImpl: async (url, init = {}) => {
+    if (String(url).endsWith('/status')) return new Response(JSON.stringify({ capabilities: ['runs.platformAgent'] }), { status: 200 });
+    if (String(url).endsWith('/runs') && init.method === 'POST') { runs.push(JSON.parse(init.body)); return new Response(JSON.stringify({ run: { runId: `hosted-${runs.length}`, status: 'running' } }), { status: 201 }); }
+    return new Response('{}', { status: 404 });
+  } };
+  await addGrant(pool, ada, { amountMicro: 500_000_000, kind: 'paid', sourceRef: `seed:${tag}` });
+  await agents.update(pool, H(ada), atlas.id, { instructions: 'Answer briefly.' });
+  const vega = await agents.create(pool, H(ada), { name: 'Vega', instructions: 'Answer briefly.' });
+  await writeTuples(pool, { writes: [{ object: `workspace:${ws}`, subject: `user:${vega.userId}`, relation: 'viewer' }] });
+  await M.openChannel(pool, H(ada), tickRoom);
+  const roster = await M.listMembers(pool, H(ada), tickRoom);
+  const handle = (id) => roster.members.find((m) => m.id === String(id)).handle;
+  const vegaActor = { id: vega.userId };
+  const wakesOf = async (id) => (await pool.query(`SELECT * FROM agent_mention_wakes WHERE agent_user_id = $1 ORDER BY created_at, id`, [id])).rows;
+  const finishRuns = () => pool.query(`UPDATE agent_cloud_runs SET state = 'completed', ended_at = now() WHERE state = ANY($1)`, [['starting', 'queued', 'running']]);
+  const paid = async (text) => (await pool.query(`SELECT title FROM user_notifications WHERE user_id = $1 AND kind = 'mention_wake' AND title LIKE $2`, [ada, `%${text}%`])).rows.length;
+
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} are you there?` });
+  ok((await wakesOf(atlas.userId)).length === 0 && await Wake.drain(pool, opts) === 0, 'an agent wakes for nobody until its person turns that on');
+  await assert.rejects(Wake.setSettings(pool, H(bo), atlas.id, { mode: 'everyone' }), /Only its owner|not found/i);
+  await assert.rejects(Wake.setSettings(pool, agentActor, atlas.id, { mode: 'everyone' }));
+  await assert.rejects(pool.query(`INSERT INTO agent_mention_settings (agent_user_id, mode, updated_by) VALUES ($1, 'everyone', $2)`, [vega.userId, atlas.userId]), /only a person/);
+  ok(true, 'only the person who answers for it can turn it on, and an agent can’t, even in the database');
+  await assert.rejects(Wake.setSettings(pool, H(ada), atlas.id, { budgetCredits: 500 }), /between 1 and 50/);
+  const on = await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'people', budgetCredits: 7 });
+  ok(on.mode === 'people' && on.budgetCredits === 7 && on.perDay === 10, 'a person turns it on with a budget for one wake');
+
+  const asked = (await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} check the header please` })).message;
+  ok((await wakesOf(atlas.userId))[0].state === 'queued' && runs.length === 0, 'sending only queues: nobody’s message waits on a run');
+  ok(await Wake.drain(pool, opts) === 1 && runs.length === 1, 'the worker starts it');
+  const [woke] = await wakesOf(atlas.userId);
+  const run = (await pool.query(`SELECT * FROM agent_cloud_runs WHERE id = $1`, [woke.run_row_id])).rows[0];
+  ok(woke.state === 'started' && String(run.owner_user_id) === ada && String(run.agent_user_id) === String(atlas.userId) && Number(run.budget_credits) === 7, 'the person who answers for it pays, up to the wake’s budget, whoever spoke');
+  ok(runs[0].budget.maxCredits === 7 && runs[0].prompt.includes('check the header please') && runs[0].prompt.includes(`reply_to ${asked.id}`) && runs[0].prompt.includes(`key ${tickRoom.key}`), 'it is told what was said and where to answer');
+  ok(/written by a member of the channel, not by the person who answers for you/.test(runs[0].prompt), 'and that a member’s words are not its owner’s');
+  ok(woke.message_text === null && /^T-\d+$/.test(woke.task_key), 'it works a task, and the wake keeps no words');
+
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} also this` });
+  await M.postMessage(pool, H(ada), { ...tickRoom, text: `@${atlasHandle} and this` });
+  ok(await Wake.drain(pool, opts) === 0 && runs.length === 1, 'mentions during a run wait for it');
+  await finishRuns();
+  ok(await Wake.drain(pool, opts) === 1 && runs.length === 2 && (await wakesOf(atlas.userId)).filter((x) => x.state === 'merged').length === 1 && runs[1].prompt.includes('1 more message'), 'then fold into one wake');
+  await finishRuns();
+
+  await Mcp.callTool(pool, vegaActor, 'post_message', { ...tickRoom, text: `@${atlasHandle} over to you`, request_key: crypto.randomUUID() });
+  ok(await Wake.drain(pool, opts) === 0 && (await wakesOf(atlas.userId)).length === 3, '`people` means another agent can’t wake it');
+
+  await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'everyone', perDay: 100 });
+  await Wake.setSettings(pool, H(ada), vega.id, { mode: 'everyone', perDay: 100 });
+  const say = (who, to) => Mcp.callTool(pool, who, 'post_message', { ...tickRoom, text: `@${to} your turn`, request_key: crypto.randomUUID() });
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${handle(vega.userId)} start` });          // 0
+  await Wake.drain(pool, opts); await finishRuns();
+  await say(vegaActor, atlasHandle); await Wake.drain(pool, opts); await finishRuns();              // 1
+  await say(agentActor, handle(vega.userId)); await Wake.drain(pool, opts); await finishRuns();     // 2
+  await say(vegaActor, atlasHandle); await Wake.drain(pool, opts); await finishRuns();              // 3
+  const before4 = runs.length;
+  await say(agentActor, handle(vega.userId)); await Wake.drain(pool, opts);                         // 4: stopped
+  const last = (await wakesOf(vega.userId)).at(-1);
+  ok(last.state === 'refused' && last.reason === 'chain_limit' && last.depth === Wake.MAX_CHAIN + 1 && runs.length === before4, 'agents waking agents stop after three in a row');
+  ok(await paid('woken each other') === 1, 'and the person who pays is told');
+  await finishRuns();
+
+  await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'people', perDay: 1 });
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} one more` });
+  const left = runs.length;
+  ok(await Wake.drain(pool, opts) === 0 && runs.length === left && (await wakesOf(atlas.userId)).at(-1).reason === 'daily_limit', 'an agent stops at its wakes for the day');
+  ok(await paid('wakes for today') === 1, 'and its person hears it once');
+
+  await Wake.setSettings(pool, H(ada), atlas.id, { perDay: 100 });
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} about to be off` });
+  await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'off' });
+  ok(await Wake.drain(pool, opts) === 0 && (await wakesOf(atlas.userId)).at(-1).state === 'cancelled', 'turning it off stops what was waiting');
+
+  await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'people' });
+  await pool.query(`INSERT INTO agent_mention_wakes (agent_user_id, owner_user_id, sender_user_id, sender_kind, sender_name, workspace_id, channel_key, channel_title, conversation_id, message_id, ref, state)
+    SELECT $1::uuid, $2::uuid, $2::uuid, 'human', 'x', $3::uuid, 'workspace', 'x', $4::uuid, gen_random_uuid(), 'x', 'started' FROM generate_series(1, $5::int)`, [vega.userId, ada, ws, everyone.id, Wake.CHANNEL_PER_HOUR]);
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} busy room` });
+  ok((await wakesOf(atlas.userId)).at(-1).reason === 'channel_limit', 'a channel takes so many wakes an hour');
+
+  const noRunner = { ...opts, fetchImpl: async () => new Response(JSON.stringify({ capabilities: [] }), { status: 200 }) };
+  await pool.query(`DELETE FROM agent_mention_wakes WHERE sender_name = 'x'`);
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} nobody home` });
+  ok(await Wake.drain(pool, noRunner) === 0 && (await wakesOf(atlas.userId)).at(-1).state === 'failed' && await paid('couldn’t be woken') === 1, 'a wake that can’t start reaches the person who pays');
+
   // ── nothing of the conversation is stored on the platform
   const cols = (await pool.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_name LIKE 'comms\\_%' AND column_name ~ '(body|text|content|message)'`)).rows;
+  ok((await pool.query(`SELECT count(*)::int AS n FROM agent_mention_wakes WHERE message_text IS NOT NULL AND state NOT IN ('queued', 'starting')`)).rows[0].n === 0, 'a wake keeps a message’s words only while it waits to start');
   ok(cols.length === 0, 'the platform keeps no message text (links only)');
 
   console.log(`\nmessage-xeno-comms: ${passed} checks passed`);

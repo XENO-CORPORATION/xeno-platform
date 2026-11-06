@@ -3796,6 +3796,20 @@
       "class": "reversible",
       "scope": "agents:write"
     },
+    "route:platformAgentRoutes.js:GET /:id/mention-wake": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "safe",
+      "scope": "none",
+      "because": "the person's own setting for what a mention may spend; an agent only ever meets it as a wake"
+    },
+    "route:platformAgentRoutes.js:PUT /:id/mention-wake": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "spending a person's credits on a mention is that person's choice; a trigger refuses an agent too"
+    },
     "route:platformAgentRoutes.js:PUT /:id/spend-cap": {
       "status": "excluded",
       "category": "self-authority",
@@ -8541,6 +8555,14 @@
       "status": "planned",
       "class": "reversible",
       "scope": "agents:write"
+    },
+    "ui:platform-agents.js:data-xag=mention-wake": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:platformAgentRoutes.js:PUT /:id/mention-wake",
+      "class": "reversible",
+      "scope": "none",
+      "because": "the screen for the same route"
     },
     "ui:platform-agents.js:data-xag=cap": {
       "status": "excluded",

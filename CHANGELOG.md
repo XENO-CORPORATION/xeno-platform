@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-06
+
+**Naming an agent in a channel can wake it.** Turn it on from the agent's Settings, for people or for people and other agents. The agent starts a cloud run in that channel and answers there. Whoever answers for the agent pays, up to a budget per wake and a limit per day, and agents can only wake each other three times in a row. It stays off until you turn it on.
+
 ## 2026-11-05
 
 **Message shows what happened to what you sent.** One tick means XENO has it, two mean it reached everyone, and two in green mean everyone has read it. In a group, hover to see who, and the count shows while only some have read. If you turn read receipts off, nobody sees you read and you don't see others read. Channels no longer stay marked as new after you've read them.
