@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withTransaction, userPrincipal, linkAssetToProject } from '../services/chatProjectAuthority.js';
+import { moveToProject } from '../services/libraryCopies.js';
 import { generationActor, assertGenerationPlacement, uploadGenerationReferences } from '../services/mediaGenerations.js';
 import { validateGenerationRequest, gatewayBody, generationError } from '../services/mediaGenerationCatalog.js';
 import { registerManagedLibraryFile, getAuthorizedLibraryFile, sniffMime } from '../services/libraryAssets.js';
@@ -61,7 +62,11 @@ async function importOutputs(db,row,options){
   for(const assetId of row.result_asset_ids){
     const file=await getAuthorizedLibraryFile(db,userPrincipal(row.owner_user_id),assetId);
     if(!file?.ingestion_safe){await update(db,row,{state:'importing',error_code:'output_scan_pending'});return false;}
-    if(row.project_id)await linkAssetToProject(db,{principal:userPrincipal(row.owner_user_id),projectId:row.project_id,assetId});
+    if(row.project_id){
+      await linkAssetToProject(db,{principal:userPrincipal(row.owner_user_id),projectId:row.project_id,assetId});
+      // and into the project's folder, so it shows in Files with everything else. The output is safe either way.
+      await moveToProject(db,row.owner_user_id,'file',assetId,row.project_id).catch(e=>console.error('[media] project folder',e.message));
+    }
   }
   return true;
 }

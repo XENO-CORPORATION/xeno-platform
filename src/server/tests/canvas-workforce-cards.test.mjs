@@ -141,6 +141,23 @@ async function main() {
     const offered = growMap({ nodes: [{ id: 'root-project', type: 'xeno-ref', ref: { kind: 'project', id: shared }, x: 0, y: 0, width: 300, height: 120 }], edges: [] }, [{ kind: 'file', label: 'Files', items: ['a', 'b'] }], new Set(['file:b']));
     ok(offered.added === 1 && offered.content.nodes.some((n) => n.id === 'group-file' && n.x >= 300 && n.label === 'Files'), 'a kind with no column yet gets a new column, and only what was not offered before');
 
+    // made on the canvas, it is the project's
+    const docs = await import('../services/workspaceDocs.js'), { moveToProject } = await import('../services/libraryCopies.js');
+    const wsOf = (await pool.query('SELECT workspace_id FROM chat_projects WHERE id = $1', [shared])).rows[0].workspace_id;
+    const madeDoc = (await docs.createDoc(pool, { id: ada, kind: 'human' }, { kind: 'doc', title: 'Brief from the canvas', workspace: wsOf })).doc;
+    const into = await moveToProject(pool, ada, 'file', madeDoc.versionId, shared);
+    ok(!into.notFound && !into.invalid && !into.conflict && !into.forbidden, `a document moves into the project (${JSON.stringify(into).slice(0, 80)})`);
+    const withDoc = await reopen(), docCard = withDoc.records.files[String(madeDoc.id).toLowerCase()];
+    ok(cardOf(withDoc, String(madeDoc.id).toLowerCase()) && docCard && docCard.url === `/workspace/office/spaces/write/${madeDoc.id}`, 'it joins the project, and its card opens it in Write');
+    const madeChat = await call('POST', '/api/chat/conversations', { token: A, body: { title: 'Canvas chat', project_id: shared } });
+    const cid2 = String((madeChat.j.conversation || madeChat.j).id).toLowerCase();
+    const withChat = await reopen();
+    ok(cardOf(withChat, cid2) && withChat.records.chats[cid2].url === `/workspace/apps/chat/projects/${shared}/c/${cid2}`, 'a chat started in the project gets a card that opens it in the project');
+    const gen = crypto.randomUUID();
+    const genCard = { ...withChat.content, nodes: [...withChat.content.nodes, { id: 'g1', type: 'xeno-ref', ref: { kind: 'generation', id: gen }, x: 0, y: 0, width: 280, height: 280 }] };
+    const savedGen = await call('PUT', `/api/canvases/${withChat.id}`, { token: A, body: { content: genCard, revision: withChat.revision } });
+    ok(savedGen.s === 200 && savedGen.j.canvas.records.generations[gen].missing === true, 'an image card reads its generation, and one the reader can’t see says nothing about it');
+
     // 6. MCP
     const mv = JSON.parse((await canvasMcp.callTool(pool, { id: ada, kind: 'human' }, 'get', { canvas: cid })).content[0].text);
     ok(mv.items.some((i) => i.type === 'run' && i.status === 'stopped') && mv.items.some((i) => i.type === 'division' && i.name === 'Dev'), 'the MCP read shows the new cards with their live status');

@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**Work from the project's canvas.** On a project's canvas, New doc writes a real document into the project's Files, New chat starts a chat in the project, and Image generates into the project after showing you the most it can cost. Each is the same record you'd see anywhere else, not a copy. Select a task card to assign it.
+
 **A project has its own canvas.** Canvas is now a tab in the project, at the project's own address, instead of opening under Tasks. It shows the whole project (objectives, tasks, files, conversations and active runs) and stays complete: what's added to the project appears on the map the next time it's opened. Cards you've moved stay where you put them, and a card you've taken off stays off. Old links land in the right place.
 
 **A wake answers and stops.** An agent named in a channel used to take a task, report, comment and send it for review around its reply, and each step was another paid model call. Now it answers, reads the channel only if it needs to, and its task closes by itself, so a reply no longer lands in your review list. It can still raise a task if the work needs one.

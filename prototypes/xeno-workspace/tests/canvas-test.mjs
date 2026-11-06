@@ -14,11 +14,12 @@ let failed = 0;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 const now = () => new Date().toISOString();
 const ME = { id: 'u1', kind: 'human', name: 'Me' };
-const db = { tasks: [], seq: 0, canvases: [], links: [], puts: [] };
+const db = { tasks: [], seq: 0, canvases: [], links: [], puts: [], docs: [], moved: [], chats: [], generated: [], done: false };
+const GEN = 'e0000000-0000-4000-8000-000000000001', GF = 'd0000000-0000-4000-8000-00000000000a';
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
 const recs = (c) => Object.fromEntries(c.content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => { const t = db.tasks.find((x) => x.key === n.ref.id); return [n.ref.id, t ? { key: t.key, title: t.title, status: t.status, priority: t.priority, project: null, assignee: null } : { key: n.ref.id, missing: true }]; }));
-const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), files: { 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
+const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -32,6 +33,14 @@ const handler = (q) => {
   const method = q.method(); let b = {}; try { b = q.postData() ? JSON.parse(q.postData()) : {}; } catch { b = {}; }
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
+  if (u.pathname === '/api/workspace-docs' && method === 'POST') { db.docs.push(b); return json(200, { success: true, doc: { id: 'c0000000-0000-4000-8000-00000000000d', versionId: 'v-doc-1', title: b.title } }); }
+  const mv = u.pathname.match(/^\/api\/library\/assets\/file\/([\w-]+)\/project$/); if (mv) { db.moved.push(mv[1]); return json(200, { success: true }); }
+  if (u.pathname === '/api/chat/conversations' && method === 'POST') { db.chats.push(b); return json(200, { success: true, conversation: { id: 'c0000000-0000-4000-8000-00000000000e' } }); }
+  if (u.pathname === '/api/generations/catalog') return json(200, { types: [{ type: 'image', models: [{ id: 'gpt-image-2', name: 'GPT Image' }] }] });
+  if (u.pathname === '/api/generations/quote') return json(200, { quoteToken: 'q', maxRetailCredits: 12 });
+  if (u.pathname === '/api/generations' && method === 'POST') { db.generated.push(b); return json(202, { generation: { id: GEN, state: 'queued' } }); }
+  if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: [{ id: 'u2', name: 'Ada' }] });
+  const pt = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (pt && method === 'PATCH' && b.assigneeId) { db.assigned = { key: pt[1], body: b }; return json(200, { success: true, task: { key: pt[1], title: 'x', status: 'todo', assignee: { id: 'u2', name: 'Ada' } } }); }
   if (u.pathname === '/api/canvases/open-as' && method === 'POST') { db.openAs = b.id; return json(200, { success: true, created: false, canvas: { ...out(db.canvases[0]), content: db.canvases[0].content, records: { tasks: recs(db.canvases[0]) } } }); }
   if (u.pathname === '/api/canvases' && method === 'GET') return json(200, { success: true, canvases: db.canvases.map(out) });
   if (u.pathname === '/api/canvases' && method === 'POST') { const c = { id: '00000000-0000-4000-8000-' + String(db.canvases.length + 1).padStart(12, '0'), name: b.name, revision: 1, content: { nodes: [], edges: [] } }; db.canvases.push(c); return json(201, { success: true, canvas: out(c) }); }
@@ -84,7 +93,7 @@ try {
   await p.click('.xd [data-v="T-1"]'); await p.click('.xd [data-v="T-2"]'); await p.click('.xd [data-xd-submit]'); await settle();
   ok((await p.$$('[data-cv-task]')).length === 2 && /Design the onboarding/.test(await main()), 'tasks go on the canvas as cards');
   let s = await waitSaved();
-  ok(s.rev === '2' && db.puts.at(-1).revision === '1' && db.canvases[0].content.nodes.every((n) => n.type !== 'xeno-ref' || !n.title), 'the change autosaves with the revision it was loaded at, storing references only');
+  ok(s.rev === '2' && db.puts.at(-1).revision === '1' && db.canvases[0].content.nodes.every((n) => n.type !== 'xeno-ref' || !n.title), `the change autosaves with the revision it was loaded at, storing references only (${JSON.stringify({ rev: s.rev, conflict: s.conflict, put: db.puts.at(-1)?.revision, puts: db.puts.length })})`);
 
   // a note, by double-clicking the board
   const st = await box('[data-cv-stage]');
@@ -178,6 +187,33 @@ try {
   ok(await p.evaluate(() => location.pathname) === `/workspace/projects/${pid}/canvas/${pc}` && !!(await p.$('[data-cv-project] [data-cv-stage]')), 'refresh lands on the same canvas');
   await p.goto(`${base}/workspace/projects/${pid}/canvas`, { waitUntil: 'domcontentloaded' }); await settle(2000);
   ok(db.openAs === pid && !!(await p.$('[data-cv-project] [data-cv-stage]')), 'the Canvas tab opens the projectâ€™s own map');
+
+  // made on the canvas, it is the project's
+  await p.click('[data-cv-act="new-doc"]'); await settle(500);
+  await p.type('.xd-sh [data-f="title"] input, .xd-sh input', 'Plan'); await p.click('.xd-sh [data-xd-submit]'); await settle(1200);
+  ok(db.docs.length === 1 && db.moved.at(-1) === 'v-doc-1', 'New doc makes a real document and moves it into the project');
+  await p.click('[data-cv-act="new-chat"]'); await settle(500);
+  await p.type('.xd-sh [data-f="title"] input, .xd-sh input', 'Ideas'); await p.click('.xd-sh [data-xd-submit]'); await settle(1200);
+  ok(db.chats.at(-1)?.project_id === pid, 'New chat starts a chat in the project');
+  const kinds = () => db.canvases[0].content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => n.ref.kind);
+  const saved2 = async () => { await settle(1200); return kinds(); };
+  const k2 = await saved2(); ok(k2.includes('file') && k2.includes('chat'), `and both land on the canvas (${k2.join()})`);
+  await p.click('[data-cv-act="new-image"]'); await settle(700);
+  await p.type('.xd-sh textarea', 'a bunker at dawn'); await p.click('.xd-sh [data-xd-submit]'); await settle(900);
+  ok(/up to 12 credits/.test(await p.$eval('.xd-sh', (e) => e.innerText)), 'Image says the most it can cost before it starts');
+  ok(!db.generated.length, 'and nothing has been spent yet');
+  await p.click('.xd-sh [data-xd-ok]'); await settle(1300);
+  ok(db.generated[0]?.projectId === pid && db.generated[0].quoteToken === 'q', 'confirmed, it generates into the project');
+  ok(kinds().includes('generation') && !!(await p.$('[data-cv-generation]')), 'and a card waits for it on the canvas');
+  db.done = true; await settle(4500);
+  ok(!kinds().includes('generation') && db.canvases[0].content.nodes.some((n) => n.ref?.id === 'd0000000-0000-4000-8000-00000000000a'), 'when it finishes the card becomes the file it made');
+
+  // a task card can be assigned from the canvas
+  const taskNode = db.canvases[0].content.nodes.find((n) => n.ref?.kind === 'task');
+  await p.click(`[data-cv-node="${taskNode.id}"] .cv-task-t`); await settle(400);
+  await p.click('[data-cv-act="assign"]'); await settle(600);
+  await p.select('.xd-sh [data-f="who"] select', 'u2'); await p.click('.xd-sh [data-xd-submit]'); await settle(800);
+  ok(db.assigned?.key === taskNode.ref.id && db.assigned.body.assigneeId === 'u2', 'a task card is assigned from the canvas, on the real task');
 
   // view-only
   db.canvases[0].readonly = true; await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
