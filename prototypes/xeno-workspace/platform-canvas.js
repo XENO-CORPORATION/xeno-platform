@@ -58,8 +58,8 @@
     if (!saved) fit();
     paint();
   }
-  const refsOf = (rec) => ({ file: rec.files || {}, chat: rec.chats || {}, project: rec.projects || {}, division: rec.divisions || {}, objective: rec.objectives || {}, run: rec.runs || {}, tenet: rec.tenets || {} });
-  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = refsOf(cv.records); C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; }
+  const refsOf = (rec) => ({ generation: rec.generations || {}, file: rec.files || {}, chat: rec.chats || {}, project: rec.projects || {}, division: rec.divisions || {}, objective: rec.objectives || {}, run: rec.runs || {}, tenet: rec.tenets || {} });
+  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = refsOf(cv.records); C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; watchImages(); }
   const store = (id, v) => { try { if (v) localStorage.setItem('xw-canvas-view:' + id, JSON.stringify(v)); else return JSON.parse(localStorage.getItem('xw-canvas-view:' + id) || 'null'); } catch { return null; } return null; };
 
   /** call BEFORE changing C.doc: the undo step is the state as it was */
@@ -138,8 +138,13 @@
       const st = r.status || '';
       return `<div class="cv-n cv-n--task cv-n--wf cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" data-cv-kind="${n.ref.kind}" ${pos}><div class="cv-task-top">${ic(icon)}<small class="tk-key">${label}</small><small class="cv-st cv-st--${esc(st)}">${esc(STATUS[st] || st)}</small></div><b class="cv-task-t">${esc(r.name || r.title || r.agent || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(wfLine(n.ref.kind, r))}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
     }
+    if (n.ref.kind === 'generation') {
+      const g = (C.refs.generation || {})[n.ref.id] || {}, bad = g.missing || ['failed', 'cancelled'].includes(g.state);
+      return `<div class="cv-n cv-n--task cv-n--image${bad ? ' cv-n--gone' : ''}${sel}" data-cv-node="${esc(n.id)}" data-cv-generation="${esc(n.ref.id)}" ${pos}><div class="cv-task-top">${ic('image')}<small class="tk-key">Image</small><small class="tk-dim">${bad ? 'Didn’t finish' : 'Generating…'}</small></div><b class="cv-task-t">${esc(g.prompt || '…')}</b>${grips}</div>`;
+    }
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
+      if (isF && r.version && /^image\/(jpeg|png|gif|webp)$/.test(String(r.type))) return `<div class="cv-n cv-n--task cv-n--image${sel}" data-cv-node="${esc(n.id)}" ${pos}><img class="cv-img" alt="${esc(r.name)}" src="/api/library/assets/${esc(r.version)}/content" draggable="false">${grips}</div>`;
       if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${isF ? 'File' : 'Chat'}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
       const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : [r.messages != null ? r.messages + (r.messages === 1 ? ' message' : ' messages') : '', r.status === 'active' ? 'active now' : r.at ? new Date(r.at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
       return `<div class="cv-n cv-n--task cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic(isF ? 'doc' : 'chat')}<small class="tk-key">${isF ? 'File' : 'Chat'}</small></div><b class="cv-task-t">${esc((isF ? r.name : r.title) || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(sub)}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
@@ -229,7 +234,8 @@
       setHtml(box, !e ? '' : `<span class="cv-insp-l">Connection</span>${both ? `<span class="tk-seg" role="group" aria-label="What this connection means">${[['', 'Just a line'], ['blocks', 'Blocks'], ['relates', 'Relates'], ['duplicates', 'Duplicates']].map(([k, l]) => `<button class="${(e.xeno?.link || '') === k ? 'on' : ''}" data-cv-act="edge-kind" data-arg="${k}"${e.xeno?.link && !k ? ' disabled title="Remove the link on the task page; a canvas cannot unlink tasks"' : ''}>${l}</button>`).join('')}</span><small class="tk-dim">${e.xeno?.link ? 'A real task link — it shows on both task pages.' : 'Pick a meaning to make it a real link between the tasks.'}</small>` : '<small class="tk-dim">Connect two tasks to make it a real task link.</small>'}<span class="tk-sp"></span><button class="tk-btn" data-cv-act="delete">${ic('trash')}Remove</button>`);
       return;
     }
-    setHtml(box, ids.length ? `<span class="cv-insp-l">${ids.length} selected</span><span class="tk-sp"></span><button class="tk-btn" data-cv-act="group-sel">${ic('layers')}Group</button><button class="tk-btn" data-cv-act="delete">${ic('trash')}Remove from canvas</button>` : '<small class="tk-dim">Drag the board to move around · Ctrl+scroll to zoom · double-click to write a note · drag the ＋ on an item to connect it</small>');
+    const card = one ? nodeById(one) : null;
+    setHtml(box, ids.length ? `<span class="cv-insp-l">${ids.length} selected</span><span class="tk-sp"></span>${card && card.type === 'xeno-ref' && card.ref.kind === 'task' ? `<button class="tk-btn" data-cv-act="assign">${ic('people')}Assign</button>` : ''}<button class="tk-btn" data-cv-act="group-sel">${ic('layers')}Group</button><button class="tk-btn" data-cv-act="delete">${ic('trash')}Remove from canvas</button>` : '<small class="tk-dim">Drag the board to move around · Ctrl+scroll to zoom · double-click to write a note · drag the ＋ on an item to connect it</small>');
   }
 
   // ───────────────────────── pages
@@ -255,6 +261,9 @@
         ${ro ? '<small class="tk-chip">View only</small>' : `<span class="cv-tools" role="toolbar" aria-label="Add to the canvas">
           <button class="tk-tool" data-cv-act="add-task" title="Put an existing task on the canvas · T">${ic('check')}Task</button>
           <button class="tk-tool" data-cv-act="new-task" title="Create a new task here">${ic('plus')}New task</button>
+          ${C.project ? `<button class="tk-tool" data-cv-act="new-doc" title="Write a new document in this project">${ic('plus')}New doc</button>
+          <button class="tk-tool" data-cv-act="new-chat" title="Start a chat in this project">${ic('plus')}New chat</button>
+          <button class="tk-tool" data-cv-act="new-image" title="Generate an image into this project">${ic('plus')}Image</button>` : ''}
           <button class="tk-tool" data-cv-act="add-file" title="Put Library files on the canvas">${ic('doc')}File</button>
           <button class="tk-tool" data-cv-act="add-chat" title="Put chats on the canvas">${ic('chat')}Chat</button>
           ${C.project ? `<button class="tk-tool" data-cv-act="add-tenet" title="Put the project’s tenets on the canvas as live verdict cards">${ic('check')}Verdict</button>` : ''}
@@ -372,6 +381,78 @@
     const t = r.d.task, c = centre(); C.records[t.key] = t; before();
     C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind: 'task', id: t.key }, x: snap(c.x - 130), y: snap(c.y - 60), width: 260, height: 120 });
     change(`${t.key} created`); try { window.XENO_TASKS?.load?.(); } catch {}
+  }
+  // Made here, it belongs to the project: the same records its Files, Conversations and Tasks show. A card only points.
+  function place(kind, id, w, h) { const c = centre(); before(); C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id }, x: snap(c.x - w / 2), y: snap(c.y - h / 2), width: w, height: h }); }
+  async function newDocHere() {
+    const v = await D().form({ title: 'New document in this project', sub: 'It opens in Write and lives in the project’s Files.', submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 200 }] });
+    if (!v) return;
+    const r = await api('POST', '/api/workspace-docs', { kind: 'doc', title: v.title, workspace: window.XENO_SCOPE?.served ? window.XENO_SCOPE.uuid() : null }).catch(() => null);
+    if (!r || !r.ok) return toast(said(r, 'The document couldn’t be created'));
+    const d = r.d.doc, k = String(d.id).toLowerCase();
+    const moved = await api('PUT', `/api/library/assets/file/${encodeURIComponent(d.versionId)}/project`, { project: C.project.id }).catch(() => null);
+    if (!moved || !moved.ok) toast(said(moved, 'It was made, but couldn’t be put in the project’s folder'));
+    C.refs.file[k] = { id: k, name: d.title, type: 'Document', url: `/workspace/office/spaces/write/${k}` };
+    place('file', k, 260, 100); change('Document created');
+  }
+  async function newChatHere() {
+    const v = await D().form({ title: 'New chat in this project', submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 200 }] });
+    if (!v) return;
+    const r = await api('POST', '/api/chat/conversations', { title: v.title, project_id: C.project.id }).catch(() => null);
+    const cv = r && r.ok && (r.d.conversation || r.d);
+    if (!cv || !cv.id) return toast(said(r, 'The chat couldn’t be started'));
+    const k = String(cv.id).toLowerCase();
+    C.refs.chat[k] = { id: k, title: v.title, url: `/workspace/apps/chat/projects/${C.project.id}/c/${k}` };
+    place('chat', k, 260, 100); change('Chat started');
+  }
+  async function imageHere() {
+    const cat = await api('GET', '/api/generations/catalog').catch(() => null);
+    const models = (cat && cat.ok && (cat.d.types || []).find((t) => t.type === 'image')?.models) || [];
+    if (!models.length) return toast('Image generation isn’t available right now');
+    const v = await D().form({ title: 'Generate an image in this project', sub: 'You’ll see the most it can cost before it starts.', submit: 'Next', size: 'md', fields: [
+      { id: 'prompt', label: 'What should it show?', type: 'textarea', required: true, max: 16000 },
+      { id: 'model', label: 'Model', type: 'select', value: models[0].id, options: models.map((m) => [m.id, m.name]) }] });
+    if (!v) return;
+    const input = { type: 'image', model: v.model, prompt: v.prompt, projectId: C.project.id };
+    const q = await api('POST', '/api/generations/quote', input).catch(() => null);
+    if (!q || !q.ok) return toast(said(q, 'It couldn’t be priced'));
+    if (!(await D().confirm({ title: 'Generate this image?', body: `It costs up to ${esc(q.d.maxRetailCredits)} credits, from your balance.`, action: 'Generate', danger: false }))) return;
+    const g = await api('POST', '/api/generations', { ...input, quoteToken: q.d.quoteToken, requestKey: `canvas:${crypto.randomUUID()}` }).catch(() => null);
+    if (!g || !g.ok) return toast(said(g, 'It couldn’t be started'));
+    const id = String(g.d.generation.id).toLowerCase();
+    C.refs.generation[id] = { id, state: g.d.generation.state, prompt: v.prompt, files: [] };
+    place('generation', id, 280, 280); change('Generating'); watchImages();
+  }
+  // An image card waits for its generation, then becomes the file it made. A person may have left: the next open does this.
+  function watchImages() {
+    clearTimeout(C.imgTimer);
+    const open = (C.doc?.nodes || []).filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'generation');
+    if (!open.length || !C.can?.edit) return;
+    C.imgTimer = setTimeout(async () => {
+      const id = C.id; let changed = false;
+      const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
+      if (C.id !== id) return;
+      if (!r || !r.ok) return watchImages();
+      C.refs = refsOf(r.d.canvas.records);
+      for (const n of open) {
+        const g = C.refs.generation[n.ref.id];
+        if (!g || !g.files || !g.files.length) continue;
+        const k = g.files[0], taken = C.doc.nodes.some((x) => x.type === 'xeno-ref' && x.ref.kind === 'file' && x.ref.id === k);
+        if (!changed) before(); changed = true;
+        C.doc.nodes = taken ? C.doc.nodes.filter((x) => x.id !== n.id) : C.doc.nodes.map((x) => (x.id === n.id ? { ...x, ref: { kind: 'file', id: k } } : x));
+      }
+      if (changed) change('Image ready'); else draw();
+      watchImages();
+    }, 3000);
+  }
+  async function assignHere(key) {
+    const list = await window.XENO_TASKS.people(C.project ? C.project.id : null);
+    const t = C.records[key] || {};
+    const v = await D().form({ title: `Assign ${esc(key)}`, submit: 'Assign', size: 'sm', fields: [{ id: 'who', label: 'Who', type: 'select', value: t.assignee ? String(t.assignee.id) : '', options: [['', 'Nobody'], ...(list || []).map((p) => [String(p.id), p.name])] }] });
+    if (!v) return;
+    const r = await api('PATCH', `/api/tasks/${encodeURIComponent(key)}`, { assigneeId: v.who || null }).catch(() => null);
+    if (!r || !r.ok) return toast(said(r, 'It couldn’t be assigned'));
+    if (r.d.task) C.records[key] = r.d.task; draw(); status(v.who ? 'Assigned' : 'Unassigned');
   }
   function addNote(at) { const c = at || centre(); const n = { id: uid(), type: 'text', text: '', x: snap(c.x - 120), y: snap(c.y - 60), width: 240, height: 140 }; before(); C.doc.nodes.push(n); C.sel = new Set([n.id]); C.editing = n.id; change(); }
   async function addLink() {
@@ -531,7 +612,7 @@
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
   const ACT = {
-    'add-task': addTask, 'new-task': newTaskHere, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
+    'add-task': addTask, 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, 'new-image': imageHere, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
     deps: () => layoutDeps(), back: () => leave(C.project), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),

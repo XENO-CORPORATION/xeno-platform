@@ -1394,6 +1394,6 @@
   addEventListener('dragend', (e) => { e.target.closest?.('[data-tk-card]')?.removeAttribute('data-tk-dragging'); clearOver(); });
 
   const label = (x) => { if (x === 'canvas') return 'Canvases'; if (window.XENO_CANVAS?.nameOf?.(x)) return window.XENO_CANVAS.nameOf(x); const t = findTask(x); return t && !t.missing ? `${t.key} · ${t.title}` : x; };
-  window.XENO_TASKS = { served: true, label, route, layoutSeg, projectTab, load, sync, patch, poll, newTask, markRead, md, state: () => ({ status: T.status, area: T.area === undefined ? undefined : T.area, count: (T.list || []).length, selected: T.sel.size }) };
+  window.XENO_TASKS = { served: true, people, label, route, layoutSeg, projectTab, load, sync, patch, poll, newTask, markRead, md, state: () => ({ status: T.status, area: T.area === undefined ? undefined : T.area, count: (T.list || []).length, selected: T.sel.size }) };
   Promise.resolve(P.ready).then((user) => { if (user) load(); });
 })();

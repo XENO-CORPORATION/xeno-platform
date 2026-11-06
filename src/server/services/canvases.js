@@ -40,8 +40,8 @@ const AREA = /^[a-z][a-z0-9_-]{0,39}$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TASK_KEY = /^T-\d{1,15}$/;
 const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref']);
-const REF_KINDS = new Set(['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet']);   // tenet: a XENO Corpus verdict card (services/xenoCorpus.js)
-const UUID_KINDS = new Set(['file', 'chat', 'project', 'division', 'objective', 'run', 'tenet']);
+const REF_KINDS = new Set(['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet', 'generation']);   // tenet: a XENO Corpus verdict card (services/xenoCorpus.js)
+const UUID_KINDS = new Set(['file', 'chat', 'project', 'division', 'objective', 'run', 'tenet', 'generation']);
 const COLORS = /^([1-6]|#[0-9a-fA-F]{6})$/;
 const SIDES = new Set(['top', 'right', 'bottom', 'left']);
 const ENDS = new Set(['none', 'arrow']);
@@ -127,18 +127,33 @@ async function resolveFiles(db, me, ids) {
     // a card names the FILE: it shows the newest version, whichever of the file's ids the card was made with
     const rev = await latestFor(db, id);
     const can = (await check(db, { object: `library_asset:${rev}`, relation: 'viewer', subject: `user:${me.id}` })).allowed;
-    const f = can ? (await db.query('SELECT id, file_id, original_name, mime_type, file_size FROM user_files WHERE id = $1 AND deleted_at IS NULL', [rev])).rows[0] : null;
-    out[id] = f ? { id: String(f.file_id), version: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), url: `/workspace/library?sel=${f.id}` } : { id, missing: true };
+    const f = can ? (await db.query('SELECT id, file_id, original_name, mime_type, file_size, metadata FROM user_files WHERE id = $1 AND deleted_at IS NULL', [rev])).rows[0] : null;
+    out[id] = f ? { id: String(f.file_id), version: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), url: f.metadata?.xeno_doc ? `/workspace/office/spaces/${f.metadata.xeno_doc.kind === 'note' ? 'notes' : 'write'}/${f.file_id}` : `/workspace/library?sel=${f.id}` } : { id, missing: true };
   }
   return out;
 }
+/** An image being made on the canvas. When it's done, `files` names what it made and the card becomes that file. */
+async function resolveGenerations(db, me, ids) {
+  const out = {};
+  if (!ids.length) return out;
+  const { getGeneration } = await import('./mediaGenerations.js');
+  for (const id of ids) {
+    try {
+      const g = await getGeneration(db, me.id, id);
+      const files = g.resultAssetIds?.length ? (await db.query('SELECT COALESCE(file_id, id) AS id FROM user_files WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL', [g.resultAssetIds])).rows.map((r) => String(r.id)) : [];
+      out[id] = { id, state: g.state, prompt: g.request?.prompt || '', files, error: g.error?.code || null };
+    } catch { out[id] = { id, missing: true }; }
+  }
+  return out;
+}
+
 async function resolveChats(db, me, ids) {
   const out = {};
   for (const id of ids) {
-    const c = (await db.query('SELECT id, user_id, title, last_message_at, updated_at FROM chat_conversations WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
+    const c = (await db.query('SELECT id, user_id, project_id, title, last_message_at, updated_at FROM chat_conversations WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
     const can = c && (String(c.user_id) === String(me.id) || (await check(db, { object: `conversation:${id}`, relation: 'viewer', subject: `user:${me.id}` })).allowed);
     const n = can ? (await db.query('SELECT count(*)::int AS n FROM chat_messages WHERE conversation_id = $1', [id])).rows[0].n : 0;
-    out[id] = can ? { id: String(c.id), title: c.title, at: c.last_message_at || c.updated_at, messages: n, status: c.last_message_at && Date.now() - new Date(c.last_message_at).getTime() < 15 * 60e3 ? 'active' : 'quiet', url: `/workspace/apps/chat/${c.id}` } : { id, missing: true };
+    out[id] = can ? { id: String(c.id), title: c.title, at: c.last_message_at || c.updated_at, messages: n, status: c.last_message_at && Date.now() - new Date(c.last_message_at).getTime() < 15 * 60e3 ? 'active' : 'quiet', url: c.project_id ? `/workspace/apps/chat/projects/${c.project_id}/c/${c.id}` : `/workspace/apps/chat/${c.id}` } : { id, missing: true };
   }
   return out;
 }
@@ -238,7 +253,7 @@ export async function getCanvas(db, me, id) {
   const content = cleanContent(c.content);
   const of = (kind) => content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id);
   return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')),
-    projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')), tenets: await resolveTenetCards(db, me, of('tenet')) } };
+    projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')), tenets: await resolveTenetCards(db, me, of('tenet')), generations: await resolveGenerations(db, me, of('generation')) } };
 }
 
 /**
@@ -330,8 +345,9 @@ async function projectColumns(db, key) {
     AND NOT EXISTS (SELECT 1 FROM workforce_run_revocations v WHERE v.admission_id = a.id) ORDER BY a.admitted_at DESC LIMIT 30`, [key])).rows.map((r) => String(r.id));
   const files = (await db.query(`WITH RECURSIVE tree AS (SELECT folder_id AS id, 0 AS depth FROM project_folders WHERE app = 'projects' AND project_id = $1
       UNION ALL SELECT c.id, t.depth + 1 FROM storage_folders c JOIN tree t ON c.parent_id = t.id WHERE t.depth < 64)
-    SELECT DISTINCT COALESCE(f.file_id, f.id) AS id FROM tree JOIN storage_item_folders i ON i.folder_id = tree.id AND i.source = 'file'
-      JOIN user_files f ON f.id = i.source_id AND f.deleted_at IS NULL LIMIT 60`, [key])).rows.map((r) => String(r.id));
+    SELECT COALESCE(f.file_id, f.id) AS id FROM tree JOIN storage_item_folders i ON i.folder_id = tree.id AND i.source = 'file'
+      JOIN user_files f ON f.id = i.source_id AND f.deleted_at IS NULL
+    UNION SELECT COALESCE(f.file_id, f.id) FROM chat_project_assets a JOIN user_files f ON f.id = a.asset_id AND f.deleted_at IS NULL WHERE a.project_id = $1 LIMIT 60`, [key])).rows.map((r) => String(r.id));
   return [{ kind: 'objective', label: 'Objectives', items: objectives }, { kind: 'task', label: 'Tasks', items: tasks }, { kind: 'file', label: 'Files', items: files },
     { kind: 'chat', label: 'Conversations', items: chats }, { kind: 'run', label: 'Active runs', items: runs }];
 }
