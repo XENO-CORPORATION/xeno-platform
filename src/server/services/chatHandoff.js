@@ -44,7 +44,7 @@ export async function handOff(db, me, conversationId, { agentId, prompt, run = t
  * it. The chat's `@agent` and the workspace Message area's `@agent` (services/xenoComms.js) both come through here,
  * so everything the task system enforces applies to both unchanged.
  */
-export async function delegateWork(db, me, { agentId, text, body, task: fields = {}, run = true, folders = [], budgetCredits } = {}, opts = {}) {
+export async function delegateWork(db, me, { agentId, text, body, task: fields = {}, run = true, folders = [], budgetCredits, answering = false } = {}, opts = {}) {
   const agent = await agents.get(db, me, String(agentId || ''));          // seen by this person, or agent_not_found
   let task = await tasks.createTask(db, me, { title: titleOf(text), body, ...fields });
   // `#folder` in the prompt: the folders its work lives in, linked BEFORE the agent gets it so it can open them at once
@@ -61,7 +61,7 @@ export async function delegateWork(db, me, { agentId, text, body, task: fields =
   }
   let started = null, runNote = null;
   if (run && agent.rights && (agent.rights.runner || agent.rights.manage)) {
-    try { started = await cloudRuns.start(db, me, agent.id, { taskKey: task.key, budgetCredits }, opts); }
+    try { started = await cloudRuns.start(db, me, agent.id, { taskKey: task.key, budgetCredits, answering }, opts); }
     catch (e) { if (e instanceof cloudRuns.AgentRunError || e instanceof tasks.TaskError) runNote = e.message; else throw e; }
   } else if (run) runNote = `You can’t run ${agent.name}; it will pick the task up itself.`;
   return {
