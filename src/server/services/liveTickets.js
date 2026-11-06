@@ -17,10 +17,12 @@ import jwt from 'jsonwebtoken';
 import { issuerForHost } from '../config/hosts.js';
 import { getSigningKey } from '../utils/oidcProvider.js';
 import { canvasRole } from './spawnCanvases.js';
+import { canvasLiveRole, CanvasError as WorkspaceCanvasError } from './canvases.js';
 
 export const AUDIENCE = 'xeno-multiplayer';
 export const TICKET_TYP = 'xeno-live-ticket+jwt';
 export const REVOKE_TYP = 'xeno-live-revoke+jwt';
+export const NOTIFY_TYP = 'xeno-live-notify+jwt';
 export const TTL_SECONDS = 60;
 // Where the service reads the platform's discovery; its tickets carry that provider's issuer (staged issuer move).
 const DISCOVERY_HOST = 'xenosystem.ai';
@@ -41,6 +43,17 @@ export const RESOURCE_TYPES = Object.freeze({
   'spawn.canvas': async (db, actor, id) => {
     const { role, userId, agentId } = await canvasRole(db, actor, id);
     return { role, userId, agentId };
+  },
+  // A workspace canvas: <id> is the canvas, its role the one its own service gives. Saving stays that service's.
+  'workspace.canvas': async (db, actor, id) => {
+    const agent = actor.kind === 'agent';
+    try {
+      const role = await canvasLiveRole(db, { id: actor.id, kind: actor.kind }, id);
+      return { role: agent && role === 'owner' ? 'editor' : role, userId: agent ? (actor.owner?.id ?? actor.owner) : actor.id, agentId: agent ? actor.id : null };
+    } catch (e) {
+      if (e instanceof WorkspaceCanvasError) throw new LiveTicketError(e.message, e.code, e.status);
+      throw e;
+    }
   },
 });
 
@@ -82,6 +95,24 @@ export async function createServiceTicket(db, machineId, resource) {
   return jwt.sign({ sub: String(machineId), jti: crypto.randomUUID(), name: 'Spawn server', kind: 'service', xeno_resource: r.resource,
     xeno_role: 'editor', iat: now, exp: now + TTL_SECONDS }, key.privatePem,
   { algorithm: 'ES256', keyid: key.kid, issuer: issuerForHost(DISCOVERY_HOST), audience: AUDIENCE, header: { typ: TICKET_TYP, kid: key.kid, alg: 'ES256' } });
+}
+
+/**
+ * Tell everyone on one shared thing that something changed outside it (SPEC §6a). It says that, never what: each client
+ * reads the platform with its own rights. Returns { ok, status }; a service that's down costs a live update, not the change.
+ */
+export async function notify(db, resource, data, { fetchImpl = globalThis.fetch } = {}) {
+  const r = parseResource(resource);
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  const token = jwt.sign({ sub: 'platform', xeno_resource: r.resource, jti: crypto.randomUUID(), iat: now, exp: now + TTL_SECONDS }, key.privatePem,
+    { algorithm: 'ES256', keyid: key.kid, issuer: issuerForHost(DISCOVERY_HOST), audience: AUDIENCE, header: { typ: NOTIFY_TYP, kid: key.kid, alg: 'ES256' } });
+  try {
+    const res = await fetchImpl(`${liveOrigin()}/v1/${r.resource}/notify`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ data }), signal: AbortSignal.timeout(5000) });
+    return { ok: res.ok, status: res.status };
+  } catch (e) {
+    return { ok: false, status: 0, error: e.message };
+  }
 }
 
 export function liveOrigin() {

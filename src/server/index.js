@@ -27,6 +27,7 @@ import publishRoutes from './routes/publishRoutes.js';
 import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
 import { startAutomateWorker } from './workers/automateWorker.js';
 import { startMentionWakeWorker } from './workers/mentionWakeWorker.js';
+import { startProjectChangeWorker } from './workers/projectChangeWorker.js';
 import { startLedgerChainAudit } from './services/ledgerChainAudit.js';
 import { startComputeMeter } from './workers/computeMeter.js';
 import messageRoutes from './routes/messageRoutes.js';
@@ -4178,6 +4179,8 @@ startDownloadCleanup();
       t.unref(); remindBookings();
       return () => clearInterval(t);
     });
+    // Open canvases hear what changed in their project (workers/projectChangeWorker.js).
+    backgroundLeader.whenLeader(() => startProjectChangeWorker(pool));
     const sweepHolds = () => sweepExpiredHolds(pool)
       .then((n) => { if (n) console.log(`[HoldSweeper] voided ${n} expired hold(s)`); })
       .catch((e) => console.error('[HoldSweeper] error:', e.message));

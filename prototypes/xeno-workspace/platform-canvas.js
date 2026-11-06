@@ -50,7 +50,7 @@
     const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (C.id !== id) return;
     if (!r || !r.ok) { C.state = r && r.status === 404 ? 'missing' : 'error'; return paint(); }
-    take(r.d.canvas); C.state = 'ready';
+    take(r.d.canvas); C.state = 'ready'; goLive(id);
     // a project's canvas belongs to the project: an old link under Tasks lands there, with no extra Back step
     if (C.project && /\/tasks\/canvas\//.test(location.pathname)) { history.replaceState(history.state, '', `/workspace/projects/${C.project.id}/canvas/${id}${location.search}`); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); }
     try { X()?.render?.(); } catch {}
@@ -66,23 +66,120 @@
   function before() { if (!C.can || !C.can.edit) return; C.undo.push(JSON.stringify(C.doc)); if (C.undo.length > 100) C.undo.shift(); }
   function change(label) {
     if (!C.can || !C.can.edit) return;
-    C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); draw();
+    pushLive(); C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); draw();
     if (label) status(label);
   }
   async function save() {
+    if (live() && !isLead()) { C.dirty = false; return; }   // one person's screen writes the shared canvas down
     if (!C.dirty || C.saving || C.conflict || !C.id) return;
     C.saving = true; C.dirty = false; status('Saving…');
     const id = C.id, body = { content: C.doc, revision: C.rev, name: C.name };
     const r = await api('PUT', '/api/canvases/' + encodeURIComponent(id), body).catch(() => null);
     C.saving = false; if (C.id !== id) return;
-    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
-    if (r && r.status === 409 && r.d.code === 'canvas_changed') { C.conflict = true; status(''); return paint(); }
+    if (r && r.ok) { const keepSel = C.sel; C.rev = r.d.canvas.revision; if (NOW.meta) NOW.doc.transact(() => NOW.meta.set('rev', String(C.rev)), LOCAL); C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); C.sel = keepSel; status('Saved'); draw(); if (C.dirty) save(); return; }
+    if (r && r.status === 409 && r.d.code === 'canvas_changed') {
+      // live, the shared canvas is already everyone's merge: this writes it down over the newer revision
+      if (live()) { const g = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null); if (g && g.ok && C.id === id) { C.rev = g.d.canvas.revision; C.dirty = true; return save(); } }
+      C.conflict = true; status(''); return paint();
+    }
     C.dirty = true; status(said(r, 'Not saved — the change is kept here; it will try again.'), true);
     // a refused link (403/400) is a rule, not a network blip: undo it rather than retry forever
     if (r && (r.status === 403 || r.status === 400 || r.status === 404)) { C.dirty = false; if (C.undo.length) { C.doc = JSON.parse(C.undo.pop()); draw(); } toast(said(r, 'That change was refused')); return; }
     clearTimeout(C.timer); C.timer = setTimeout(save, 4000);
   }
   function status(t, bad) { const el = document.querySelector('[data-cv-status]'); if (el) { el.textContent = t; el.toggleAttribute('data-bad', !!bad); } }
+
+  // ───────────────────────── together (XENO Multiplayer, xeno-live.v1)
+  // While a canvas is open it's a shared Yjs document: one entry per item, so two people changing different items both
+  // land, and the same item takes the last change. `gone` keeps what was removed, so a slow arrival can't bring it back.
+  // /api/canvases stays what everyone else reads (agents, the map, a fresh open): one person's screen writes it down.
+  const LOCAL = Symbol('canvas-local'), clone = (v) => JSON.parse(JSON.stringify(v));
+  const NOW = { id: null, conn: null, doc: null, nodes: null, edges: null, gone: null, meta: null, seeded: false, pending: false, people: [], moved: 0, pushed: 0, map: 0 };
+  const live = () => !!(NOW.conn && NOW.conn.status === 'open' && NOW.seeded);
+  /** The first person who can edit, by connection: the same answer on every screen, and the next one if they leave. */
+  function isLead() {
+    const me = NOW.conn?.self; if (!me || me.role === 'viewer') return false;
+    return !NOW.people.some((p) => p.role !== 'viewer' && p.kind === 'human' && String(p.conn) < String(me.conn));
+  }
+  const CLIENT_SRC = document.currentScript?.src; let client = null;
+  const loadClient = () => client || (client = new Promise((ok, no) => {
+    if (window.XenoLive) return ok(window.XenoLive);
+    const s = document.createElement('script'); s.src = new URL('live-client.js', CLIENT_SRC || new URL('/workspace/', location.href)).href;
+    s.onload = () => ok(window.XenoLive); s.onerror = () => { client = null; no(new Error('live client')); }; document.head.append(s);
+  }));
+  function stopLive() { try { NOW.conn?.close(); } catch {} try { NOW.doc?.destroy(); } catch {} Object.assign(NOW, { id: null, conn: null, doc: null, nodes: null, edges: null, gone: null, meta: null, seeded: false, pending: false, people: [] }); drawPeople(); }
+  async function goLive(id) {
+    stopLive(); NOW.id = id;
+    let X_; try { X_ = await loadClient(); } catch { return; }        // the canvas works alone without it
+    if (NOW.id !== id || C.id !== id) return;
+    const doc = new X_.Y.Doc();
+    Object.assign(NOW, { doc, nodes: doc.getMap('nodes'), edges: doc.getMap('edges'), gone: doc.getMap('gone'), meta: doc.getMap('meta') });
+    doc.on('update', (_, origin) => { if (origin !== LOCAL && NOW.seeded) pull(); });
+    const conn = X_.joinLive({ type: 'workspace.canvas', id, Y: X_.Y, doc, ticket: async (resource) => {
+      const r = await api('POST', '/api/live/tickets', { resource }); if (!r.ok) throw new Error(said(r, 'No ticket')); return r.d.ticket; } });
+    NOW.conn = conn;
+    conn.on('status', (s) => { if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople(); });
+    conn.on('participants', (p) => { NOW.people = p || []; drawPeople(); if (live() && isLead() && C.dirty) save(); });
+    conn.on('signal', ({ data }) => { if (data && data.changed) changedElsewhere(); });
+  }
+  /** Joining: the shared canvas wins while anyone is on it. Alone, what was saved outside it (an agent, the map) wins. */
+  function seed() {
+    const edit = C.can?.edit, rev = String(C.rev), alone = !NOW.conn.participants().length;
+    if (edit) NOW.doc.transact(() => {
+      if (alone && NOW.meta.get('rev') !== rev) { [...NOW.nodes.keys()].forEach((k) => NOW.nodes.delete(k)); [...NOW.edges.keys()].forEach((k) => NOW.edges.delete(k)); NOW.gone.clear(); NOW.meta.set('rev', rev); }
+      absorb(C.doc);
+    }, LOCAL);
+    NOW.seeded = true;
+    if (edit || NOW.nodes.size) pull({ quiet: true }); else drawPeople();
+  }
+  /** What the saved canvas has that the shared one doesn't, unless someone removed it. Never overwrites. */
+  function absorb(content) {
+    for (const n of content.nodes) if (!NOW.nodes.has(n.id) && !NOW.gone.has(n.id)) NOW.nodes.set(n.id, clone(n));
+    for (const e of content.edges) if (!NOW.edges.has(e.id) && !NOW.gone.has(e.id)) NOW.edges.set(e.id, clone(e));
+  }
+  function pushLive() {
+    if (!NOW.seeded || !C.can?.edit || !NOW.doc) return;
+    const put = (map, rows) => { const on = new Set(); for (const x of rows) { on.add(x.id); if (JSON.stringify(map.get(x.id)) !== JSON.stringify(x)) { map.set(x.id, clone(x)); NOW.gone.delete(x.id); } }
+      [...map.keys()].forEach((k) => { if (!on.has(k)) { map.delete(k); NOW.gone.set(k, 1); } }); };
+    NOW.doc.transact(() => { put(NOW.nodes, C.doc.nodes); put(NOW.edges, C.doc.edges); if (NOW.meta.get('name') !== C.name) NOW.meta.set('name', C.name); }, LOCAL);
+    if (NOW.pending) { NOW.pending = false; pull(); }
+  }
+  /** Someone else's change. A drag waits for the drop; a note you're typing in stays yours while the rest keeps arriving. */
+  function pull({ quiet = false } = {}) {
+    if (drag) { NOW.pending = true; return; }
+    const keep = (map, rows) => { const out = []; for (const x of rows) if (x.id === C.editing) out.push(x); else if (map.has(x.id)) out.push(clone(map.get(x.id))); const had = new Set(rows.map((x) => x.id)); map.forEach((v, k) => { if (!had.has(k) && !NOW.gone.has(k)) out.push(clone(v)); }); return out; };
+    const nodes = keep(NOW.nodes, C.doc.nodes), ids = new Set(nodes.map((n) => n.id));
+    C.doc = { ...C.doc, nodes, edges: keep(NOW.edges, C.doc.edges).filter((e) => ids.has(e.fromNode) && ids.has(e.toNode)) };
+    C.sel = new Set([...C.sel].filter((s) => s.startsWith('e:') || ids.has(s)));
+    if (NOW.meta.get('name')) C.name = NOW.meta.get('name');
+    if (C.doc.nodes.some((n) => n.type === 'xeno-ref' && !known(n))) records();
+    if (!quiet && isLead()) { C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); }
+    draw();
+  }
+  const known = (n) => (n.ref.kind === 'task' ? C.records[n.ref.id] : (C.refs[n.ref.kind] || {})[n.ref.id]);
+  /** What the cards say comes from the server, as on any load. */
+  async function records() {
+    clearTimeout(records.t);
+    records.t = setTimeout(async () => {
+      const id = C.id, r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
+      if (!r || !r.ok || C.id !== id) return;
+      C.records = r.d.canvas.records.tasks || {}; C.refs = refsOf(r.d.canvas.records); draw(); watchImages();
+    }, 150);
+  }
+  /** The platform said something in this project changed. Cards refresh for everyone; one screen asks the map for what's new. */
+  async function changedElsewhere() {
+    records();
+    if (!C.project || !isLead() || Date.now() - NOW.map < 1500) return;
+    NOW.map = Date.now();
+    const r = await api('POST', '/api/canvases/open-as', { kind: 'project', id: C.project.id }).catch(() => null);
+    if (r && r.ok && r.d.canvas.id === C.id && NOW.doc) { NOW.doc.transact(() => absorb(r.d.canvas.content), LOCAL); C.rev = r.d.canvas.revision; pull(); }
+  }
+  function drawPeople() {
+    const box = document.querySelector('[data-cv-people]'), layer = document.querySelector('[data-cv-cursors]');
+    if (box) { const on = NOW.conn?.status === 'open'; box.innerHTML = !on ? '' : `<small class="tk-chip" data-cv-live>Live</small>${NOW.people.filter((p) => p.kind !== 'service').slice(0, 5).map((p) => `<span class="tk-face tk-face--sm" title="${esc(p.name)}">${esc(String(p.name || '?').slice(0, 1).toUpperCase())}</span>`).join('')}`; }
+    if (!layer) return;
+    layer.innerHTML = NOW.people.filter((p) => p.state && Number.isFinite(p.state.x)).map((p) => `<div class="cv-cursor" data-cv-cursor="${esc(p.conn)}" style="left:${p.state.x * C.view.z + C.view.x}px;top:${p.state.y * C.view.z + C.view.y}px"><svg width="14" height="18" viewBox="0 0 14 18" aria-hidden="true"><path d="M1 1v14l4-4 3 6 2-1-3-6h6z"/></svg><b>${esc(p.name)}</b></div>`).join('');
+  }
 
   // ───────────────────────── geometry
   const nodeById = (id) => C.doc.nodes.find((n) => n.id === id);
@@ -218,10 +315,12 @@
     world.style.transform = `translate(${x}px,${y}px) scale(${z})`;
     const stage = document.querySelector('[data-cv-stage]'); if (stage) { stage.style.backgroundPosition = `${x}px ${y}px`; stage.style.backgroundSize = `${24 * z}px ${24 * z}px`; }
     const groups = C.doc.nodes.filter((n) => n.type === 'group'), rest = C.doc.nodes.filter((n) => n.type !== 'group');
+    const typing = world.querySelector('[data-cv-text]'), caret = typing && document.activeElement === typing ? [typing.selectionStart, typing.selectionEnd] : null;
     world.querySelector('[data-cv-nodes]').innerHTML = [...groups, ...rest].map(nodeHtml).join('');
     world.querySelector('[data-cv-edges]').innerHTML = edgesSvg();
     const zl = document.querySelector('[data-cv-zoom]'); if (zl) zl.textContent = Math.round(z * 100) + '%';
-    const ed = world.querySelector('[data-cv-text]'); if (ed && document.activeElement !== ed) { ed.focus(); ed.setSelectionRange(ed.value.length, ed.value.length); }
+    drawPeople();
+    const ed = world.querySelector('[data-cv-text]'); if (ed && document.activeElement !== ed) { ed.focus(); const at = caret || [ed.value.length, ed.value.length]; ed.setSelectionRange(at[0], at[1]); }
     inspector();
   }
   const setHtml = (el, html) => { if (el.__html !== html) { el.innerHTML = html; el.__html = html; } };
@@ -251,6 +350,7 @@
   function canvasPage(id) {
     if (C.id !== id) open(id);
     if (C.state === 'loading' || C.id !== id) return '<p class="tk-msg">Opening the canvas…</p>';
+    if (C.state === 'ready' && NOW.id !== id) goLive(id);
     if (C.state === 'missing') return `<p class="tk-msg">This canvas doesn’t exist, or it hasn’t been shared with you. <button class="pg-link" data-cv-act="back">All canvases</button></p>`;
     if (C.state === 'error') return `<p class="tk-msg">The canvas couldn’t be opened. <button class="pg-link" data-cv-act="reopen">Try again</button></p>`;
     const ro = !C.can.edit;
@@ -270,12 +370,13 @@
           <button class="tk-tool" data-cv-act="add-note" title="Note · N">${ic('edit')}Note</button>
           <button class="tk-tool" data-cv-act="add-link" title="Link">${ic('link')}Link</button>
           <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button>${C.project ? `<button class="tk-tool" data-cv-act="deps" title="Lay out this project’s dependency graph: every task, in the order the work can happen">${ic('link')}Dependencies</button>` : ''}</span>`}
-        <span class="tk-sp"></span><small class="cv-status" data-cv-status aria-live="polite"></small>
+        <span class="tk-sp"></span><span class="cv-people" data-cv-people></span><small class="cv-status" data-cv-status aria-live="polite"></small>
         <span class="cv-zoom"><button class="tk-ib" data-cv-act="zoom-out" aria-label="Zoom out">${ic('minus')}</button><button class="cv-zl" data-cv-act="fit" data-cv-zoom title="Fit everything">100%</button><button class="tk-ib" data-cv-act="zoom-in" aria-label="Zoom in">${ic('plus')}</button></span>
         <button class="tk-ib" data-cv-act="menu" aria-label="Canvas actions">${ic('more')}</button>
       </div>
       ${C.conflict ? `<div class="cv-conflict" role="alert">Someone else saved this canvas while you were editing. Your last change wasn’t saved. <button class="tk-btn tk-btn--main" data-cv-act="reload">Load their version</button></div>` : ''}
       <div class="cv-stage" data-cv-stage tabindex="0" aria-label="Canvas ${esc(C.name)}">
+        <div class="cv-cursors" data-cv-cursors></div>
         <div class="cv-world" data-cv-world>
           <svg class="cv-svg" width="1" height="1"><defs><marker id="cv-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs><g data-cv-edges></g><path data-cv-ghost class="cv-e-ghost"/></svg>
           <div data-cv-nodes></div>
@@ -349,9 +450,10 @@
     const on = new Set(C.doc.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id));
     const all = (isF ? r.d.items : r.d.conversations) || [], free = all.filter((x) => !on.has(String(x.id).toLowerCase()));
     if (!free.length) return toast(all.length ? `Every ${kind} here is already on the canvas` : `No ${isF ? 'files' : 'chats'} yet`);
-    const v = await D().form({ title: isF ? 'Put files on the canvas' : 'Put chats on the canvas', sub: 'They stay live, and each person sees only what they may open.', submit: 'Add', size: 'md', fields: [{ id: 'ids', label: isF ? 'Files' : 'Chats', type: 'checks', required: true, options: free.slice(0, 300).map((x) => [String(x.id), String((isF ? x.name : x.title) || 'Untitled'), '']) }] });
+    const v = await D().form({ title: isF ? 'Put files on the canvas' : 'Put chats on the canvas', sub: C.project ? 'They join this project, so people on it can use them.' : 'They stay live, and each person sees only what they may open.', submit: 'Add', size: 'md', fields: [{ id: 'ids', label: isF ? 'Files' : 'Chats', type: 'checks', required: true, options: free.slice(0, 300).map((x) => [String(x.id), String((isF ? x.name : x.title) || 'Untitled'), '']) }] });
     if (!v) return;
-    const ids = [].concat(v.ids || []).filter(Boolean); const c = centre(); C.refs = C.refs || { file: {}, chat: {} };
+    let ids = [].concat(v.ids || []).filter(Boolean); const c = centre(); C.refs = C.refs || { file: {}, chat: {} };
+    if (C.project) { ids = await joinProject(kind, ids, C.project.id); if (!ids.length) return; }
     before(); ids.forEach((id, i) => { const x = free.find((y) => String(y.id) === id); const k = id.toLowerCase();
       if (x) C.refs[kind][k] = isF ? { id: k, name: x.name, type: x.mime_type || x.type, url: '/workspace/library?sel=' + k } : { id: k, title: x.title, url: '/workspace/apps/chat/' + k };
       C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id: k }, x: snap(c.x - 130 + (i % 4) * 280), y: snap(c.y - 50 + Math.floor(i / 4) * 130), width: 260, height: 100 }); });
@@ -381,6 +483,23 @@
     const t = r.d.task, c = centre(); C.records[t.key] = t; before();
     C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind: 'task', id: t.key }, x: snap(c.x - 130), y: snap(c.y - 60), width: 260, height: 120 });
     change(`${t.key} created`); try { window.XENO_TASKS?.load?.(); } catch {}
+  }
+  /** Put on a project's canvas, it joins the project. A chat moves only with the consent its own move asks for. Returns what joined. */
+  async function joinProject(kind, ids, project) {
+    const joined = [];
+    for (const id of ids) {
+      if (kind === 'file') {
+        const r = await api('POST', `/api/chat/projects/${encodeURIComponent(project)}/files`, { storage_key: id }).catch(() => null);
+        if (r && r.ok) joined.push(id); else toast(said(r, 'That file couldn’t join the project'));
+        continue;
+      }
+      const p = await api('POST', `/api/chat/conversations/${encodeURIComponent(id)}/move/preview`, { project_id: project }).catch(() => null);
+      if (!p || !p.ok) { toast(said(p, 'That chat couldn’t join the project')); continue; }
+      if (!(await D().confirm({ title: 'Move this chat into the project?', body: 'People on the project will be able to read it.', action: 'Move', danger: false }))) continue;
+      const m = await api('POST', `/api/chat/conversations/${encodeURIComponent(id)}/move`, { project_id: project, consent_revision: p.d.move.consentRevision }).catch(() => null);
+      if (m && m.ok) joined.push(id); else toast(said(m, 'That chat couldn’t join the project'));
+    }
+    return joined;
   }
   // Made here, it belongs to the project: the same records its Files, Conversations and Tasks show. A card only points.
   function place(kind, id, w, h) { const c = centre(); before(); C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id }, x: snap(c.x - w / 2), y: snap(c.y - h / 2), width: w, height: h }); }
@@ -480,7 +599,7 @@
     C.doc.edges = C.doc.edges.filter((e) => !eids.has(e.id) && !ids.has(e.fromNode) && !ids.has(e.toNode));
     C.sel.clear(); change('Removed from the canvas — the tasks themselves are untouched');
   }
-  function undo() { if (!C.undo.length) return; C.doc = JSON.parse(C.undo.pop()); C.sel.clear(); C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); draw(); status('Undone'); }
+  function undo() { if (!C.undo.length) return; C.doc = JSON.parse(C.undo.pop()); C.sel.clear(); pushLive(); C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); draw(); status('Undone'); }
   function zoomAt(f, cx, cy) {
     const stage = document.querySelector('[data-cv-stage]'); if (!stage) return;
     const r = stage.getBoundingClientRect(); const px = cx ?? r.left + r.width / 2, py = cy ?? r.top + r.height / 2;
@@ -575,7 +694,7 @@
   addEventListener('pointerup', (e) => {
     if (!drag) return; const d = drag; drag = null;
     const stage = document.querySelector('[data-cv-stage]'); if (stage) delete stage.dataset.cvPanning;
-    if (d.kind === 'pan') { store(C.id, C.view); return; }
+    if (d.kind === 'pan') { store(C.id, C.view); if (NOW.pending) { NOW.pending = false; pull(); } return; }
     if ((d.kind === 'move' || d.kind === 'size') && d.pushed) { change(); return; }
     if (d.kind === 'wire') {
       const g = document.querySelector('[data-cv-ghost]'); if (g) g.setAttribute('d', '');
@@ -587,6 +706,13 @@
       before(); C.doc.edges.push(ed); C.sel = new Set(['e:' + ed.id]); change();
     }
   });
+  addEventListener('pointermove', (e) => {
+    if (!NOW.conn || NOW.conn.status !== 'open') return;
+    const now = Date.now(), stage = e.target.closest?.('[data-cv-stage]');
+    if (stage && now - NOW.moved > 50) { NOW.moved = now; NOW.conn.setPresence(toBoard(stage, e.clientX, e.clientY)); }
+    if (drag && drag.pushed && now - NOW.pushed > 80) { NOW.pushed = now; pushLive(); }   // the card moves on their screen too
+  });
+  setInterval(() => { if (NOW.id && !document.querySelector('[data-cv-stage]')) stopLive(); }, 5000);
   addEventListener('wheel', (e) => {
     const stage = e.target.closest?.('[data-cv-stage]'); if (!stage || !C.doc || e.target.closest('textarea')) return;
     e.preventDefault();
