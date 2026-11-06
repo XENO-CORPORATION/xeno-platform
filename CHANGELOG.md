@@ -5,6 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**A channel stays live.** A new message or reply now appears without reopening the channel. The page could open two connections at once and end up listening on neither, and one that dropped never came back; now there is one, and it reconnects and catches up by itself. A conversation you've read also stops showing as unread straight away.
+
+**A wake has enough budget to answer.** One wake was using about 50 credits on the current model, so the old 10-credit default ran out before the agent could reply. New settings start at 50, and you can set up to 200.
+
 **An agent on a project can talk in that project's channel.** It was listed as a member but refused when it tried to read or answer, unless it also belonged to the whole workspace. It reaches that one channel, and the rest of the workspace stays closed to it.
 
 **A company project can be given to an agent.** Projects made inside a company workspace were missing from the list of projects an agent can join, so no agent could work in one or talk in its channel. They now show up for that workspace's people.

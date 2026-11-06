@@ -9,6 +9,8 @@ import { shot } from './shot.mjs';
 //   5. Unconfigured server: an honest state, never sample rows.
 //   6. Your own messages show one tick, two, or two in green; the count shows while only some have read; other people's
 //      show none. Opening a conversation says you've seen it. @ offers who is here, and Enter picks rather than sends.
+//   7. Live: one socket however many things ask for it; a new reply appears without a reload; a lost socket or a closed
+//      channel comes back by itself, rejoins and catches up. Reading a conversation clears its unread mark at once.
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
@@ -21,12 +23,13 @@ await server.listen();
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
 const USER = { id: 7, username: 'test-person', email: 'test@example.test', display_name: 'Test Person', avatar_url: null, email_verified: true };
 const TEAM = '6f0c2b8e-3f43-4b1a-9a52-0d9c2f7e1a12', CONV = '0b0b0b0b-1111-4111-8111-000000000001', DM = '0d0d0d0d-2222-4222-8222-000000000002', M1 = '0a0a0a0a-3333-4333-8333-000000000003';
-const db = { configured: true, calls: [], msgs: { [CONV]: [{ id: M1, author: { id: 'u2', name: 'Ada', kind: 'human' }, text: 'Launch is Friday <img src=x onerror=alert(1)>', replyTo: null, replies: 0, createdAt: new Date().toISOString() }], [DM]: [] }, dms: [] };
+const db = { configured: true, realtime: false, calls: [], msgs: { [CONV]: [{ id: M1, author: { id: 'u2', name: 'Ada', kind: 'human' }, text: 'Launch is Friday <img src=x onerror=alert(1)>', replyTo: null, replies: 0, createdAt: new Date().toISOString() }], [DM]: [] }, dms: [] };
 const chans = () => [{ key: 'workspace', kind: 'workspace', title: 'Acme', conversationId: null, unread: false }, { key: `team:${TEAM}`, kind: 'team', title: 'Design', conversationId: CONV, unread: true }];
 
 async function open(addr) {
   const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
   const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => { errs.push('native dialog: ' + d.message()); d.dismiss(); });
+  await p.evaluateOnNewDocument(() => { window.__ws = []; window.WebSocket = class { constructor(url) { this.url = url; this.readyState = 0; this.sent = []; window.__ws.push(this); setTimeout(() => { this.readyState = 1; this.onopen?.(); }, 120); } send(x) { this.sent.push(JSON.parse(x)); } close() {} }; });
   await p.setRequestInterception(true);
   p.on('request', async (q) => { const u = new URL(q.url()); const json = (body, status = 200) => q.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (!u.pathname.startsWith('/api/')) return q.continue();
@@ -44,7 +47,7 @@ async function open(addr) {
     if (u.pathname === '/api/message/directory') return json({ success: true, people: [{ id: 'u2', name: 'Ada', handle: 'ada' }], agents: [] });
     if (u.pathname === '/api/message/direct') { db.dms = [{ conversationId: DM, with: { id: 'u2', name: 'Ada', kind: 'human' }, unread: false }]; return json({ success: true, conversationId: DM, with: { id: 'u2', name: 'Ada' } }); }
     if (u.pathname === '/api/message/handoff') return json({ success: true, note: 'Handed to Atlas as T-9', handoff: { delegated: true, task: { key: 'T-9' } } });
-    if (u.pathname === '/api/message/realtime') return json({ success: true, realtime: false });
+    if (u.pathname === '/api/message/realtime') { if (db.realtime) await wait(80); return json(db.realtime ? { success: true, realtime: true, url: 'wss://gateway.test/socket', token: 't', deviceId: 'd' } : { success: true, realtime: false }); }
     if (u.pathname === '/api/message/members') return json({ success: true, members: [{ id: 'u2', name: 'Ada', kind: 'human', handle: 'ada' }, { id: 'u3', name: 'Atlas', kind: 'agent', handle: 'atlas.ada' }] });
     if (u.pathname.startsWith('/api/message/')) return json({ success: false, error: 'unexpected ' + u.pathname }, 500);
     if (u.pathname === '/api/agents') return json({ success: true, agents: [{ id: 'agt_atlas', name: 'Atlas' }] });
@@ -67,6 +70,8 @@ try {
 
     await p.click(`[data-ms-ch="team:${TEAM}"]`); await wait(700);
     ok(await path0(p) === `/workspace/social/spaces/message/team/${TEAM}`, `the channel has a real address by id (${await path0(p)})`);
+    const read = await p.evaluate(() => ({ badge: [...document.querySelectorAll('#rail [data-zone="message"] .cnt')].map((x) => x.textContent).join(''), dot: !!document.querySelector('[data-ms-unread]') }));
+    ok(!read.badge && !read.dot, `reading it clears the unread mark at once, on the rail too (${JSON.stringify(read)})`);
     const body = await p.evaluate(() => ({ html: document.querySelector('[data-ms-body]')?.innerHTML || '', img: !!document.querySelector('[data-ms-body] img'), crumb: document.querySelector('#main .topbar')?.textContent || '' }));
     ok(!body.img && body.html.includes('&lt;img'), 'message text is shown as text, never as markup');
     ok(/#Design/.test(body.crumb) && !body.crumb.includes(TEAM), 'the breadcrumb names the channel, not its id');
@@ -121,6 +126,28 @@ try {
     ok(!errs.length, `no page errors (${errs.join(' | ')})`);
     await shot(p, 'message-ticks');
     await p.close(); }
+
+  { db.realtime = true;
+    const { p, errs } = await open(`/workspace/social/spaces/message/team/${TEAM}/t/${M1}`); await p.bringToFront(); await wait(800);
+    const socks = () => p.evaluate(() => window.__ws.map((s) => ({ state: s.readyState, joins: s.sent.filter((m) => m[3] === 'phx_join').length, leaves: s.sent.filter((m) => m[3] === 'phx_leave').length })));
+    const push = (i, m) => p.evaluate((a, b) => window.__ws[a].onmessage({ data: JSON.stringify(b) }), i, m);
+    const s1 = await socks();
+    ok(s1.length === 1 && s1[0].joins === 1 && s1[0].leaves === 0, `load and open share one socket, joined once (${JSON.stringify(s1)})`);
+    ok(await p.evaluate(() => window.XENO_ZONE_LIVE['social.message'].state().live), 'the page knows it is live');
+    const R1 = 'bbbbbbbb-0000-4000-8000-000000000001', joined = await p.evaluate(() => window.__ws[0].sent.find((m) => m[3] === 'phx_join')[0]);
+    db.msgs[CONV].push({ id: R1, author: { id: 'u3', name: 'Atlas', kind: 'agent' }, text: 'Answered live', replyTo: M1, createdAt: new Date().toISOString(), mentions: [] });
+    await push(0, [joined, null, `conversation:${CONV}`, 'message.new', { type: 'message.new' }]); await wait(700);
+    ok(await p.evaluate(() => document.querySelector('[data-ms-replies]')?.textContent.includes('Answered live')), 'a reply in the open thread appears without a reload');
+    await push(0, [joined, null, `conversation:${CONV}`, 'phx_close', {}]); await wait(1300);
+    ok((await socks())[0].joins === 2, 'a channel the gateway closed is joined again');
+    await p.evaluate(() => { const s = window.__ws[0]; s.readyState = 3; s.onclose(); });
+    db.msgs[CONV].push({ id: 'bbbbbbbb-0000-4000-8000-000000000002', author: { id: 'u3', name: 'Atlas', kind: 'agent' }, text: 'Said while you were away', replyTo: M1, createdAt: new Date().toISOString(), mentions: [] });
+    await wait(2000);
+    const s2 = await socks();
+    ok(s2.length === 2 && s2[1].state === 1 && s2[1].joins === 1, `a lost socket comes back and rejoins (${JSON.stringify(s2)})`);
+    ok(await p.evaluate(() => document.querySelector('[data-ms-replies]')?.textContent.includes('Said while you were away')), 'and catches up on what it missed');
+    ok(!errs.length, `no page errors (${errs.join(' | ')})`);
+    db.realtime = false; await p.close(); }
 
   { db.configured = false; const { p } = await open('/workspace/social/spaces/message');
     const s = await p.evaluate(() => ({ st: document.querySelector('[data-ms-state]')?.dataset.msState, sample: document.body.textContent.includes('Team — design crit') }));

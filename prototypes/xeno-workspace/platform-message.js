@@ -49,6 +49,8 @@
   const same = (a, b) => !!a && !!b && a.key === b.key && a.conversationId === b.conversationId;
   const refQ = (ref) => (ref.key ? `key=${encodeURIComponent(ref.key)}` : `conversationId=${encodeURIComponent(ref.conversationId)}`);
   const unread = () => (S.list ? [...S.list.channels, ...S.list.dms].filter((c) => c.unread).length : 0);
+  // Read just now: it stops counting as new here and on the rail. The list was fetched before the read, so it can't say so.
+  const readNow = (ref) => { if (S.list) for (const c of [...S.list.channels, ...S.list.dms]) if (ref.key ? c.key === ref.key : c.conversationId === ref.conversationId) c.unread = false; };
 
   // ─────────────────────────────── text → markup (escaped first)
   const quote = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -72,6 +74,7 @@
     const seen = document.visibilityState === 'visible' && document.hasFocus();
     const r = await api('GET', `/api/message/messages?${[wq(), refQ(ref), seen ? 'seen=1' : ''].filter(Boolean).join('&')}`).catch(() => null);
     if (!same(S.openRef, ref)) return;
+    if (seen && r && r.ok) readNow(ref);
     S.open = r && r.ok ? r.d : { error: said(r, 'This conversation could not be opened.') }; paint(); live();
     const m = await api('GET', `/api/message/members?${[wq(), refQ(ref)].filter(Boolean).join('&')}`).catch(() => null);
     if (same(S.openRef, ref)) S.members = (m && m.ok && m.d.members) || [];
@@ -92,20 +95,26 @@
   const refresh = async () => { await load(); if (S.openRef) { const keep = S.openRef; await openRef(keep); if (S.threadRef) await openThread(keep, S.threadRef); } };
 
   // live: the Comms gateway (Phoenix channels, JSON v2). The ticket is single-use, so each connect asks for a new one.
-  let sock = null, sockTopic = null, hb = 0, ref = 0;
+  // One socket at a time: load and openRef both ask for it, and a second one's open re-joined the first's conversation
+  // over it, which left nothing listening. A lost socket comes back by itself and catches up on what it missed.
+  let sock = null, sockTopic = null, joinedAs = null, opening = false, hb = 0, ref = 0, gap = 0, lost = false;
+  const again = () => { clearTimeout(again.t); gap = Math.min(gap ? gap * 2 : 1000, 30000); lost = true; again.t = setTimeout(live, gap); };
   async function live() {
     const conv = S.open && S.open.conversationId ? S.open.conversationId : null;
     if (sock && sock.readyState === 1) { if (conv && sockTopic !== conv) join(conv); return; }
-    if (sock || typeof WebSocket === 'undefined') return;
+    if (sock || opening || typeof WebSocket === 'undefined') return;
+    opening = true;
     const t = await api('GET', '/api/message/realtime?' + wq()).catch(() => null);
-    if (!t || !t.ok || !t.d.realtime) return;
-    try { sock = new WebSocket(`${t.d.url}/websocket?vsn=2.0.0&token=${encodeURIComponent(t.d.token)}&device_id=${encodeURIComponent(t.d.deviceId)}`); } catch { sock = null; return; }
-    sock.onopen = () => { hb = setInterval(() => send0('phoenix', 'heartbeat', {}), 30000); const c = S.open && S.open.conversationId; if (c) join(c); };
-    sock.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } const [, , topic, event] = m; if (!String(topic).startsWith('conversation:')) return; if (/^message\./.test(event)) { clearTimeout(live.t); live.t = setTimeout(refresh, 150); } else if (/^receipt\./.test(event)) { clearTimeout(ticks.t); ticks.t = setTimeout(ticks, 300); } };
-    sock.onclose = () => { clearInterval(hb); sock = null; sockTopic = null; };
+    opening = false;
+    if (!t || !t.ok) return again();
+    if (!t.d.realtime) return;
+    try { sock = new WebSocket(`${t.d.url}/websocket?vsn=2.0.0&token=${encodeURIComponent(t.d.token)}&device_id=${encodeURIComponent(t.d.deviceId)}`); } catch { sock = null; return again(); }
+    sock.onopen = () => { hb = setInterval(() => send0('phoenix', 'heartbeat', {}), 30000); gap = 0; const c = S.open && S.open.conversationId; if (c) join(c); if (lost) { lost = false; refresh(); } };
+    sock.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } const [joinRef, , topic, event] = m; if (!String(topic).startsWith('conversation:')) return; if ((event === 'phx_error' || event === 'phx_close') && topic === `conversation:${sockTopic}` && joinRef === joinedAs) { sockTopic = null; clearTimeout(live.back); live.back = setTimeout(live, 1000); } else if (/^message\./.test(event)) { clearTimeout(live.t); live.t = setTimeout(refresh, 150); } else if (/^receipt\./.test(event)) { clearTimeout(ticks.t); ticks.t = setTimeout(ticks, 300); } };
+    sock.onclose = () => { clearInterval(hb); sock = null; sockTopic = null; again(); };
   }
   const send0 = (topic, event, payload, joinRef = null) => { if (sock && sock.readyState === 1) sock.send(JSON.stringify([joinRef, String(++ref), topic, event, payload])); };
-  function join(conv) { if (sockTopic) send0(`conversation:${sockTopic}`, 'phx_leave', {}); sockTopic = conv; send0(`conversation:${conv}`, 'phx_join', {}, String(ref + 1)); }
+  function join(conv) { if (sockTopic === conv) return; if (sockTopic) send0(`conversation:${sockTopic}`, 'phx_leave', {}); sockTopic = conv; joinedAs = String(ref + 1); send0(`conversation:${conv}`, 'phx_join', {}, joinedAs); }
   addEventListener('focus', () => { if (here() && S.status === 'ready') refresh(); });
 
   window.XENO_ZONE_LIVE = window.XENO_ZONE_LIVE || {};

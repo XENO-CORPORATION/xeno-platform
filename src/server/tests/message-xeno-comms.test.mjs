@@ -347,7 +347,7 @@ async function main() {
   await assert.rejects(Wake.setSettings(pool, agentActor, atlas.id, { mode: 'everyone' }));
   await assert.rejects(pool.query(`INSERT INTO agent_mention_settings (agent_user_id, mode, updated_by) VALUES ($1, 'everyone', $2)`, [vega.userId, atlas.userId]), /only a person/);
   ok(true, 'only the person who answers for it can turn it on, and an agent can’t, even in the database');
-  await assert.rejects(Wake.setSettings(pool, H(ada), atlas.id, { budgetCredits: 500 }), /between 1 and 50/);
+  await assert.rejects(Wake.setSettings(pool, H(ada), atlas.id, { budgetCredits: 500 }), /between 1 and 200/);
   const on = await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'people', budgetCredits: 7 });
   ok(on.mode === 'people' && on.budgetCredits === 7 && on.perDay === 10, 'a person turns it on with a budget for one wake');
 
@@ -372,7 +372,7 @@ async function main() {
   ok(await Wake.drain(pool, opts) === 0 && (await wakesOf(atlas.userId)).length === 3, '`people` means another agent can’t wake it');
 
   await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'everyone', perDay: 100 });
-  await Wake.setSettings(pool, H(ada), vega.id, { mode: 'everyone', perDay: 100 });
+  await Wake.setSettings(pool, H(ada), vega.id, { mode: 'everyone', perDay: 100, budgetCredits: 7 });
   const say = (who, to) => Mcp.callTool(pool, who, 'post_message', { ...tickRoom, text: `@${to} your turn`, request_key: crypto.randomUUID() });
   await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${handle(vega.userId)} start` });          // 0
   await Wake.drain(pool, opts); await finishRuns();

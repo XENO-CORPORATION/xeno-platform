@@ -27,7 +27,7 @@ export const MODES = ['off', 'people', 'everyone'];
 export const MAX_CHAIN = 3;
 export const CHANNEL_PER_HOUR = 20;
 const STALE_MINUTES = 60, LEASE_MINUTES = 5, CHAIN_HOURS = 8;
-const DEFAULTS = { mode: 'off', budgetCredits: 10, perDay: 10 };
+const DEFAULTS = { mode: 'off', budgetCredits: 50, perDay: 10 };
 const LIVE = ['starting', 'queued', 'running'];
 
 const settingsOf = (r) => (r ? { mode: r.mode, budgetCredits: r.budget_credits, perDay: r.per_day } : { ...DEFAULTS });
@@ -43,7 +43,7 @@ export async function setSettings(db, me, publicId, { mode, budgetCredits, perDa
   const agent = await agents.getWith(db, me, publicId, 'manage');
   const next = { ...(await getSettings(db, me, publicId)), ...(mode !== undefined ? { mode } : {}), ...(budgetCredits !== undefined ? { budgetCredits } : {}), ...(perDay !== undefined ? { perDay } : {}) };
   if (!MODES.includes(next.mode)) throw new MentionWakeError('Choose off, people or everyone', 'invalid_mode');
-  if (!whole(next.budgetCredits, 1, 50)) throw new MentionWakeError('The budget for one wake is between 1 and 50 credits', 'invalid_budget');
+  if (!whole(next.budgetCredits, 1, 200)) throw new MentionWakeError('The budget for one wake is between 1 and 200 credits', 'invalid_budget');
   if (!whole(next.perDay, 1, 100)) throw new MentionWakeError('The limit is between 1 and 100 wakes a day', 'invalid_limit');
   await db.query(`INSERT INTO agent_mention_settings (agent_user_id, mode, budget_credits, per_day, updated_by) VALUES ($1, $2, $3, $4, $5)
     ON CONFLICT (agent_user_id) DO UPDATE SET mode = $2, budget_credits = $3, per_day = $4, updated_by = $5, updated_at = now()`,

@@ -784,7 +784,7 @@
     const w = S.wake.settings;
     const v = await D().form({ title: `When ${a.name} is mentioned`, sub: 'A mention can start a cloud run, which costs credits. Direct messages never wake it.', submit: 'Save', size: 'sm', fields: [
       { id: 'mode', label: 'Who can wake it', type: 'select', value: w.mode, options: [['off', 'Nobody'], ['people', 'People'], ['everyone', 'People and other agents']] },
-      { id: 'budget', label: 'Budget for one wake (credits)', value: String(w.budgetCredits), max: 2, hint: 'Up to 50.' },
+      { id: 'budget', label: 'Budget for one wake (credits)', value: String(w.budgetCredits), max: 2, hint: 'Up to 200.' },
       { id: 'perDay', label: 'Wakes a day', value: String(w.perDay), max: 3, hint: 'Up to 100.' }] });
     if (!v) return;
     const r = await call('PUT', `/api/agents/${a.id}/mention-wake`, { mode: v.mode, budgetCredits: Number(v.budget), perDay: Number(v.perDay) }, 'It could not be saved.');
