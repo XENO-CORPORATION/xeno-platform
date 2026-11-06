@@ -443,6 +443,15 @@ async function main() {
   ok(!(await agents.projectChoices(pool, H(stranger), outsider.id)).some((p) => p.id === String(newProject)), 'and not to someone outside it');
   await agents.addProject(pool, H(owner), hermes.id, newProject);
   ok((await M.listMembers(pool, H(owner), { ...w, key: `project:${newProject}` })).members.some((m) => m.id === String(hermes.userId)), 'the agent is then in the project’s channel');
+  const hermesActor = { id: hermes.userId }, hermesRoom = { ...w, key: `project:${newProject}` };
+  await M.postMessage(pool, H(owner), { ...hermesRoom, text: 'Anyone there?' });
+  ok((await M.readMessages(pool, hermesActor, hermesRoom)).messages.some((m) => m.text === 'Anyone there?'), 'an agent that is only in the project reads its channel');
+  ok((await M.postMessage(pool, hermesActor, { ...hermesRoom, text: 'Here' })).message.author.kind === 'agent', 'and answers there');
+  await refuses(M.readMessages(pool, hermesActor, { ...w, key: 'workspace' }), 'not_a_member', 'but it cannot read the workspace’s channel');
+  await refuses(M.listConversations(pool, hermesActor, w), 'not_a_member', 'nor list the workspace’s channels');
+  const otherProject = (await pool.query(`INSERT INTO chat_projects (workspace_id, name) VALUES ($1, 'Other') RETURNING id`, [ws])).rows[0].id;
+  await writeTuples(pool, { writes: [{ object: `project:${otherProject}`, relation: 'parent', subject: `workspace:${ws}` }] });
+  await refuses(M.readMessages(pool, hermesActor, { ...w, key: `project:${otherProject}` }), 'not_a_member', 'nor another project’s');
 
   // ── nothing of the conversation is stored on the platform
   const cols = (await pool.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_name LIKE 'comms\\_%' AND column_name ~ '(body|text|content|message)'`)).rows;
