@@ -26,6 +26,9 @@ const LIBRARY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /** A model id as the catalogue writes them: `gpt-image-2.5-sunburst`, `openai/gpt-5.6-terra`. */
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const tokenCount = (value) => Number.isInteger(value) && value >= 0 && value <= 10_000_000;
+/** Where a step sits in the answer: how many characters of it came first. Absent on older records. */
+const badTextAt = (raw) => raw.textAt !== undefined && !(Number.isInteger(raw.textAt) && raw.textAt >= 0 && raw.textAt <= 10_000_000);
+const textAtOf = (raw) => (raw.textAt !== undefined ? { textAt: raw.textAt } : {});
 
 /**
  * An `image` step: the chat's generate_image tool drew something (2026-09-26). It records the
@@ -35,6 +38,7 @@ const tokenCount = (value) => Number.isInteger(value) && value >= 0 && value <= 
 function normalizeImageStep(raw) {
   if (!shortString(raw.prompt, 4000)) return { ok: false, error: 'image step.prompt must be a string of at most 4000 characters' };
   if (!IMAGE_ASPECTS.has(raw.aspectRatio)) return { ok: false, error: 'image step.aspectRatio must be one of the supported ratios' };
+  if (badTextAt(raw)) return { ok: false, error: 'step.textAt is invalid' };
   if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
   if (raw.endedAt !== undefined && (!isFiniteNumber(raw.endedAt) || raw.endedAt < raw.startedAt)) {
     return { ok: false, error: 'step.endedAt must be a timestamp at or after its startedAt' };
@@ -71,6 +75,7 @@ function normalizeImageStep(raw) {
       ...(raw.model !== undefined ? { model: raw.model } : {}),
       ...(raw.usage !== undefined ? { usage: { input: raw.usage.input, output: raw.usage.output, total: raw.usage.total } } : {}),
       ...(raw.error !== undefined ? { error: raw.error } : {}),
+      ...textAtOf(raw),
     },
   };
 }
@@ -91,6 +96,7 @@ const CODE_LIMITS = Object.freeze({ code: 8000, stdout: 4000, stderr: 2000, file
 function normalizeCodeStep(raw) {
   if (!CODE_LANGUAGES.has(raw.language)) return { ok: false, error: 'code step.language must be a supported language' };
   if (!shortString(raw.code, CODE_LIMITS.code)) return { ok: false, error: `code step.code must be a string of at most ${CODE_LIMITS.code} characters` };
+  if (badTextAt(raw)) return { ok: false, error: 'step.textAt is invalid' };
   if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
   if (raw.endedAt !== undefined && (!isFiniteNumber(raw.endedAt) || raw.endedAt < raw.startedAt)) {
     return { ok: false, error: 'step.endedAt must be a timestamp at or after its startedAt' };
@@ -127,6 +133,7 @@ function normalizeCodeStep(raw) {
       ...(raw.stderr !== undefined ? { stderr: raw.stderr } : {}),
       ...(files.length ? { files } : {}),
       ...(raw.error !== undefined ? { error: raw.error } : {}),
+      ...textAtOf(raw),
     },
   };
 }
@@ -244,7 +251,8 @@ export function normalizeTurnRecord(value) {
       if (!LIBRARY_ID.test(String(raw.generationId || ''))) return { ok: false, error: 'generation step needs a valid generationId' };
       if (!['image', 'video', 'audio', '3d'].includes(raw.type)) return { ok: false, error: 'generation step.type is invalid' };
       if (!isFiniteNumber(raw.startedAt) || raw.startedAt <= 0) return { ok: false, error: 'step.startedAt must be a timestamp' };
-      steps.push({ id: raw.id, kind: 'generation', generationId: raw.generationId, type: raw.type, startedAt: raw.startedAt });
+      if (badTextAt(raw)) return { ok: false, error: 'step.textAt is invalid' };
+      steps.push({ id: raw.id, kind: 'generation', generationId: raw.generationId, type: raw.type, startedAt: raw.startedAt, ...textAtOf(raw) });
       continue;
     }
     if (raw.kind === 'handoff') {

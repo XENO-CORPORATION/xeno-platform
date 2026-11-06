@@ -78,7 +78,7 @@ import { ChatQuestionPanel, ChatQuestionRecord } from './ChatQuestionPanel';
 import { formatAnswer, pendingQuestion, questionHistoryNote, questionOutcome, readAnswer } from './chatQuestion';
 import { enqueue, removeQueued, moveQueued, updateQueued, patchQueuedFile, nextSendable, type QueueState } from './chatQueueState';
 import {
-  applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnCodeSteps, turnQuestion,
+  anchorTurnSteps, applyTurnEvent, chatFaviconUrl, closeTurnRecord, DEFAULT_STEPS_MODE, isStepsMode, newTurnRecord, normalizeStoredTurn, stampTextAt, turnBodyParts, turnCitedSources, turnHasRail, turnImageModels, turnImages, turnQuestion,
   type ChatTurnRecord, type StepsMode,
 } from './chatTurnTranscript';
 import { CitationChip, parseCitationHref, remarkCitations } from '@xenosystem/agent-conversation/components/agent/transcript/citations';
@@ -7498,7 +7498,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                  * fills it — from the preview the frame carried, since the stored copy is still in its
                  * scan — and `image_error` keeps the frame and says why.
                  */
-                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                turnRecord = stampTextAt(turnRecord, applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]), streamedText.length);
                 if (event.type === 'image_result' && event.image?.previewUrl?.startsWith('data:image/')) {
                     imagePreviews[`image-${(event.index ?? 0) + 1}`] = event.image.previewUrl;
                 }
@@ -7514,7 +7514,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
 
             if (event.type === 'generation_proposal') {
                 narrateGenerationsRef.current.add(event.generation.id);
-                turnRecord = applyTurnEvent(turnRecord, event);
+                turnRecord = stampTextAt(turnRecord, applyTurnEvent(turnRecord, event), streamedText.length);
                 const record = turnRecord;
                 setMessages(prev => prev.map(msg => msg.id === localPlaceholderId ? {...msg,turn:record,isDotPlaceholder:false} : msg));
                 return;
@@ -7547,9 +7547,9 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                  * A run is a step of the turn too (2026-09-27): `code_start` opens the block with the
                  * source and a running state, `code_result` closes it with the exit, output and any
                  * produced files (each already a Library asset), and `code_error` keeps the block and
-                 * says why. The block is drawn by ChatCodeExecution under the transcript head.
+                 * says why. The block is drawn by ChatCodeExecution where the run happened in the reply.
                  */
-                turnRecord = applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]);
+                turnRecord = stampTextAt(turnRecord, applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]), streamedText.length);
                 // a priced run bills when it lands, so the header balance moves now (free by default)
                 if (event.type === 'code_result') window.dispatchEvent(new CustomEvent('xeno:credits-updated'));
                 const record = turnRecord;
@@ -7784,7 +7784,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                 sender: 'ai',
             text: rawTextForState,
             timestamp: Date.now(),
-            turn: closeTurnRecord(turnRecord),
+            turn: anchorTurnSteps(closeTurnRecord(turnRecord), streamedText, finalAnswer),
             ...(Object.keys(imagePreviews).length ? { imagePreviews: { ...imagePreviews } } : {}),
             parsedAnswer: finalAnswer,
             parsedThinking: thinking,
@@ -17619,36 +17619,30 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                           {(() => {
                                               /*
                                                * ONE renderer for every generated image. A turn from the
-                                               * generate_image tool carries its images on the turn record;
-                                               * an older conversation saved by the retired keyword path
-                                               * carries ONE library attachment (or, older still, inline
-                                               * base64) and no record — it is drawn in the same frame, as
-                                               * a square, which is the only shape that path ever made.
+                                               * generate_image tool carries its images on the turn record
+                                               * and draws them with the rest of its body below; an older
+                                               * conversation saved by the retired keyword path carries ONE
+                                               * library attachment (or, older still, inline base64) and no
+                                               * record — it is drawn in the same frame, as a square, which
+                                               * is the only shape that path ever made.
                                                */
-                                              const images: ChatTurnImageView[] = turnImages(message.turn).map((step) => ({
-                                                  step,
-                                                  previewUrl: message.imagePreviews?.[step.id],
-                                                  asset: imageAssetFor(step),
-                                              }));
-                                              if (!images.length && (message.generatedImageAsset || message.imageData)) {
-                                                  const inline = message.imageData
-                                                      ? (message.imageData.startsWith('data:image/') ? message.imageData : `data:image/png;base64,${message.imageData}`)
-                                                      : undefined;
-                                                  images.push({
-                                                      step: {
-                                                          id: 'generated',
-                                                          kind: 'image',
-                                                          prompt: '',
-                                                          aspectRatio: '1:1',
-                                                          startedAt: message.timestamp ?? 0,
-                                                          endedAt: message.timestamp ?? 0,
-                                                          ...(message.generatedImageAsset ? { assetId: message.generatedImageAsset.assetId } : {}),
-                                                      },
-                                                      previewUrl: inline,
-                                                      asset: message.generatedImageAsset,
-                                                  });
-                                              }
-                                              if (!images.length) return null;
+                                              if (turnImages(message.turn).length || !(message.generatedImageAsset || message.imageData)) return null;
+                                              const inline = message.imageData
+                                                  ? (message.imageData.startsWith('data:image/') ? message.imageData : `data:image/png;base64,${message.imageData}`)
+                                                  : undefined;
+                                              const images: ChatTurnImageView[] = [{
+                                                  step: {
+                                                      id: 'generated',
+                                                      kind: 'image',
+                                                      prompt: '',
+                                                      aspectRatio: '1:1',
+                                                      startedAt: message.timestamp ?? 0,
+                                                      endedAt: message.timestamp ?? 0,
+                                                      ...(message.generatedImageAsset ? { assetId: message.generatedImageAsset.assetId } : {}),
+                                                  },
+                                                  previewUrl: inline,
+                                                  asset: message.generatedImageAsset,
+                                              }];
                                               return (
                                                   <ChatGeneratedImages
                                                       images={images}
@@ -17661,24 +17655,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               );
                                           })()}
 
-                                          {/* run_code blocks (2026-09-27): the source, output and produced
-                                              files of each run the turn made, in order — drawn under the head
-                                              like generated images, live and on reload from the turn record. */}
-                                          {message.turn?.steps.map(step => step.kind === 'handoff' ? <ChatHandoffCard key={step.id} taskKey={step.taskKey} agentName={step.agentName} /> : null)}
-                                          {message.turn?.steps.filter(step => step.kind === 'generation').map(step => step.kind === 'generation' ? <ChatGenerationCard key={step.id} id={step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} onOpenAsset={(opened, all) => {
+                                          {/* The reply in the order it happened: its text with the turn's images,
+                                              runs and generation cards where they came, live and after a reload
+                                              (turnBodyParts). Keys follow the step, so a card is never remounted
+                                              while text streams around it. */}
+                                          {turnBodyParts(message.turn, message.isError ? '' : message.parsedAnswer ?? '').map((part) => {
+                                              const live = Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder);
+                                              if (part.kind === 'images') return (
+                                                  <ChatGeneratedImages
+                                                      key={`images:${part.steps[0].id}`}
+                                                      images={part.steps.map((step): ChatTurnImageView => ({ step, previewUrl: message.imagePreviews?.[step.id], asset: imageAssetFor(step) }))}
+                                                      live={live}
+                                                      onOpen={(image) => setLibraryViewerSelection({
+                                                          items: conversationLibraryViewerItems,
+                                                          activeId: `${message.id}:${image.step.id}`,
+                                                      })}
+                                                  />
+                                              );
+                                              if (part.kind === 'handoff') return <ChatHandoffCard key={part.step.id} taskKey={part.step.taskKey} agentName={part.step.agentName} />;
+                                              if (part.kind === 'generation') return <ChatGenerationCard key={part.step.id} id={part.step.generationId} onUsePrompt={(text, type) => { setInputValue(text); generate.setMode(type); }} onAttach={attachResult} onOpenAsset={(opened, all) => {
                                               // the conversation's own images, then this generation's results, so the viewer's arrows walk both
                                               const results: LibraryViewerItem[] = all.map((assetId, index) => ({ id: `generation:${assetId}`, name: `XENO image${all.length > 1 ? ` ${index + 1}` : ''}`, asset: { assetId, name: 'XENO image', mimeType: assetId === opened.assetId ? opened.mime : 'image/png', contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content` }, context: 'Chat' }));
                                               setLibraryViewerSelection({ items: [...conversationLibraryViewerItems.filter(item => !results.some(r => r.asset?.assetId === item.asset?.assetId)), ...results], activeId: `generation:${opened.assetId}` });
-                                          }} /> : null)}
-                                          <ChatCodeExecution
-                                              steps={turnCodeSteps(message.turn)}
-                                              live={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}
-                                          />
-
-                                          {!message.isError && (message.parsedAnswer || message.isStreaming) && (
+                                          }} />;
+                                              if (part.kind === 'code') return <ChatCodeExecution key={`code:${part.steps[0].id}`} steps={part.steps} live={live} />;
+                                              return (
                                                   /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:
                                                      theme CSS uses [class*="bg-…"] and would paint the whole answer. */
-                                                  <div className="prose prose-sm max-w-none prose-strong:font-bold prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--chat-border)] prose-pre:p-4 prose-pre:font-mono prose-pre:text-[15px] prose-pre:overflow-x-auto">
+                                                  <div key={`text:${part.start}`} className="prose prose-sm max-w-none prose-strong:font-bold prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--chat-border)] prose-pre:p-4 prose-pre:font-mono prose-pre:text-[15px] prose-pre:overflow-x-auto">
                                                    <ReactMarkdown
   remarkPlugins={[remarkGfm, remarkCitations, remarkChatMath]}
   rehypePlugins={[rehypeRaw, rehypeChatKatex]}
@@ -17697,7 +17701,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
       if (!inline) {
         const codeString = String(children).replace(/\n$/, "");
         if (match || codeString.includes("\n")) {
-                                                              const blockIndex = node?.position?.start?.line ?? (node?.index ?? Date.now());
+                                                              const blockIndex = node?.position?.start?.line !== undefined ? node.position.start.line + part.firstLine : (node?.index ?? Date.now());
                                                               const codeBlockId = `${message.id}-code-${blockIndex}`;
 
                                                               return <CodeBlockWithHeader
@@ -17724,11 +17728,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
     },
   }}
 >
-  {normalizeChatMath(message.parsedAnswer ?? '')}
+  {normalizeChatMath(part.text)}
 </ReactMarkdown>
                                                {/* Streaming caret removed to match the XENO model (no vertical caret). */}
                                                   </div>
-                                          )}
+                                              );
+                                          })}
                                           {(() => {
                                               // ask_user: the question this turn ended on, one line, once ANSWERED (the message after it).
                                               // While it waits, the panel above the composer is the question — showing both would say it twice.

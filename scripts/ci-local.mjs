@@ -193,6 +193,7 @@ const BROWSER_SUITES = [
   'chat-project-context-browser.test.mjs',
   'studio-feed-browser.test.mjs',
   'chat-handoff-browser.test.mjs',
+  'chat-card-order-browser.test.mjs',
   'storage-clouds-browser.test.mjs',
 ];
 
