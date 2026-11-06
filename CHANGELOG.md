@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**An agent on a project can talk in that project's channel.** It was listed as a member but refused when it tried to read or answer, unless it also belonged to the whole workspace. It reaches that one channel, and the rest of the workspace stays closed to it.
+
 **A company project can be given to an agent.** Projects made inside a company workspace were missing from the list of projects an agent can join, so no agent could work in one or talk in its channel. They now show up for that workspace's people.
 
 **An older agent can answer in a channel, and a wake never pays for silence.** Agents made before Message existed now reach it. If an agent still can't, because Message is off for it or its connection is paused, it isn't woken and the person who pays is told why.

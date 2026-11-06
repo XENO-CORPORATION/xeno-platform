@@ -112,7 +112,7 @@ async function principalOf(db, actor) {
   return p;
 }
 
-export async function workspaceFor(db, actor, workspaceId) {
+export async function workspaceFor(db, actor, workspaceId, { key = null } = {}) {
   const me = await principalOf(db, actor);
   let ws = workspaceId ? String(workspaceId) : null;
   if (ws && !UUID.test(ws)) throw new MessageError('Invalid workspace id', 'invalid_workspace');
@@ -120,7 +120,7 @@ export async function workspaceFor(db, actor, workspaceId) {
     if (me.kind === 'agent') throw new MessageError('Name the workspace', 'invalid_workspace');
     ws = String((await ensurePersonalWorkspace(db, me.id)).id);
   }
-  if (!(await check(db, { object: `workspace:${ws}`, relation: 'viewer', subject: `user:${me.id}` })).allowed) throw new MessageError('You are not a member of that workspace', 'not_a_member', 403);
+  if (!(await check(db, { object: `workspace:${ws}`, relation: 'viewer', subject: `user:${me.id}` })).allowed && !(await inOneChannel(db, ws, key, me))) throw new MessageError('You are not a member of that workspace', 'not_a_member', 403);
   const row = (await db.query('SELECT id, name FROM workspaces WHERE id = $1', [ws])).rows[0];
   if (!row) throw new MessageError('You are not a member of that workspace', 'not_a_member', 403);
   return { me, workspaceId: ws, workspaceName: row.name };
@@ -206,6 +206,12 @@ async function scopesFor(db, me, ws) {
     if (await viewerOf(db, `project:${p.id}`, me.id)) out.push({ key: `project:${p.id}`, kind: 'project', id: String(p.id), title: p.name });
   }
   return out;
+}
+
+/** A project or team has members the workspace doesn't: they reach that one channel and nothing else of the workspace. */
+async function inOneChannel(db, ws, key, me) {
+  try { return (await audienceOf(db, ws, key)).members.some((m) => m.subject === String(me.id)); }
+  catch (e) { if (e instanceof MessageError) return false; throw e; }
 }
 
 /** The scoping gate every channel read and write passes BEFORE Comms is called. */
@@ -368,7 +374,7 @@ export async function listConversations(db, actor, { workspace, fetchImpl } = {}
 
 /** Find or create the channel for a scope and make Comms' membership exactly its audience. */
 export async function openChannel(db, actor, { workspace, key, fetchImpl } = {}) {
-  const ctx = await workspaceFor(db, actor, workspace);
+  const ctx = await workspaceFor(db, actor, workspace, { key });
   const a = await requireScope(db, ctx, key);
   const title = titleFor(a.scope, ctx.workspaceName);
   const scope = { workspace: ctx.workspaceId, key, title, members_sha256: memberDigest(a.members) };

@@ -16,7 +16,9 @@ const files = { xenoComms: path.join(here, '..', 'services', 'xenoComms.js'), wa
 const originals = Object.fromEntries(Object.entries(files).map(([k, f]) => [k, fs.readFileSync(f, 'utf8')]));
 const MUTATIONS = [
   ['the channel audience check', "if (!a.members.some((m) => m.subject === String(ctx.me.id))) throw new MessageError('You are not a member of that channel', 'not_in_channel', 403);", ''],
-  ['the workspace membership check', "if (!(await check(db, { object: `workspace:${ws}`, relation: 'viewer', subject: `user:${me.id}` })).allowed) throw new MessageError('You are not a member of that workspace', 'not_a_member', 403);", ''],
+  ['the workspace membership check', "if (!(await check(db, { object: `workspace:${ws}`, relation: 'viewer', subject: `user:${me.id}` })).allowed && !(await inOneChannel(db, ws, key, me))) throw new MessageError('You are not a member of that workspace', 'not_a_member', 403);", ''],
+  ['a project member reaches its channel', "&& !(await inOneChannel(db, ws, key, me)))", ')'],
+  ['only that channel', "return (await audienceOf(db, ws, key)).members.some((m) => m.subject === String(me.id));", 'return true;'],
   ['the direct-message co-member check', "if (!(await viewerOf(db, `workspace:${ctx.workspaceId}`, userId))) throw new MessageError('That person is not in this workspace', 'not_a_member', 403);", ''],
   ['the assertion single-use ledger', "if (!spent.rows.length) return null;   // replayed", ''],
   ['team membership in the audience', "const members = (await db.query(`SELECT member_principal_id FROM workforce_team_memberships WHERE team_id = $1 AND state = 'active' AND member_principal_id IS NOT NULL`, [o.id])).rows.map((r) => String(r.member_principal_id));", "const members = (await db.query(`SELECT member_principal_id FROM workforce_team_memberships WHERE team_id = $1 AND member_principal_id IS NOT NULL`, [o.id])).rows.map((r) => String(r.member_principal_id));"],
