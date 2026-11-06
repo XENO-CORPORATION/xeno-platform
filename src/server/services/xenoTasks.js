@@ -1085,8 +1085,10 @@ export async function mcpAgentFor(db, ownerId, appName) {
 
 /** Projects the caller can see tasks in (people: their projects; agents: the ones shared with them). */
 export async function listTaskProjects(db, me) {
-  const rows = (await db.query(`SELECT DISTINCT p.id, p.name, p.area FROM relationship_tuples r JOIN chat_projects p ON p.id::text = r.object_id
-    WHERE r.object_type = 'project' AND r.subject_type = 'user' AND r.subject_id = $1 AND NOT p.is_archived ORDER BY p.name`, [String(me.id)])).rows;
+  // a workspace's project has no tuple of its own: its people reach it through the workspace
+  const rows = (await db.query(`SELECT DISTINCT p.id, p.name, p.area FROM relationship_tuples r JOIN chat_projects p
+      ON (r.object_type = 'project' AND p.id::text = r.object_id) OR (r.object_type = 'workspace' AND p.workspace_id::text = r.object_id)
+    WHERE r.subject_type = 'user' AND r.subject_id = $1 AND NOT p.is_archived ORDER BY p.name`, [String(me.id)])).rows;
   const out = [];
   for (const p of rows) { if (!(await rel(db, me.id, p.id, 'viewer'))) continue; out.push({ id: String(p.id), name: p.name, area: p.area || null, canEdit: await rel(db, me.id, p.id, 'editor') }); }
   return out;
