@@ -34,6 +34,8 @@ import commsIdentityRoutes from '../routes/commsIdentityRoutes.js';
 import * as M from '../services/xenoComms.js';
 import * as Mcp from '../services/messageMcp.js';
 import * as Wake from '../services/mentionWake.js';
+import * as Cloud from '../services/agentCloudRuns.js';
+import * as Tasks from '../services/xenoTasks.js';
 import { addGrant } from '../utils/creditLedgerV2.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -323,10 +325,11 @@ async function main() {
   ok((await Mcp.callTool(pool, agentActor, 'list_members', tickRoom)).structuredContent.members.length === members.length, 'an agent can see who it can name');
 
   // ── a mention wakes an agent, only as its person allows
-  const runs = [];
+  const runs = []; let hosted = 'running';
   const opts = { env: { AGENTS_API_BASE_URL: 'http://runner.test' }, fetchImpl: async (url, init = {}) => {
     if (String(url).endsWith('/status')) return new Response(JSON.stringify({ capabilities: ['runs.platformAgent'] }), { status: 200 });
     if (String(url).endsWith('/runs') && init.method === 'POST') { runs.push(JSON.parse(init.body)); return new Response(JSON.stringify({ run: { runId: `hosted-${runs.length}`, status: 'running' } }), { status: 201 }); }
+    if (/\/runs\/hosted-\d+$/.test(String(url))) return new Response(JSON.stringify({ run: { status: hosted } }), { status: 200 });
     return new Response('{}', { status: 404 });
   } };
   await addGrant(pool, ada, { amountMicro: 500_000_000, kind: 'paid', sourceRef: `seed:${tag}` });
@@ -360,13 +363,18 @@ async function main() {
   ok(runs[0].budget.maxCredits === 7 && runs[0].prompt.includes('check the header please') && runs[0].prompt.includes(`reply_to ${asked.id}`) && runs[0].prompt.includes(`key ${tickRoom.key}`), 'it is told what was said and where to answer');
   ok(/written by a member of the channel, not by the person who answers for you/.test(runs[0].prompt), 'and that a member’s words are not its owner’s');
   ok(woke.message_text === null && /^T-\d+$/.test(woke.task_key), 'it works a task, and the wake keeps no words');
+  ok(!/XenoTask(Take|Report|Comment|Move)|for review|How to work a XENO task/.test(runs[0].prompt) && /Answer them there, then stop/.test(runs[0].prompt) && runs[0].prompt.includes('Answer briefly.'), 'a wake is told to answer and stop, with its own instructions and no task steps');
+  ok(['XenoTaskTake', 'XenoTaskMove', 'XenoTaskComment', 'XenoTaskReport', 'XenoTaskProgress'].every((x) => runs[0].platformAgent.tools.deny.includes(x)) && !runs[0].platformAgent.tools.deny.includes('XenoTaskCreate'), 'and it has no task steps to spend turns on, though it can still raise a task');
 
   await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} also this` });
   await M.postMessage(pool, H(ada), { ...tickRoom, text: `@${atlasHandle} and this` });
   ok(await Wake.drain(pool, opts) === 0 && runs.length === 1, 'mentions during a run wait for it');
-  await finishRuns();
+  hosted = 'completed'; await Cloud.refresh(pool, H(ada), run, opts);
+  ok((await Tasks.getTask(pool, H(ada), woke.task_key)).status === 'done', 'a wake that finished closes its task: nobody has a reply to review');
   ok(await Wake.drain(pool, opts) === 1 && runs.length === 2 && (await wakesOf(atlas.userId)).filter((x) => x.state === 'merged').length === 1 && runs[1].prompt.includes('1 more message'), 'then fold into one wake');
-  await finishRuns();
+  const second = (await wakesOf(atlas.userId)).find((x) => x.state === 'started' && x.task_key !== woke.task_key);
+  hosted = 'failed'; await Cloud.refresh(pool, H(ada), (await pool.query('SELECT * FROM agent_cloud_runs WHERE id = $1', [second.run_row_id])).rows[0], opts); hosted = 'running';
+  ok((await Tasks.getTask(pool, H(ada), second.task_key)).status === 'todo', 'one that failed stays open for its person to see');
 
   await Mcp.callTool(pool, vegaActor, 'post_message', { ...tickRoom, text: `@${atlasHandle} over to you`, request_key: crypto.randomUUID() });
   ok(await Wake.drain(pool, opts) === 0 && (await wakesOf(atlas.userId)).length === 3, '`people` means another agent can’t wake it');

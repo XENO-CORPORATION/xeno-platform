@@ -21,7 +21,7 @@ import { assertAvailableOrOverridden, workspaceOfProject, AwayError } from './wo
 import { agentsApiBaseUrl, mintDelegatedAccessToken, revokeDelegatedSession } from './marketplaceBroker.js';
 import * as agents from './platformAgents.js';
 import * as tasks from './xenoTasks.js';
-import { guidanceFor } from './agentGuidance.js';
+import { guidanceFor, conversationBriefOf } from './agentGuidance.js';
 import { issuer } from '../config/hosts.js';
 import { admitAccountRun, readRunnablePin, RunAdmissionError } from './workforceRunAdmission.js';
 import { revokeRun } from './workforceRunAuthority.js';
@@ -91,6 +91,34 @@ export function runPrompt(agent, task, guidance = null) {
   return lines.join('\n').slice(0, 60000);
 }
 
+/**
+ * An agent answering someone in a channel. The reply is the whole job, and every step costs a model call that resends
+ * the context, so the task is only the record: the agent has no task steps to take, and the task closes when it's done.
+ */
+const NO_TASK_STEPS = ['XenoTaskTake', 'XenoTaskMove', 'XenoTaskComment', 'XenoTaskReport', 'XenoTaskProgress'];
+export function answerPrompt(agent, task, brief = null) {
+  const lines = [
+    `You are the XENO agent "${agent.name}" (${agent.id}${agent.division ? `, division ${agent.division.name}` : ''}, instructions v${agent.version}).`,
+    'Someone spoke to you in a channel. Answer them there, then stop: the reply is the whole job.',
+    `${task.key} only keeps the record and closes by itself. If they need work beyond a reply, say so, or raise a task with XenoTaskCreate.`,
+  ];
+  if (brief) lines.push('', brief);
+  lines.push('', task.body || task.title);
+  return lines.join('\n').slice(0, 60000);
+}
+const answerTools = (tools) => ({ ...(tools || {}), deny: [...new Set([...((tools && tools.deny) || []), ...NO_TASK_STEPS])] });
+
+/** The reply was the job, so a wake's task closes with its run. A failed run leaves it open for its person to see. */
+async function closeAnswered(db, r) {
+  const t = (await db.query(`SELECT 'T-' || t.number AS key FROM tasks t JOIN agent_mention_wakes w ON w.task_key = 'T-' || t.number AND w.run_row_id = $1 WHERE t.id = $2`, [r.id, r.task_id])).rows[0];
+  if (!t) return;
+  const owner = { id: r.owner_user_id, kind: 'human' };
+  try {
+    await tasks.transitionTask(db, owner, t.key, { to: 'in_progress' });
+    await tasks.transitionTask(db, owner, t.key, { to: 'done', note: 'Answered in the channel.' });
+  } catch (e) { if (!(e instanceof tasks.TaskError)) throw e; }
+}
+
 async function revokeCredential(db, owner, agentId, credentialId) {
   if (!credentialId) return;
   await agents.revokeCredential(db, owner, agentId, credentialId).catch(() => {});
@@ -142,7 +170,7 @@ async function fenced(db, admissionId) {
   return !!(await db.query('SELECT workforce_run_admission_fence($1) AS f', [admissionId])).rows[0].f;
 }
 
-export async function start(db, owner, agentId, { taskKey, budgetCredits, overrideAway } = {}, { fetchImpl = fetch, env = process.env } = {}) {
+export async function start(db, owner, agentId, { taskKey, budgetCredits, overrideAway, answering = false } = {}, { fetchImpl = fetch, env = process.env } = {}) {
   const base = agentsApiBaseUrl(env);
   if (!base) throw new AgentRunError('Cloud runs are not available on this server', 'cloud_runs_unavailable', 503);
   const agent = await agents.getWith(db, owner, agentId, 'runner');       // the run right, or 403/404
@@ -202,7 +230,7 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits, overri
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': `agent-run:${row.id}` },
         body: JSON.stringify({
-          prompt: runPrompt(agent, task, (await guidanceFor(db, task, agent.userId)).text),
+          prompt: answering ? answerPrompt(agent, task, (await conversationBriefOf(db, agent.userId)).text) : runPrompt(agent, task, (await guidanceFor(db, task, agent.userId)).text),
           title: `${agent.name} · ${task.key} ${task.title}`.slice(0, 200),
           ...(agent.runtime && agent.runtime.model ? { model: agent.runtime.model } : {}),
           ...(agent.runtime && agent.runtime.effort ? { effort: agent.runtime.effort } : {}),
@@ -212,7 +240,7 @@ export async function start(db, owner, agentId, { taskKey, budgetCredits, overri
           // (never logged, never returned) and gives the run the XenoTask* tools. The tool scope narrows them.
           platformAgent: {
             issuer: issuer(), agentId: agent.id, runRef: String(row.id),
-            ...(agent.runtime && agent.runtime.tools ? { tools: agent.runtime.tools } : {}),
+            ...(answering ? { tools: answerTools(agent.runtime && agent.runtime.tools) } : agent.runtime && agent.runtime.tools ? { tools: agent.runtime.tools } : {}),
           },
           budget: { maxCredits: budget },
         }),
@@ -307,6 +335,7 @@ export async function refresh(db, owner, row, { fetchImpl = fetch, env = process
       await revokeAdmission(db, owner.id, row.admission_id);
       const a = (await db.query('SELECT public_id FROM agent_identities WHERE user_id = $1', [row.agent_user_id])).rows[0];
       if (a) await revokeCredential(db, owner, a.public_id, row.credential_id);
+      if (state === 'completed') await closeAnswered(db, r);
       await tellEnded(db, r, state, r.reason);
     }
     return r;
