@@ -33,6 +33,7 @@ import { ensurePersonalWorkspace } from './personalWorkspace.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { delegateWork, HandoffError } from './chatHandoff.js';
 import { tell } from './inbox.js';
+import { queueWakes } from './mentionWake.js';
 
 export class MessageError extends Error {
   constructor(message, code, status = 400) { super(message); this.name = 'MessageError'; this.code = code; this.status = status; }
@@ -443,6 +444,11 @@ export async function postMessage(db, actor, { workspace, key, conversationId, t
   const m = await call(db, t.ctx.me, 'POST', `/v1/conversations/${t.conversationId}/messages`, { json: body, fetchImpl });
   const author = t.ctx.me.displayName || t.ctx.me.handle || 'Someone', place = t.channel ? `#${t.channel.title}` : 'a direct message';
   if (m && m.id) for (const h of hits) await tell(db, { userId: h.id, source: 'message', kind: 'mentioned', ref: addressOf(t, m.id), title: `${author} mentioned you in ${place}`, detail: body.body, actorId: t.ctx.me.id, actorKind: t.ctx.me.kind, dedupeKey: `comms:${m.id}` });
+  const named_agents = hits.filter((h) => h.kind === 'agent');
+  if (m && m.id && t.channel && named_agents.length) {
+    await queueWakes(db, { named: named_agents, sender: { id: t.ctx.me.id, kind: t.ctx.me.kind, name: author }, workspaceId: t.ctx.workspaceId, channelKey: t.channel.key, channelTitle: t.channel.title, conversationId: t.conversationId, messageId: m.id, ref: addressOf(t, m.id), text: body.body })
+      .catch((e) => console.error('[MentionWake] not queued:', e.message));   // the message is sent either way
+  }
   return { conversationId: t.conversationId, message: { ...messageOf(m || {}, await nameMap(db, [m && m.senderUserId])), mentions: hits.map(({ id, name, kind, handle }) => ({ id, name, kind, handle })) } };
 }
 

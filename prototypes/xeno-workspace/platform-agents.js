@@ -511,6 +511,7 @@
       ${row('Model and tools', 'The same everywhere it runs', rt, R.editor || R.manage ? h0.btn(rtSet(a.runtime) ? 'Change' : 'Set', 'data-xag="runtime"', true) : '')}
       ${row('XENO services', 'What it can call', services, '')}
       ${row('Spending cap', 'Through XENO tools', cap, R.manage ? h0.btn(ov2 && ov2.capCredits != null ? 'Change' : 'Set a cap', 'data-xag="cap"', true) : '')}
+      ${row('Mentions', 'When someone names it in a channel', wakeText(a), R.manage ? h0.btn('Change', 'data-xag="mention-wake"', true) : '')}
       ${row('New work', 'How it hears about tasks', hook + (S.hook && S.hook.agentId === a.id ? `<div class="xag-secret" role="status"><div><b>${ic('lock')}Signing secret — copy it now, it is never shown again</b></div><div class="xag-secret-v"><code>${esc(S.hook.secret)}</code>${copyBtn(S.hook.secret)}</div></div>` : ''), R.manage ? h0.btn(a.webhook ? 'Change' : 'Add webhook', 'data-xag="webhook"', true) + (a.webhook ? h0.btn('Remove', 'data-xag="webhook-off"', true) : '') : '')}
       ${row('Division', 'Which projects it may join', div, S.canManageDivisions ? h0.btn(a.division ? 'Move' : 'Put in a division', 'data-xag="division"', true) : '')}
       ${row('Lent to', 'Other divisions or workspaces', lent, R.manage ? h0.btn('Lend', 'data-xag="lend"', true) : '')}
@@ -765,6 +766,30 @@
     const r = await call('PATCH', `/api/tasks/${encodeURIComponent(v.task)}`, { delegateId: a.userId }, 'It could not be handed over.');
     if (r) { toast(`${a.name} has ${v.task}`); loadOverview(a.id); }
   }
+  const WAKE_MODES = { off: 'A mention doesn’t wake it', people: 'People can wake it', everyone: 'People and other agents can wake it' };
+  function wakeText(a) {
+    const w = S.wake && S.wake.agentId === a.id ? S.wake.settings : null;
+    if (!w) { if (!S.wake || S.wake.agentId !== a.id) loadWake(a.id); return `<p class="xag-dim">${S.wake.failed ? 'It could not be loaded.' : 'Loading…'}</p>`; }
+    return `<b>${esc(WAKE_MODES[w.mode])}</b><p class="xag-dim">${w.mode === 'off' ? 'A mention lands in its inbox and starts nothing.' : `A mention starts a cloud run in that channel, up to ${esc(w.budgetCredits)} credits and ${esc(w.perDay)} times a day, paid by whoever answers for it. Anyone in the channel can write the message, so give it only the access you’d be happy for them to use.`}</p>`;
+  }
+  async function loadWake(id) {
+    S.wake = { agentId: id, settings: null };
+    const r = await api('GET', `/api/agents/${id}/mention-wake`);
+    if (S.wake.agentId !== id) return;
+    if (r.ok) S.wake.settings = r.d.settings; else S.wake.failed = true;
+    paint();
+  }
+  async function setWake() {
+    const a = S.one; if (!a || !S.wake || !S.wake.settings) return;
+    const w = S.wake.settings;
+    const v = await D().form({ title: `When ${a.name} is mentioned`, sub: 'A mention can start a cloud run, which costs credits. Direct messages never wake it.', submit: 'Save', size: 'sm', fields: [
+      { id: 'mode', label: 'Who can wake it', type: 'select', value: w.mode, options: [['off', 'Nobody'], ['people', 'People'], ['everyone', 'People and other agents']] },
+      { id: 'budget', label: 'Budget for one wake (credits)', value: String(w.budgetCredits), max: 2, hint: 'Up to 50.' },
+      { id: 'perDay', label: 'Wakes a day', value: String(w.perDay), max: 3, hint: 'Up to 100.' }] });
+    if (!v) return;
+    const r = await call('PUT', `/api/agents/${a.id}/mention-wake`, { mode: v.mode, budgetCredits: Number(v.budget), perDay: Number(v.perDay) }, 'It could not be saved.');
+    if (r) { S.wake = { agentId: a.id, settings: r.d.settings }; toast(r.d.settings.mode === 'off' ? 'Mentions won’t wake it' : 'Saved'); paint(); }
+  }
   async function setCap() {
     const a = S.one; if (!a) return;
     const curCap = S.ov && S.ov.spend ? S.ov.spend.capCredits : null;
@@ -901,6 +926,7 @@
     if (a === 'clearq') { S.q = ''; return paint(); }
     if (a === 'hand') return handTask();
     if (a === 'cap') return setCap();
+    if (a === 'mention-wake') return setWake();
     if (a === 'pause' || a === 'resume') return pauseConn(b.dataset.id, a === 'pause');
     if (a === 'watch') { S.watch = !S.watch; if (S.watch && S.one) loadTrace(S.one.id); return paint(); }
     if (a === 'place') { S.place = b.dataset.k; S.tab = b.dataset.k === 'spawn' ? 'spawn' : (S.tab === 'spawn' ? 'claude' : S.tab); return paint(); }

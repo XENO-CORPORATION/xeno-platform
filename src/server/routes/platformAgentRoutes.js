@@ -28,6 +28,7 @@
  */
 import express from 'express';
 import * as agents from '../services/platformAgents.js';
+import * as mentionWake from '../services/mentionWake.js';
 import { TaskError } from '../services/xenoTasks.js';
 import { DivisionError } from '../services/workforceDivisions.js';
 import * as lending from '../services/agentLending.js';
@@ -47,7 +48,7 @@ const handled = (fn) => async (req, res) => {
   catch (e) {
     if (e instanceof SkillError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     if (e instanceof mind.MindError) return res.status(e.status).json({ success: false, error: e.message, code: e.code, ...(e.details ? { details: e.details } : {}) });
-    if (e instanceof overview.OverviewError || e instanceof agents.AgentError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError || e instanceof access.AccessError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
+    if (e instanceof overview.OverviewError || e instanceof agents.AgentError || e instanceof mentionWake.MentionWakeError || e instanceof TaskError || e instanceof DivisionError || e instanceof lending.LendError || e instanceof cloudRuns.AgentRunError || e instanceof access.AccessError) return res.status(e.status).json({ success: false, error: e.message, code: e.code });
     console.error('[agents]', e);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
@@ -70,6 +71,9 @@ router.get('/:id/overview', handled(async (req, res) => { res.json({ success: tr
 router.post('/:id/message', handled(async (req, res) => { res.json({ success: true, ...(await overview.message(req.db, req.me, req.params.id, req.body || {})) }); }));
 router.post('/:id/connections/:cid/pause', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, true) }); }));
 router.post('/:id/connections/:cid/resume', handled(async (req, res) => { res.json({ success: true, connection: await overview.setConnectionPaused(req.db, req.me, req.params.id, req.params.cid, false) }); }));
+// when naming the agent in a channel wakes it (mentionWake.js)
+router.get('/:id/mention-wake', handled(async (req, res) => { res.json({ success: true, settings: await mentionWake.getSettings(req.db, req.me, req.params.id) }); }));
+router.put('/:id/mention-wake', handled(async (req, res) => { res.json({ success: true, settings: await mentionWake.setSettings(req.db, req.me, req.params.id, req.body || {}) }); }));
 router.put('/:id/spend-cap', handled(async (req, res) => { res.json({ success: true, ...(await overview.setSpendCap(req.db, req.me, req.params.id, req.body || {})) }); }));
 router.get('/:id/activity', handled(async (req, res) => {
   const out = await presence.activity(req.db, req.me, req.params.id, { limit: req.query.limit, before: req.query.before });

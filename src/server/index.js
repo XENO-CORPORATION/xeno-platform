@@ -26,6 +26,7 @@ import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
 import { startAutomateWorker } from './workers/automateWorker.js';
+import { startMentionWakeWorker } from './workers/mentionWakeWorker.js';
 import { startLedgerChainAudit } from './services/ledgerChainAudit.js';
 import { startComputeMeter } from './workers/computeMeter.js';
 import messageRoutes from './routes/messageRoutes.js';
@@ -4321,6 +4322,7 @@ backgroundLeader.whenLeader(() => {
 backgroundLeader.whenLeader(() => startWebhookPushSweep(pool));
 // Dev › Automate: the ONE delivery loop for workspace workflows (schedules due → runs queued → the XENO Workflow runner)
 backgroundLeader.whenLeader(() => startAutomateWorker(pool));
+backgroundLeader.whenLeader(() => startMentionWakeWorker(pool));
 // The money journal's hash chain, verified every hour for every account (services/ledgerChainAudit.js)
 backgroundLeader.whenLeader(() => startLedgerChainAudit(pool));
 // XENO Compute: settle running machines' hours and reserve the next, on the leader only (workers/computeMeter.js)
