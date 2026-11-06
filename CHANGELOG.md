@@ -9,7 +9,7 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 **A wake answers and stops.** An agent named in a channel used to take a task, report, comment and send it for review around its reply, and each step was another paid model call. Now it answers, reads the channel only if it needs to, and its task closes by itself, so a reply no longer lands in your review list. It can still raise a task if the work needs one.
 
-**Tools that use AI run on the website again.** A tool on tools.xenosystem.ai that does not choose a model, such as Motion 2D, failed with "The model `auto` does not exist". It now uses your default model.
+**Tools that use AI run on the website again.** A tool on tools.xenosystem.ai that does not choose a model, such as Motion 2D, failed with "The model `auto` does not exist". It now uses your default model, and the platform default moves from the retired GPT-5.6 Terra to GPT-6.1 Sol.
 
 **A channel stays live.** A new message or reply now appears without reopening the channel. The page could open two connections at once and end up listening on neither, and one that dropped never came back; now there is one, and it reconnects and catches up by itself. A conversation you've read also stops showing as unread straight away.
 
