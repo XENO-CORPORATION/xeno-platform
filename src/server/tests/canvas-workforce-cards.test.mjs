@@ -12,6 +12,7 @@
  *
  * Run: DATABASE_URL=postgres://… node src/server/tests/canvas-workforce-cards.test.mjs
  */
+import assert from 'node:assert/strict';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import express from 'express';
@@ -157,6 +158,30 @@ async function main() {
     const genCard = { ...withChat.content, nodes: [...withChat.content.nodes, { id: 'g1', type: 'xeno-ref', ref: { kind: 'generation', id: gen }, x: 0, y: 0, width: 280, height: 280 }] };
     const savedGen = await call('PUT', `/api/canvases/${withChat.id}`, { token: A, body: { content: genCard, revision: withChat.revision } });
     ok(savedGen.s === 200 && savedGen.j.canvas.records.generations[gen].missing === true, 'an image card reads its generation, and one the reader can’t see says nothing about it');
+
+    // XENO Multiplayer: a ticket says what the canvas's own service says
+    const live = await import('../services/liveTickets.js');
+    const tk = await live.createTicket(pool, { id: ada, kind: 'human', username: 'ada' }, `workspace.canvas/${pm.j.canvas.id}`);
+    const claims = JSON.parse(Buffer.from(tk.ticket.split('.')[1], 'base64url').toString());
+    ok(claims.xeno_resource === `workspace.canvas/${pm.j.canvas.id}` && ['owner', 'editor'].includes(claims.xeno_role) && claims.sub === String(ada) && tk.url.endsWith(`/v1/workspace.canvas/${pm.j.canvas.id}`), 'a person who can edit a canvas gets a ticket to it');
+    await assert.rejects(live.createTicket(pool, { id: eve, kind: 'human' }, `workspace.canvas/${pm.j.canvas.id}`), (e) => e.statusCode === 404);
+    ok(true, 'and someone who can’t see it gets none, and learns nothing about it');
+
+    // what changes in the project reaches an open canvas, however it was changed
+    const { startProjectChangeWorker } = await import('../workers/projectChangeWorker.js');
+    const told = [], stopFeed = startProjectChangeWorker(pool, { delayMs: 50, fetchImpl: async (url, init) => { told.push({ url: String(url), token: init.headers.authorization, body: init.body }); return new Response('{"sent":1}'); } });
+    await new Promise((r) => setTimeout(r, 400));
+    const heard = async () => { for (let i = 0; i < 40 && !told.length; i++) await new Promise((r) => setTimeout(r, 50)); return told.splice(0); };
+    await createTask(pool, { id: ada, kind: 'human' }, { title: 'Made by an API call', projectId: shared });
+    const fromTask = await heard();
+    ok(fromTask.length >= 1 && fromTask.every((t) => JSON.parse(t.body).data.changed === 'project') && fromTask.some((t) => t.url.endsWith(`/v1/workspace.canvas/${pm.j.canvas.id}/notify`)), 'a new task tells the project’s open canvases');
+    ok(JSON.parse(Buffer.from(fromTask[0].token.split(' ')[1].split('.')[0], 'base64url').toString()).typ === 'xeno-live-notify+jwt' && !fromTask[0].body.includes('Made by an API call'), 'with its own token, and without saying what changed');
+    await pool.query('UPDATE chat_conversations SET title = title WHERE id = $1', [cid2]);
+    ok((await heard()).length >= 1, 'a change to a project chat does too');
+    await pool.query("SELECT pg_notify('project_changed', $1)", [secret]);
+    await new Promise((r) => setTimeout(r, 300));
+    ok(!told.some((t) => t.url.includes(pm.j.canvas.id)), 'and a change in another project tells this canvas nothing');
+    stopFeed();
 
     // 6. MCP
     const mv = JSON.parse((await canvasMcp.callTool(pool, { id: ada, kind: 'human' }, 'get', { canvas: cid })).content[0].text);

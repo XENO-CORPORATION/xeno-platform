@@ -1,9 +1,10 @@
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // canvas-test — canvases in the workspace (platform-canvas.js) against a stand-in /api/canvases that validates content
 // with the SERVER's own cleanContent, so a canvas the page saves is one the server would accept. Headless.
 // Proves: Board | List | Canvas switch, the id-based address (refresh, Back, a fresh tab), creating a canvas, putting
 // tasks on it, notes, links, groups, connecting two tasks and making the wire a real link, task data read live,
 // autosave with the revision, a conflict refused (never overwritten), view-only canvases, undo, and no page errors.
-import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url';
+import fs from 'node:fs'; import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, '../../..');
 const require = createRequire(import.meta.url); const puppeteer = require('puppeteer');
 const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
@@ -14,7 +15,23 @@ let failed = 0;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 const now = () => new Date().toISOString();
 const ME = { id: 'u1', kind: 'human', name: 'Me' };
-const db = { tasks: [], seq: 0, canvases: [], links: [], puts: [], docs: [], moved: [], chats: [], generated: [], done: false };
+const LIVE_CLIENT = fs.readFileSync(path.join(repo, 'prototypes/xeno-workspace/live-client.js'), 'utf8');
+const FAKE_HUB = `;XenoLive = { ...XenoLive, joinLive: ({ id, ticket, Y, doc }) => {
+  const ch = new BroadcastChannel('live' + id), conn = Math.random().toString(36).slice(2), peers = new Map(), L = new Map();
+  const emit = (e, v) => (L.get(e) || []).forEach((f) => f(v));
+  const me = { conn, sub: conn, name: 'P' + conn.slice(0, 3), kind: 'human', role: 'editor', act: null, state: null };
+  const api = { doc, status: 'connecting', self: null, ended: null, participants: () => [...peers.values()], leases: () => ({}), setPresence(s) { me.state = s; ch.postMessage({ k: 'hello', p: me }); }, signal() {}, on(e, f) { L.set(e, [...(L.get(e) || []), f]); return () => {}; }, close() { ch.postMessage({ k: 'bye', conn }); ch.close(); } };
+  doc.on('update', (u, o) => { if (o !== 'remote') ch.postMessage({ k: 'u', u }); });
+  ch.onmessage = ({ data: m }) => {
+    if (m.k === 'u') Y.applyUpdate(doc, m.u, 'remote');
+    else if (m.k === 'hello') { peers.set(m.p.conn, m.p); emit('participants', [...peers.values()]); if (m.reply) { ch.postMessage({ k: 'hello', p: me }); ch.postMessage({ k: 'u', u: Y.encodeStateAsUpdate(doc) }); } }
+    else if (m.k === 'bye') { peers.delete(m.conn); emit('participants', [...peers.values()]); }
+    else if (m.k === 'changed') emit('signal', { data: { changed: 'project' } });
+  };
+  ticket('workspace.canvas/' + id).then(() => { api.status = 'open'; api.self = me; ch.postMessage({ k: 'hello', p: me, reply: true }); emit('status', 'open'); });
+  window.__live = api; window.__hub = ch; return api;
+} };`;
+const db = { joined: [], tickets: [], liveOn: false, tasks: [], seq: 0, canvases: [], links: [], puts: [], docs: [], moved: [], chats: [], generated: [], done: false };
 const GEN = 'e0000000-0000-4000-8000-000000000001', GF = 'd0000000-0000-4000-8000-00000000000a';
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
@@ -28,6 +45,8 @@ const p = await br.newPage(); await p.setViewport({ width: 1400, height: 900 });
 await p.setRequestInterception(true);
 const handler = (q) => {
   const u = new URL(q.url());
+  // XENO Multiplayer stands in here: the real Yjs from live-client.js, passed between two pages by a BroadcastChannel
+  if (u.pathname.endsWith('/live-client.js')) return db.liveOn ? q.respond({ status: 200, contentType: 'text/javascript', body: LIVE_CLIENT + FAKE_HUB }) : q.respond({ status: 503, body: '' });
   if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><body></body>' });
   if (!u.pathname.startsWith('/api/')) return q.continue();
   const method = q.method(); let b = {}; try { b = q.postData() ? JSON.parse(q.postData()) : {}; } catch { b = {}; }
@@ -41,6 +60,12 @@ const handler = (q) => {
   if (u.pathname === '/api/generations' && method === 'POST') { db.generated.push(b); return json(202, { generation: { id: GEN, state: 'queued' } }); }
   if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: [{ id: 'u2', name: 'Ada' }] });
   const pt = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (pt && method === 'PATCH' && b.assigneeId) { db.assigned = { key: pt[1], body: b }; return json(200, { success: true, task: { key: pt[1], title: 'x', status: 'todo', assignee: { id: 'u2', name: 'Ada' } } }); }
+  const jf = u.pathname.match(/^\/api\/chat\/projects\/([\w-]+)\/files$/); if (jf) { db.joined.push({ kind: 'file', project: jf[1], id: b.storage_key }); return json(200, { success: true, file: {} }); }
+  if (/\/move\/preview$/.test(u.pathname)) return json(200, { success: true, move: { consentRevision: 'c'.repeat(64) } });
+  const jc = u.pathname.match(/^\/api\/chat\/conversations\/([\w-]+)\/move$/); if (jc) { db.joined.push({ kind: 'chat', project: b.project_id, id: jc[1], consent: b.consent_revision }); return json(200, { success: true, conversation: {} }); }
+  if (u.pathname === '/api/library/assets' && method === 'GET') return json(200, { success: true, items: [{ id: 'aa000000-0000-4000-8000-000000000001', name: 'old.pdf', mime_type: 'application/pdf' }] });
+  if (u.pathname === '/api/chat/conversations' && method === 'GET') return json(200, { success: true, conversations: [{ id: 'bb000000-0000-4000-8000-000000000001', title: 'Old chat' }] });
+  if (u.pathname === '/api/live/tickets') { db.tickets.push(b.resource); return json(200, { success: true, ticket: 't' }); }
   if (u.pathname === '/api/canvases/open-as' && method === 'POST') { db.openAs = b.id; return json(200, { success: true, created: false, canvas: { ...out(db.canvases[0]), content: db.canvases[0].content, records: { tasks: recs(db.canvases[0]) } } }); }
   if (u.pathname === '/api/canvases' && method === 'GET') return json(200, { success: true, canvases: db.canvases.map(out) });
   if (u.pathname === '/api/canvases' && method === 'POST') { const c = { id: '00000000-0000-4000-8000-' + String(db.canvases.length + 1).padStart(12, '0'), name: b.name, revision: 1, content: { nodes: [], edges: [] } }; db.canvases.push(c); return json(201, { success: true, canvas: out(c) }); }
@@ -76,7 +101,7 @@ const settle = (ms = 600) => new Promise((r) => setTimeout(r, ms));
 const nav = async (h) => { await p.evaluate((x) => (location.hash = x), h); await settle(); };
 const cv = () => p.evaluate(() => window.XENO_CANVAS.state());
 const box = (sel) => p.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, l: r.left, t: r.top, r: r.right, b: r.bottom }; });
-const waitSaved = async () => { for (let i = 0; i < 30; i++) { const s = await cv(); if (!s.dirty) { await settle(250); return s; } await settle(150); } return cv(); };
+const waitSaved = async () => { for (let i = 0; i < 30; i++) { const s = await cv(); if (!s.dirty) { await settle(250); return cv(); } await settle(150); } return cv(); };
 try {
   await p.goto(base + '/workspace/studio/tasks', { waitUntil: 'domcontentloaded' }); await settle(1500);
   ok(!!(await p.$('[data-tk="layout"][data-arg="canvas"]')), 'Tasks offers Board | List | Canvas');
@@ -93,7 +118,7 @@ try {
   await p.click('.xd [data-v="T-1"]'); await p.click('.xd [data-v="T-2"]'); await p.click('.xd [data-xd-submit]'); await settle();
   ok((await p.$$('[data-cv-task]')).length === 2 && /Design the onboarding/.test(await main()), 'tasks go on the canvas as cards');
   let s = await waitSaved();
-  ok(s.rev === '2' && db.puts.at(-1).revision === '1' && db.canvases[0].content.nodes.every((n) => n.type !== 'xeno-ref' || !n.title), `the change autosaves with the revision it was loaded at, storing references only (${JSON.stringify({ rev: s.rev, conflict: s.conflict, put: db.puts.at(-1)?.revision, puts: db.puts.length })})`);
+  ok(s.rev === '2' && db.puts.at(-1).revision === '1' && db.canvases[0].content.nodes.every((n) => n.type !== 'xeno-ref' || !n.title), 'the change autosaves with the revision it was loaded at, storing references only');
 
   // a note, by double-clicking the board
   const st = await box('[data-cv-stage]');
@@ -215,8 +240,59 @@ try {
   await p.select('.xd-sh [data-f="who"] select', 'u2'); await p.click('.xd-sh [data-xd-submit]'); await settle(800);
   ok(db.assigned?.key === taskNode.ref.id && db.assigned.body.assigneeId === 'u2', 'a task card is assigned from the canvas, on the real task');
 
+  // an existing file or chat put on a project's canvas joins the project
+  await p.click('[data-cv-act="add-file"]'); await settle(700);
+  await p.click('.xd [data-v]'); await p.click('.xd [data-xd-submit]'); await settle(900);
+  ok(db.joined.some((x) => x.kind === 'file' && x.project === pid && x.id), `a file put on the canvas joins the project (${JSON.stringify(db.joined)})`);
+  await p.click('[data-cv-act="add-chat"]'); await settle(700);
+  await p.click('.xd [data-v]'); await p.click('.xd [data-xd-submit]'); await settle(900);
+  ok(!db.joined.some((x) => x.kind === 'chat'), 'a chat asks first: people on the project will be able to read it');
+  await p.click('.xd-sh [data-xd-ok]'); await settle(900);
+  ok(db.joined.some((x) => x.kind === 'chat' && x.project === pid && x.consent === 'c'.repeat(64)), 'and moves with the consent its preview gave');
+
+  // two people on one canvas, live
+  db.liveOn = true; await p.goto(base + '/workspace/tasks', { waitUntil: 'domcontentloaded' }); await settle(800);
+  const pair = []; db.writers = new Set();
+  for (let i = 0; i < 2; i++) { const page = await br.newPage(); await page.setViewport({ width: 1400, height: 900 }); page.on('pageerror', (e) => errs.push(e.message)); await page.setRequestInterception(true); page.on('request', handler); page.on('request', (q) => { if (q.method() === 'PUT' && /\/api\/canvases\//.test(q.url())) db.writers.add(i); }); await page.goto(`${base}/workspace/projects/${pid}/canvas/${pc}`, { waitUntil: 'domcontentloaded' }); pair.push(page); }
+  await settle(3000);
+  const [a, b2] = pair;
+  const ids = (page) => page.$$eval('[data-cv-node]', (els) => els.map((e) => e.dataset.cvNode).sort());
+  const same = async () => JSON.stringify(await ids(a)) === JSON.stringify(await ids(b2));
+  ok(db.tickets.includes(`workspace.canvas/${pc}`) && !!(await a.$('[data-cv-live]')) && !!(await b2.$('[data-cv-live]')), 'both join the canvas live');
+  ok((await b2.$$('[data-cv-people] .tk-face')).length === 1, 'and each sees the other is here');
+  const startCount = (await ids(a)).length;
+  await a.bringToFront(); await a.click('[data-cv-act="add-note"]'); await settle(300); await a.keyboard.type('from A'); await a.keyboard.press('Escape'); await a.mouse.click(700, 800); await settle(700);
+  ok((await ids(b2)).length === startCount + 1 && await same(), 'a note added by one appears for the other without a reload');
+  await a.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await b2.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await settle(900);
+  await a.keyboard.press('Escape'); await a.mouse.click(700, 800); await b2.bringToFront(); await b2.keyboard.press('Escape'); await b2.mouse.click(700, 800); await settle(400); await a.bringToFront(); await settle(900);
+  ok((await ids(a)).length === startCount + 3 && await same(), 'two people adding at the same moment both land');
+  const target = await a.evaluate(() => [...document.querySelectorAll('[data-cv-node]')].filter((e) => /^[a-z0-9]{8}$/.test(e.dataset.cvNode)).find((e) => { const r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit && hit.closest('[data-cv-node]') === e; })?.dataset.cvNode);
+  const bb = await (await a.$(`[data-cv-node="${target}"]`)).boundingBox();
+  const was = await b2.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top);
+  await a.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await a.mouse.down(); await a.mouse.move(bb.x + 140, bb.y + 90, { steps: 6 }); await settle(200);
+  ok(await b2.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top) !== was, 'a card being moved moves on the other screen as it goes');
+  await a.mouse.up(); await settle(500);
+  ok(await a.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top) === await b2.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top), 'and both end in the same place');
+  await b2.bringToFront(); await b2.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await settle(400); await b2.keyboard.type('still typing');
+  await a.bringToFront(); await a.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await settle(500); await a.mouse.click(700, 800); await settle(900);
+  ok((await ids(b2)).length === (await ids(a)).length, 'someone typing in a note still sees what others do');
+  ok(/still typing/.test(await b2.$eval('[data-cv-text]', (e) => e.value).catch(() => '')) || await b2.$$eval('.cv-n--text', (els) => els.some((e) => /still typing/.test(e.innerText || e.textContent))), 'and keeps what they typed');
+  await b2.bringToFront(); await b2.keyboard.press('Escape'); await b2.mouse.click(700, 800); await settle(400); await a.bringToFront(); await settle(700);
+  await a.mouse.move(600, 500); await settle(300); await a.mouse.move(620, 520); await settle(500);
+  ok(!!(await b2.$('[data-cv-cursor]')), 'each sees where the other is pointing');
+  await a.click(`[data-cv-node="${target}"]`); await settle(200); await a.keyboard.press('Delete'); await settle(700);
+  ok(!(await ids(b2)).includes(target), 'a card removed by one goes for the other');
+  await settle(1500);
+  const putsAt = db.puts.length, conflicts = await a.$('.cv-conflict') || await b2.$('.cv-conflict');
+  ok(!conflicts && db.canvases[0].content.nodes.length === (await ids(a)).length, 'it is written down once, whole, with no conflict for anyone');
+  await settle(1200); ok(db.puts.length === putsAt, 'and nothing saves when nothing changed');
+  ok(db.writers.size === 1, `one screen writes the shared canvas down, not everyone (${db.writers.size})`);
+  const onCanvas = db.tasks.find((x) => db.canvases[0].content.nodes.some((n) => n.ref?.id === x.key)); onCanvas.title = 'Renamed elsewhere'; await a.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await b2.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await settle(900);
+  ok(/Renamed elsewhere/.test(await a.$eval('[data-cv-stage]', (e) => e.textContent)), 'told something changed in the project, the cards update');
+  await a.close(); await b2.close(); db.liveOn = false;
+
   // view-only
-  db.canvases[0].readonly = true; await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
+  db.canvases[0].readonly = true; await p.bringToFront(); await p.goto(`${base}/workspace/projects/${pid}/canvas/${pc}`, { waitUntil: 'domcontentloaded' }); await settle(1800);
   ok(/View only/.test(await main()) && !(await p.$('[data-cv-act="add-note"]')), 'a canvas you may only view shows no editing tools');
   ok((await p.$$('[data-cv-wire]')).length === 0, 'and no connect handles');
 

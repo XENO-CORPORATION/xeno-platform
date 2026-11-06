@@ -281,6 +281,12 @@ export async function saveCanvas(db, me, id, { content, revision, name } = {}) {
   return getCanvas(db, me, c.id);
 }
 
+/** Who a person is on a canvas in XENO Multiplayer (services/liveTickets.js): the same standing every read and save uses. */
+export async function canvasLiveRole(db, me, id) {
+  const { c, s } = await load(db, me, id);
+  return s.del && String(c.owner_user_id) === String(me.id) ? 'owner' : s.edit ? 'editor' : 'viewer';
+}
+
 export async function deleteCanvas(db, me, id) {
   const { c } = await load(db, me, id, 'del');
   await db.query('UPDATE canvases SET deleted_at = now() WHERE id = $1', [c.id]);
