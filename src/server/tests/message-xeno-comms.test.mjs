@@ -22,6 +22,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import express from 'express';
 import pg from 'pg';
 import { runAllMigrations } from '../services/migrationRunner.js';
@@ -406,6 +407,31 @@ async function main() {
   await pool.query(`DELETE FROM agent_mention_wakes WHERE sender_name = 'x'`);
   await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} nobody home` });
   ok(await Wake.drain(pool, noRunner) === 0 && (await wakesOf(atlas.userId)).at(-1).state === 'failed' && await paid('couldn’t be woken') === 1, 'a wake that can’t start reaches the person who pays');
+
+  // a wake that couldn't answer is never started: its person would pay for silence
+  await Wake.setSettings(pool, H(ada), atlas.id, { mode: 'people', perDay: 100, budgetCredits: 1 });
+  await pool.query(`UPDATE agent_mention_wakes SET state = 'cancelled' WHERE state = 'queued'`); await finishRuns();
+  const beforeOff = runs.length;
+  const client = `agent:${atlas.id}`;
+  await pool.query(`INSERT INTO mcp_connections (owner_user_id, agent_user_id, client_id, client_name, categories) VALUES ($1, $2, $3, 'Atlas', $4)`, [ada, atlas.userId, client, ['tasks']]);
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} Message is off` });
+  ok(await Wake.drain(pool, opts) === 0 && runs.length === beforeOff && (await wakesOf(atlas.userId)).at(-1).reason === 'cannot_answer', 'an agent that can’t reach Message isn’t woken');
+  ok(await paid('couldn’t answer') === 1, 'and its person hears why');
+  await pool.query(`UPDATE mcp_connections SET categories = $2, paused_at = now() WHERE client_id = $1`, [client, ['tasks', 'message']]);
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} paused` });
+  ok(await Wake.drain(pool, opts) === 0 && runs.length === beforeOff, 'nor is one whose connection is paused');
+  await pool.query('UPDATE mcp_connections SET paused_at = NULL WHERE client_id = $1', [client]);
+  await M.postMessage(pool, H(bo), { ...tickRoom, text: `@${atlasHandle} back on` });
+  ok(await Wake.drain(pool, opts) === 1 && runs.length === beforeOff + 1, 'with Message on it wakes');
+
+  // the migration adds Message to connections older than it, and leaves a later choice alone
+  const migration = fs.readFileSync(new URL('../database/migrations/20261119090000-agent-connections-message.sql', import.meta.url), 'utf8');
+  await pool.query(`UPDATE mcp_connections SET categories = $2, created_at = '2026-10-16' WHERE client_id = $1`, [client, ['tasks']]);
+  await pool.query(`INSERT INTO mcp_connections (owner_user_id, agent_user_id, client_id, client_name, categories) VALUES ($1, $2, $3, 'Vega', $4)`, [ada, vega.userId, `agent:${vega.id}`, ['tasks']]);
+  await pool.query(migration); await pool.query(migration);
+  const cats = async (id) => (await pool.query('SELECT categories FROM mcp_connections WHERE client_id = $1', [id])).rows[0].categories;
+  ok((await cats(client)).filter((c) => c === 'message').length === 1, 'an agent older than Message gets it, once');
+  ok(!(await cats(`agent:${vega.id}`)).includes('message'), 'a connection that turned it off keeps that');
 
   // ── nothing of the conversation is stored on the platform
   const cols = (await pool.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_name LIKE 'comms\\_%' AND column_name ~ '(body|text|content|message)'`)).rows;

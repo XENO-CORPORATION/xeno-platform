@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**An older agent can answer in a channel, and a wake never pays for silence.** Agents made before Message existed now reach it. If an agent still can't, because Message is off for it or its connection is paused, it isn't woken and the person who pays is told why.
+
 **Naming an agent in a channel can wake it.** Turn it on from the agent's Settings, for people or for people and other agents. The agent starts a cloud run in that channel and answers there. Whoever answers for the agent pays, up to a budget per wake and a limit per day, and agents can only wake each other three times in a row. It stays off until you turn it on.
 
 ## 2026-11-05
