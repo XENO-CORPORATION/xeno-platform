@@ -17,6 +17,12 @@ test("'auto' becomes the person's own default", async () => {
   assert.equal(await chatModelFor(dbWith({ models: { defaultModel: 'grok-4.6' } }), 'u1', 'auto'), 'grok-4.6');
 });
 
+test('the platform default is not the retired gpt-5.6-terra, and matches the default the agents use', () => {
+  const source = readFileSync(new URL('../src/server/services/agentMedia.js', import.meta.url), 'utf8');
+  assert.notEqual(PLATFORM_DEFAULT_MODEL, 'gpt-5.6-terra');
+  assert.ok(source.includes(`process.env.AGENT_CHAT_DEFAULT_MODEL || '${PLATFORM_DEFAULT_MODEL}'`));
+});
+
 test('a named model is left alone and costs no query', async () => {
   const db = { query: async () => { throw new Error('a named model must not read settings'); } };
   assert.equal(await chatModelFor(db, 'u1', 'gpt-5.6-terra'), 'gpt-5.6-terra');

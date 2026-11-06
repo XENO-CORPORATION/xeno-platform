@@ -1,5 +1,5 @@
-/** The chat's own first choice (src/components/playground/Chat/ChatWithLLM.tsx DEFAULT_MODEL). Keep the two the same. */
-export const PLATFORM_DEFAULT_MODEL = 'gpt-5.6-terra';
+/** Used when nobody named a model, so it must be one the gateway serves: it never redirects a retired id. */
+export const PLATFORM_DEFAULT_MODEL = 'gpt-6.1-sol';
 /**
  * The model new work in `area` uses when none is named: the area's own (settings areas.<id>.model), else the
  * person's default (settings models.defaultModel), else the platform's. Decided here, on the server, so a client
