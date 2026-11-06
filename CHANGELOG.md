@@ -5,6 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**A reply reads in the order it was written.** An image card, a generated image or a code run used to sit above all of the reply's text, even when the model wrote the text first, so "the brief below" appeared under the card it described. Each one now stays where it happened, while the answer streams and after a reload. Chats from before this keep their image cards under the text; older code runs stay where they were, because nothing recorded where they happened.
+
+**The Generate button stops flickering.** A waiting image card kept switching between "Generate · up to 10 credits" and a grey "Pricing…", because every status check asked for a new price. It now gets one price per request, renews it quietly before it runs out, and only shows "Pricing…" when you change a setting. If a request can't be priced, it says so and stays said, with "Price it again" beside it.
+
 **The project canvas is live.** People on the same canvas see each other, their cursors and each other's changes as they happen, and a card being moved moves on everyone's screen. Two people can work at once: changes to different cards both land, nobody gets a conflict warning, and it's saved once. What changes elsewhere in the project, by a person or an agent, reaches the open canvas within a moment. Adding an existing file or chat to a project's canvas now adds it to the project too.
 
 **Work from the project's canvas.** On a project's canvas, New doc writes a real document into the project's Files, New chat starts a chat in the project, and Image generates into the project after showing you the most it can cost. Each is the same record you'd see anywhere else, not a copy. Select a task card to assign it.

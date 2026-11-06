@@ -72,6 +72,8 @@ export interface ChatTurnImageStep {
   /** That image call's own tokens, as the gateway reported them. Absent when it did not. */
   usage?: ChatTurnImageUsage;
   error?: string;
+  /** Where in the answer it happened: see `turnBodyParts`. */
+  textAt?: number;
 }
 
 export interface ChatTurnImageUsage { input: number; output: number; total: number }
@@ -97,6 +99,8 @@ export interface ChatTurnCodeStep {
   stderr?: string;
   files?: ChatTurnCodeFile[];
   error?: string;
+  /** Where in the answer it happened: see `turnBodyParts`. */
+  textAt?: number;
 }
 
 /** Caps mirror `utils/chatTurnRecord.js` CODE_LIMITS: what the server accepts is what the client records. */
@@ -123,7 +127,7 @@ export interface ChatTurnQuestionStep {
 /** Caps mirror `utils/chatTurnRecord.js` QUESTION_LIMITS. */
 export const QUESTION_LIMITS = { question: 300, option: 300, minOptions: 2, maxOptions: 6, toolCallId: 128 } as const;
 
-export interface ChatTurnGenerationStep { id: string; kind: 'generation'; generationId: string; type: 'image' | 'video' | 'audio' | '3d'; startedAt: number; endedAt?: number; }
+export interface ChatTurnGenerationStep { id: string; kind: 'generation'; generationId: string; type: 'image' | 'video' | 'audio' | '3d'; startedAt: number; endedAt?: number; textAt?: number; }
 /** Work handed to an agent from this chat: a task delegated to it (services/chatHandoff.js). The card reads the task live. */
 export interface ChatTurnHandoffStep { id: string; kind: 'handoff'; taskKey: string; agentId: string; agentName: string; startedAt: number; endedAt?: number; }
 /**
@@ -435,10 +439,11 @@ export function closeTurnRecord(record: ChatTurnRecord, endedAt = Date.now()): C
   };
 }
 
+const keptTextAt = (value: unknown): { textAt?: number } => (Number.isSafeInteger(value) && (value as number) >= 0 ? { textAt: value as number } : {});
 /** Read a stored `turn` column back; anything that is not a v1 record is treated as absent. */
 function asGenerationStep(raw: unknown): ChatTurnGenerationStep | null {
   const s = raw as Partial<ChatTurnGenerationStep> | null;
-  return s && s.kind === 'generation' && typeof s.id === 'string' && typeof s.generationId === 'string' && /^[0-9a-f-]{36}$/i.test(s.generationId) && ['image','video','audio','3d'].includes(s.type || '') && typeof s.startedAt === 'number' && s.startedAt > 0 ? {id:s.id,kind:'generation',generationId:s.generationId,type:s.type!,startedAt:s.startedAt} : null;
+  return s && s.kind === 'generation' && typeof s.id === 'string' && typeof s.generationId === 'string' && /^[0-9a-f-]{36}$/i.test(s.generationId) && ['image','video','audio','3d'].includes(s.type || '') && typeof s.startedAt === 'number' && s.startedAt > 0 ? {id:s.id,kind:'generation',generationId:s.generationId,type:s.type!,startedAt:s.startedAt,...keptTextAt(s.textAt)} : null;
 }
 export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -462,6 +467,7 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
         ...(asModelId(image.model) ? { model: image.model } : {}),
         ...(asImageUsage(image.usage) ? { usage: asImageUsage(image.usage) } : {}),
         ...(typeof image.error === 'string' ? { error: image.error } : {}),
+        ...keptTextAt(image.textAt),
       }];
     }
     if (raw && typeof raw === 'object' && (raw as ChatTurnCodeStep).kind === 'code') {
@@ -486,6 +492,7 @@ export function normalizeStoredTurn(value: unknown): ChatTurnRecord | undefined 
         ...(typeof c.stderr === 'string' ? { stderr: c.stderr.slice(0, CODE_LIMITS.stderr) } : {}),
         ...(files.length ? { files } : {}),
         ...(typeof c.error === 'string' ? { error: c.error } : {}),
+        ...keptTextAt(c.textAt),
       }];
     }
     if (raw && typeof raw === 'object' && (raw as ChatTurnBrowserStep).kind === 'browser') {
@@ -536,6 +543,125 @@ export const turnImages = (turn: ChatTurnRecord | undefined): ChatTurnImageStep[
 /** The code runs a turn made, in order — what the reply draws as code-execution blocks under the head. */
 export const turnCodeSteps = (turn: ChatTurnRecord | undefined): ChatTurnCodeStep[] =>
   (turn?.steps ?? []).filter(isCodeStep);
+
+/*
+ * Where a step sits in the reply's text (2026-11-06).
+ *
+ * A turn stores its words as one string and its steps as a list, so nothing said which words came
+ * before an image or a run: the reply drew every step above all of its text, and "the brief below"
+ * sat under the card it described. `textAt` is the place: how much of the answer had been written
+ * when the step started. It is taken from the stream as the step arrives, moved onto the finished
+ * answer when the turn lands (`anchorTurnSteps`), and read back unchanged after a reload.
+ */
+export type ChatTurnBodyStep = ChatTurnImageStep | ChatTurnCodeStep | ChatTurnGenerationStep;
+const isPlacedStep = (step: ChatTurnStep): step is ChatTurnBodyStep => step.kind === 'image' || step.kind === 'code' || step.kind === 'generation';
+
+/** Note how much text was written when `after` gained its new steps. Steps it already had keep their place. */
+export function stampTextAt(before: ChatTurnRecord, after: ChatTurnRecord, textAt: number): ChatTurnRecord {
+  if (after === before) return after;
+  const known = new Set(before.steps.map((step) => step.id));
+  return { ...after, steps: after.steps.map((step) => (!known.has(step.id) && isPlacedStep(step) ? { ...step, textAt } : step)) };
+}
+
+/** How many characters of the text before a place are looked for in the finished answer: long first, then shorter. */
+const ANCHOR_LENGTHS = [48, 24, 12];
+
+/**
+ * Move each step from the streamed text onto the finished answer. They differ: the answer is parsed
+ * (thinking tags and markers go, the ends are trimmed) and can carry citation markers, so an offset
+ * is carried across by the words just before it.
+ */
+export function anchorTurnSteps(record: ChatTurnRecord, streamed: string, answer: string): ChatTurnRecord {
+  if (streamed === answer) return record;
+  const anchored = (at: number): number => {
+    if (!streamed.slice(at).trim()) return answer.length;    // nothing was written after it
+    const before = streamed.slice(0, at).trimEnd();
+    if (!before.trim()) return 0;
+    for (const length of ANCHOR_LENGTHS) {
+      const tail = before.slice(-length).trimStart();
+      let nearest = -1;
+      for (let found = answer.indexOf(tail); found !== -1; found = answer.indexOf(tail, found + 1)) {
+        const end = found + tail.length;
+        if (nearest === -1 || Math.abs(end - at) < Math.abs(nearest - at)) nearest = end;
+      }
+      if (nearest !== -1) return nearest;
+    }
+    return Math.min(at, answer.length);
+  };
+  return { ...record, steps: record.steps.map((step) => (isPlacedStep(step) && step.textAt !== undefined ? { ...step, textAt: anchored(step.textAt) } : step)) };
+}
+
+/** The end of the code fence `at` falls inside, or `at` itself when it is outside every fence. */
+function pastCodeFence(text: string, at: number): number {
+  let opened: { index: number; mark: string } | null = null;
+  for (const match of text.matchAll(/^ {0,3}(`{3,}|~{3,})/gm)) {
+    const mark = match[1];
+    if (!opened) { opened = { index: match.index, mark }; continue; }
+    if (mark[0] !== opened.mark[0] || mark.length < opened.mark.length) continue;
+    const lineEnd = text.indexOf('\n', match.index);
+    const end = lineEnd === -1 ? text.length : lineEnd;
+    if (at > opened.index && at < end) return end;
+    opened = null;
+  }
+  return opened && at > opened.index ? text.length : at;
+}
+
+/**
+ * Where a step really goes: at `at`, or at the next paragraph break if the text was edited since and
+ * `at` now falls inside a paragraph or a code block. Text is only ever cut between its blocks.
+ */
+function blockBoundary(text: string, at: number): number {
+  const place = pastCodeFence(text, Math.min(Math.max(at, 0), text.length));
+  if (place === 0 || place === text.length || /^[ \t]*\r?\n/.test(text.slice(place)) || /\n[ \t]*\n[ \t]*$/.test(text.slice(Math.max(0, place - 16), place))) return place;
+  const blank = /\n[ \t]*\n/g;
+  blank.lastIndex = place;
+  const next = blank.exec(text);
+  return next ? pastCodeFence(text, next.index) : text.length;
+}
+
+/** A step recorded before `textAt` existed. A proposal has always ended its turn, so all its text came first. */
+const stepPlace = (step: ChatTurnBodyStep | ChatTurnHandoffStep, length: number): number => {
+  if (step.kind === 'handoff') return 0;
+  return step.textAt ?? (step.kind === 'generation' ? length : 0);
+};
+
+export type TurnBodyPart =
+  | { kind: 'text'; text: string; start: number; firstLine: number }
+  | { kind: 'images'; steps: ChatTurnImageStep[] }
+  | { kind: 'code'; steps: ChatTurnCodeStep[] }
+  | { kind: 'generation'; step: ChatTurnGenerationStep }
+  | { kind: 'handoff'; step: ChatTurnHandoffStep };
+
+/**
+ * The reply's body in the order it happened: runs of text with the turn's steps between them.
+ *
+ * `firstLine` is how many lines of the answer come before a run of text, so a code block keeps the
+ * line number it has in the whole answer: that number is how its edit finds it again.
+ */
+export function turnBodyParts(turn: ChatTurnRecord | undefined, answer: string): TurnBodyPart[] {
+  const placed = (turn?.steps ?? [])
+    .filter((step): step is ChatTurnBodyStep | ChatTurnHandoffStep => isPlacedStep(step) || step.kind === 'handoff')
+    .map((step) => ({ step, at: blockBoundary(answer, stepPlace(step, answer.length)) }));
+  const parts: TurnBodyPart[] = [];
+  const addText = (start: number, end: number) => {
+    const text = answer.slice(start, end);
+    if (text.trim()) parts.push({ kind: 'text', text, start, firstLine: answer.slice(0, start).split('\n').length - 1 });
+  };
+  let written = 0;
+  for (const at of [...new Set(placed.map((entry) => entry.at))].sort((a, b) => a - b)) {
+    addText(written, at);
+    written = at;
+    for (const { step, at: place } of placed) {
+      if (place !== at) continue;
+      const last = parts[parts.length - 1];
+      if (step.kind === 'image') { if (last?.kind === 'images') last.steps.push(step); else parts.push({ kind: 'images', steps: [step] }); }
+      else if (step.kind === 'code') { if (last?.kind === 'code') last.steps.push(step); else parts.push({ kind: 'code', steps: [step] }); }
+      else parts.push({ kind: step.kind, step } as TurnBodyPart);
+    }
+  }
+  addText(written, answer.length);
+  return parts;
+}
 
 /** Whether a message has anything for the transcript head to show. */
 export const turnHasRail = (turn: ChatTurnRecord | undefined, thinking: string | undefined): boolean =>

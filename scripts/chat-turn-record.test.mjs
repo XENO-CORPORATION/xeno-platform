@@ -18,6 +18,22 @@ const good = () => ({
   ],
 });
 
+test('a step keeps its place in the answer, and a bad one is refused', () => {
+  const GEN = '33333333-3333-4333-8333-333333333333';
+  const steps = [
+    { id: 'generation:1', kind: 'generation', generationId: GEN, type: 'image', startedAt: 1100, textAt: 42 },
+    { id: 'image-1', kind: 'image', prompt: 'p', aspectRatio: '1:1', startedAt: 1100, textAt: 7 },
+    { id: 'code-1', kind: 'code', language: 'python', code: 'x', startedAt: 1100, textAt: 0 },
+  ];
+  const kept = normalizeTurnRecord({ ...good(), steps });
+  assert.equal(kept.ok, true);
+  assert.deepEqual(kept.turn.steps.map((step) => step.textAt), [42, 7, 0]);
+  for (const step of steps) {
+    assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...step, textAt: undefined }] }).turn.steps[0].textAt, undefined, 'older records have none');
+    for (const bad of [-1, 1.5, '4', 10_000_001]) assert.equal(normalizeTurnRecord({ ...good(), steps: [{ ...step, textAt: bad }] }).ok, false, `${step.kind} refuses ${bad}`);
+  }
+});
+
 test('absent is fine; a valid record comes back canonical', () => {
   assert.deepEqual(normalizeTurnRecord(undefined), { ok: true, turn: null });
   assert.deepEqual(normalizeTurnRecord(null), { ok: true, turn: null });

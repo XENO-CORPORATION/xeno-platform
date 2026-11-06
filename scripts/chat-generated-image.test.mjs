@@ -158,9 +158,9 @@ try {
   // ── the chat really mounts it, from the turn record, and the old detector is gone ────────────
   // the working tree is CRLF on Windows and LF in git; read the source in one shape either way
   const chat = code(readFileSync('src/components/playground/Chat/ChatWithLLM.tsx', 'utf8').replace(/\r\n/g, '\n'));
-  check('ChatWithLLM renders ChatGeneratedImages from the turn record', /turnImages\(message\.turn\)\.map\(\(step\) => \(\{[\s\S]{0,3000}<ChatGeneratedImages/.test(chat));
+  check('ChatWithLLM renders ChatGeneratedImages from the turn record', /part\.kind === 'images'\) return \([\s\S]{0,400}<ChatGeneratedImages/.test(chat));
   check('ONE renderer for every generated image: the old square container, its dot-matrix placeholder and its hard-coded model badge are gone', !/<ImageContainer|DotMatrixImagePlaceholder|GPT Image 2/.test(chat));
-  check('an older conversation\'s single saved image is drawn by the same frame', /message\.generatedImageAsset \|\| message\.imageData\)\) \{[\s\S]{0,2000}asset: message\.generatedImageAsset/.test(chat));
+  check('an older conversation\'s single saved image is drawn by the same frame', /message\.generatedImageAsset \|\| message\.imageData\)\) return null;[\s\S]{0,2000}asset: message\.generatedImageAsset/.test(chat));
   check('the live image events fold into the turn record and keep the preview', /event\.type === 'image_start' \|\| event\.type === 'image_result' \|\| event\.type === 'image_error'/.test(chat) && /imagePreviews\[`image-\$\{/.test(chat));
   check('the streamed save stores the turn\'s images as attachments, so a reload has them', /turnImages\(updatedMessage\.turn\)\.some\(\(step\) => step\.assetId\)[\s\S]{0,120}attachments: messageLibraryAttachments\(updatedMessage\)/.test(chat));
   check('the keyword image detector is gone — an image request is a chat turn the model decides', !/extractedDirectPrompt|isPotentialImageRefinement|const generateImage =/.test(chat));

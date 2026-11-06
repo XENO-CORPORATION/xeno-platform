@@ -1,7 +1,8 @@
 // The chat's image-approval card (GenerationRecord.tsx, design 2026-10-24), the real component in a real browser
 // against a stand-in /api/generations: the settings open into the model's own options; changing one prices exactly
 // that request again; approving sends the person's settings and the card follows to the version that ran; Cancel
-// leaves nothing generated. AGENT_SHOTS=<dir> saves screenshots.
+// leaves nothing generated. A waiting card prices each request once and holds still while it polls, a price about to
+// run out is renewed in place, and a request that cannot be priced says so once. AGENT_SHOTS=<dir> saves screenshots.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -13,7 +14,7 @@ import puppeteer from 'puppeteer';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(repo, 'scripts', 'harness', '.generation-card');
-const PROPOSAL = '11111111-1111-4111-8111-111111111111', MINE = '22222222-2222-4222-8222-222222222222';
+const PROPOSAL = '11111111-1111-4111-8111-111111111111', MINE = '22222222-2222-4222-8222-222222222222', OTHER = PROPOSAL;
 const prompt = 'A sleek, sophisticated humanoid robot standing in a modern high-tech research laboratory. The robot features polished white and brushed metal chassis panels, subtle glowing cyan LED accents along its joints and visor, and intricate mechanical details. Cinematic lighting with soft ambient blue and warm rim light, sharp focus, 8k resolution, highly detailed digital art.';
 const request = (settings) => ({ type: 'image', model: 'gpt-image-2.5-sunburst', prompt, settings, referenceAssetIds: [], projectId: null, conversationId: null, area: null });
 
@@ -32,7 +33,13 @@ test('the image-approval card: options from the model, re-priced on change, appr
     let body = ''; for await (const c of req) body += c;
     const json = (v, s = 200) => { res.statusCode = s; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(v)); };
     if (p === '/api/generations/catalog') return json({ types: [{ type: 'image', available: true, models: [{ id: 'gpt-image-2.5-sunburst', type: 'image', endpoint: '/v1/images/generations', settings: { ratio: { values: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'], default: '1:1' }, quality: { values: ['low', 'medium', 'high', 'auto'], default: 'medium' } }, references: { max: 8 } }], tariff: null }] });
-    if (p === '/api/generations/quote') { const r = JSON.parse(body); calls.push(['quote', r.settings]); return json({ quoteToken: 'q-' + r.settings.ratio + '-' + r.settings.quality, requestHash: 'h-' + r.settings.ratio + '-' + r.settings.quality, tariffRevision: 't1', maxRetailCredits: r.settings.quality === 'high' ? 10 : 6, expiresAt: new Date(Date.now() + 300000).toISOString() }); }
+    if (p === '/api/generations/quote') {
+      const r = JSON.parse(body); calls.push(['quote', r.settings]);
+      if (state.refuseQuotes) return json({ error: { code: 'quote_refused', message: 'This model cannot be priced right now.' } }, 503);
+      const life = state.shortQuotes?.shift();
+      await new Promise((done) => setTimeout(done, 80));   // a real round trip: an old card shows Pricing for this long
+      return json({ quoteToken: 'q-' + r.settings.ratio + '-' + r.settings.quality, requestHash: 'h-' + r.settings.ratio + '-' + r.settings.quality, tariffRevision: 't1', maxRetailCredits: r.settings.quality === 'high' ? 10 : 6, expiresAt: new Date(Date.now() + (life ?? 300000)).toISOString() });
+    }
     if (p === `/api/generations/${PROPOSAL}/approve`) {
       const b = JSON.parse(body); calls.push(['approve', b]);
       state.mine = { id: MINE, type: 'image', state: 'queued', request: request(b.settings), requestHash: b.requestHash, version: 1, quote: {}, resultAssetIds: [], replacedBy: null };
@@ -51,6 +58,13 @@ test('the image-approval card: options from the model, re-priced on change, appr
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   const shot = async (name) => { if (process.env.AGENT_SHOTS) { await mkdir(process.env.AGENT_SHOTS, { recursive: true }); await page.screenshot({ path: join(process.env.AGENT_SHOTS, `generation-card-${name}.png`) }); } };
   const text = () => page.evaluate(() => document.body.innerText);
+  const quoteCalls = () => calls.filter((c) => c[0] === 'quote').length;
+  /** What the Generate button said over the next `ms`, and how many prices were asked for meanwhile. */
+  const watch = async (ms) => {
+    const before = quoteCalls(), said = new Set();
+    for (const until = Date.now() + ms; Date.now() < until; await new Promise((r) => setTimeout(r, 15))) said.add(await page.evaluate(() => document.querySelector('.chat-q-gen-go')?.textContent ?? ''));
+    return { said: [...said], asked: quoteCalls() - before };
+  };
   try {
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(() => /Generate · up to 10 credits/.test(document.body.innerText), { timeout: 15000 });
@@ -58,6 +72,10 @@ test('the image-approval card: options from the model, re-priced on change, appr
     assert.match(t, /Image\s*Gpt Image 2\.5 Sunburst/); assert.match(t, /Awaiting approval/i); assert.match(t, /Nothing has been generated or charged yet\./);
     assert.ok(await page.$('.chat-q-gen-mark[data-live]') && await page.$('.chat-q-gen-state[data-live]'), 'the square pulses and the status shimmers while it waits');
     await shot('waiting');
+    // The status is read every 2.5 s. Three reads, the same request: no new price, and the button never moves.
+    const still = await watch(8000);
+    assert.equal(still.asked, 0, `${still.asked} prices for a request that did not change`);
+    assert.deepEqual(still.said, ['Generate · up to 10 credits'], `the button read: ${still.said.join(' / ')}`);
     // Ratio opens into the model's own ratios, each drawn at its proportion
     await page.click('.chat-q-gen-pick button[data-pick]');
     const opts = await page.$$eval('.chat-q-gen-menu [role="option"]', (els) => els.map((e) => [e.textContent.trim(), !!e.querySelector('.chat-q-gen-frame i'), e.getAttribute('aria-selected')]));
@@ -73,14 +91,36 @@ test('the image-approval card: options from the model, re-priced on change, appr
     await page.waitForFunction(() => /Generate · up to 6 credits/.test(document.body.innerText));
     assert.deepEqual(calls.filter((c) => c[0] === 'quote').pop()[1], { ratio: '16:9', quality: 'medium' }, 'the price is for exactly the settings shown');
     await shot('changed');
+    const pricedBeforeApproval = quoteCalls();
     await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => /^Generate/.test(b.textContent)).click());
     await page.waitForFunction(() => /Queued/i.test(document.body.innerText) && !/Nothing has been generated/.test(document.body.innerText), { timeout: 15000 });
+    assert.equal(quoteCalls(), pricedBeforeApproval, 'approving asks for no further price');
     const approve = calls.find((c) => c[0] === 'approve')[1];
     assert.deepEqual(approve.settings, { ratio: '16:9', quality: 'medium' }); assert.equal(approve.quoteToken, 'q-16:9-medium');
     t = await text();
     assert.match(t, /Ratio\s*16:9/); assert.equal(await page.$('.chat-q-gen-pick'), null, 'once approved the settings are fixed: plain chips, no menus');
     assert.ok(await page.$(`.chat-q-gen-wrap[data-generation-id="${MINE}"]`), 'the card now shows the person’s own generation');
     await shot('approved');
+    assert.deepEqual(errors, []);
+
+    // A price that is about to run out is renewed in place: the button never goes back to Pricing.
+    state.proposal = { ...state.proposal, state: 'awaiting_approval', replacedBy: null, id: OTHER }; state.shortQuotes = [41000];
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.waitForFunction(() => /Generate · up to 10 credits/.test(document.body.innerText), { timeout: 15000 });
+    const renewed = await watch(14000);
+    assert.equal(renewed.asked, 1, `renewed ${renewed.asked} times in 14 s`);
+    assert.deepEqual(renewed.said, ['Generate · up to 10 credits'], `the button read: ${renewed.said.join(' / ')}`);
+
+    // A request that cannot be priced says so once, stays said through the status reads, and can be asked again.
+    state.refuseQuotes = true;
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.waitForFunction(() => /cannot be priced right now/.test(document.body.innerText), { timeout: 15000 });
+    const failing = await watch(6000);
+    assert.equal(failing.asked, 0, 'a refusal is not retried on its own');
+    assert.match(await text(), /cannot be priced right now/);
+    state.refuseQuotes = false;
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => /Price it again/.test(b.textContent)).click());
+    await page.waitForFunction(() => /Generate · up to 10 credits/.test(document.body.innerText) && !/cannot be priced/.test(document.body.innerText), { timeout: 15000 });
     assert.deepEqual(errors, []);
   } finally { await browser.close(); server.close(); }
 });

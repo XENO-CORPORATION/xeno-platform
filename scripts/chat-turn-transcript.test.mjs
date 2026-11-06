@@ -42,7 +42,7 @@ const vite = await createServer({
 let dom;
 try {
   const turnModule = await vite.ssrLoadModule('/src/components/playground/Chat/chatTurnTranscript.ts');
-  const { applyTurnEvent, closeTurnRecord, newTurnRecord, normalizeStoredTurn, toTranscriptMessage, turnHasRail, turnCodeSteps } = turnModule;
+  const { anchorTurnSteps, applyTurnEvent, closeTurnRecord, newTurnRecord, normalizeStoredTurn, stampTextAt, toTranscriptMessage, turnBodyParts, turnHasRail, turnCodeSteps } = turnModule;
 
   // ── the record, pure ──────────────────────────────────────────────────────────────────
   {
@@ -109,6 +109,56 @@ try {
     check('a code run is a run_code tool call, succeeded, in a segment', codeMsg.toolCalls.length === 1 && codeMsg.toolCalls[0].toolName === 'run_code' && codeMsg.toolCalls[0].status === 'done' && codeMsg.toolCalls[0].outcome === 'succeeded' && codeMsg.segments[0].toolCallId === codeMsg.toolCalls[0].id);
     const liveCode = toTranscriptMessage({ id: 'mcode2', streaming: true, replyStarted: false, turn: applyTurnEvent(newTurnRecord(1000), { type: 'code_start', index: 0, language: 'go', code: 'x' }, 1100) });
     check('a running code step is a running run_code tool call', liveCode.toolCalls[0].toolName === 'run_code' && liveCode.toolCalls[0].status === 'running');
+  }
+
+  // ── a reply's body, in the order it happened (2026-11-06) ──────────────
+  {
+    const GEN = '33333333-3333-4333-8333-333333333333';
+    const generation = { id: GEN, type: 'image' };
+    const shape = (parts) => parts.map((p) => (p.kind === 'text' ? `text:${p.text.trim()}` : p.kind === 'images' || p.kind === 'code' ? `${p.kind}:${p.steps.length}` : p.kind));
+    const fold = (events) => {
+      let record = newTurnRecord(1000), text = '';
+      for (const event of events) {
+        if (event.type === 'delta') { text += event.text; continue; }
+        record = stampTextAt(record, applyTurnEvent(record, event, 2000), text.length);
+      }
+      return { record, text };
+    };
+    const owner = fold([{ type: 'delta', text: "I've written the brief below." }, { type: 'generation_proposal', generation }]);
+    check('a card proposed after text comes after it', JSON.stringify(shape(turnBodyParts(owner.record, owner.text))) === JSON.stringify(["text:I've written the brief below.", 'generation']));
+    const again = applyTurnEvent(owner.record, { type: 'generation_proposal', generation }, 3000);
+    check('a step that is seen again keeps its first place', stampTextAt(owner.record, again, 999) === owner.record);
+    const back = normalizeStoredTurn(JSON.parse(JSON.stringify(closeTurnRecord(owner.record, 4000))));
+    check('the place survives a save and a reload', back.steps[0].textAt === owner.text.length && JSON.stringify(shape(turnBodyParts(back, owner.text))) === JSON.stringify(["text:I've written the brief below.", 'generation']));
+    const parts = fold([
+      { type: 'delta', text: 'One.' }, { type: 'code_start', index: 0, language: 'python', code: 'a' }, { type: 'code_result', index: 0, status: 'success' }, { type: 'code_start', index: 1, language: 'python', code: 'b' },
+      { type: 'delta', text: '\n\nTwo.' }, { type: 'image_start', index: 0, prompt: 'p', aspectRatio: '1:1' }, { type: 'image_start', index: 1, prompt: 'q', aspectRatio: '1:1' },
+      { type: 'delta', text: '\n\nThree.' }, { type: 'generation_proposal', generation },
+    ]);
+    check('several parts keep their order, and neighbours of a kind stay one group', JSON.stringify(shape(turnBodyParts(parts.record, parts.text))) === JSON.stringify(['text:One.', 'code:2', 'text:Two.', 'images:2', 'text:Three.', 'generation']));
+    const first = fold([{ type: 'code_start', index: 0, language: 'python', code: 'a' }, { type: 'delta', text: 'After the run.' }]);
+    check('text after a step stays after it', JSON.stringify(shape(turnBodyParts(first.record, first.text))) === JSON.stringify(['code:1', 'text:After the run.']));
+    const code = { id: 'code-1', kind: 'code', language: 'python', code: 'a', startedAt: 1 };
+    const old = (step) => ({ ...newTurnRecord(1000), steps: [step] });
+    check('an older card goes under its text: a proposal has always ended its turn', JSON.stringify(shape(turnBodyParts(old({ id: 'g', kind: 'generation', generationId: GEN, type: 'image', startedAt: 1 }), 'Words.'))) === JSON.stringify(['text:Words.', 'generation']));
+    check('an older run stays above the text, where nothing says otherwise', JSON.stringify(shape(turnBodyParts(old(code), 'Words.'))) === JSON.stringify(['code:1', 'text:Words.']));
+    check('a reply with no steps is one run of text, whole', JSON.stringify(turnBodyParts(undefined, 'Just words.')) === JSON.stringify([{ kind: 'text', text: 'Just words.', start: 0, firstLine: 0 }]));
+    const answer = 'Line one.\n\n```python\nprint(1)\n```\n\nLine six.';
+    const cut = turnBodyParts(old({ ...code, textAt: answer.indexOf('print') }), answer);
+    check('a place inside a code block moves past it, so a fence is never cut', JSON.stringify(shape(cut)) === JSON.stringify(['text:' + answer.slice(0, answer.lastIndexOf('\n\n')).trim(), 'code:1', 'text:Line six.']));
+    const edited = turnBodyParts(old({ ...code, textAt: 3 }), 'Long first paragraph.\n\nSecond.');
+    check('a place inside a paragraph moves to its end', JSON.stringify(shape(edited)) === JSON.stringify(['text:Long first paragraph.', 'code:1', 'text:Second.']));
+    check('a place past the end of edited text goes at the end', JSON.stringify(shape(turnBodyParts(old({ ...code, textAt: 500 }), 'Short.'))) === JSON.stringify(['text:Short.', 'code:1']));
+    const lines = turnBodyParts(old({ ...code, textAt: 'A.\n\nB.'.length }), 'A.\n\nB.\n\n```js\nx\n```');
+    check('a run of text knows its first line, so a code block keeps the number its edit finds it by', lines[2].kind === 'text' && lines[2].firstLine === 2 && lines[2].text.startsWith('\n\n'));
+    const streamed = '<think>plan</think>  Before the run, in full.\n\nAfter the run.';
+    const moved = anchorTurnSteps(old({ ...code, textAt: streamed.indexOf('\n\nAfter') }), streamed, 'Before the run, in full.\n\nAfter the run.');
+    check('the place moves with the words when the finished answer differs from the stream', JSON.stringify(shape(turnBodyParts(moved, 'Before the run, in full.\n\nAfter the run.'))) === JSON.stringify(['text:Before the run, in full.', 'code:1', 'text:After the run.']));
+    const repeated = 'Same words.\n\nSame words.\n\nEnd.';
+    const nearest = anchorTurnSteps(old({ ...code, textAt: '  Same words.'.length }), '  ' + repeated, repeated);
+    check('words said twice resolve to the nearer place', nearest.steps[0].textAt === 'Same words.'.length);
+    check('a step at the very end stays at the end of the finished answer', anchorTurnSteps(old({ ...code, textAt: 9 }), '  Words.  ', 'Words.').steps[0].textAt === 'Words.'.length);
+    check('a step before any words stays before them', anchorTurnSteps(old({ ...code, textAt: 0 }), ' Words.', 'Words.').steps[0].textAt === 0);
   }
 
   // ── the real component, mounted ───────────────────────────────────────────────────────
@@ -219,7 +269,7 @@ try {
   check('the user turn spans the column like the answer does — no 88 / 96 / 98 percent cap (2026-09-18)', (chat.match(/--xeno-message-max: 100%;/g) || []).length === 3 && !/--xeno-message-max: (88|96|98)%/.test(chat) && !/chat-message-editor flex w-full max-w-/.test(chat));
   check('streamed deltas are SHOWN as they arrive — the delta handler writes parsedAnswer, which is what the bubble prints', /parsedAnswer: streamedText,/.test(chat));
   check('search events grow the turn record on the placeholder', /turnRecord = applyTurnEvent\(turnRecord, event/.test(chat) && /msg\.id === localPlaceholderId \? \{ \.\.\.msg, turn: record \}/.test(chat));
-  check('the final message carries the closed record and it is persisted', /turn: closeTurnRecord\(turnRecord\)/.test(chat) && /turn: updatedMessage\.turn,/.test(chat) && /turn: msg\.turn,/.test(chat));
+  check('the final message carries the closed record and it is persisted', /turn: anchorTurnSteps\(closeTurnRecord\(turnRecord\), streamedText, finalAnswer\)/.test(chat) && /turn: updatedMessage\.turn,/.test(chat) && /turn: msg\.turn,/.test(chat));
   // 2026-09-26: parsed once into `storedTurn`, because the reload also reads which images the turn drew
   check('a stored message reads its turn back', /const storedTurn = isAi \? normalizeStoredTurn\(/.test(chat) && /turn: storedTurn,/.test(chat));
   const head = readFileSync(new URL('../src/components/playground/Chat/ChatTurnHead.tsx', import.meta.url), 'utf8');

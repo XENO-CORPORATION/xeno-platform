@@ -49,6 +49,9 @@ const EDITABLE = new Set(['ratio', 'quality', 'resolution']);
 const modelLabel = (id: string) => String(id).split('/').pop()!.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const creditWord = (n: number) => `${n} credit${n === 1 ? '' : 's'}`;
 const sameSettings = (a: Record<string, string>, b: Record<string, string>) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+/** A price is renewed this long before it runs out, and never sooner than the floor, however the clocks disagree. */
+const QUOTE_MARGIN_MS = 30_000, QUOTE_FLOOR_MS = 10_000;
+const quoteRefreshIn = (expiresAt: string) => { const left = Date.parse(expiresAt) - Date.now(); return Number.isFinite(left) ? Math.max(left - QUOTE_MARGIN_MS, QUOTE_FLOOR_MS) : QUOTE_FLOOR_MS; };
 
 // One catalogue read per page: which values each model accepts for each setting (the server validates the same list).
 let catalogOnce: Promise<GenerationCatalog> | null = null;
@@ -123,6 +126,8 @@ export function GenerationRecord({ id }: { id: string }) {
   const [quote, setQuote] = useState<GenerationQuote | null>(null);
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [error, setError] = useState('');
+  const [quoteError, setQuoteError] = useState('');
+  const [priceAgain, setPriceAgain] = useState(0);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
   const [whole, setWhole] = useState(false);
@@ -141,35 +146,41 @@ export function GenerationRecord({ id }: { id: string }) {
   }, [current, reload]);
   const settings = draft ?? record?.request.settings ?? {};
   const waiting = record?.state === 'awaiting_approval';
-  // The price of exactly what will run: the proposal, or the person's settings. A quote expires, so a stale one is
-  // fetched again rather than kept; the server re-checks the token against the request when it is approved.
-  const settingsKey = JSON.stringify(settings);
+  /*
+   * The price of exactly what will run: the proposal, or the person's settings. `quoteFor` names that request, and
+   * it is the only thing that fetches a price. 🔴 Never `record`: a waiting card reads its status every 2.5 s and each
+   * read is a new object, so an effect on it blanks the button and prices the same request again, for ever. Only a
+   * new request clears the price; a price about to run out is renewed in place, so the button does not move.
+   */
+  const quoteFor = record && waiting ? `${record.id}:${JSON.stringify(settings)}` : '';
   useEffect(() => {
-    if (!record || !waiting) return;
-    let live = true; setQuote(null);
+    setQuote(null); setQuoteError('');
+    if (!record || !quoteFor) return;
+    let live = true; let timer: ReturnType<typeof setTimeout>;
     const { requestKey: _k, ...request } = record.request as GenerationRequest & { requestKey?: string };
-    generations.quote({ ...request, settings })
-      .then((next) => { if (live) setQuote(next); })
-      .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'This request cannot be priced right now.'); });
-    return () => { live = false; };
+    const price = () => generations.quote({ ...request, settings })
+      .then((next) => { if (!live) return; setQuote(next); setQuoteError(''); timer = setTimeout(() => void price(), quoteRefreshIn(next.expiresAt)); })
+      .catch((e) => { if (live) setQuoteError(e instanceof Error ? e.message : 'This request cannot be priced right now.'); });
+    void price();
+    return () => { live = false; clearTimeout(timer); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record, waiting, settingsKey]);
+  }, [quoteFor, priceAgain]);
   const values = useModelSettings(record?.request.model);
   /**
    * One action at a time. A refused approval clears the quote rather than retrying it here: the effect above
    * re-quotes the current request, so an expired price heals itself and a request that genuinely cannot be
    * priced says so once rather than looping.
    */
-  const act = async (action: 'quote' | 'approve' | 'cancel') => {
+  const act = async (action: 'approve' | 'cancel') => {
     if (!record || busy) return;
     setBusy(true); setError('');
     try {
-      if (action === 'quote') { const { requestKey: _k, ...request } = record.request as GenerationRequest & { requestKey?: string }; setQuote(await generations.quote({ ...request, settings })); }
-      else if (action === 'approve' && quote) {
+      if (action === 'approve' && quote) {
         const changed = draft && !sameSettings(draft, record.request.settings || {});
         const next = await generations.approve(record, quote, changed ? draft! : undefined);
-        setQuote(null); setDraft(null);
-        if (next.id !== record.id) setCurrent(next.id); else { setRecord(next); setReload(n => n + 1); }
+        // following a new record clears the draft by itself; clearing it here would price the proposal once more on the way out
+        setQuote(null);
+        if (next.id !== record.id) setCurrent(next.id); else { setDraft(null); setRecord(next); setReload(n => n + 1); }
       }
       else if (action === 'cancel') { setRecord(await generations.cancel(current)); setQuote(null); setReload(n => n + 1); }
     } catch (e) {
@@ -214,11 +225,11 @@ export function GenerationRecord({ id }: { id: string }) {
       </div>
       {note && <p className="chat-q-gen-note">{note}</p>}
       <div className="chat-q-gen-actions">
-        {waiting && !quoteReady && !busy && error && <button className="chat-q-gen-text" type="button" onClick={() => void act('quote')}>Price it again</button>}
+        {waiting && !quoteReady && !busy && quoteError && <button className="chat-q-gen-text" type="button" onClick={() => setPriceAgain(n => n + 1)}>Price it again</button>}
         {(waiting || live) && <button className="chat-q-gen-text" type="button" disabled={busy} onClick={() => void act('cancel')}>Cancel</button>}
         {waiting && <button className="chat-q-gen-go" type="button" disabled={busy || !quoteReady} onClick={() => void act('approve')}>{busy ? 'Starting…' : quoteReady ? `Generate · up to ${creditWord(quote!.maxRetailCredits)}` : 'Pricing…'}</button>}
       </div>
     </div>
-    {error && <p className="chat-q-gen-error" role="alert">{error}{!waiting && <> <button type="button" className="chat-q-gen-text" onClick={() => setReload(n => n + 1)}>Reload status</button></>}</p>}
+    {(error || quoteError) && <p className="chat-q-gen-error" role="alert">{error || quoteError}{!waiting && <> <button type="button" className="chat-q-gen-text" onClick={() => setReload(n => n + 1)}>Reload status</button></>}</p>}
   </div>;
 }
