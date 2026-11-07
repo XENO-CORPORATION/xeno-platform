@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2060 actions · 237 agent capability · 1383 planned (debt) · 440 excluded · **coverage 14.6%** of the 1620 owed.
+**Total:** 2061 actions · 237 agent capability · 1384 planned (debt) · 440 excluded · **coverage 14.6%** of the 1621 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -22,7 +22,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | platform | 75 | 0 | 37 | 38 | 0% |
 | browser-shell | 31 | 0 | 31 | 0 | 0% |
 | forms | 45 | 18 | 20 | 7 | 47.4% |
-| canvas | 22 | 6 | 16 | 0 | 27.3% |
+| canvas | 23 | 6 | 17 | 0 | 26.1% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | scheduling | 22 | 4 | 12 | 6 | 25% |
 | support | 22 | 8 | 12 | 2 | 40% |
@@ -289,7 +289,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:shellSessionRoutes.js:POST /:id/signal`
 - `route:shellSessionRoutes.js:POST /join`
 
-## canvas — 16 planned
+## canvas — 17 planned
 
 - `route:canvasRoutes.js:DELETE /:id`
 - `route:officeCanvasRoutes.js:DELETE /canvases/:canvasId`
@@ -302,6 +302,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:officeCanvasRoutes.js:POST /canvases/:canvasId/share/disable`
 - `route:officeCanvasRoutes.js:POST /join/:token`
 - `route:officeCanvasRoutes.js:PUT /canvases/:canvasId`
+- `ui:platform-canvas.js:data-add`
 - `ui:platform-canvas.js:data-cv-edge`
 - `ui:platform-canvas.js:data-cv-grip`
 - `ui:platform-canvas.js:data-cv-node`

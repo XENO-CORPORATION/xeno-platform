@@ -8911,6 +8911,11 @@
       "scope": "none",
       "because": "changes only what the screen shows"
     },
+    "ui:platform-canvas.js:data-add": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "tasks:write"
+    },
     "ui:platform-canvas.js:data-cv-edge": {
       "status": "planned",
       "class": "reversible",

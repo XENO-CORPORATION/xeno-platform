@@ -50,7 +50,7 @@
     const r = await api('GET', '/api/canvases/' + encodeURIComponent(id)).catch(() => null);
     if (C.id !== id) return;
     if (!r || !r.ok) { C.state = r && r.status === 404 ? 'missing' : 'error'; return paint(); }
-    take(r.d.canvas); C.state = 'ready'; goLive(id);
+    take(r.d.canvas); C.state = 'ready'; goLive(id); loadCatalog(); window.XENO_TASKS?.people?.(C.project ? C.project.id : null).then((p) => { C.people = p || []; draw(); });
     // a project's canvas belongs to the project: an old link under Tasks lands there, with no extra Back step
     if (C.project && /\/tasks\/canvas\//.test(location.pathname)) { history.replaceState(history.state, '', `/workspace/projects/${C.project.id}/canvas/${id}${location.search}`); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); }
     try { X()?.render?.(); } catch {}
@@ -192,7 +192,7 @@
     C.view = { z, x: (w - (maxX - minX) * z) / 2 - minX * z, y: (h - (maxY - minY) * z) / 2 - minY * z };
   }
   const toBoard = (stage, cx, cy) => { const r = stage.getBoundingClientRect(); return { x: (cx - r.left - C.view.x) / C.view.z, y: (cy - r.top - C.view.y) / C.view.z }; };
-  const centre = () => { const s = document.querySelector('[data-cv-stage]'); const r = s ? s.getBoundingClientRect() : { left: 0, top: 0, width: 800, height: 600 }; return toBoard(s || { getBoundingClientRect: () => r }, r.left + r.width / 2, r.top + r.height / 2); };
+  const centre = () => { if (C.at) { const a = { ...C.at, exact: true }; C.at = null; return a; } const s = document.querySelector('[data-cv-stage]'); const r = s ? s.getBoundingClientRect() : { left: 0, top: 0, width: 800, height: 600 }; return toBoard(s || { getBoundingClientRect: () => r }, r.left + r.width / 2, r.top + r.height / 2); };
   function anchor(n, toward) {
     const cx = n.x + n.width / 2, cy = n.y + n.height / 2, dx = toward.x - cx, dy = toward.y - cy;
     if (Math.abs(dx) * n.height > Math.abs(dy) * n.width) return { x: dx > 0 ? n.x + n.width : n.x, y: cy };
@@ -216,11 +216,13 @@
   function nodeHtml(n) {
     const sel = C.sel.has(n.id) ? ' cv-n--sel' : '';
     const pos = `style="left:${n.x}px;top:${n.y}px;width:${n.width}px;height:${n.height}px"`;
-    const grips = C.can?.edit ? `<i class="cv-grip" data-cv-grip="${esc(n.id)}" title="Resize"></i><i class="cv-wire" data-cv-wire="${esc(n.id)}" title="Drag to another item to connect">${ic('plus')}</i>` : '';
+    const grips = C.can?.edit ? `${n.type === 'group' ? '' : `<i class="xn-grip xn-grip--tl" data-cv-grip="${esc(n.id)}" data-c="tl"></i><i class="xn-grip xn-grip--bl" data-cv-grip="${esc(n.id)}" data-c="bl"></i>`}<i class="${n.type === 'group' ? 'cv-grip' : 'xn-grip xn-grip--br'}" data-cv-grip="${esc(n.id)}" data-c="br"></i><i class="cv-wire" data-cv-wire="${esc(n.id)}" title="Drag to another item to connect">${ic('plus')}</i>` : '';
+    const xn = (kind, label, inner, opts = {}) => `<div class="cv-n xn xn--${kind}${opts.cls || ''}${sel}" data-cv-node="${esc(n.id)}"${opts.attr || ''} ${pos}><div class="xn-label">${ic(opts.icon || 'doc')}<b>${esc(label)}</b>${opts.em ? `<em>${esc(opts.em)}</em>` : ''}</div><div class="xn-edge"><div class="xn-obj">${inner}</div></div>${opts.noWho ? '' : whoOf(n)}${grips}</div>`;
+    if (n.type === 'media') return mediaNode(n, xn);
     if (n.type === 'group') return `<div class="cv-n cv-n--group${sel}" data-cv-node="${esc(n.id)}" ${pos}><b class="cv-group-l" data-cv-edit="${esc(n.id)}">${esc(n.label || 'Group')}</b>${grips}</div>`;
     if (n.type === 'text') {
       const body = C.editing === n.id ? `<textarea class="cv-text-ed" data-cv-text="${esc(n.id)}" aria-label="Note">${esc(n.text)}</textarea>` : `<div class="cv-text">${n.text ? (window.XENO_TASKS?.md ? window.XENO_TASKS.md(n.text, null, {}) : esc(n.text)) : '<span class="tk-dim">Double-click to write</span>'}</div>`;
-      return `<div class="cv-n cv-n--text${sel}" data-cv-node="${esc(n.id)}" ${pos}>${body}${grips}</div>`;
+      return `<div class="cv-n cv-n--text xn xn--note${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="xn-label">${ic('edit')}<b>Note</b></div><div class="xn-edge"><div class="xn-obj">${body}</div></div>${grips}</div>`;
     }
     if (n.type === 'link') { let host = n.url; try { host = new URL(n.url).host; } catch {} return `<div class="cv-n cv-n--link${sel}" data-cv-node="${esc(n.id)}" ${pos}>${ic('link')}<div><b>${esc(host)}</b><a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.url)}</a></div>${grips}</div>`; }
     if (n.ref.kind === 'tenet') {   // a XENO Corpus verdict card: the tenet's latest signed verdict, read live as this reader
@@ -228,6 +230,10 @@
       if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">Tenet</small><b>Not available</b><span class="tk-dim">Retired, or not shared with you</span>${grips}</div>`;
       const st = r.state ? { held: 'Held', lapsed: 'Lapsed', error: 'Error' }[r.state] : 'Never assayed';
       return `<div class="cv-n cv-n--task cv-n--tenet cv-n--v-${esc(r.state || 'none')}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic('check')}<small class="tk-key">${esc(r.key || 'Tenet')}</small></div><b class="cv-task-t">${esc(r.claim || '…')}</b><div class="cv-task-f"><small class="tk-dim cv-verdict">${esc(st)}${r.at ? ' · ' + esc(new Date(r.at).toLocaleDateString()) : ''}${r.superseded ? ' · superseded' : ''}</small></div>${grips}</div>`;
+    }
+    if (n.ref.kind === 'project') {
+      const r = ((C.refs || {}).project || {})[n.ref.id] || {};
+      if (!r.missing) return xn('project', '', `<div class="xn-title">${esc(r.name || '…')}</div><div class="xn-facts"><span><b>${r.openTasks ?? 0}</b> open</span><span><b>${r.doneTasks ?? 0}</b> done</span></div>`, { noWho: true, icon: 'folder' }).replace('<div class="xn-label">', '<div class="xn-label" hidden>');
     }
     if (WF[n.ref.kind]) {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, [label, icon] = WF[n.ref.kind];
@@ -241,17 +247,58 @@
     }
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
-      if (isF && r.version && /^image\/(jpeg|png|gif|webp)$/.test(String(r.type))) return `<div class="cv-n cv-n--task cv-n--image${sel}" data-cv-node="${esc(n.id)}" ${pos}><img class="cv-img" alt="${esc(r.name)}" src="/api/library/assets/${esc(r.version)}/content" draggable="false">${grips}</div>`;
+      if (isF && r.doc) return xn('doc', r.name?.replace(/\.xdoc$/, '') || 'Document', docBody(n), { icon: 'doc' });
+      if (n.ref.kind === 'chat' && !r.missing) return xn('chat', r.title || 'Chat', chatBody(n, r), { icon: 'chat' });
+      if (isF && r.version && /^image\/(jpeg|png|gif|webp)$/.test(String(r.type))) return xn('image', r.name || 'Image', `<div class="xn-media"><img alt="${esc(r.name)}" src="/api/library/assets/${esc(r.version)}/content" draggable="false"></div>`, { icon: 'image' });
       if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${isF ? 'File' : 'Chat'}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
       const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : [r.messages != null ? r.messages + (r.messages === 1 ? ' message' : ' messages') : '', r.status === 'active' ? 'active now' : r.at ? new Date(r.at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
       return `<div class="cv-n cv-n--task cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic(isF ? 'doc' : 'chat')}<small class="tk-key">${isF ? 'File' : 'Chat'}</small></div><b class="cv-task-t">${esc((isF ? r.name : r.title) || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(sub)}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
     }
     const t = C.records[n.ref.id] || { key: n.ref.id, loading: true };
     if (t.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${esc(n.ref.id)}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
-    return `<div class="cv-n cv-n--task${sel}" data-cv-node="${esc(n.id)}" data-cv-task="${esc(t.key)}" ${pos}>
-      <div class="cv-task-top"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span><small class="tk-key">${esc(t.key)}</small><small class="tk-dim">${esc(LABEL[t.status] || '')}</small>${readyBadge(t.key)}<span class="tk-sp"></span>${t.priority && t.priority !== 'none' ? `<em class="tk-pri tk-pri--${esc(t.priority)}">${esc(t.priority)}</em>` : ''}</div>
-      <b class="cv-task-t">${esc(t.title || '…')}</b>
-      <div class="cv-task-f">${t.project ? `<small class="tk-chip">${esc(t.project.name)}</small>` : ''}<span class="tk-sp"></span>${t.delegate ? `<span class="tk-face tk-face--sm tk-face--agent" title="${esc(t.delegate.name)} (agent)">${ic('bot')}</span>` : ''}${t.assignee ? `<span class="tk-face tk-face--sm" title="${esc(t.assignee.name)}">${esc(String(t.assignee.name || '?').slice(0, 2).toUpperCase())}</span>` : ''}<button class="cv-open" data-cv-open="${esc(t.key)}" title="Open ${esc(t.key)}">${ic('open')}</button></div>${grips}</div>`;
+    const step = STEPS.indexOf(t.status);
+    return xn('task', 'Task', `<div class="xn-task"><div class="xn-tk"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span>${esc(LABEL[t.status] || '')}${readyBadge(t.key)}</div><b class="cv-task-t">${esc(t.title || '…')}</b><div class="xn-steps">${STEPS.map((x, i) => `<button class="${i <= step ? 'on' : ''}" data-cv-act="step" data-arg="${esc(t.key)}|${x}" title="${esc(LABEL[x])}" aria-label="${esc(LABEL[x])}"></button>`).join('')}</div></div>`, { attr: ` data-cv-task="${esc(t.key)}"`, icon: 'check', em: t.key });
+  }
+  const STEPS = ['todo', 'in_progress', 'in_review', 'done'];
+  function whoOf(n) {
+    const task = n.type === 'xeno-ref' && n.ref.kind === 'task' ? C.records[n.ref.id] : null;
+    const p = task ? (task.delegate ? { name: task.delegate.name, agent: true } : task.assignee) : (C.people || []).find((x) => String(x.id) === String(n.who));
+    const mark = p ? esc(String(p.name || '?').slice(0, 1).toUpperCase()) : ic('plus');
+    return `<button class="xn-who ${p ? (p.agent || p.kind === 'agent' ? 'agent' : '') : 'none'}" data-cv-act="who" data-arg="${esc(n.id)}" title="${p ? 'Assigned to ' + esc(p.name) : 'Assign someone'}" aria-label="${p ? 'Assigned to ' + esc(p.name) : 'Assign someone'}"${C.can?.edit ? '' : ' disabled'}>${mark}</button>`;
+  }
+  // a picture or video made here: its prompt and versions live on the card, the files in the project
+  const fileOf = (id) => (C.refs.file || {})[id] || {};
+  const mediaOut = (m) => fileOf(m.versions[m.cur]);
+  function mediaNode(n, xn) {
+    const m = n.media, g = m.generation ? (C.refs.generation || {})[m.generation] : null, running = !!m.generation && !(g && (g.missing || ['failed', 'cancelled'].includes(g.state))), f = mediaOut(m), isV = m.kind === 'video';
+    const src = sourceOf(n), label = (m.prompt.split(/[,.]/)[0] || (isV ? 'Video' : 'Image')).slice(0, 34);
+    const empty = `<span class="xn-crop a"></span><span class="xn-crop b"></span><span class="xn-crop c"></span><span class="xn-crop d"></span><div class="xn-ask">${running ? 'Generating…' : src ? 'Starts from this picture' : isV ? 'Describe the shot below' : 'Describe the image below'}</div>`;
+    const shown = !running && f.version ? (isV ? `<video src="/api/library/assets/${esc(f.version)}/content" controls preload="metadata"></video>` : `<img alt="${esc(m.prompt)}" src="/api/library/assets/${esc(f.version)}/content" draggable="false">`) : (src?.version ? `<img alt="" style="opacity:.35" src="/api/library/assets/${esc(src.version)}/content" draggable="false">` : '') + empty + (running ? '<div class="xn-run"></div>' : '');
+    return xn('media', label, `<div class="xn-media">${shown}</div>`, { icon: isV ? 'play' : 'image', em: m.versions.length > 1 ? `${m.cur + 1} of ${m.versions.length}` : '' , attr: ` data-cv-media="${esc(m.kind)}"` });
+  }
+  /** the file behind the image wired into this node */
+  function sourceOf(n) { const e = C.doc.edges.find((x) => x.toNode === n.id); const a = e && nodeById(e.fromNode); return a && a.type === 'media' && a.media.versions.length ? mediaOut(a.media) : null; }
+  function docBody(n) {
+    const d = docOf(n.ref.id);
+    if (C.editing === n.id && d.ready) return `<textarea class="xn-page-ed" data-cv-text="${esc(n.id)}" aria-label="Document">${esc(d.markdown)}</textarea>`;
+    return `<div class="xn-page"><h3>${esc(d.title || '…')}</h3>${d.markdown ? (window.XENO_TASKS?.md ? window.XENO_TASKS.md(d.markdown, null, {}) : esc(d.markdown)) : ''}</div>`;
+  }
+  const docs = new Map(), chats = new Map();
+  function docOf(id) {
+    let d = docs.get(id); if (d) return d; d = {}; docs.set(id, d);
+    api('GET', '/api/workspace-docs/' + encodeURIComponent(id)).then((r) => { if (r.ok) { Object.assign(d, { ready: true, title: r.d.doc.title, markdown: r.d.doc.markdown || '', versionId: r.d.doc.versionId }); draw(); } }).catch(() => {});
+    return d;
+  }
+  async function saveDoc(id) {
+    const d = docs.get(id); if (!d || !d.ready || !d.changed) return; d.changed = false;
+    const r = await api('PUT', '/api/workspace-docs/' + encodeURIComponent(id), { markdown: d.markdown, expectedVersion: d.versionId }).catch(() => null);
+    if (r && r.ok) d.versionId = r.d.doc.versionId; else toast(said(r, 'That edit couldn’t be saved'));
+  }
+  function chatBody(n, r) {
+    const k = n.ref.id; let c = chats.get(k);
+    if (!c) { c = { msgs: [] }; chats.set(k, c); api('GET', '/api/chat/conversations/' + encodeURIComponent(k)).then((x) => { if (x.ok) { c.msgs = (x.d.messages || x.d.conversation?.messages || []).slice(-8); draw(); } }).catch(() => {}); }
+    const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.text || ''));
+    return `<div class="xn-chat"><div class="xn-thread">${c.msgs.map((m) => (m.role === 'user' ? `<div class="xn-msg--me">${esc(textOf(m))}</div>` : `<div class="xn-msg"><small>${esc(m.agent_name || 'XENO')}</small>${esc(textOf(m))}</div>`)).join('') || '<span class="tk-dim">This chat stays with the project.</span>'}</div><a class="xn-say" href="${esc(r.url || '#')}">Continue in Chat</a></div>`;
   }
   // ───────────────────────── dependency graph (xeno-orchestrator on the platform: /api/orchestrator/graph)
   // The graph is the project's own `blocks` links between tasks; this lays it out on the canvas in the order the work
@@ -319,7 +366,7 @@
     world.querySelector('[data-cv-nodes]').innerHTML = [...groups, ...rest].map(nodeHtml).join('');
     world.querySelector('[data-cv-edges]').innerHTML = edgesSvg();
     const zl = document.querySelector('[data-cv-zoom]'); if (zl) zl.textContent = Math.round(z * 100) + '%';
-    drawPeople();
+    drawPeople(); drawDock();
     const ed = world.querySelector('[data-cv-text]'); if (ed && document.activeElement !== ed) { ed.focus(); const at = caret || [ed.value.length, ed.value.length]; ed.setSelectionRange(at[0], at[1]); }
     inspector();
   }
@@ -334,7 +381,7 @@
       return;
     }
     const card = one ? nodeById(one) : null;
-    setHtml(box, ids.length ? `<span class="cv-insp-l">${ids.length} selected</span><span class="tk-sp"></span>${card && card.type === 'xeno-ref' && card.ref.kind === 'task' ? `<button class="tk-btn" data-cv-act="assign">${ic('people')}Assign</button>` : ''}<button class="tk-btn" data-cv-act="group-sel">${ic('layers')}Group</button><button class="tk-btn" data-cv-act="delete">${ic('trash')}Remove from canvas</button>` : '<small class="tk-dim">Drag the board to move around · Ctrl+scroll to zoom · double-click to write a note · drag the ＋ on an item to connect it</small>');
+    setHtml(box, ids.length ? `<span class="cv-insp-l">${ids.length} selected</span><span class="tk-sp"></span>${card && card.type === 'xeno-ref' && card.ref.kind === 'task' ? `<button class="tk-btn" data-cv-act="assign">${ic('people')}Assign</button>` : ''}<button class="tk-btn" data-cv-act="group-sel">${ic('layers')}Group</button><button class="tk-btn" data-cv-act="delete">${ic('trash')}Remove from canvas</button>` : '<small class="tk-dim">Right-click to add · I image · V video · D document · C chat · T task · N note · drag the ＋ on an item to connect it</small>');
   }
 
   // ───────────────────────── pages
@@ -358,18 +405,7 @@
       <div class="cv-bar">
         ${!C.project && window.XENO_TASKS?.layoutSeg ? window.XENO_TASKS.layoutSeg('canvas') : ''}
         <button class="cv-name" data-cv-act="rename"${ro ? ' disabled' : ''} title="Rename">${esc(C.name)}</button>
-        ${ro ? '<small class="tk-chip">View only</small>' : `<span class="cv-tools" role="toolbar" aria-label="Add to the canvas">
-          <button class="tk-tool" data-cv-act="add-task" title="Put an existing task on the canvas · T">${ic('check')}Task</button>
-          <button class="tk-tool" data-cv-act="new-task" title="Create a new task here">${ic('plus')}New task</button>
-          ${C.project ? `<button class="tk-tool" data-cv-act="new-doc" title="Write a new document in this project">${ic('plus')}New doc</button>
-          <button class="tk-tool" data-cv-act="new-chat" title="Start a chat in this project">${ic('plus')}New chat</button>
-          <button class="tk-tool" data-cv-act="new-image" title="Generate an image into this project">${ic('plus')}Image</button>` : ''}
-          <button class="tk-tool" data-cv-act="add-file" title="Put Library files on the canvas">${ic('doc')}File</button>
-          <button class="tk-tool" data-cv-act="add-chat" title="Put chats on the canvas">${ic('chat')}Chat</button>
-          ${C.project ? `<button class="tk-tool" data-cv-act="add-tenet" title="Put the project’s tenets on the canvas as live verdict cards">${ic('check')}Verdict</button>` : ''}
-          <button class="tk-tool" data-cv-act="add-note" title="Note · N">${ic('edit')}Note</button>
-          <button class="tk-tool" data-cv-act="add-link" title="Link">${ic('link')}Link</button>
-          <button class="tk-tool" data-cv-act="add-group" title="Group">${ic('layers')}Group</button>${C.project ? `<button class="tk-tool" data-cv-act="deps" title="Lay out this project’s dependency graph: every task, in the order the work can happen">${ic('link')}Dependencies</button>` : ''}</span>`}
+        ${ro ? '<small class="tk-chip">View only</small>' : `<button class="tk-tool" data-cv-act="add">${ic('plus')}Add</button>`}
         <span class="tk-sp"></span><span class="cv-people" data-cv-people></span><small class="cv-status" data-cv-status aria-live="polite"></small>
         <span class="cv-zoom"><button class="tk-ib" data-cv-act="zoom-out" aria-label="Zoom out">${ic('minus')}</button><button class="cv-zl" data-cv-act="fit" data-cv-zoom title="Fit everything">100%</button><button class="tk-ib" data-cv-act="zoom-in" aria-label="Zoom in">${ic('plus')}</button></span>
         <button class="tk-ib" data-cv-act="menu" aria-label="Canvas actions">${ic('more')}</button>
@@ -377,7 +413,7 @@
       ${C.conflict ? `<div class="cv-conflict" role="alert">Someone else saved this canvas while you were editing. Your last change wasn’t saved. <button class="tk-btn tk-btn--main" data-cv-act="reload">Load their version</button></div>` : ''}
       <div class="cv-stage" data-cv-stage tabindex="0" aria-label="Canvas ${esc(C.name)}">
         <div class="cv-cursors" data-cv-cursors></div>
-        <div class="cv-world" data-cv-world>
+        <div class="cv-world" data-cv-world><div class="xn-dock" data-cv-dock hidden></div>
           <svg class="cv-svg" width="1" height="1"><defs><marker id="cv-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs><g data-cv-edges></g><path data-cv-ghost class="cv-e-ghost"/></svg>
           <div data-cv-nodes></div>
         </div>
@@ -502,7 +538,16 @@
     return joined;
   }
   // Made here, it belongs to the project: the same records its Files, Conversations and Tasks show. A card only points.
-  function place(kind, id, w, h) { const c = centre(); before(); C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id }, x: snap(c.x - w / 2), y: snap(c.y - h / 2), width: w, height: h }); }
+  // the first clear spot to the right of where it was asked for: nothing lands on top of something else
+  function freeX(x, y, w, h) {
+    for (let i = 0; i < 60; i++) {
+      const hit = C.doc.nodes.filter((n) => n.type !== 'group' && x < n.x + n.width + 32 && x + w + 32 > n.x && y < n.y + n.height + 48 && y + h + 48 > n.y);
+      if (!hit.length) break;
+      x = Math.max(...hit.map((n) => n.x + n.width)) + 32;
+    }
+    return snap(x);
+  }
+  function place(kind, id, w, h) { const c = centre(), y = snap(c.y - h / 2); before(); C.doc.nodes.push({ id: uid(), type: 'xeno-ref', ref: { kind, id }, x: c.exact ? snap(c.x - w / 2) : freeX(c.x - w / 2, y, w, h), y, width: w, height: h }); }
   async function newDocHere() {
     const v = await D().form({ title: 'New document in this project', sub: 'It opens in Write and lives in the project’s Files.', submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 200 }] });
     if (!v) return;
@@ -511,8 +556,8 @@
     const d = r.d.doc, k = String(d.id).toLowerCase();
     const moved = await api('PUT', `/api/library/assets/file/${encodeURIComponent(d.versionId)}/project`, { project: C.project.id }).catch(() => null);
     if (!moved || !moved.ok) toast(said(moved, 'It was made, but couldn’t be put in the project’s folder'));
-    C.refs.file[k] = { id: k, name: d.title, type: 'Document', url: `/workspace/office/spaces/write/${k}` };
-    place('file', k, 260, 100); change('Document created');
+    C.refs.file[k] = { id: k, doc: true, name: d.title, type: 'Document', url: `/workspace/office/spaces/write/${k}` };
+    place('file', k, 340, 440); change('Document created');
   }
   async function newChatHere() {
     const v = await D().form({ title: 'New chat in this project', submit: 'Create', size: 'sm', fields: [{ id: 'title', label: 'Title', required: true, max: 200 }] });
@@ -522,30 +567,12 @@
     if (!cv || !cv.id) return toast(said(r, 'The chat couldn’t be started'));
     const k = String(cv.id).toLowerCase();
     C.refs.chat[k] = { id: k, title: v.title, url: `/workspace/apps/chat/projects/${C.project.id}/c/${k}` };
-    place('chat', k, 260, 100); change('Chat started');
-  }
-  async function imageHere() {
-    const cat = await api('GET', '/api/generations/catalog').catch(() => null);
-    const models = (cat && cat.ok && (cat.d.types || []).find((t) => t.type === 'image')?.models) || [];
-    if (!models.length) return toast('Image generation isn’t available right now');
-    const v = await D().form({ title: 'Generate an image in this project', sub: 'You’ll see the most it can cost before it starts.', submit: 'Next', size: 'md', fields: [
-      { id: 'prompt', label: 'What should it show?', type: 'textarea', required: true, max: 16000 },
-      { id: 'model', label: 'Model', type: 'select', value: models[0].id, options: models.map((m) => [m.id, m.name]) }] });
-    if (!v) return;
-    const input = { type: 'image', model: v.model, prompt: v.prompt, projectId: C.project.id };
-    const q = await api('POST', '/api/generations/quote', input).catch(() => null);
-    if (!q || !q.ok) return toast(said(q, 'It couldn’t be priced'));
-    if (!(await D().confirm({ title: 'Generate this image?', body: `It costs up to ${esc(q.d.maxRetailCredits)} credits, from your balance.`, action: 'Generate', danger: false }))) return;
-    const g = await api('POST', '/api/generations', { ...input, quoteToken: q.d.quoteToken, requestKey: `canvas:${crypto.randomUUID()}` }).catch(() => null);
-    if (!g || !g.ok) return toast(said(g, 'It couldn’t be started'));
-    const id = String(g.d.generation.id).toLowerCase();
-    C.refs.generation[id] = { id, state: g.d.generation.state, prompt: v.prompt, files: [] };
-    place('generation', id, 280, 280); change('Generating'); watchImages();
+    place('chat', k, 360, 440); change('Chat started');
   }
   // An image card waits for its generation, then becomes the file it made. A person may have left: the next open does this.
   function watchImages() {
     clearTimeout(C.imgTimer);
-    const open = (C.doc?.nodes || []).filter((n) => n.type === 'xeno-ref' && n.ref.kind === 'generation');
+    const open = (C.doc?.nodes || []).filter((n) => (n.type === 'xeno-ref' && n.ref.kind === 'generation') || (n.type === 'media' && n.media.generation));
     if (!open.length || !C.can?.edit) return;
     C.imgTimer = setTimeout(async () => {
       const id = C.id; let changed = false;
@@ -554,6 +581,12 @@
       if (!r || !r.ok) return watchImages();
       C.refs = refsOf(r.d.canvas.records);
       for (const n of open) {
+        if (n.type === 'media') {
+          const m = n.media, g = C.refs.generation[m.generation]; if (!g) continue;
+          if (g.files && g.files.length) { if (!changed) before(); changed = true; m.versions = [...m.versions, ...g.files]; m.cur = m.versions.length - 1; m.generation = null; }
+          else if (g.missing || ['failed', 'cancelled'].includes(g.state)) { if (!changed) before(); changed = true; m.generation = null; toast('It didn’t finish'); }
+          continue;
+        }
         const g = C.refs.generation[n.ref.id];
         if (!g || !g.files || !g.files.length) continue;
         const k = g.files[0], taken = C.doc.nodes.some((x) => x.type === 'xeno-ref' && x.ref.kind === 'file' && x.ref.id === k);
@@ -607,10 +640,111 @@
     C.view = { z, x: px - r.left - (px - r.left - C.view.x) * k, y: py - r.top - (py - r.top - C.view.y) * k };
     store(C.id, C.view); draw();
   }
+  // what opens under a selected node. Drawn apart from the nodes, so a repaint never takes the prompt from under your hand
+  function drawDock() {
+    const box = document.querySelector('[data-cv-dock]'); if (!box) return;
+    const n = C.sel.size === 1 ? nodeById([...C.sel][0]) : null, off = !n || !C.can?.edit || (drag && drag.kind === 'size') || !(n.type === 'media' || (n.type === 'xeno-ref' && ['file', 'chat', 'task'].includes(n.ref.kind)));
+    if (off) { box.hidden = true; box.__k = null; return; }
+    // it sits on the board but stays one size on screen, so it can be read at any zoom
+    const z = C.view.z; box.hidden = false; box.style.left = n.x + 'px'; box.style.top = n.y + n.height + 8 / z + 'px'; box.style.width = Math.max(n.width * z, 430) + 'px'; box.style.transform = `scale(${1 / z})`;
+    const m = n.media, key = JSON.stringify([n.id, m ? [m.model, m.ratio, m.quality, m.versions, m.cur, m.generation, !!C.catalog] : n.ref]);
+    if (box.__k === key) return; box.__k = key;
+    if (!m) { const r = n.ref.kind === 'task' ? { url: null } : fileOrChat(n), where = { file: 'In Files', chat: 'In Conversations', task: 'In Tasks' }[n.ref.kind]; box.innerHTML = `<div class="xn-row"><span class="xn-cost" style="padding-left:6px">${where}</span><span class="xn-sp"></span>${r.url ? `<a class="xn-sub" href="${esc(r.url)}">${ic('open')}Open</a>` : ''}</div>`; return; }
+    const d = modelOf(m), isV = m.kind === 'video', running = !!m.generation, ratios = d?.settings?.ratio?.values || ['1:1'], qs = d?.settings?.quality?.values;
+    const vers = m.versions.length > 1 ? `<div class="xn-vers">${m.versions.map((v, i) => { const f = fileOf(v); return `<button class="${i === m.cur ? 'on' : ''}" data-cv-act="ver" data-arg="${i}" aria-label="Version ${i + 1}">${f.version && !isV ? `<img alt="" src="/api/library/assets/${esc(f.version)}/content">` : ''}</button>`; }).join('')}</div>` : '';
+    box.innerHTML = `${vers}<textarea class="xn-prompt" rows="2" data-cv-prompt="${esc(n.id)}" aria-label="Describe it" placeholder="${isV ? 'Describe the shot' : 'Describe the image'}">${esc(m.prompt)}</textarea>
+      <div class="xn-row"><button class="xn-chip" data-cv-act="media-pick" data-arg="model">${esc(d?.name || m.model || 'Model')}</button>${ratios.length > 1 ? `<button class="xn-chip" data-cv-act="media-pick" data-arg="ratio">${shapeGlyph(ratioOf(m))}${esc(m.ratio)}</button>` : ''}${qs ? `<button class="xn-chip" data-cv-act="media-pick" data-arg="quality">${esc(m.quality)}</button>` : ''}<span class="xn-sp"></span>
+      ${running ? '<span class="xn-cost">Generating…</span>' : `<span class="xn-cost">${d?.tariff ? `up to ${esc(d.tariff.maxRetailCredits)} credits` : ''}</span><button class="xn-go" data-cv-act="media-go"${d ? '' : ' disabled'}>Generate</button>`}</div>
+      ${m.versions.length && !isV ? `<div class="xn-row" style="border-top:1px solid var(--border)"><button class="xn-sub" data-cv-act="to-video">${ic('play')}Make a video</button><span class="xn-sp"></span><span class="xn-cost">In Files</span></div>` : ''}`;
+  }
+  const fileOrChat = (n) => ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || {};
+  const ratioOf = (m) => { const [a, b] = String(m.ratio).split(':').map(Number); return a && b ? a / b : 1; };
+  const shapeGlyph = (r) => `<i style="width:${r >= 1 ? 13 : Math.round(13 * r)}px;height:${r >= 1 ? Math.round(13 / r) : 13}px"></i>`;
+  const modelOf = (m) => (C.catalog?.[m.kind] || []).find((x) => x.id === m.model) || (C.catalog?.[m.kind] || [])[0] || null;
+  async function loadCatalog() {
+    if (C.catalog) return; const r = await api('GET', '/api/generations/catalog').catch(() => null); if (!r || !r.ok) return;
+    C.catalog = Object.fromEntries((r.d.types || []).map((t) => [t.type, t.models || []])); drawDock();
+  }
+  function addMedia(kind, from) {
+    const models = C.catalog?.[kind] || [], d = models[0];
+    if (C.catalog && !d) return toast(`${kind === 'video' ? 'Video' : 'Image'} generation isn’t available right now`);
+    const c = centre(), ratio = d?.settings?.ratio?.default || (kind === 'video' ? '16:9' : '1:1'), m = { kind, prompt: '', model: d?.id || '', ratio, quality: d?.settings?.quality?.default || '', versions: [], cur: 0, generation: null };
+    const width = kind === 'video' ? 420 : 340, height = Math.round(width / ratioOf(m)), y = snap(c.y), n = { id: uid(), type: 'media', media: m, x: c.exact ? snap(c.x) : freeX(c.x, y, width, height), y, width, height };
+    before(); C.doc.nodes.push(n); if (from) C.doc.edges.push({ id: uid(), fromNode: from, toNode: n.id, toEnd: 'arrow' });
+    C.sel = new Set([n.id]); change(); loadCatalog().then(() => { const fresh = C.catalog?.[kind]?.[0]; if (!m.model && fresh) { m.model = fresh.id; m.quality = fresh.settings?.quality?.default || ''; change(); } });
+    setTimeout(() => document.querySelector(`[data-cv-prompt="${n.id}"]`)?.focus(), 0);
+    return n;
+  }
+  async function mediaGo() {
+    const n = nodeById([...C.sel][0]), m = n?.media; if (!m) return;
+    if (!m.prompt.trim()) { document.querySelector('[data-cv-prompt]')?.focus(); return toast('Describe it first'); }
+    const d = modelOf(m), settings = {}; if (d?.settings?.ratio) settings.ratio = m.ratio; if (d?.settings?.quality) settings.quality = m.quality;
+    const src = sourceOf(n); if (d?.settings?.mode) settings.mode = src?.version ? 'start_image' : 'text_to_video';
+    const input = { type: m.kind, model: m.model, prompt: m.prompt, settings, ...(C.project ? { projectId: C.project.id } : {}), ...(src?.version && d?.references?.max ? { referenceAssetIds: [src.version] } : {}) };
+    const q = await api('POST', '/api/generations/quote', input).catch(() => null);
+    if (!q || !q.ok) return toast(said(q, 'It couldn’t be priced'));
+    const g = await api('POST', '/api/generations', { ...input, quoteToken: q.d.quoteToken, requestKey: `canvas:${crypto.randomUUID()}` }).catch(() => null);
+    if (!g || !g.ok) return toast(said(g, 'It couldn’t be started'));
+    const id = String(g.d.generation.id).toLowerCase(); C.refs.generation = C.refs.generation || {}; C.refs.generation[id] = { id, state: g.d.generation.state, files: [] };
+    before(); m.generation = id; change('Generating'); watchImages();
+  }
+  function mediaPick(k, el) {
+    const n = nodeById([...C.sel][0]), m = n?.media; if (!m) return; const d = modelOf(m), r = el.getBoundingClientRect();
+    const rows = k === 'model' ? (C.catalog?.[m.kind] || []).map((x) => [x.id, x.name]) : (d?.settings?.[k]?.values || []).map((v) => [v, v]);
+    window.XCM?.show([rows.map(([v, l]) => ({ label: l, run: () => {
+      before();
+      if (k === 'model') { m.model = v; const nd = modelOf(m); if (!nd?.settings?.ratio?.values?.includes(m.ratio)) m.ratio = nd?.settings?.ratio?.default || m.ratio; m.quality = nd?.settings?.quality?.default || ''; }
+      else m[k === 'ratio' ? 'ratio' : 'quality'] = v;
+      n.height = Math.round(n.width / ratioOf(m)); change();
+    } }))], { x: r.left, y: r.bottom + 4, opener: el });
+  }
+  async function whoPick(id, el) {
+    const n = nodeById(id); if (!n) return; const list = C.people || [], r = el.getBoundingClientRect(), task = n.type === 'xeno-ref' && n.ref.kind === 'task';
+    const set = async (v) => { if (task) { const x = await api('PATCH', `/api/tasks/${encodeURIComponent(n.ref.id)}`, { assigneeId: v }).catch(() => null); if (!x || !x.ok) return toast(said(x, 'It couldn’t be assigned')); if (x.d.task) C.records[n.ref.id] = x.d.task; draw(); return; } before(); if (v) n.who = v; else delete n.who; change(); };
+    window.XCM?.show([list.map((p) => ({ label: p.name, icon: p.kind === 'agent' ? 'bot' : 'people', run: () => set(String(p.id)) })), [{ label: 'Nobody', run: () => set(null) }]], { x: r.left - 176, y: r.bottom + 4, opener: el });
+  }
+  async function stepTo(arg) {
+    const [key, to] = arg.split('|'), t = C.records[key]; if (!t || t.status === to) return;
+    let at = t.status, last = null;
+    // a task moves one allowed step at a time: To do → In progress → In review → Done
+    for (const s of STEPS.slice(STEPS.indexOf(at) < 0 ? 0 : STEPS.indexOf(at) + 1, STEPS.indexOf(to) + 1).concat(STEPS.indexOf(to) < STEPS.indexOf(at) ? [to] : [])) {
+      last = await api('POST', `/api/tasks/${encodeURIComponent(key)}/transition`, { to: s, from: at }).catch(() => null);
+      if (!last || !last.ok) { toast(said(last, 'That move isn’t allowed')); break; }
+      at = s; C.records[key] = last.d.task;
+    }
+    draw();
+  }
+  // the add menu: the workspace's own menu, with search, opened where you asked
+  function closeAdd() { document.querySelector('.xn-menu')?.remove(); }
+  function openAdd(cx, cy, { from = null } = {}) {
+    closeAdd(); const stage = document.querySelector('[data-cv-stage]'), at = toBoard(stage, cx, cy), P_ = !!C.project;
+    const rows = from ? [['Starts from this image', [['media-image', 'Image', 'image', ''], ['media-video', 'Video', 'play', '']]]] : [
+      ...(P_ ? [['In this project', [['new-task', 'Task', 'check', 'T'], ['new-doc', 'Document', 'doc', 'D'], ['new-chat', 'Chat', 'chat', 'C']]], ['Generate', [['media-image', 'Image', 'image', 'I'], ['media-video', 'Video', 'play', 'V']]]] : [['Add', [['new-task', 'Task', 'check', 'T']]]]),
+      ['Bring in', [['add-task', 'Existing task', 'check', ''], ['add-file', 'File from Library', 'file', ''], ['add-chat', 'Existing chat', 'chat', ''], ...(P_ ? [['add-tenet', 'Verdict', 'check', '']] : [])]],
+      ['On the canvas', [['add-note', 'Note', 'edit', 'N'], ['add-group', 'Group', 'layers', ''], ['add-link', 'Link', 'link', '']]],
+    ];
+    const m = document.createElement('div'); m.className = 'xcm xn-menu on'; m.setAttribute('role', 'menu');
+    m.innerHTML = `<label class="xn-find">${ic('search')}<input aria-label="Find a node" placeholder="${from ? 'Connect to…' : 'Add to the canvas…'}"></label><div data-l></div>`;
+    document.body.append(m);
+    const list = m.querySelector('[data-l]'), q = m.querySelector('input');
+    const fill = (t = '') => { const hit = rows.map(([h, r]) => [h, r.filter((x) => x[1].toLowerCase().includes(t.toLowerCase()))]).filter(([, r]) => r.length);
+      list.innerHTML = hit.map(([h, r]) => `<div class="xn-grp">${esc(h)}</div>` + r.map(([k, l, i, key]) => `<div class="xcm-i" role="menuitem" data-add="${k}">${ic(i)}<span class="xcm-l">${esc(l)}</span>${key ? `<kbd>${key}</kbd>` : ''}</div>`).join('')).join('') || '<div class="xn-none">Nothing by that name</div>';
+      list.querySelector('.xcm-i')?.classList.add('hl'); };
+    fill(); m.style.left = Math.max(8, Math.min(cx, innerWidth - m.offsetWidth - 8)) + 'px'; m.style.top = Math.max(8, Math.min(cy, innerHeight - m.offsetHeight - 8)) + 'px'; q.focus();
+    q.addEventListener('input', () => fill(q.value));
+    q.addEventListener('keydown', (e) => { const b = [...list.querySelectorAll('.xcm-i')], i = b.findIndex((x) => x.classList.contains('hl'));
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); b[i]?.classList.remove('hl'); b[(i + (e.key === 'ArrowDown' ? 1 : -1) + b.length) % b.length]?.classList.add('hl'); }
+      if (e.key === 'Enter' && b[i]) b[i].click(); if (e.key === 'Escape') closeAdd(); });
+    list.addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (!b) return; closeAdd(); C.at = at; if (b.dataset.add.startsWith('media-')) addMedia(b.dataset.add.slice(6), from); else ACT[b.dataset.add]?.(); });
+  }
+  function nodeMenu(n, x, y) {
+    window.XCM?.show([[{ label: 'Assign…', icon: 'people', run: () => whoPick(n.id, { getBoundingClientRect: () => ({ left: x + 176, bottom: y }) }) }], [{ label: 'Take off the canvas', icon: 'trash', danger: true, run: () => { C.sel = new Set([n.id]); removeSel(); } }]], { x, y });
+  }
   async function canvasMenu(el) {
     const r = el.getBoundingClientRect();
     window.XCM?.show([[
       { label: 'Copy link to this canvas', icon: 'link', run: () => window.XCM.H.copy(location.href, 'Link copied') },
+      ...(C.project ? [{ label: 'Lay out dependencies', icon: 'link', run: () => layoutDeps() }] : []),
       { label: 'Export as JSON Canvas (.canvas)', icon: 'download', run: exportCanvas },
     ], C.can?.delete ? [{ label: 'Delete canvas', icon: 'trash', danger: true, run: delCanvas }] : []].filter((s) => s.length), { x: r.left, y: r.bottom + 4, opener: el });
   }
@@ -646,11 +780,23 @@
   }
 
   // ───────────────────────── pointer
-  let drag = null, space = false, lastDown = null, lastNode = null;
-  function openNode(n) { if (!n) return; if (n.type === 'text') { C.editing = n.id; C.sel = new Set([n.id]); draw(); } else if (n.type === 'group') rename(n.id); else if (n.type === 'xeno-ref' && n.ref.kind !== 'task') { const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id]; if (r && r.url) location.assign(r.url); } else if (n.type === 'xeno-ref') X().go('global', { global: 'tasks', item: n.ref.id }); else if (n.type === 'link') window.open(n.url, '_blank', 'noopener'); }
+  let drag = null, space = false, lastDown = null, lastNode = null, hover = null;
+  const ADDKEY = { n: () => addNote(), t: () => (C.project ? newTaskHere() : addTask()), d: () => newDocHere(), c: () => newChatHere(), i: () => addMedia('image'), v: () => addMedia('video') };
+  addEventListener('pointermove', (e) => { if (e.target.closest?.('[data-cv-stage]')) hover = { x: e.clientX, y: e.clientY }; });
+  // the board's own menu, ahead of the page's
+  addEventListener('contextmenu', (e) => {
+    const stage = e.target.closest?.('[data-cv-stage]'); if (!stage || !C.doc || !C.can?.edit || e.target.closest('textarea, input')) return;
+    e.preventDefault(); e.stopPropagation();
+    const node = e.target.closest('[data-cv-node]'); if (node) return nodeMenu(nodeById(node.dataset.cvNode), e.clientX, e.clientY);
+    openAdd(e.clientX, e.clientY);
+  }, true);
+  // the press that opened it still has its mouse-down to come, which takes focus off anything: hand it back after that
+  function writeOn(n) { C.editing = n.id; C.sel = new Set([n.id]); draw(); setTimeout(() => document.querySelector('[data-cv-text]')?.focus(), 0); }
+  function openNode(n) { if (!n) return; if (n.type === 'xeno-ref' && n.ref.kind === 'file' && fileOf(n.ref.id).doc && docOf(n.ref.id).ready) { writeOn(n); return; } if (n.type === 'text') writeOn(n); else if (n.type === 'group') rename(n.id); else if (n.type === 'xeno-ref' && n.ref.kind !== 'task') { const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id]; if (r && r.url) location.assign(r.url); } else if (n.type === 'xeno-ref') X().go('global', { global: 'tasks', item: n.ref.id }); else if (n.type === 'link') window.open(n.url, '_blank', 'noopener'); }
   addEventListener('pointerdown', (e) => {
     const stage = e.target.closest?.('[data-cv-stage]'); if (!stage || !C.doc || e.button > 1) return;
-    if (e.target.closest('textarea, a, button.cv-open')) return;
+    if (e.target.closest('textarea, a, video, button.cv-open, .xn-who, .xn-steps button, .xn-dock')) return;
+    closeAdd(); C.at = null;
     if (!e.target.closest('[data-cv-text]')) stage.focus({ preventScroll: true });
     const at = toBoard(stage, e.clientX, e.clientY), edit = C.can?.edit;
     const grip = e.target.closest('[data-cv-grip]'), wire = e.target.closest('[data-cv-wire]'), node = e.target.closest('[data-cv-node]'), edge = e.target.closest('[data-cv-edge]');
@@ -666,7 +812,7 @@
     if (edge) { const id = 'e:' + edge.dataset.cvEdge; C.sel = e.shiftKey ? new Set([...C.sel, id]) : new Set([id]); C.editing = null; draw(); return; }
     if (!edit) { if (node) { C.sel = new Set([node.dataset.cvNode]); draw(); } return; }
     if (wire) { drag = { kind: 'wire', from: wire.dataset.cvWire }; stage.setPointerCapture(e.pointerId); e.preventDefault(); return; }
-    if (grip) { const n = nodeById(grip.dataset.cvGrip); drag = { kind: 'size', n, sw: n.width, sh: n.height, at, pushed: false }; stage.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+    if (grip) { const n = nodeById(grip.dataset.cvGrip), f = n.type === 'xeno-ref' && n.ref.kind === 'file' ? fileOf(n.ref.id) : null, bound = n.type === 'media' || (f && !f.doc && /^image\//.test(String(f.type))); drag = { kind: 'size', n, sw: n.width, sh: n.height, x0: n.x, y0: n.y, at, c: grip.dataset.c || 'br', lock: bound ? n.width / n.height : null, pushed: false }; stage.setPointerCapture(e.pointerId); e.preventDefault(); drawDock(); return; }
     const id = node.dataset.cvNode;
     if (C.editing === id) return;
     { const t = Date.now(), last = lastNode; lastNode = { t, id };
@@ -688,7 +834,13 @@
       if (!drag.pushed) { C.undo.push(JSON.stringify(C.doc)); drag.pushed = true; }
       for (const [n, x0, y0] of drag.items) { n.x = snap(x0 + dx); n.y = snap(y0 + dy); } draw(); return;
     }
-    if (drag.kind === 'size') { if (!drag.pushed) { C.undo.push(JSON.stringify(C.doc)); drag.pushed = true; } drag.n.width = Math.max(120, snap(drag.sw + at.x - drag.at.x)); drag.n.height = Math.max(60, snap(drag.sh + at.y - drag.at.y)); draw(); return; }
+    if (drag.kind === 'size') {
+      if (!drag.pushed) { C.undo.push(JSON.stringify(C.doc)); drag.pushed = true; }
+      const d = drag, dx = at.x - d.at.x, dy = at.y - d.at.y, left = d.c !== 'br', top = d.c === 'tl'; let w = d.sw + (left ? -dx : dx), h = d.sh + (top ? -dy : dy);
+      // a picture keeps its shape, whichever way you pull further; everything else takes the size you give it
+      if (d.lock) { const byH = h * d.lock; w = Math.max(160, snap(Math.abs(w - d.sw) >= Math.abs(byH - d.sw) ? w : byH)); h = Math.round(w / d.lock); } else { w = Math.max(120, snap(w)); h = Math.max(60, snap(h)); }
+      d.n.width = w; d.n.height = h; d.n.x = left ? d.x0 + d.sw - w : d.x0; d.n.y = top ? d.y0 + d.sh - h : d.y0; draw(); return;
+    }
     if (drag.kind === 'wire') { const a = nodeById(drag.from); const p = anchor(a, at); const g = document.querySelector('[data-cv-ghost]'); if (g) g.setAttribute('d', `M${p.x},${p.y} L${at.x},${at.y}`); }
   });
   addEventListener('pointerup', (e) => {
@@ -699,7 +851,7 @@
     if (d.kind === 'wire') {
       const g = document.querySelector('[data-cv-ghost]'); if (g) g.setAttribute('d', '');
       const over = document.elementsFromPoint(e.clientX, e.clientY).find((el) => el.dataset && el.dataset.cvNode && el.dataset.cvNode !== d.from);
-      if (!over) return;
+      if (!over) { if (nodeById(d.from)?.type === 'media' && C.project) openAdd(e.clientX, e.clientY, { from: d.from }); return; }
       const to = over.dataset.cvNode;
       if (C.doc.edges.some((x) => (x.fromNode === d.from && x.toNode === to) || (x.fromNode === to && x.toNode === d.from))) return toast('Those two are already connected');
       const ed = { id: uid(), fromNode: d.from, toNode: to, toEnd: 'arrow' };
@@ -720,8 +872,8 @@
     else { C.view.x -= e.deltaX; C.view.y -= e.deltaY; store(C.id, C.view); draw(); }
   }, { passive: false });
 
-  addEventListener('input', (e) => { const t = e.target.closest?.('[data-cv-text]'); if (!t) return; const n = nodeById(t.dataset.cvText); if (n) { if (!t.__snap) { t.__snap = 1; before(); } n.text = t.value; C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } });
-  addEventListener('focusout', (e) => { const t = e.target.closest?.('[data-cv-text]'); if (!t) return; setTimeout(() => { if (C.editing === t.dataset.cvText && !document.activeElement?.closest?.('[data-cv-text]')) { C.editing = null; draw(); } }, 0); });
+  addEventListener('input', (e) => { const pr = e.target.closest?.('[data-cv-prompt]'); if (pr) { const x = nodeById(pr.dataset.cvPrompt); if (x) { x.media.prompt = pr.value; pushLive(); C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } return; } const t = e.target.closest?.('[data-cv-text]'); if (!t) return; const n = nodeById(t.dataset.cvText); if (n && n.type === 'xeno-ref') { const d = docs.get(n.ref.id); if (d) { d.markdown = t.value; d.changed = true; clearTimeout(d.t); d.t = setTimeout(() => saveDoc(n.ref.id), 900); } return; } if (n) { if (!t.__snap) { t.__snap = 1; before(); } n.text = t.value; C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } });
+  addEventListener('focusout', (e) => { const t = e.target.closest?.('[data-cv-text]'); if (!t) return; { const x = nodeById(t.dataset.cvText); if (x?.type === 'xeno-ref') saveDoc(x.ref.id); } setTimeout(() => { if (C.editing === t.dataset.cvText && !document.activeElement?.closest?.('[data-cv-text]')) { C.editing = null; draw(); } }, 0); });
   addEventListener('keydown', (e) => {
     if (e.code === 'Space' && document.querySelector('[data-cv-stage]') && !e.target.closest?.('input, textarea')) { space = true; }
     if (!document.querySelector('[data-cv-stage]') || !C.doc || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
@@ -730,15 +882,14 @@
     if ((e.key === 'Delete' || e.key === 'Backspace') && edit && C.sel.size) { e.preventDefault(); removeSel(); }
     else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && edit) { e.preventDefault(); e.stopImmediatePropagation(); undo(); }
     else if (e.key === 'Escape') { C.sel.clear(); C.editing = null; draw(); }
-    else if (e.key.toLowerCase() === 'n' && edit && !e.ctrlKey && !e.metaKey) { e.preventDefault(); addNote(); }
-    else if (e.key.toLowerCase() === 't' && edit && !e.ctrlKey && !e.metaKey) { e.preventDefault(); addTask(); }
+    else if (edit && !e.ctrlKey && !e.metaKey && !e.altKey && ADDKEY[e.key.toLowerCase()] && (C.project || 'nt'.includes(e.key.toLowerCase()))) { e.preventDefault(); if (hover) C.at = toBoard(document.querySelector('[data-cv-stage]'), hover.x, hover.y); ADDKEY[e.key.toLowerCase()](); }
     else if (e.key === '0' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fit(); store(C.id, C.view); draw(); }
     else if ((e.key === '=' || e.key === '+') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); zoomAt(1.2); }
     else if (e.key === '-' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); zoomAt(1 / 1.2); }
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
   const ACT = {
-    'add-task': addTask, 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, 'new-image': imageHere, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
+    'add-task': addTask, 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, add: (_, el) => { const r = el.getBoundingClientRect(); openAdd(r.left, r.bottom + 6); }, who: (id, el) => whoPick(id, el), step: (a) => stepTo(a), 'media-go': () => mediaGo(), 'media-pick': (k, el) => mediaPick(k, el), ver: (i) => { const m = nodeById([...C.sel][0])?.media; if (m) { before(); m.cur = Number(i); change(); } }, 'to-video': () => { const n = nodeById([...C.sel][0]); if (n) { C.at = { x: n.x + n.width + 80, y: n.y }; addMedia('video', n.id); } }, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
     deps: () => layoutDeps(), back: () => leave(C.project), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),
@@ -771,5 +922,5 @@
     if (!r || !r.ok) return toast(said(r, 'It could not be opened as a canvas.'));
     L.list = null; goCanvas(r.d.canvas.id);
   }, true);
-  window.XENO_CANVAS = { served: true, nameOf, route, open, projectTab, state: () => ({ id: C.id, state: C.state, nodes: C.doc ? C.doc.nodes.length : 0, edges: C.doc ? C.doc.edges.length : 0, rev: C.rev, dirty: C.dirty, conflict: C.conflict, view: { ...C.view } }), save };
+  window.XENO_CANVAS = { served: true, act: (k, a) => { ACT[k]?.(a); }, nameOf, route, open, projectTab, state: () => ({ id: C.id, state: C.state, nodes: C.doc ? C.doc.nodes.length : 0, edges: C.doc ? C.doc.edges.length : 0, rev: C.rev, dirty: C.dirty, conflict: C.conflict, view: { ...C.view } }), save };
 })();

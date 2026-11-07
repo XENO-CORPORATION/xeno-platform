@@ -36,7 +36,7 @@ const GEN = 'e0000000-0000-4000-8000-000000000001', GF = 'd0000000-0000-4000-800
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
 const recs = (c) => Object.fromEntries(c.content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => { const t = db.tasks.find((x) => x.key === n.ref.id); return [n.ref.id, t ? { key: t.key, title: t.title, status: t.status, priority: t.priority, project: null, assignee: null } : { key: n.ref.id, missing: true }]; }));
-const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
+const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'c0000000-0000-4000-8000-00000000000d': { id: 'c0000000-0000-4000-8000-00000000000d', doc: true, name: 'Plan', type: 'Document', url: '/workspace/office/spaces/write/c0000000-0000-4000-8000-00000000000d' }, [GF]: { id: GF, version: GF, name: 'dawn.png', type: 'image/png', url: '/workspace/library' }, 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -55,10 +55,12 @@ const handler = (q) => {
   if (u.pathname === '/api/workspace-docs' && method === 'POST') { db.docs.push(b); return json(200, { success: true, doc: { id: 'c0000000-0000-4000-8000-00000000000d', versionId: 'v-doc-1', title: b.title } }); }
   const mv = u.pathname.match(/^\/api\/library\/assets\/file\/([\w-]+)\/project$/); if (mv) { db.moved.push(mv[1]); return json(200, { success: true }); }
   if (u.pathname === '/api/chat/conversations' && method === 'POST') { db.chats.push(b); return json(200, { success: true, conversation: { id: 'c0000000-0000-4000-8000-00000000000e' } }); }
-  if (u.pathname === '/api/generations/catalog') return json(200, { types: [{ type: 'image', models: [{ id: 'gpt-image-2', name: 'GPT Image' }] }] });
+  if (u.pathname === '/api/generations/catalog') return json(200, { types: [{ type: 'image', models: [{ id: 'gpt-image-2', name: 'GPT Image', settings: { ratio: { values: ['1:1', '16:9'], default: '1:1' }, quality: { values: ['low', 'medium'], default: 'medium' } }, references: { max: 8 }, tariff: { maxRetailCredits: 12 } }] }, { type: 'video', models: [{ id: 'veo', name: 'Veo', settings: { ratio: { values: ['16:9', '9:16'], default: '16:9' }, mode: { values: ['text_to_video', 'start_image'], default: 'text_to_video' } }, references: { max: 1 }, tariff: { maxRetailCredits: 80 } }] }] });
   if (u.pathname === '/api/generations/quote') return json(200, { quoteToken: 'q', maxRetailCredits: 12 });
   if (u.pathname === '/api/generations' && method === 'POST') { db.generated.push(b); return json(202, { generation: { id: GEN, state: 'queued' } }); }
   if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: [{ id: 'u2', name: 'Ada' }] });
+  const dg = u.pathname.match(/^\/api\/workspace-docs\/([\w-]+)$/); if (dg) { if (method === 'PUT') { db.docPut = b; return json(200, { success: true, doc: { versionId: 'v-doc-2' } }); } return json(200, { success: true, doc: { id: dg[1], versionId: 'v-doc-1', title: 'Plan', markdown: 'First line' } }); }
+  const ts = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/transition$/); if (ts) { (db.moves = db.moves || []).push(b.to); const t = db.tasks.find((x) => x.key === ts[1]); t.status = b.to; return json(200, { success: true, task: t }); }
   const pt = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (pt && method === 'PATCH' && b.assigneeId) { db.assigned = { key: pt[1], body: b }; return json(200, { success: true, task: { key: pt[1], title: 'x', status: 'todo', assignee: { id: 'u2', name: 'Ada' } } }); }
   const jf = u.pathname.match(/^\/api\/chat\/projects\/([\w-]+)\/files$/); if (jf) { db.joined.push({ kind: 'file', project: jf[1], id: b.storage_key }); return json(200, { success: true, file: {} }); }
   if (/\/move\/preview$/.test(u.pathname)) return json(200, { success: true, move: { consentRevision: 'c'.repeat(64) } });
@@ -114,7 +116,7 @@ try {
   ok(id && p.url().endsWith(`/workspace/studio/tasks/canvas/${id}`) && !!(await p.$('[data-cv-stage]')), 'a new canvas opens at an id-based address (parent in the path)');
 
   // put tasks on it
-  await p.click('[data-cv-act="add-task"]'); await p.waitForSelector('.xd .xd-checks', { timeout: 3000 });
+  await p.evaluate(() => XENO_CANVAS.act('add-task')); await p.waitForSelector('.xd .xd-checks', { timeout: 3000 });
   await p.click('.xd [data-v="T-1"]'); await p.click('.xd [data-v="T-2"]'); await p.click('.xd [data-xd-submit]'); await settle();
   ok((await p.$$('[data-cv-task]')).length === 2 && /Design the onboarding/.test(await main()), 'tasks go on the canvas as cards');
   let s = await waitSaved();
@@ -164,7 +166,7 @@ try {
 
   // conflict: someone else saves meanwhile
   db.canvases[0].revision += 5;
-  await p.click('[data-cv-act="add-note"]'); await settle(1500);
+  await p.evaluate(() => XENO_CANVAS.act('add-note')); await settle(1500);
   ok((await cv()).conflict && /Someone else saved this canvas/.test(await main()), 'a save over someone else’s newer version is refused and the page says so — nothing is overwritten');
   await p.click('[data-cv-act="reload"]'); await settle(800);
   ok(!(await cv()).conflict, '"Load their version" recovers');
@@ -186,13 +188,15 @@ try {
   ok(/brief\.pdf/.test(await cardTxt('rf1')) && /2\.4 MB/.test(await cardTxt('rf1')), 'a library file shows as a card with its live name and size');
   ok(/Kickoff notes/.test(await cardTxt('rc1')) && !!(await p.$('[data-cv-node="rc1"] a[href="/workspace/apps/chat/c0000000-0000-4000-8000-000000000001"]')), 'a chat shows as a card that opens the chat');
   ok(/Not available/.test(await cardTxt('rf2')), 'a file the reader cannot open says Not available, never its name');
-  ok(!!(await p.$('[data-cv-act="add-file"]')) && !!(await p.$('[data-cv-act="add-chat"]')), 'the toolbar can put files and chats on the canvas');
+  await p.click('[data-cv-act="add"]'); await settle(200);
+  ok(!!(await p.$('.xn-menu [data-add="add-file"]')) && !!(await p.$('.xn-menu [data-add="add-chat"]')), 'Add can put files and chats on the canvas'); await p.keyboard.press('Escape'); await settle(150);
 
   // dependency graph (xeno-orchestrator on the platform): lay out the project's graph, readiness on each card
   db.canvases[0].project = { id: 'a0000000-0000-4000-8000-000000000001', name: 'Launch' }; db.canvases[0].revision++;
   await p.reload({ waitUntil: 'domcontentloaded' }); await settle(1800);
-  ok(!!(await p.$('[data-cv-act="deps"]')), 'a project canvas offers Dependencies');
-  await p.click('[data-cv-act="deps"]'); await settle(1200);
+  await p.click('[data-cv-act="menu"]'); await settle(300);
+  ok(/Lay out dependencies/.test(await p.$eval('.xcm', (e) => e.innerText).catch(() => '')), 'a project canvas offers Dependencies'); await p.keyboard.press('Escape'); await settle(150);
+  await p.evaluate(() => XENO_CANVAS.act('deps')); await settle(1200);
   const sd = await waitSaved();
   const doc = db.canvases[0].content;
   const nodeOf = (k) => doc.nodes.find((x) => x.type === 'xeno-ref' && x.ref.id === k);
@@ -214,24 +218,57 @@ try {
   ok(db.openAs === pid && !!(await p.$('[data-cv-project] [data-cv-stage]')), 'the Canvas tab opens the projectâ€™s own map');
 
   // made on the canvas, it is the project's
-  await p.click('[data-cv-act="new-doc"]'); await settle(500);
+  await p.evaluate(() => XENO_CANVAS.act('new-doc')); await settle(500);
   await p.type('.xd-sh [data-f="title"] input, .xd-sh input', 'Plan'); await p.click('.xd-sh [data-xd-submit]'); await settle(1200);
   ok(db.docs.length === 1 && db.moved.at(-1) === 'v-doc-1', 'New doc makes a real document and moves it into the project');
-  await p.click('[data-cv-act="new-chat"]'); await settle(500);
+  await p.evaluate(() => XENO_CANVAS.act('new-chat')); await settle(500);
   await p.type('.xd-sh [data-f="title"] input, .xd-sh input', 'Ideas'); await p.click('.xd-sh [data-xd-submit]'); await settle(1200);
   ok(db.chats.at(-1)?.project_id === pid, 'New chat starts a chat in the project');
   const kinds = () => db.canvases[0].content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => n.ref.kind);
   const saved2 = async () => { await settle(1200); return kinds(); };
   const k2 = await saved2(); ok(k2.includes('file') && k2.includes('chat'), `and both land on the canvas (${k2.join()})`);
-  await p.click('[data-cv-act="new-image"]'); await settle(700);
-  await p.type('.xd-sh textarea', 'a bunker at dawn'); await p.click('.xd-sh [data-xd-submit]'); await settle(900);
-  ok(/up to 12 credits/.test(await p.$eval('.xd-sh', (e) => e.innerText)), 'Image says the most it can cost before it starts');
+  // the board's own menu, where you asked for it
+  const bd = await box('[data-cv-stage]'), spot = { x: bd.l + 120, y: bd.b - 120 };
+  await p.mouse.click(spot.x, spot.y, { button: 'right' }); await settle(250);
+  const mn = await box('.xn-menu'); ok(Math.abs(mn.l - spot.x) < 4, 'right-clicking the board opens the menu where you clicked');
+  await p.type('.xn-menu input', 'ima'); await settle(100);
+  ok((await p.$$eval('.xn-menu [data-add]', (e) => e.map((x) => x.dataset.add))).join() === 'media-image', 'typing narrows it');
+  await p.keyboard.press('Enter'); await settle(600);
+  const med = () => db.canvases[0].content.nodes.find((n) => n.type === 'media');
+  const mel = await box('[data-cv-media="image"] .xn-obj'); ok(Math.abs(mel.l - spot.x) < 200, 'Image drops an image node where you clicked');
+  ok(!!(await p.$('[data-cv-prompt]')) && await p.evaluate(() => document.activeElement?.dataset?.cvPrompt != null), 'its panel opens under it with the prompt in your hand');
+  await p.keyboard.type('a bunker at dawn'); await settle(1200);
+  ok(med()?.media.prompt === 'a bunker at dawn', 'what you type is kept on the node');
+  ok(/up to 12 credits/.test(await p.$eval('[data-cv-dock]', (e) => e.innerText)), 'the panel says the most it can cost before it starts');
   ok(!db.generated.length, 'and nothing has been spent yet');
-  await p.click('.xd-sh [data-xd-ok]'); await settle(1300);
-  ok(db.generated[0]?.projectId === pid && db.generated[0].quoteToken === 'q', 'confirmed, it generates into the project');
-  ok(kinds().includes('generation') && !!(await p.$('[data-cv-generation]')), 'and a card waits for it on the canvas');
+  await p.click('[data-cv-act="media-go"]'); await settle(1300);
+  ok(db.generated[0]?.projectId === pid && db.generated[0].quoteToken === 'q' && db.generated[0].settings.quality === 'medium', 'Generate runs it into the project, with the settings shown');
+  ok(med()?.media.generation === GEN && !!(await p.$('.xn-run')), 'and the node shows it running, with no second card');
   db.done = true; await settle(4500);
-  ok(!kinds().includes('generation') && db.canvases[0].content.nodes.some((n) => n.ref?.id === 'd0000000-0000-4000-8000-00000000000a'), 'when it finishes the card becomes the file it made');
+  ok(med()?.media.versions.includes('d0000000-0000-4000-8000-00000000000a') && !med()?.media.generation, 'when it finishes the file becomes the node’s version');
+  ok(!kinds().includes('generation'), 'and nothing is left waiting');
+  // a picture keeps its shape, a page does not, and a corner never selects
+  await p.mouse.click(bd.l + 30, bd.t + 30); await settle(200);
+  const shape = (el) => p.$eval(el, (e) => [e.offsetWidth, e.offsetHeight]);
+  const pull = async (el, dx, dy) => { const c = await p.$eval(el + ' [data-c="br"]', (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }); await p.mouse.move(c.x, c.y); await p.mouse.down(); await p.mouse.move(c.x + dx, c.y + dy, { steps: 6 }); await p.mouse.up(); await settle(200); };
+  const pic = '[data-cv-media="image"]', w0 = await shape(pic); await pull(pic, 80, 8); const w1 = await shape(pic);
+  ok(w1[0] > w0[0] && Math.abs(w1[0] / w1[1] - w0[0] / w0[1]) < 0.02, `a picture scales on its ratio (${w0} → ${w1})`);
+  ok(!(await p.$(pic + '.cv-n--sel')), 'pulling a corner doesn’t select the node');
+  await p.evaluate(() => XENO_CANVAS.act('fit')); await settle(300);
+  const pg = '.xn--doc', d0 = await shape(pg); await pull(pg, 64, -48); const d1 = await shape(pg);
+  ok(d1[0] > d0[0] && d1[1] < d0[1], `a document takes any size (${d0} → ${d1})`);
+  // a document is a page you write on
+  const dp = await box(pg + ' .xn-page');
+  await p.mouse.click(dp.x, dp.y); await p.mouse.click(dp.x, dp.y); await settle(500);
+  ok(!!(await p.$(pg + ' [data-cv-text]')), 'double-clicking a document writes on it, in place');
+  await p.keyboard.type(' more'); await settle(1500);
+  ok(db.docPut?.expectedVersion === 'v-doc-1' && /more/.test(db.docPut.markdown), 'and it saves to the real document, against the version it opened');
+  await p.mouse.click(bd.l + 30, bd.t + 30); await settle(300);
+  // a task moves from its card, one allowed step at a time
+  const stepKey = db.canvases[0].content.nodes.find((n) => n.ref?.kind === 'task').ref.id, moved0 = (db.moves || []).length; db.tasks.find((t) => t.key === stepKey).status = 'todo'; await p.evaluate(() => XENO_CANVAS.act('reload')); await settle(700);
+  await p.evaluate((k) => XENO_CANVAS.act('step', k + '|in_review'), stepKey); await settle(500);
+  ok((db.moves || []).slice(moved0).join() === 'in_progress,in_review', `a task steps forward through the real state machine (${(db.moves || []).slice(moved0)})`);
+  ok(!!(await p.$('.xn-who')), 'every node has a place for who it’s with');
 
   // a task card can be assigned from the canvas
   const taskNode = db.canvases[0].content.nodes.find((n) => n.ref?.kind === 'task');
@@ -241,10 +278,10 @@ try {
   ok(db.assigned?.key === taskNode.ref.id && db.assigned.body.assigneeId === 'u2', 'a task card is assigned from the canvas, on the real task');
 
   // an existing file or chat put on a project's canvas joins the project
-  await p.click('[data-cv-act="add-file"]'); await settle(700);
+  await p.evaluate(() => XENO_CANVAS.act('add-file')); await settle(700);
   await p.click('.xd [data-v]'); await p.click('.xd [data-xd-submit]'); await settle(900);
   ok(db.joined.some((x) => x.kind === 'file' && x.project === pid && x.id), `a file put on the canvas joins the project (${JSON.stringify(db.joined)})`);
-  await p.click('[data-cv-act="add-chat"]'); await settle(700);
+  await p.evaluate(() => XENO_CANVAS.act('add-chat')); await settle(700);
   await p.click('.xd [data-v]'); await p.click('.xd [data-xd-submit]'); await settle(900);
   ok(!db.joined.some((x) => x.kind === 'chat'), 'a chat asks first: people on the project will be able to read it');
   await p.click('.xd-sh [data-xd-ok]'); await settle(900);
@@ -261,9 +298,9 @@ try {
   ok(db.tickets.includes(`workspace.canvas/${pc}`) && !!(await a.$('[data-cv-live]')) && !!(await b2.$('[data-cv-live]')), 'both join the canvas live');
   ok((await b2.$$('[data-cv-people] .tk-face')).length === 1, 'and each sees the other is here');
   const startCount = (await ids(a)).length;
-  await a.bringToFront(); await a.click('[data-cv-act="add-note"]'); await settle(300); await a.keyboard.type('from A'); await a.keyboard.press('Escape'); await a.mouse.click(700, 800); await settle(700);
+  await a.bringToFront(); await a.evaluate(() => XENO_CANVAS.act('add-note')); await settle(300); await a.keyboard.type('from A'); await a.keyboard.press('Escape'); await a.mouse.click(700, 800); await settle(700);
   ok((await ids(b2)).length === startCount + 1 && await same(), 'a note added by one appears for the other without a reload');
-  await a.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await b2.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await settle(900);
+  await a.evaluate(() => XENO_CANVAS.act('add-note')); await b2.evaluate(() => XENO_CANVAS.act('add-note')); await settle(900);
   await a.keyboard.press('Escape'); await a.mouse.click(700, 800); await b2.bringToFront(); await b2.keyboard.press('Escape'); await b2.mouse.click(700, 800); await settle(400); await a.bringToFront(); await settle(900);
   ok((await ids(a)).length === startCount + 3 && await same(), 'two people adding at the same moment both land');
   const target = await a.evaluate(() => [...document.querySelectorAll('[data-cv-node]')].filter((e) => /^[a-z0-9]{8}$/.test(e.dataset.cvNode)).find((e) => { const r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return hit && hit.closest('[data-cv-node]') === e; })?.dataset.cvNode);
@@ -273,8 +310,8 @@ try {
   ok(await b2.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top) !== was, 'a card being moved moves on the other screen as it goes');
   await a.mouse.up(); await settle(500);
   ok(await a.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top) === await b2.$eval(`[data-cv-node="${target}"]`, (e) => e.style.left + e.style.top), 'and both end in the same place');
-  await b2.bringToFront(); await b2.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await settle(400); await b2.keyboard.type('still typing');
-  await a.bringToFront(); await a.evaluate(() => document.querySelector('[data-cv-act="add-note"]').click()); await settle(500); await a.mouse.click(700, 800); await settle(900);
+  await b2.bringToFront(); await b2.evaluate(() => XENO_CANVAS.act('add-note')); await settle(400); await b2.keyboard.type('still typing');
+  await a.bringToFront(); await a.evaluate(() => XENO_CANVAS.act('add-note')); await settle(500); await a.mouse.click(700, 800); await settle(900);
   ok((await ids(b2)).length === (await ids(a)).length, 'someone typing in a note still sees what others do');
   ok(/still typing/.test(await b2.$eval('[data-cv-text]', (e) => e.value).catch(() => '')) || await b2.$$eval('.cv-n--text', (els) => els.some((e) => /still typing/.test(e.innerText || e.textContent))), 'and keeps what they typed');
   await b2.bringToFront(); await b2.keyboard.press('Escape'); await b2.mouse.click(700, 800); await settle(400); await a.bringToFront(); await settle(700);
@@ -293,7 +330,7 @@ try {
 
   // view-only
   db.canvases[0].readonly = true; await p.bringToFront(); await p.goto(`${base}/workspace/projects/${pid}/canvas/${pc}`, { waitUntil: 'domcontentloaded' }); await settle(1800);
-  ok(/View only/.test(await main()) && !(await p.$('[data-cv-act="add-note"]')), 'a canvas you may only view shows no editing tools');
+  ok(/View only/.test(await main()) && !(await p.$('[data-cv-act="add"]')), 'a canvas you may only view shows no editing tools');
   ok((await p.$$('[data-cv-wire]')).length === 0, 'and no connect handles');
 
   // missing

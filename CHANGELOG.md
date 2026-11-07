@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-06
 
+**New canvas nodes.** The project canvas fills the page, and you add to it by right-clicking the board, with search and single-key shortcuts. A picture or video is its own node: select it and a panel opens underneath with the prompt, settings and versions, and it generates in place, with connected images feeding a video. Documents are pages you can write on directly, chats show their thread, tasks show their progress, and every node has a person in its corner. Drag a corner to resize: pictures keep their shape, everything else takes any size.
+
 **A reply reads in the order it was written.** An image card, a generated image or a code run used to sit above all of the reply's text, even when the model wrote the text first, so "the brief below" appeared under the card it described. Each one now stays where it happened, while the answer streams and after a reload. Chats from before this keep their image cards under the text; older code runs stay where they were, because nothing recorded where they happened.
 
 **The Generate button stops flickering.** A waiting image card kept switching between "Generate · up to 10 credits" and a grey "Pricing…", because every status check asked for a new price. It now gets one price per request, renews it quietly before it runs out, and only shows "Pricing…" when you change a setting. If a request can't be priced, it says so and stays said, with "Price it again" beside it.

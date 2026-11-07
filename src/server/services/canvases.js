@@ -39,7 +39,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AREA = /^[a-z][a-z0-9_-]{0,39}$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TASK_KEY = /^T-\d{1,15}$/;
-const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref']);
+const NODE_TYPES = new Set(['text', 'link', 'group', 'xeno-ref', 'media']);   // media: a picture or video made on the canvas, with its prompt and versions
 const REF_KINDS = new Set(['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet', 'generation']);   // tenet: a XENO Corpus verdict card (services/xenoCorpus.js)
 const UUID_KINDS = new Set(['file', 'chat', 'project', 'division', 'objective', 'run', 'tenet', 'generation']);
 const COLORS = /^([1-6]|#[0-9a-fA-F]{6})$/;
@@ -67,6 +67,12 @@ export function cleanContent(content) {
     if (n.type === 'text') out.text = str(n.text, 20000) ?? '';
     if (n.type === 'link') { const u = String(n.url || ''); if (!/^https?:\/\//i.test(u) || u.length > 2000) throw new CanvasError('A link must be an http(s) address', 'invalid_content'); out.url = u; }
     if (n.type === 'group') out.label = str(n.label, 200) ?? '';
+    if (n.who != null) { if (!ID.test(String(n.who))) throw new CanvasError('Invalid assignee', 'invalid_content'); out.who = String(n.who); }
+    if (n.type === 'media') {
+      const m = n.media || {}, versions = Array.isArray(m.versions) ? m.versions.slice(-50).map((v) => String(v).toLowerCase()) : [];
+      if (!['image', 'video'].includes(m.kind) || !versions.every((v) => UUID.test(v)) || (m.generation != null && !UUID.test(String(m.generation)))) throw new CanvasError('Invalid media item', 'invalid_content');
+      out.media = { kind: m.kind, prompt: str(m.prompt, 16000) ?? '', model: str(m.model, 120) ?? '', ratio: str(m.ratio, 8) ?? '1:1', quality: str(m.quality, 16) ?? '', versions, cur: Math.max(0, Math.min(versions.length - 1, Number(m.cur) || 0)), generation: m.generation ? String(m.generation).toLowerCase() : null };
+    }
     if (n.type === 'xeno-ref') {
       const r = n.ref || {};
       if (!REF_KINDS.has(r.kind)) throw new CanvasError('Unknown reference kind', 'invalid_content');
@@ -128,7 +134,7 @@ async function resolveFiles(db, me, ids) {
     const rev = await latestFor(db, id);
     const can = (await check(db, { object: `library_asset:${rev}`, relation: 'viewer', subject: `user:${me.id}` })).allowed;
     const f = can ? (await db.query('SELECT id, file_id, original_name, mime_type, file_size, metadata FROM user_files WHERE id = $1 AND deleted_at IS NULL', [rev])).rows[0] : null;
-    out[id] = f ? { id: String(f.file_id), version: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), url: f.metadata?.xeno_doc ? `/workspace/office/spaces/${f.metadata.xeno_doc.kind === 'note' ? 'notes' : 'write'}/${f.file_id}` : `/workspace/library?sel=${f.id}` } : { id, missing: true };
+    out[id] = f ? { id: String(f.file_id), version: String(f.id), name: f.original_name, type: f.mime_type, bytes: Number(f.file_size), doc: !!f.metadata?.xeno_doc, url: f.metadata?.xeno_doc ? `/workspace/office/spaces/${f.metadata.xeno_doc.kind === 'note' ? 'notes' : 'write'}/${f.file_id}` : `/workspace/library?sel=${f.id}` } : { id, missing: true };
   }
   return out;
 }
@@ -251,7 +257,9 @@ export async function createCanvas(db, me, { name, projectId, area, content } = 
 export async function getCanvas(db, me, id) {
   const { c, s } = await load(db, me, id);
   const content = cleanContent(c.content);
-  const of = (kind) => content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id);
+  const media = content.nodes.filter((n) => n.type === 'media').map((n) => n.media);
+  const of = (kind) => [...new Set([...content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id),
+    ...(kind === 'file' ? media.flatMap((m) => m.versions) : kind === 'generation' ? media.map((m) => m.generation).filter(Boolean) : [])])];
   return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')),
     projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')), tenets: await resolveTenetCards(db, me, of('tenet')), generations: await resolveGenerations(db, me, of('generation')) } };
 }
@@ -319,7 +327,7 @@ export function layoutMap(root, columns) {
 
 /** What's new goes under its column, or a new column to the right. Pure: returns the content, and what it added. */
 export function growMap(content, columns, seen) {
-  const nodes = [...content.nodes], on = new Set(nodes.filter((n) => n.type === 'xeno-ref').map((n) => `${n.ref.kind}:${n.ref.id}`));
+  const nodes = [...content.nodes], on = new Set([...nodes.filter((n) => n.type === 'xeno-ref').map((n) => `${n.ref.kind}:${n.ref.id}`), ...nodes.filter((n) => n.type === 'media').flatMap((n) => n.media.versions.map((v) => `file:${v}`))]);
   let added = 0;
   for (const col of columns) {
     const fresh = col.items.filter((id) => !seen.has(`${col.kind}:${id}`) && !on.has(`${col.kind}:${id}`));
