@@ -1,0 +1,114 @@
+/* The project canvas's nodes (platform-canvas.js): the content is the object, a name sits outside it, the person sits in
+   XENO's scooped corner, and what you can do opens under the node when it's selected. */
+.pg.pg--canvas{padding:0!important}
+.pg--canvas .cv{border:0;border-radius:0;min-height:0}
+
+.cv-n.xn{background:none;border:0;box-shadow:none}
+.cv-n.xn:hover{border:0}
+.cv-n.xn.cv-n--sel{box-shadow:none}
+.xn-label{position:absolute;left:0;right:34px;bottom:100%;height:24px;display:flex;align-items:center;gap:6px;color:var(--dim);font-size:11.5px;white-space:nowrap;overflow:hidden}
+.xn-label svg.i{width:13px;height:13px;opacity:.8}
+.xn-label b{font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.xn-label em{font-style:normal;color:var(--dim);font-variant-numeric:tabular-nums}
+.xn:hover .xn-label b,.cv-n--sel .xn-label b{color:var(--text)}
+
+.xn-edge{position:relative;width:100%;height:100%}
+.xn-obj{position:relative;z-index:1;width:100%;height:100%;background:var(--n20);overflow:hidden;
+  clip-path:shape(from 0 6px,arc to 6px 0 of 6px cw,line to calc(100% - 36px) 0,arc to calc(100% - 30px) 6px of 6px cw,line to calc(100% - 30px) 24px,arc to calc(100% - 24px) 30px of 6px ccw,line to calc(100% - 6px) 30px,arc to 100% 36px of 6px cw,line to 100% calc(100% - 6px),arc to calc(100% - 6px) 100% of 6px cw,line to 6px 100%,arc to 0 calc(100% - 6px) of 6px cw,close)}
+/* selection is a drawn line, never a filter: a filter re-rasterises the node and softens the picture and the text */
+.xn-edge::before{content:'';position:absolute;inset:-1px;pointer-events:none;opacity:0;background:var(--text);
+  clip-path:shape(from 0 7px,arc to 7px 0 of 7px cw,line to calc(100% - 36px) 0,arc to calc(100% - 30px) 6px of 6px cw,line to calc(100% - 30px) 24px,arc to calc(100% - 24px) 30px of 6px ccw,line to calc(100% - 6px) 30px,arc to 100% 36px of 6px cw,line to 100% calc(100% - 7px),arc to calc(100% - 7px) 100% of 7px cw,line to 7px 100%,arc to 0 calc(100% - 7px) of 7px cw,close)}
+.xn:hover>.xn-edge::before{opacity:.18}
+.cv-n--sel>.xn-edge::before,.cv-n--sel:hover>.xn-edge::before{opacity:.5}
+
+.xn-who{position:absolute;top:0;right:0;width:24px;height:24px;display:grid;place-items:center;border-radius:5px;background:var(--n31);color:var(--text);font-size:10px;font-weight:600;z-index:3;text-align:center;cursor:pointer;padding:0;border:0}
+.xn-who.agent{background:var(--n24);border:1px solid var(--n44)}
+.xn-who.none{background:transparent;border:1px dashed var(--n38);color:var(--dim)}
+.xn-who svg.i{width:11px;height:11px}
+.xn-who:hover{border-color:var(--text)}
+
+.xn .cv-wire{z-index:3;right:-10px}
+.xn .cv-grip{display:none}
+.xn-grip{position:absolute;width:44px;height:44px;z-index:2}
+.xn-grip::after{content:'';position:absolute;width:20px;height:20px;border:0 solid var(--text);opacity:0;transform:scale(.86);transition:opacity .16s ease,transform .16s var(--open)}
+.xn-grip:hover::after{opacity:.5;transform:none}
+.xn-grip:active::after{opacity:.9;transform:none}
+.xn-grip--tl{left:-22px;top:-22px;cursor:nwse-resize}
+.xn-grip--tl::after{left:13px;top:13px;border-width:2.5px 0 0 2.5px;border-top-left-radius:15px;transform-origin:100% 100%}
+.xn-grip--bl{left:-22px;bottom:-22px;cursor:nesw-resize}
+.xn-grip--bl::after{left:13px;bottom:13px;border-width:0 0 2.5px 2.5px;border-bottom-left-radius:15px;transform-origin:100% 0}
+.xn-grip--br{right:-22px;bottom:-22px;cursor:nwse-resize}
+.xn-grip--br::after{right:13px;bottom:13px;border-width:0 2.5px 2.5px 0;border-bottom-right-radius:15px;transform-origin:0 0}
+
+/* what opens under a selected node */
+.xn-dock{position:absolute;transform-origin:0 0;border-radius:6px;background:var(--elevated);border:1px solid var(--border);box-shadow:0 14px 40px rgb(0 0 0 / .5);z-index:6;user-select:text;cursor:default}
+.xn-prompt{display:block;width:100%;min-height:44px;max-height:120px;padding:10px 11px 4px;border:0;outline:0;box-shadow:none;background:none;color:var(--text);font:13px/1.45 Inter,system-ui,sans-serif;resize:none}
+.xn-prompt::placeholder{color:var(--dim)}
+.xn-row{display:flex;align-items:center;gap:4px;padding:6px;min-width:0}
+.xn-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 7px;border:0;border-radius:5px;background:none;color:var(--muted);font-size:12px;white-space:nowrap;cursor:pointer}
+.xn-chip:hover{background:var(--hover);color:var(--text)}
+.xn-chip i{display:inline-block;border:1.5px solid currentColor;border-radius:1.5px}
+.xn-sp{flex:1}
+.xn-cost{color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:4px}
+.xn-go{display:inline-flex;align-items:center;height:28px;padding:0 11px;border:0;border-radius:5px;background:var(--text);color:var(--canvas);font-weight:600;font-size:12.5px;white-space:nowrap;cursor:pointer}
+.xn-go:hover{opacity:.88}
+.xn-go[disabled]{opacity:.45;cursor:default}
+.xn-sub{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:5px;border:1px solid var(--n44);background:none;color:var(--text);font-size:12.5px;white-space:nowrap;cursor:pointer;text-decoration:none}
+.xn-sub:hover{background:var(--hover)}
+.xn-sub svg.i{width:13px;height:13px}
+.xn-vers{display:flex;gap:4px;padding:8px 8px 0}
+.xn-vers button{width:44px;height:44px;padding:0;border:0;background:#000;border-radius:4px;overflow:hidden;opacity:.55;outline:1px solid transparent;outline-offset:1px;cursor:pointer}
+.xn-vers button.on{opacity:1;outline-color:var(--text)}
+.xn-vers img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* picture and video: the content is the node */
+.xn-media{position:relative;width:100%;height:100%;background:var(--n20)}
+.xn-media img,.xn-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.xn-media img{pointer-events:none}
+.xn-crop{position:absolute;width:18px;height:18px;border:0 solid var(--n44)}
+.xn-crop.a{left:12px;top:12px;border-width:1.5px 0 0 1.5px}.xn-crop.b{right:42px;top:42px;border-width:1.5px 1.5px 0 0}.xn-crop.c{left:12px;bottom:12px;border-width:0 0 1.5px 1.5px}.xn-crop.d{right:12px;bottom:12px;border-width:0 1.5px 1.5px 0}
+.xn-ask{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;color:var(--muted);font-size:13.5px;padding:0 42px}
+.xn-run{position:absolute;left:0;bottom:0;height:2px;width:34%;background:var(--text);animation:xn-run 1.5s ease-in-out infinite alternate}
+@keyframes xn-run{from{left:0}to{left:66%}}
+
+/* paper in both themes, so it is a colour of its own and not a step of the theme grey */
+.xn--doc .xn-obj{background:white;color:#000}
+.xn-page{height:100%;padding:28px 30px 20px;overflow:hidden;font-size:12.5px;line-height:1.6;mask-image:linear-gradient(#000 84%,transparent)}
+.xn-page h3{margin:0 0 12px;font-size:21px;line-height:1.2;font-weight:600;letter-spacing:-.01em;padding-right:18px}
+.xn-page p{margin:0 0 10px}
+.xn-page-ed{display:block;width:100%;height:100%;padding:28px 30px 20px;border:0;outline:0;box-shadow:none;background:none;color:inherit;font:12.5px/1.6 Inter,system-ui,sans-serif;resize:none}
+
+.xn-chat{display:flex;flex-direction:column;height:100%}
+.xn-thread{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:11px;padding:38px 14px 8px;scrollbar-width:none;font-size:13px}
+.xn-msg small{display:block;color:var(--dim);font-size:11px;margin-bottom:2px}
+.xn-msg--me{align-self:flex-end;max-width:84%;padding:6px 10px;border-radius:6px;background:var(--n31)}
+.xn-say{display:flex;align-items:center;margin:0 8px 8px;padding:0 10px;height:36px;border-radius:5px;background:var(--n12);border:1px solid var(--n31);color:var(--dim);text-decoration:none;font-size:13px;flex:none}
+.xn-say:hover{color:var(--text)}
+
+.xn-task{display:flex;flex-direction:column;height:100%;padding:12px 14px}
+.xn-tk{display:flex;align-items:center;gap:7px;height:18px;margin-bottom:9px;padding-right:22px;color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+.xn-task .cv-task-t{font-size:15px;flex:1}
+.xn-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-top:10px}
+.xn-steps button{height:18px;padding:0;border:0;background:none;display:flex;align-items:flex-start;cursor:pointer}
+.xn-steps button::before{content:'';display:block;width:100%;height:3px;border-radius:1px;background:var(--n31)}
+.xn-steps button.on::before{background:var(--text)}
+.xn-steps button:hover::before{background:var(--n68)}
+
+.cv-n.xn--note .xn-obj{background:none;clip-path:none;overflow:visible}
+.cv-n.xn--note{padding:0}
+.xn--note .xn-edge::before,.xn--project .xn-edge::before{display:none}
+.xn--note .cv-text,.xn--note .cv-text-ed{font-size:19px;font-weight:500;line-height:1.3;letter-spacing:-.01em;padding:0}
+.xn--project .xn-obj{background:none;clip-path:none;overflow:visible}
+.xn-title{font-size:46px;line-height:1.05;font-weight:600;letter-spacing:-.025em;margin:2px 0 8px;white-space:nowrap}
+.xn-facts{display:flex;gap:18px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.xn-facts b{color:var(--text);font-weight:600}
+
+/* the add menu is the workspace's own, with search */
+.xcm.xn-menu{width:256px;max-height:min(480px,calc(100vh - 24px))}
+.xn-find{display:flex;align-items:center;gap:7px;height:30px;padding:0 9px;margin-bottom:3px}
+.xn-find svg.i{width:14px;height:14px;color:var(--dim)}
+.xn-find input{flex:1;min-width:0;background:none;border:0;outline:0;box-shadow:none;color:var(--text);font:12.5px Inter,system-ui,sans-serif}
+.xn-find input::placeholder{color:var(--dim)}
+.xn-grp{padding:7px 9px 3px;color:var(--dim);font-size:11px}
+.xn-none{padding:10px 9px;color:var(--dim)}
+@media (prefers-reduced-motion:reduce){.xn-run{animation:none}.xn-grip::after{transition:none}}

@@ -92,6 +92,22 @@ async function main() {
     check((await bob('GET', `/canvases/${cv.id}`)).j.canvas.records.files[bobFile].name === 'brief-v2.txt', 'renaming the file shows on the canvas at once');
     check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'q', type: 'xeno-ref', ref: { kind: 'file', id: 'nope' }, x: 0, y: 0, width: 260, height: 100 }], edges: [] }, revision: '4' })).j.code === 'invalid_content', 'a file reference must name a file id');
 
+    // a picture or video made on the canvas: its files come back live, for those allowed, and only sound data is kept
+    const mc = (await bob('POST', '/canvases', { name: 'Media', projectId: proj.id })).j.canvas;
+    const med = (over = {}) => ({ id: 'm1', type: 'media', x: 0, y: 0, width: 340, height: 340, who: String(ids.bob), media: { kind: 'image', prompt: 'a door', model: 'gpt-image-2', ratio: '1:1', quality: 'medium', versions: [bobFile, eveFile], cur: 1, generation: null, ...over } });
+    const ms = await bob('PUT', `/canvases/${mc.id}`, { content: { nodes: [med()], edges: [] }, revision: String(mc.revision) });
+    const kept = ms.j.canvas?.content?.nodes?.[0];
+    check(ms.s === 200 && kept?.media?.prompt === 'a door' && kept.media.cur === 1 && kept.who === String(ids.bob), 'a media node keeps its prompt, versions and person');
+    check(ms.j.canvas?.records?.files?.[bobFile]?.name === 'brief-v2.txt', 'its versions read as live files');
+    check(ms.j.canvas?.records?.files?.[eveFile]?.missing === true && !ms.j.canvas.records.files[eveFile].name, 'a version the reader cannot open stays hidden');
+    const bad = async (over, node) => (await bob('PUT', `/canvases/${mc.id}`, { content: { nodes: [node || med(over)], edges: [] }, revision: String(ms.j.canvas.revision) })).j.code;
+    check(await bad({ kind: 'audio' }) === 'invalid_content', 'only a picture or a video is a media node');
+    check(await bad({ versions: ['nope'] }) === 'invalid_content', 'a version must name a file id');
+    check(await bad({ generation: 'nope' }) === 'invalid_content', 'a running generation must name a generation id');
+    check(await bad(null, { ...med(), who: '../x' }) === 'invalid_content', 'the person on a node must be an id');
+    check((await bob('PUT', `/canvases/${mc.id}`, { content: { nodes: [{ ...med(), media: { ...med().media, cur: 99, extra: 'x' } }], edges: [] }, revision: String(ms.j.canvas.revision) })).j.canvas?.content?.nodes?.[0]?.media?.cur === 1, 'the shown version stays within the versions, and unknown fields are dropped');
+    await bob('DELETE', `/canvases/${mc.id}`);
+
     // validation
     check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [content.nodes[0], { ...content.nodes[0], id: 'a2' }], edges: [] }, revision: '4' })).j.code === 'duplicate_ref', 'the same task twice on one canvas is refused');
     check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'x', type: 'script', x: 0, y: 0, width: 1, height: 1 }], edges: [] }, revision: '4' })).j.code === 'invalid_content', 'an unknown item type is refused');
