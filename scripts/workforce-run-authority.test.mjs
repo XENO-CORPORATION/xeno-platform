@@ -159,6 +159,47 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     assert.equal((await readRunAuthority(pool, ctx(editor), id)).revoked, false, 'refusing one call does not revoke the run');
   });
 
+  await t.test('NFR-06: a run’s steps read back in sequence, each dispatch with the draw that consumed it', async () => {
+    const { readRunSteps } = await import('../src/server/services/workforceRunAuthority.js');
+    const ledger = await import('../src/server/utils/creditLedgerV2.js');
+    const id = await admit(owner, mine, { kind: 'personal', ownerUserId: owner });
+    const dispatch = await step(owner, id, 'provider_dispatch');
+    const drawId = `steps-${randomUUID().slice(0, 12)}`;
+    await ledger.openRunDrawV2(pool, { admissionId: id, actorUserId: owner, drawId, lease: dispatch.token, model: 'claude-opus-5', inputBound: 1, outputBound: 1 });
+    await ledger.settleRunDrawV2(pool, { admissionId: id, drawId, providerRequestId: `provider-${drawId}`, provider: 'fixture', model: 'claude-opus-5', inputTokens: 1, outputTokens: 1, measured: true });
+    await step(owner, id, 'privileged_call', 'files.read');
+    await step(owner, id, 'provider_dispatch');   // authorized, never spent
+    await rejects(step(owner, id, 'privileged_call', 'mail.send'), 'denied', 'capability_not_live', 'a refused call');
+
+    const read = await readRunSteps(pool, ctx(owner), { admissionId: id });
+    assert.deepEqual(read.steps.map((s) => [s.sequence, s.operation, s.capability]),
+      [['1', 'provider_dispatch', null], ['2', 'privileged_call', 'files.read'], ['3', 'provider_dispatch', null]], 'every lease, in sequence');
+    const draw = (await pool.query('SELECT charged_micro, state FROM credit_hold_draws WHERE admission_id=$1 AND draw_id=$2', [id, drawId])).rows[0];
+    assert.equal(read.steps[0].dispatch?.model, 'claude-opus-5', 'a dispatch carries the draw that consumed its lease');
+    assert.equal(read.steps[0].dispatch.chargedMicro, String(draw.charged_micro), 'and what it was charged, from the draw itself');
+    assert.equal(read.steps[0].dispatch.state, draw.state);
+    assert.equal(read.steps[1].dispatch, null, 'a privileged call has no dispatch');
+    assert.equal(read.steps[2].dispatch, null, 'a lease no draw consumed is authorized, not spent');
+    assert.equal(read.refusalsRecorded, false, 'the answer says refusals are not stored, so an empty list is not read as none');
+    assert.equal(read.nextAfterSequence, null);
+    assert.equal(read.revocation, null);
+
+    const page = await readRunSteps(pool, ctx(owner), { admissionId: id, limit: 2 });
+    assert.deepEqual(page.steps.map((s) => s.sequence), ['1', '2']);
+    assert.equal(page.nextAfterSequence, '2', 'a full page names where the next one starts');
+    const rest = await readRunSteps(pool, ctx(owner), { admissionId: id, afterSequence: page.nextAfterSequence });
+    assert.deepEqual(rest.steps.map((s) => s.sequence), ['3']);
+
+    await rejects(readRunSteps(pool, ctx(editor), { admissionId: id }), 'not_found', 'admission_not_found', 'another person learns nothing about the run');
+    await rejects(readRunSteps(pool, ctx(owner), { admissionId: id, limit: 500 }), 'bad_input', 'limit_invalid');
+    await rejects(readRunSteps(pool, ctx(owner), { admissionId: id, extra: 1 }), 'bad_input', 'unknown_field');
+
+    await revokeRun(pool, ctx(owner), id);
+    const stopped = await readRunSteps(pool, ctx(owner), { admissionId: id });
+    assert.equal(stopped.revocation?.reason, 'stopped_by_actor', 'a stop shows on the steps read');
+    assert.equal(stopped.steps.length, 3, 'stopping keeps the history');
+  });
+
   await t.test('RUN-03: live revocation overrides the pinned grant before the next privileged call', async () => {
     const ws = await workspace(owner, 'revoke', [['editor', editor]]);
     const a = await assign(lent.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read', 'files.write']));

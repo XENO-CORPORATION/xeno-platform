@@ -6073,6 +6073,12 @@
       "class": "safe",
       "scope": "agents:read"
     },
+    "route:workforceRoutes.js:POST /run-admissions/steps/read": {
+      "status": "capability",
+      "capability": "run.steps.get",
+      "class": "safe",
+      "scope": "agents:read"
+    },
     "route:workforceRoutes.js:POST /run-admissions/authorize-step": {
       "status": "planned",
       "class": "reversible",

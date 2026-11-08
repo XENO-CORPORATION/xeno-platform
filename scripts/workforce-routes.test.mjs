@@ -75,6 +75,7 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
   let admitFailure;
   let admitResult;
   let authorityResult;
+let stepsResult;
   let pinResult;
   let capacityResult;
   let evaluationResult, rosterResult;
@@ -172,7 +173,8 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
     revokeRun: async (pool, context, value) => { calls.push({ method: 'revoke', context, body: value });
       return { schemaVersion: 1, admissionId: operationId, revoked: true, reason: 'stopped_by_actor', revokedAt: '2026-09-25T12:00:00.000Z', replayed: false }; },
     readRunAuthority: async (pool, context, value) => { calls.push({ method: 'authority', context, body: value });
-      return authorityResult ?? { schemaVersion: 1, admissionId: operationId, revoked: false, reason: null, latestLeaseSequence: '1' }; } }));
+      return authorityResult ?? { schemaVersion: 1, admissionId: operationId, revoked: false, reason: null, latestLeaseSequence: '1' }; },
+    readRunSteps: async (pool, context, value) => { calls.push({ method: 'steps', context, body: value }); return stepsResult; } }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -765,6 +767,25 @@ test('real HTTP/authMiddleware/JWT/DPoP boundary with query-aware auth DB and in
       }
       authorityResult = undefined;
       assert.equal((await request({ path: '/run-admissions/authority', body: { admissionId: operationId, extra: 1 } })).status, 400);
+      // NFR-06: a run's steps are a read; each step and its draw cross field by field, nothing else.
+      const step1 = { sequence: '1', operation: 'provider_dispatch', capability: null, effectiveCapabilities: ['files.read'],
+        issuedAt: '2026-09-25T12:00:00.000Z', expiresAt: '2026-09-25T12:01:00.000Z',
+        dispatch: { model: 'claude-opus-5', state: 'settled', outcome: 'measured', reservedMicro: '10', chargedMicro: '4', inputTokens: '1', outputTokens: '1',
+          openedAt: '2026-09-25T12:00:01.000Z', resolvedAt: '2026-09-25T12:00:02.000Z', providerRequestId: 'hidden' } };
+      stepsResult = { schemaVersion: 1, admissionId: operationId, steps: [step1], nextAfterSequence: null, revocation: null, refusalsRecorded: false, internal: 'hidden' };
+      const steps = await request({ path: '/run-admissions/steps/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
+      assert.equal(steps.status, 200);
+      assert.equal(steps.body.steps[0].dispatch.chargedMicro, '4');
+      assert.deepEqual(['internal' in steps.body, 'providerRequestId' in steps.body.steps[0].dispatch, steps.body.refusalsRecorded], [false, false, false],
+        'the steps cross, the provider request id does not, and the answer says refusals are not stored');
+      for (const bad of [{ refusalsRecorded: true }, { steps: [{ ...step1, operation: 'anything' }] }, { steps: [{ ...step1, dispatch: { ...step1.dispatch, chargedMicro: 4 } }] },
+        { revocation: { reason: 'because', revokedAt: '2026-09-25T12:00:00.000Z', fencedByAdmissionId: null } }]) {
+        stepsResult = { schemaVersion: 1, admissionId: operationId, steps: [step1], nextAfterSequence: null, revocation: null, refusalsRecorded: false, ...bad };
+        assert.equal((await request({ path: '/run-admissions/steps/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) })).status, 500,
+          'a step in another shape is never relayed: ' + JSON.stringify(bad).slice(0, 80));
+      }
+      stepsResult = undefined;
+      assert.equal((await request({ method: 'GET', path: '/run-admissions/steps/read' })).status, 405);
       assert.equal((await request({ method: 'GET', path: '/run-admissions/authorize-step' })).status, 405);
     });
   } finally {

@@ -375,6 +375,50 @@ export async function readRunAuthority(pool, authenticatedContext, admissionIdVa
     remainingMicro: funding?.remainingMicro ?? null, reservationExpiresAt: funding?.reservationExpiresAt ?? null };
 }
 
+/**
+ * NFR-06: a run's steps, for a Runs screen -- every lease this admission was issued, in sequence, and
+ * for each provider dispatch the draw that consumed it (model, state, tokens, what was charged). Same
+ * visibility as readRunAuthority: only the admitted actor. A read; it commits nothing.
+ *
+ * What is NOT here, said in the answer rather than left as silence: a refused step is never stored (it
+ * rolls back with its transaction; only a terminal loss is recorded, as the revocation), so
+ * `refusalsRecorded` is false and an empty refusal list must not read as "nothing was refused".
+ */
+export const RUN_STEPS_PAGE_MAX = 200;
+export async function readRunSteps(pool, authenticatedContext, value) {
+  const actorUserId = uuid(authenticatedContext?.actorUserId, 'actor');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('bad_input', 'body_required');
+  if (Object.keys(value).some((k) => !['admissionId', 'afterSequence', 'limit'].includes(k))) fail('bad_input', 'unknown_field');
+  const admissionId = uuid(value.admissionId, 'admission');
+  const after = value.afterSequence === undefined ? '0' : String(value.afterSequence);
+  if (!/^\d{1,18}$/.test(after)) fail('bad_input', 'after_sequence_invalid');
+  const limit = value.limit === undefined ? 100 : value.limit;
+  if (!Number.isInteger(limit) || limit < 1 || limit > RUN_STEPS_PAGE_MAX) fail('bad_input', 'limit_invalid');
+  const row = (await pool.query('SELECT actor_user_id FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
+  if (!row || row.actor_user_id !== actorUserId) fail('not_found', 'admission_not_found');
+  // One more than asked, to say whether another page exists without a count query.
+  const rows = (await pool.query(`SELECT l.*, d.model, d.state AS draw_state, d.outcome, d.reserved_micro, d.charged_micro,
+      d.input_tokens, d.output_tokens, d.created_at AS draw_opened_at, d.resolved_at
+    FROM workforce_run_leases l LEFT JOIN credit_hold_draws d ON d.lease_hash = l.token_hash AND d.admission_id = l.admission_id
+    WHERE l.admission_id=$1 AND l.sequence > $2 ORDER BY l.sequence LIMIT $3`, [admissionId, after, limit + 1])).rows;
+  const more = rows.length > limit;
+  const steps = rows.slice(0, limit).map((r) => ({
+    sequence: String(r.sequence), operation: r.operation, capability: r.capability, effectiveCapabilities: r.effective_capabilities,
+    issuedAt: r.issued_at.toISOString(), expiresAt: r.expires_at.toISOString(),
+    // A provider dispatch whose lease no draw consumed yet (or ever) has no dispatch: it was authorized, not spent.
+    dispatch: r.model ? { model: r.model, state: r.draw_state, outcome: r.outcome, reservedMicro: String(r.reserved_micro),
+      chargedMicro: String(r.charged_micro), inputTokens: r.input_tokens === null ? null : String(r.input_tokens),
+      outputTokens: r.output_tokens === null ? null : String(r.output_tokens),
+      openedAt: r.draw_opened_at.toISOString(), resolvedAt: r.resolved_at ? r.resolved_at.toISOString() : null } : null,
+  }));
+  const fence = await fenceOf(pool, admissionId);
+  return { schemaVersion: 1, admissionId, steps,
+    nextAfterSequence: more ? steps.at(-1).sequence : null,
+    revocation: fence ? { reason: fence.reason, revokedAt: fence.revokedAt.toISOString(),
+      fencedByAdmissionId: fence.admissionId !== admissionId ? fence.admissionId : null } : null,
+    refusalsRecorded: false };
+}
+
 /** RUN-10: the revocation that fences this admission -- its own, or the nearest ancestor's -- or null. */
 async function fenceOf(db, admissionId) {
   const r = (await db.query(`SELECT r.admission_id, r.reason, r.revoked_at FROM workforce_run_revocations r

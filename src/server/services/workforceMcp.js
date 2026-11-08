@@ -61,6 +61,7 @@ const DEFS = [
   ['pin_get', 'Read the runnable pin', RO, 'run.pin.get: the current { resourceId, version, contentHash } of an agent as runnable at one target, by you — what an admission must name. Writes nothing.', free('the /run-admissions/pin body'), (db, a, v) => admission.readRunnablePin(db, ctxOf(a), v)],
   ['admission_revoke', 'Revoke a run', DX, 'run.admission.revoke (agent.execution.cancel): stop a run; its next step is refused.', free('{ admissionId }', ['admissionId']), (db, a, v) => authority.revokeRun(db, ctxOf(a), v.admissionId)],
   ['authority_get', 'Read a run’s live authority', RO, 'run.authority.get: what a run may still do, re-derived from live rows.', free('{ admissionId }', ['admissionId']), (db, a, v) => authority.readRunAuthority(db, ctxOf(a), v.admissionId)],
+  ['steps_get', 'Read a run’s steps', RO, 'run.steps.get: every lease the run was issued, in sequence, each model call with what it was charged. Refused steps are not stored.', free('{ admissionId, afterSequence?, limit? }', ['admissionId']), (db, a, v) => authority.readRunSteps(db, ctxOf(a), v)],
   // ── division.*
   ['division_list', 'List divisions', RO, 'division.division.list: the divisions of a workspace (default: your personal one).', free('{ workspaceId?, archived? }'), (db, a, v) => divisions.list(db, meOf(a), { workspaceId: v.workspaceId || null, archived: v.archived === true })],
   ['division_get', 'Read a division', RO, 'division.division.get: one division — head, parent, children, agents, projects.', free('{ id }', ['id']), (db, a, v) => divisions.get(db, meOf(a), v.id)],
@@ -108,7 +109,7 @@ export const TOOL_ROUTE = Object.freeze({
   catalog_list: { path: '/resources/list' },
   admission_create: { path: '/run-admissions' }, admission_get: { path: '/run-admissions/read' }, admission_list: { path: '/run-admissions/list' },
   admission_operation_get: { path: '/run-admissions/operations/read' }, pin_get: { path: '/run-admissions/pin' },
-  admission_revoke: { path: '/run-admissions/revoke' }, authority_get: { path: '/run-admissions/authority' },
+  admission_revoke: { path: '/run-admissions/revoke' }, authority_get: { path: '/run-admissions/authority' }, steps_get: { path: '/run-admissions/steps/read' },
   division_list: { wrap: '...' }, division_get: { wrap: 'division' }, division_home: { wrap: 'home' }, division_create: { wrap: 'division' }, division_update: { wrap: 'division' }, division_archive: { wrap: 'division' },
   objective_create: { wrap: 'result' }, objective_get: { wrap: 'result' }, objective_update: { wrap: 'result' }, objective_complete: { wrap: 'result' }, objective_link_goal: { wrap: 'result' },
   funding_price: { wrap: 'result' }, funding_budget_propose: { wrap: 'result' }, funding_budget_get: { wrap: 'result' }, funding_offer_get: { wrap: 'result' },
