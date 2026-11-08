@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Agents can work on a canvas the way people do.** Through XENO MCP, an agent can now put image and video nodes on a canvas (with their prompt, and the files or running generation that fill them), change a node's prompt, and change what a connection means: between two tasks that makes a real task link, as it does on screen. Moving, resizing, writing notes and connecting were already there. Everything goes through the same rules as the screen, so an agent can only change a canvas its person may edit.
+
 **Losing access closes the canvas.** Someone removed from a project, or from the workspace it belongs to, or turned from an editor into a viewer, used to stay on the project's open canvas and keep editing until they left. Now their live session is closed as soon as the change is saved, and the canvas reopens as what they can still do: view only, or "not shared with you". People who can still edit are left alone. An agent that loses access closes its person's session too, who simply reopens it.
 
 **The product list says what works.** Assets, Fonts, Stock, CRM, Forms and Scheduling were still marked "Soon" in the workspace although each has run there for weeks. They are now listed as working, and choosing one opens its real page (Studio › Libraries, Corpo › Customers, Forms, Scheduling), including from search and from an old link. The Assets, Fonts and Stock product pages on the site no longer call themselves a documentation scaffold: each says what works today, what is next, and links into the workspace. Support Desk (answering your own customers) and Mail stay marked "Soon": the desk is not built, and XENO Mail's server is offline.
