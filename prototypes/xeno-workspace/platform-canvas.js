@@ -118,7 +118,12 @@
     const conn = X_.joinLive({ type: 'workspace.canvas', id, Y: X_.Y, doc, ticket: async (resource) => {
       const r = await api('POST', '/api/live/tickets', { resource }); if (!r.ok) throw new Error(said(r, 'No ticket')); return r.d.ticket; } });
     NOW.conn = conn;
-    conn.on('status', (s) => { if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople(); });
+    conn.on('status', (s) => {
+      // access ended while it was open (removed from the project, or now only a viewer): read the canvas again as who
+      // they are now — gone ("not shared with you") or view only. Nothing they type after this is written anywhere.
+      if (s === 'ended' && conn.ended?.code === 4403 && NOW.conn === conn) { stopLive(); clearTimeout(C.timer); C.dirty = false; C.id = null; toast('Your access to this canvas changed'); open(id).then(paint); return; }
+      if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople();
+    });
     conn.on('participants', (p) => { NOW.people = p || []; drawPeople(); if (live() && isLead() && C.dirty) save(); });
     conn.on('signal', ({ data }) => { if (data && data.changed) changedElsewhere(); });
   }

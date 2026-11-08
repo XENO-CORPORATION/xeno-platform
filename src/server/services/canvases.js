@@ -295,6 +295,43 @@ export async function canvasLiveRole(db, me, id) {
   return s.del && String(c.owner_user_id) === String(me.id) ? 'owner' : s.edit ? 'editor' : 'viewer';
 }
 
+/**
+ * Access was taken away (a relationship tuple was deleted or changed: the `project_access_changed` NOTIFY,
+ * migrations/20261123090000). Which live canvas seats must end? Each person concerned is re-checked on each canvas of
+ * the project with the same standing every read uses; whoever may no longer edit it is listed, so XENO Multiplayer can
+ * close their connection (4403). A demoted editor reopens as a viewer; someone with no access left gets "not shared".
+ * The service closes by `sub`, which for an agent is its person (xeno-multiplayer SPEC §6): an agent that lost access
+ * ends its person's seat too, who simply reopens. Returns [{ canvas, sub }].
+ */
+export async function liveSeatsToEnd(db, change) {
+  const { o, oi, r, s, si } = change || {};
+  let canvases = [], people = [];
+  const inProject = async (pids) => (pids.length ? (await db.query('SELECT id FROM canvases WHERE project_id = ANY($1::uuid[]) AND deleted_at IS NULL', [pids])).rows.map((x) => String(x.id)) : []);
+  const uuids = (xs) => xs.filter((x) => UUID.test(String(x)));
+  if (o === 'project' && r === 'parent' && s === 'workspace') {
+    // the project left its workspace: everyone who reached it through the workspace is re-checked
+    canvases = await inProject(uuids([oi]));
+    people = (await db.query(`SELECT DISTINCT subject_id FROM relationship_tuples WHERE object_type = 'workspace' AND object_id = $1 AND subject_type = 'user'`, [String(si)])).rows.map((x) => String(x.subject_id));
+  } else if (o === 'project' && s === 'user') {
+    canvases = await inProject(uuids([oi])); people = [String(si)];
+  } else if (o === 'workspace' && s === 'user') {
+    const pids = (await db.query(`SELECT object_id FROM relationship_tuples WHERE object_type = 'project' AND relation = 'parent' AND subject_type = 'workspace' AND subject_id = $1`, [String(oi)])).rows.map((x) => String(x.object_id));
+    canvases = await inProject(uuids(pids)); people = [String(si)];
+  } else return [];
+  const out = [], seen = new Set();
+  for (const person of uuids(people)) {
+    const agent = (await db.query('SELECT owner_user_id FROM agent_identities WHERE user_id = $1', [person])).rows[0];
+    for (const canvas of canvases) {
+      let role = null;
+      try { role = await canvasLiveRole(db, { id: person, kind: agent ? 'agent' : 'human' }, canvas); } catch (e) { if (!(e instanceof CanvasError)) throw e; }
+      if (role === 'editor' || role === 'owner') continue;   // still edits it: nothing to end
+      const sub = agent ? String(agent.owner_user_id) : person, k = `${canvas}:${sub}`;
+      if (!seen.has(k)) { seen.add(k); out.push({ canvas, sub }); }
+    }
+  }
+  return out;
+}
+
 export async function deleteCanvas(db, me, id) {
   const { c } = await load(db, me, id, 'del');
   await db.query('UPDATE canvases SET deleted_at = now() WHERE id = $1', [c.id]);

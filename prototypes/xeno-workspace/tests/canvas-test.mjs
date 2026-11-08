@@ -27,6 +27,7 @@ const FAKE_HUB = `;XenoLive = { ...XenoLive, joinLive: ({ id, ticket, Y, doc }) 
     else if (m.k === 'hello') { peers.set(m.p.conn, m.p); emit('participants', [...peers.values()]); if (m.reply) { ch.postMessage({ k: 'hello', p: me }); ch.postMessage({ k: 'u', u: Y.encodeStateAsUpdate(doc) }); } }
     else if (m.k === 'bye') { peers.delete(m.conn); emit('participants', [...peers.values()]); }
     else if (m.k === 'changed') emit('signal', { data: { changed: 'project' } });
+    else if (m.k === 'end' && m.conn === conn) { api.status = 'ended'; api.ended = { code: m.code, reason: 'your access to this has ended' }; emit('status', 'ended'); }
   };
   ticket('workspace.canvas/' + id).then(() => { api.status = 'open'; api.self = me; ch.postMessage({ k: 'hello', p: me, reply: true }); emit('status', 'open'); });
   window.__live = api; window.__hub = ch; return api;
@@ -326,6 +327,10 @@ try {
   ok(db.writers.size === 1, `one screen writes the shared canvas down, not everyone (${db.writers.size})`);
   const onCanvas = db.tasks.find((x) => db.canvases[0].content.nodes.some((n) => n.ref?.id === x.key)); onCanvas.title = 'Renamed elsewhere'; await a.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await b2.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await settle(900);
   ok(/Renamed elsewhere/.test(await a.$eval('[data-cv-stage]', (e) => e.textContent)), 'told something changed in the project, the cards update');
+  // access taken away while it is open: the service closes that seat (4403) and the page reads the canvas again as who they are now
+  db.canvases[0].readonly = true; const bConn = await b2.evaluate(() => window.__live.self.conn); await a.evaluate((c) => window.__hub.postMessage({ k: 'end', conn: c, code: 4403 }), bConn); await settle(1500);
+  ok(/View only/.test(await b2.$eval('#main', (e) => e.innerText)) && !(await b2.$('[data-cv-act="add"]')) && !(await a.evaluate(() => /View only/.test(document.querySelector('#main').innerText))), 'a seat closed because access changed reopens as what is left (view only), and only for them');
+  db.canvases[0].readonly = false;
   await a.close(); await b2.close(); db.liveOn = false;
 
   // view-only
