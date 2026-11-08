@@ -62,6 +62,8 @@
     "test:orchestrator-engine": "node src/server/tests/orchestrator-engine.test.mjs",
     "test:support-tickets": "node src/server/tests/support-tickets.test.mjs",
     "test:support-ui": "node prototypes/xeno-workspace/tests/support-test.mjs",
+    "test:freshness-ui": "node prototypes/xeno-workspace/tests/freshness-test.mjs",
+    "test:freshness-mutation": "node scripts/freshness-mutation-check.mjs",
     "test:index-governance-vendor": "node scripts/index-governance-vendor.mjs --self-test && node scripts/index-governance-vendor.mjs",
     "index-governance:sync": "node scripts/index-governance-vendor.mjs --sync",
     "test:release-record": "node src/server/tests/release-record.test.mjs",
@@ -408,6 +410,7 @@
     "walk:real-stack": "node scripts/real-stack/run-all.mjs",
     "test:stream-disconnect": "node --test scripts/stream-disconnect.test.mjs",
     "test:company-orgs": "node src/server/tests/company-orgs.test.mjs",
+    "test:customers-billing-mutation": "node scripts/customers-billing-mutation-check.mjs",
     "test:company-legal-vendor": "node scripts/company-legal-vendor.mjs && node scripts/company-legal-vendor.mjs --self-test",
     "test:chat-stream-disconnect": "node --test scripts/chat-stream-disconnect.test.mjs"
   },

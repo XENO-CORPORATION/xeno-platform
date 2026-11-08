@@ -118,7 +118,12 @@
     const conn = X_.joinLive({ type: 'workspace.canvas', id, Y: X_.Y, doc, ticket: async (resource) => {
       const r = await api('POST', '/api/live/tickets', { resource }); if (!r.ok) throw new Error(said(r, 'No ticket')); return r.d.ticket; } });
     NOW.conn = conn;
-    conn.on('status', (s) => { if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople(); });
+    conn.on('status', (s) => {
+      // access ended while it was open (removed from the project, or now only a viewer): read the canvas again as who
+      // they are now — gone ("not shared with you") or view only. Nothing they type after this is written anywhere.
+      if (s === 'ended' && conn.ended?.code === 4403 && NOW.conn === conn) { stopLive(); clearTimeout(C.timer); C.dirty = false; C.id = null; toast('Your access to this canvas changed'); open(id).then(paint); return; }
+      if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople();
+    });
     conn.on('participants', (p) => { NOW.people = p || []; drawPeople(); if (live() && isLead() && C.dirty) save(); });
     conn.on('signal', ({ data }) => { if (data && data.changed) changedElsewhere(); });
   }
@@ -256,7 +261,7 @@
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
       if (isF && r.doc) return xn('doc', r.name?.replace(/\.xdoc$/, '') || 'Document', docBody(n), { icon: 'doc' });
-      if (n.ref.kind === 'chat' && !r.missing) return xn('chat', r.title || 'Chat', chatBody(n, r), { icon: 'chat' });
+      if (n.ref.kind === 'chat' && !r.missing) return xn('chat', r.title || 'Chat', chatBody(n, r), { icon: 'chat', cls: FRAMES.has(n.id) ? ' xn--live' : '' }).replace('</div><div class="xn-edge">', FRAMES.has(n.id) ? `<button class="xn-close" data-cv-act="chat-done" data-arg="${esc(n.id)}">Done</button></div><div class="xn-edge">` : '</div><div class="xn-edge">');
       if (isF && r.version && /^image\/(jpeg|png|gif|webp)$/.test(String(r.type))) return xn('image', r.name || 'Image', `<div class="xn-media"><img alt="${esc(r.name)}" src="/api/library/assets/${esc(r.version)}/content" draggable="false"></div>`, { icon: 'image' });
       if (r.missing) return gone(isF ? 'File' : 'Chat', 'Deleted, or not shared with you', isF ? 'file' : 'chat');
       // any other file: the kind of file is the object, named outside it, with its size and the way to open it
@@ -308,8 +313,38 @@
     const k = n.ref.id; let c = chats.get(k);
     if (!c) { c = { msgs: [] }; chats.set(k, c); api('GET', '/api/chat/conversations/' + encodeURIComponent(k)).then((x) => { if (x.ok) { c.msgs = (x.d.messages || x.d.conversation?.messages || []).slice(-8); draw(); } }).catch(() => {}); }
     const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.text || ''));
-    return `<div class="xn-chat"><div class="xn-thread">${c.msgs.map((m) => (m.role === 'user' ? `<div class="xn-msg--me">${esc(textOf(m))}</div>` : `<div class="xn-msg"><small>${esc(m.agent_name || 'XENO')}</small>${esc(textOf(m))}</div>`)).join('') || '<span class="tk-dim">This chat stays with the project.</span>'}</div><a class="xn-say" href="${esc(r.url || '#')}">Continue in Chat</a></div>`;
+    // replying happens in the real chat, in place (drawFrames): the same app, send path and streaming as Chat
+    const here = chatPathOf(r);
+    return `<div class="xn-chat"><div class="xn-thread">${c.msgs.map((m) => (m.role === 'user' ? `<div class="xn-msg--me">${esc(textOf(m))}</div>` : `<div class="xn-msg"><small>${esc(m.agent_name || 'XENO')}</small>${esc(textOf(m))}</div>`)).join('') || '<span class="tk-dim">This chat stays with the project.</span>'}</div>${here ? `<div class="xn-sayrow"><button class="xn-say" data-cv-act="chat-here" data-arg="${esc(n.id)}">Reply…</button>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open in Chat" aria-label="Open in Chat">${ic('open')}</a>` : ''}</div>` : `<a class="xn-say" href="${esc(r.url || '#')}">Continue in Chat</a>`}</div>`;
   }
+  /** The chat app's own address for a chat card (the one the workspace's Chat frame shows: platform-chat.js pathFor). */
+  function chatPathOf(r) {
+    const u = String(r && r.url || ''); let m = u.match(/\/apps\/chat\/projects\/([\w-]+)\/c\/([\w-]+)$/);
+    if (m) return `/chat/projects/${m[1]}/c/${m[2]}`;
+    m = u.match(/\/apps\/chat\/([\w-]+)$/); return m ? `/chat/c/${m[1]}` : null;
+  }
+  // A chat being replied to holds the REAL chat (src/lib/workspaceEmbed.ts: inside /workspace it drops its shell) in a
+  // same-origin frame over its node. Frames live in their own layer, apart from the nodes, so a repaint or a drag never
+  // reloads one and loses a half-typed message or a streaming answer. Each person's own: nothing is saved on the canvas.
+  const FRAMES = new Map();   // node id → { el, path }
+  function drawFrames() {
+    const layer = document.querySelector('[data-cv-frames]'); if (!layer) return;
+    for (const [id, f] of FRAMES) {
+      const n = nodeById(id), r = n && n.type === 'xeno-ref' && n.ref.kind === 'chat' ? fileOrChat(n) : null, path = r && !r.missing ? chatPathOf(r) : null;
+      if (!path) { f.el.remove(); FRAMES.delete(id); continue; }
+      if (f.el.parentNode !== layer || f.path !== path) {
+        f.el.remove(); f.path = path;
+        f.el = document.createElement('div'); f.el.className = 'xn-frame'; f.el.dataset.cvFrame = id;
+        f.el.innerHTML = `<iframe title="Chat" allow="clipboard-read; clipboard-write; microphone" src="${esc(path)}"></iframe>`;
+        // the composer wears the workspace's design, as the side chat does (platform-chat.js dress)
+        f.el.firstChild.addEventListener('load', () => { try { const d = f.el.firstChild.contentDocument, css = document.getElementById('xw-chat-frame')?.contentDocument?.getElementById('xw-composer')?.textContent; if (d && css && !d.getElementById('xw-composer')) { const st = d.createElement('style'); st.id = 'xw-composer'; st.textContent = css; (d.head || d.documentElement).appendChild(st); } } catch {} });
+        layer.append(f.el);
+      }
+      Object.assign(f.el.style, { left: n.x + 'px', top: n.y + 'px', width: n.width + 'px', height: n.height + 'px' });
+    }
+  }
+  function chatHere(id) { const n = nodeById(id); if (!n || FRAMES.has(id)) return; FRAMES.set(id, { el: document.createElement('i'), path: null }); C.sel = new Set([id]); draw(); }
+  function chatDone(id) { const f = FRAMES.get(id); if (!f) return; f.el.remove(); FRAMES.delete(id); const n = nodeById(id); if (n) chats.delete(n.ref.id); draw(); }
   // ───────────────────────── dependency graph (xeno-orchestrator on the platform: /api/orchestrator/graph)
   // The graph is the project's own `blocks` links between tasks; this lays it out on the canvas in the order the work
   // can happen (left → right by dependency depth) and marks each card Ready / Waiting. It adds no second store: the
@@ -376,7 +411,7 @@
     world.querySelector('[data-cv-nodes]').innerHTML = [...groups, ...rest].map(nodeHtml).join('');
     world.querySelector('[data-cv-edges]').innerHTML = edgesSvg();
     const zl = document.querySelector('[data-cv-zoom]'); if (zl) zl.textContent = Math.round(z * 100) + '%';
-    drawPeople(); drawDock();
+    drawPeople(); drawDock(); drawFrames();
     const ed = world.querySelector('[data-cv-text]'); if (ed && document.activeElement !== ed) { ed.focus(); const at = caret || [ed.value.length, ed.value.length]; ed.setSelectionRange(at[0], at[1]); }
     inspector();
   }
@@ -425,7 +460,7 @@
         <div class="cv-cursors" data-cv-cursors></div>
         <div class="cv-world" data-cv-world><div class="xn-dock" data-cv-dock hidden></div>
           <svg class="cv-svg" width="1" height="1"><defs><marker id="cv-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs><g data-cv-edges></g><path data-cv-ghost class="cv-e-ghost"/></svg>
-          <div data-cv-nodes></div>
+          <div data-cv-nodes></div><div class="xn-frames" data-cv-frames></div>
         </div>
       </div>
       <div class="cv-insp" data-cv-insp></div>
@@ -805,7 +840,7 @@
   function openNode(n) { if (!n) return; if (n.type === 'xeno-ref' && n.ref.kind === 'file' && fileOf(n.ref.id).doc && docOf(n.ref.id).ready) { writeOn(n); return; } if (n.type === 'text') writeOn(n); else if (n.type === 'group') rename(n.id); else if (n.type === 'xeno-ref' && n.ref.kind !== 'task') { const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id]; if (r && r.url) location.assign(r.url); } else if (n.type === 'xeno-ref') X().go('global', { global: 'tasks', item: n.ref.id }); else if (n.type === 'link') window.open(n.url, '_blank', 'noopener'); }
   addEventListener('pointerdown', (e) => {
     const stage = e.target.closest?.('[data-cv-stage]'); if (!stage || !C.doc || e.button > 1) return;
-    if (e.target.closest('textarea, a, video, button.cv-open, .xn-who, .xn-steps button, .xn-dock')) return;
+    if (e.target.closest('textarea, a, video, button.cv-open, .xn-who, .xn-steps button, .xn-dock, .xn-say, .xn-close, .xn-frame')) return;
     closeAdd(); C.at = null;
     if (!e.target.closest('[data-cv-text]')) stage.focus({ preventScroll: true });
     const at = toBoard(stage, e.clientX, e.clientY), edit = C.can?.edit;
@@ -899,7 +934,7 @@
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
   const ACT = {
-    'add-task': addTask, 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, add: (_, el) => { const r = el.getBoundingClientRect(); openAdd(r.left, r.bottom + 6); }, who: (id, el) => whoPick(id, el), step: (a) => stepTo(a), 'media-go': () => mediaGo(), 'media-pick': (k, el) => mediaPick(k, el), ver: (i) => { const m = nodeById([...C.sel][0])?.media; if (m) { before(); m.cur = Number(i); change(); } }, 'to-video': () => { const n = nodeById([...C.sel][0]); if (n) { C.at = { x: n.x + n.width + 80, y: n.y }; addMedia('video', n.id); } }, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
+    'add-task': addTask, 'chat-here': (id) => chatHere(id), 'chat-done': (id) => chatDone(id), 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, add: (_, el) => { const r = el.getBoundingClientRect(); openAdd(r.left, r.bottom + 6); }, who: (id, el) => whoPick(id, el), step: (a) => stepTo(a), 'media-go': () => mediaGo(), 'media-pick': (k, el) => mediaPick(k, el), ver: (i) => { const m = nodeById([...C.sel][0])?.media; if (m) { before(); m.cur = Number(i); change(); } }, 'to-video': () => { const n = nodeById([...C.sel][0]); if (n) { C.at = { x: n.x + n.width + 80, y: n.y }; addMedia('video', n.id); } }, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
     deps: () => layoutDeps(), back: () => leave(C.project), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),

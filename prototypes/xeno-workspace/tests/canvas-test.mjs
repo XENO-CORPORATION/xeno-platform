@@ -27,6 +27,7 @@ const FAKE_HUB = `;XenoLive = { ...XenoLive, joinLive: ({ id, ticket, Y, doc }) 
     else if (m.k === 'hello') { peers.set(m.p.conn, m.p); emit('participants', [...peers.values()]); if (m.reply) { ch.postMessage({ k: 'hello', p: me }); ch.postMessage({ k: 'u', u: Y.encodeStateAsUpdate(doc) }); } }
     else if (m.k === 'bye') { peers.delete(m.conn); emit('participants', [...peers.values()]); }
     else if (m.k === 'changed') emit('signal', { data: { changed: 'project' } });
+    else if (m.k === 'end' && m.conn === conn) { api.status = 'ended'; api.ended = { code: m.code, reason: 'your access to this has ended' }; emit('status', 'ended'); }
   };
   ticket('workspace.canvas/' + id).then(() => { api.status = 'open'; api.self = me; ch.postMessage({ k: 'hello', p: me, reply: true }); emit('status', 'open'); });
   window.__live = api; window.__hub = ch; return api;
@@ -36,7 +37,7 @@ const GEN = 'e0000000-0000-4000-8000-000000000001', GF = 'd0000000-0000-4000-800
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
 const recs = (c) => Object.fromEntries(c.content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => { const t = db.tasks.find((x) => x.key === n.ref.id); return [n.ref.id, t ? { key: t.key, title: t.title, status: t.status, priority: t.priority, project: null, assignee: null } : { key: n.ref.id, missing: true }]; }));
-const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'c0000000-0000-4000-8000-00000000000d': { id: 'c0000000-0000-4000-8000-00000000000d', doc: true, name: 'Plan', type: 'Document', url: '/workspace/office/spaces/write/c0000000-0000-4000-8000-00000000000d' }, [GF]: { id: GF, version: GF, name: 'dawn.png', type: 'image/png', url: '/workspace/library' }, 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } }, runs: { 'a1000000-0000-4000-8000-000000000001': { id: 'a1000000-0000-4000-8000-000000000001', agent: 'Scout', status: 'live', admittedAt: now(), url: '/workspace/projects/x/runs/a1' } }, tenets: { 'a2000000-0000-4000-8000-000000000001': { key: 'TEN-1', claim: 'Signup stays closed', state: 'held', at: now() } } } });
+const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'c0000000-0000-4000-8000-00000000000d': { id: 'c0000000-0000-4000-8000-00000000000d', doc: true, name: 'Plan', type: 'Document', url: '/workspace/office/spaces/write/c0000000-0000-4000-8000-00000000000d' }, [GF]: { id: GF, version: GF, name: 'dawn.png', type: 'image/png', url: '/workspace/library' }, 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' }, 'c0000000-0000-4000-8000-00000000000e': { id: 'c0000000-0000-4000-8000-00000000000e', title: 'Ideas', url: '/workspace/apps/chat/projects/a0000000-0000-4000-8000-000000000001/c/c0000000-0000-4000-8000-00000000000e' } }, runs: { 'a1000000-0000-4000-8000-000000000001': { id: 'a1000000-0000-4000-8000-000000000001', agent: 'Scout', status: 'live', admittedAt: now(), url: '/workspace/projects/x/runs/a1' } }, tenets: { 'a2000000-0000-4000-8000-000000000001': { key: 'TEN-1', claim: 'Signup stays closed', state: 'held', at: now() } } } });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -47,6 +48,8 @@ const handler = (q) => {
   const u = new URL(q.url());
   // XENO Multiplayer stands in here: the real Yjs from live-client.js, passed between two pages by a BroadcastChannel
   if (u.pathname.endsWith('/live-client.js')) return db.liveOn ? q.respond({ status: 200, contentType: 'text/javascript', body: LIVE_CLIENT + FAKE_HUB }) : q.respond({ status: 503, body: '' });
+  // the real chat app stands in as a page that says which address it was opened at
+  if (u.pathname.startsWith('/chat/')) { (db.chatPages = db.chatPages || []).push(u.pathname); return q.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><body><textarea id="q" aria-label="Message"></textarea><script>window.__path = location.pathname</script></body>' }); }
   if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><body></body>' });
   if (!u.pathname.startsWith('/api/')) return q.continue();
   const method = q.method(); let b = {}; try { b = q.postData() ? JSON.parse(q.postData()) : {}; } catch { b = {}; }
@@ -249,6 +252,23 @@ try {
   const kinds = () => db.canvases[0].content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => n.ref.kind);
   const saved2 = async () => { await settle(1200); return kinds(); };
   const k2 = await saved2(); ok(k2.includes('file') && k2.includes('chat'), `and both land on the canvas (${k2.join()})`);
+  // a chat on the canvas is answered in place, in the REAL chat at its own address: the same app and send path as Chat
+  const cn = db.canvases[0].content.nodes.find((n) => n.ref?.kind === 'chat' && n.ref.id === 'c0000000-0000-4000-8000-00000000000e'), at0 = p.url();
+  await p.evaluate(() => XENO_CANVAS.act('fit')); await settle(300);
+  await p.click(`[data-cv-node="${cn.id}"] [data-cv-act="chat-here"]`); await settle(1500);
+  const fr = await p.$eval(`[data-cv-frame="${cn.id}"] iframe`, (e) => ({ src: new URL(e.src).pathname, loaded: e.contentWindow.__path })).catch(() => null);
+  ok(fr && fr.src === `/chat/projects/${pid}/c/${cn.ref.id}` && fr.loaded === fr.src, `Reply opens the real chat in the node, at the chat's own address (${JSON.stringify(fr)})`);
+  if (process.env.CANVAS_SHOT_CHAT) await p.screenshot({ path: process.env.CANVAS_SHOT_CHAT });
+  await p.evaluate((id) => { const w = document.querySelector(`[data-cv-frame="${id}"] iframe`).contentWindow; w.__mark = 7; w.document.getElementById('q').value = 'half typed'; }, cn.id);
+  const lb = await box(`[data-cv-node="${cn.id}"] .xn-label b`), loads0 = db.chatPages.length;
+  await p.mouse.move(lb.x, lb.y); await p.mouse.down(); await p.mouse.move(lb.x + 80, lb.y + 40, { steps: 6 }); await p.mouse.up(); await settle(500);
+  await p.evaluate(() => XENO_CANVAS.act('zoom-in')); await settle(300); await p.mouse.click(st.r - 40, st.t + 40); await settle(300);
+  const kept = await p.evaluate((id) => { const f = document.querySelector(`[data-cv-frame="${id}"]`), n = document.querySelector(`[data-cv-node="${id}"]`), w = f && f.querySelector('iframe').contentWindow; return { mark: w && w.__mark, typed: w && w.document.getElementById('q').value, same: !!f && f.style.left === n.style.left && f.style.top === n.style.top && f.style.width === n.style.width }; }, cn.id);
+  ok(kept.mark === 7 && kept.typed === 'half typed' && kept.same && db.chatPages.length === loads0, `moving, zooming and repainting keep the same chat open, with what was typed, over its node (${JSON.stringify(kept)})`);
+  ok(p.url() === at0, 'and the canvas keeps its own address');
+  await p.click(`[data-cv-node="${cn.id}"] [data-cv-act="chat-done"]`); await settle(300);
+  ok(!(await p.$(`[data-cv-frame="${cn.id}"]`)) && !!(await p.$(`[data-cv-node="${cn.id}"] [data-cv-act="chat-here"]`)), 'Done closes it and the node shows the thread again');
+  await p.evaluate(() => XENO_CANVAS.act('fit')); await settle(300);
   // the board's own menu, where you asked for it
   const bd = await box('[data-cv-stage]'), spot = { x: bd.l + 120, y: bd.b - 120 };
   await p.mouse.click(spot.x, spot.y, { button: 'right' }); await settle(250);
@@ -339,7 +359,9 @@ try {
   await b2.bringToFront(); await b2.keyboard.press('Escape'); await b2.mouse.click(700, 800); await settle(400); await a.bringToFront(); await settle(700);
   await a.mouse.move(600, 500); await settle(300); await a.mouse.move(620, 520); await settle(500);
   ok(!!(await b2.$('[data-cv-cursor]')), 'each sees where the other is pointing');
-  await a.click(`[data-cv-node="${target}"]`); await settle(200); await a.keyboard.press('Delete'); await settle(700);
+  // a point that really hits the card: after the move it may lie partly under another one
+  const spotOn = await a.evaluate((t) => { const e = document.querySelector(`[data-cv-node="${t}"]`), r = e.getBoundingClientRect(); for (let fy = 0.2; fy < 0.95; fy += 0.15) for (let fx = 0.1; fx < 0.95; fx += 0.15) { const x = r.left + r.width * fx, y = r.top + r.height * fy, h = document.elementFromPoint(x, y); if (h && h.closest('[data-cv-node]') === e && !h.closest('button, a, textarea, [data-cv-grip], [data-cv-wire]')) return { x, y }; } return null; }, target);
+  await a.mouse.click(spotOn.x, spotOn.y); await settle(200); await a.keyboard.press('Delete'); await settle(700);
   ok(!(await ids(b2)).includes(target), 'a card removed by one goes for the other');
   await settle(1500);
   const putsAt = db.puts.length, conflicts = await a.$('.cv-conflict') || await b2.$('.cv-conflict');
@@ -348,6 +370,10 @@ try {
   ok(db.writers.size === 1, `one screen writes the shared canvas down, not everyone (${db.writers.size})`);
   const onCanvas = db.tasks.find((x) => db.canvases[0].content.nodes.some((n) => n.ref?.id === x.key)); onCanvas.title = 'Renamed elsewhere'; await a.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await b2.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await settle(900);
   ok(/Renamed elsewhere/.test(await a.$eval('[data-cv-stage]', (e) => e.textContent)), 'told something changed in the project, the cards update');
+  // access taken away while it is open: the service closes that seat (4403) and the page reads the canvas again as who they are now
+  db.canvases[0].readonly = true; const bConn = await b2.evaluate(() => window.__live.self.conn); await a.evaluate((c) => window.__hub.postMessage({ k: 'end', conn: c, code: 4403 }), bConn); await settle(1500);
+  ok(/View only/.test(await b2.$eval('#main', (e) => e.innerText)) && !(await b2.$('[data-cv-act="add"]')) && !(await a.evaluate(() => /View only/.test(document.querySelector('#main').innerText))), 'a seat closed because access changed reopens as what is left (view only), and only for them');
+  db.canvases[0].readonly = false;
   await a.close(); await b2.close(); db.liveOn = false;
 
   // view-only

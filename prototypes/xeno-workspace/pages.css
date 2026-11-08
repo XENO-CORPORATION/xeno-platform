@@ -392,6 +392,8 @@ html[data-panel="open"] .topbar .crumbs{display:flex}   /* the header always sho
 .sb-l,.sb-r{display:flex;align-items:center;gap:10px;min-width:0}
 .sb-l{overflow:hidden}
 .sb-fresh{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;color:var(--muted)}
+/* a live page's freshness line (XENO_PAGES.fresh) repaints itself in place; the wrapper adds no box of its own */
+.sb-live{display:contents}
 .sb-fresh i{width:6px;height:6px;border-radius:1px;background:var(--n90);flex:none}
 .sb-fresh.ok i{background:var(--n138)}.sb-fresh.live i{background:var(--text);animation:pg-pulse 1.4s ease-in-out infinite}.sb-fresh.bad{color:#f4a3a3}.sb-fresh.bad i{background:#ef4444}
 .sb-ib{width:22px;height:22px;border-radius:4px;display:grid;place-items:center;color:var(--dim)}.sb-ib:hover{background:var(--n28);color:var(--text)}.sb-ib svg.i{width:13px;height:13px}

@@ -26,6 +26,8 @@ export function view(cv) {
     ...(n.type === 'xeno-ref' && n.ref.kind === 'chat' ? { chat: n.ref.id, ...((cv.records.chats || {})[n.ref.id] || { missing: true }) } : {}),
     ...(n.type === 'xeno-ref' && ['project', 'division', 'objective', 'run', 'tenet'].includes(n.ref.kind) ? { [n.ref.kind]: n.ref.id, ...((cv.records[n.ref.kind + 's'] || {})[n.ref.id] || { missing: true }) } : {}),
     ...(n.type === 'text' ? { text: n.text } : {}), ...(n.type === 'link' ? { url: n.url } : {}), ...(n.type === 'group' ? { label: n.label } : {}),
+    // a picture or video made on the canvas: its prompt, its versions (Library files) and the one shown, read live
+    ...(n.type === 'media' ? { type: n.media.kind, prompt: n.media.prompt, model: n.media.model, ratio: n.media.ratio, versions: n.media.versions, shown: n.media.versions[n.media.cur] || null, ...(n.media.generation ? { generating: n.media.generation } : {}), ...(n.media.versions[n.media.cur] ? { file: (cv.records.files || {})[n.media.versions[n.media.cur]] || { missing: true } } : {}) } : {}),
   }));
   const connections = cv.content.edges.map((e) => ({ id: e.id, from: e.fromNode, to: e.toNode, ...(e.xeno?.link ? { link: e.xeno.link } : {}), ...(e.label ? { label: e.label } : {}) }));
   return { id: cv.id, name: cv.name, revision: cv.revision, project: cv.project, url: `/workspace/tasks/canvas/${cv.id}`, items, connections };
@@ -57,13 +59,17 @@ export const TOOLS = [
   { name: 'create', title: 'Start a canvas', annotations: RW, description: 'Start a canvas. With `project`, everyone on the project sees it (you must be able to edit the project); without, it is yours alone.',
     inputSchema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, project: { type: 'string' } } } },
   { name: 'add', title: 'Put items on a canvas', annotations: RW,
-    description: 'Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.',
+    description: 'Put items on a canvas: image and video nodes (a prompt, and the Library files or the running generation that fill it), tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.',
     inputSchema: { type: 'object', required: ['canvas', 'items'], properties: { canvas: CANVAS, items: { type: 'array', items: { type: 'object', required: ['type'], properties: {
-      type: { type: 'string', enum: ['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet', 'note', 'link', 'group'] },
+      type: { type: 'string', enum: ['task', 'file', 'chat', 'project', 'division', 'objective', 'run', 'tenet', 'note', 'link', 'group', 'image', 'video'] },
       project: { type: 'string', description: 'For a project card: its id.' }, division: { type: 'string', description: 'For a division card: its id.' },
       objective: { type: 'string', description: 'For an objective card: its id.' }, run: { type: 'string', description: 'For a run card: its admission id.' }, tenet: { type: 'string', description: 'For a verdict card: a Corpus tenet id (see corpus_query).' }, task: { type: 'string', description: 'For a task card: its key, e.g. T-12.' },
       file: { type: 'string', description: 'For a file card: a Library file id (see library_list_files).' }, chat: { type: 'string', description: 'For a chat card: a conversation id.' },
       text: { type: 'string', description: 'For a note: markdown.' }, url: { type: 'string', description: 'For a link.' }, label: { type: 'string', description: 'For a group.' },
+      prompt: { type: 'string', description: 'For an image or video node: what it shows (the prompt a person sees and can generate from).' },
+      versions: { type: 'array', items: { type: 'string' }, description: 'For an image or video node: Library file ids it already has (e.g. what image_generate made), newest last; the last is shown.' },
+      generation: { type: 'string', description: 'For an image or video node: a generation still running (see image_generate); the node becomes its file when it finishes.' },
+      model: { type: 'string' }, ratio: { type: 'string', description: 'e.g. 1:1, 16:9.' },
       x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } } } } } } },
   { name: 'open_as', title: 'Open a project or division as a canvas', annotations: RW,
     description: 'Lay a project (its objectives, tasks, conversations and active runs) or a division (what is inside it, its objectives, projects and active runs) out on a canvas. Opening it again returns the same canvas. A division’s map holds only what you may see.',
@@ -73,9 +79,10 @@ export const TOOLS = [
     inputSchema: { type: 'object', required: ['canvas', 'from', 'to'], properties: { canvas: CANVAS, from: { type: 'string', description: 'An item id.' }, to: { type: 'string', description: 'An item id.' },
       link: { type: 'string', enum: ['blocks', 'relates', 'duplicates'] }, label: { type: 'string' } } } },
   { name: 'update', title: 'Move, edit or remove items', annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
-    description: 'Move or resize items, change a note’s text or a group’s label, or remove items or connections from the canvas. Removing a task card never deletes the task.',
+    description: 'Move or resize items, change a note’s text, a group’s label or an image/video node’s prompt, change what a connection means (between two task cards, link makes it a real task link), or remove items or connections from the canvas. Removing a task card never deletes the task, and a task link stays on the task pages.',
     inputSchema: { type: 'object', required: ['canvas'], properties: { canvas: CANVAS,
-      items: { type: 'array', items: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }, text: { type: 'string' }, label: { type: 'string' } } } },
+      items: { type: 'array', items: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }, text: { type: 'string' }, label: { type: 'string' }, prompt: { type: 'string' } } } },
+      connections: { type: 'array', items: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, link: { type: 'string', enum: ['blocks', 'relates', 'duplicates'] }, label: { type: 'string' } } }, description: 'Connections to change: what it means between two tasks, or its label.' },
       remove: { type: 'array', items: { type: 'string' }, description: 'Item or connection ids to take off the canvas.' } } } },
 ];
 
@@ -97,6 +104,10 @@ export async function callTool(db, actor, name, a = {}) {
           else if (it.type === 'note') content.nodes.push({ ...base, type: 'text', text: String(it.text || ''), width: it.width || 260, height: it.height || 150 });
           else if (it.type === 'link') content.nodes.push({ ...base, type: 'link', url: String(it.url || ''), width: it.width || 280, height: it.height || 80 });
           else if (it.type === 'group') content.nodes.unshift({ ...base, type: 'group', label: String(it.label || 'Group'), width: it.width || 600, height: it.height || 400 });
+          else if (it.type === 'image' || it.type === 'video') {   // the same media node the screen's Image / Video makes (cleanContent checks the ids)
+            const versions = (Array.isArray(it.versions) ? it.versions : []).map(String), w = it.width || (it.type === 'video' ? 420 : 340), [rw, rh] = String(it.ratio || (it.type === 'video' ? '16:9' : '1:1')).split(':').map(Number);
+            content.nodes.push({ ...base, type: 'media', width: w, height: it.height || Math.round(w / ((rw && rh) ? rw / rh : 1)), media: { kind: it.type, prompt: String(it.prompt || ''), model: String(it.model || ''), ratio: String(it.ratio || (it.type === 'video' ? '16:9' : '1:1')), quality: '', versions, cur: Math.max(0, versions.length - 1), generation: it.generation ? String(it.generation) : null } });
+          }
           else throw new canvases.CanvasError(`Unknown item type: ${String(it.type).slice(0, 20)}`, 'invalid_content');
           ids.push(id);
         });
@@ -115,6 +126,13 @@ export async function callTool(db, actor, name, a = {}) {
         for (const k of ['x', 'y', 'width', 'height']) if (u[k] != null) n[k] = u[k];
         if (u.text != null && n.type === 'text') n.text = String(u.text);
         if (u.label != null && n.type === 'group') n.label = String(u.label);
+        if (u.prompt != null && n.type === 'media') n.media.prompt = String(u.prompt);
+      }
+      const edges = new Map(content.edges.map((e) => [e.id, e]));
+      for (const u of a.connections || []) {
+        const e = edges.get(String(u.id)); if (!e) throw new canvases.CanvasError(`No connection ${String(u.id).slice(0, 40)} on this canvas`, 'item_not_found', 404);
+        if (u.link != null) { e.xeno = { link: u.link }; e.toEnd = 'arrow'; }   // a real task link: saveCanvas makes it through Tasks' rules
+        if (u.label != null) e.label = String(u.label);
       }
       const gone = new Set((a.remove || []).map(String));
       if (gone.size) {
