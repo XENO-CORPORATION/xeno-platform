@@ -549,8 +549,12 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
 .pg-top-left:has(.pg-top-tabs){flex:1 1 auto;min-width:0;margin-left:14px;padding-left:14px;background:linear-gradient(var(--n31),var(--n31)) left center/1px 22px no-repeat;height:46px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;align-self:center;mask-image:none;-webkit-mask-image:none;padding-right:0;margin-right:8px}
 .pg-top-left:has(.pg-top-tabs)::-webkit-scrollbar{display:none}
 .pg-top-left:has(.pg-top-tabs) .pg-top-tabs{margin:0;width:max-content}
-/* in a narrow header the tabs are how you move, so the path gives way before they do */
-.pg-top:has(.pg-top-tabs) .crumbs{flex:0 999 auto;min-width:0}
+/* the path keeps its own width (up to 40% of the bar) and the tabs scroll in what is left: at normal widths the
+   object's name shows whole ("Projects / BUNKERVERSE"), never "Projects / BUNK…" (owner, 2026-11-06) */
+.pg-top:has(.pg-top-tabs) .crumbs{flex:0 1 auto;min-width:0;max-width:50%}
+/* when it must give way, the names do — never the slashes or the section it starts from */
+.topbar .crumbs>.sep,.topbar .crumbs>:first-child{flex:none}
+.pg-top .pg-top-left:has(.pg-top-tabs){flex:1 1 0}
 /* the object's facts in the status bar: progress, status, next milestone, people — one quiet line */
 .sb-facts{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;min-width:0;overflow:hidden;color:var(--muted)}
 .sb-facts>span{display:inline-flex;align-items:center;gap:5px;flex:none}

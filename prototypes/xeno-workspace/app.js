@@ -227,7 +227,18 @@
   }
   // ---- PANEL contents ----
   const row = (attrs, inner, cls = '') => `<button class="row ${cls}" ${attrs}>${inner}</button>`;
-  const sec = (key, title, body, acts = '') => `<div class="sec" data-sec="${key}"><div class="sh"><button class="t" data-fold>${title}${ic('chev')}</button><div class="acts">${acts}</div></div><div class="sbody">${body}</div></div>`;
+  // which sidebar sections a person folded, per place (Chat, a mode, a product), kept across visits and every redraw
+  const folds = store.get('folds', {});
+  const foldScope = () => `${S.view}:${S.view === 'product' ? S.product : S.view === 'zone' ? S.zone : S.view === 'global' ? S.global : S.mode}`;
+  const isFolded = (key) => !!(folds[foldScope()] || {})[key];
+  function setFold(secEl, closed) {
+    if (!secEl) return; const key = secEl.dataset.sec, scope = foldScope();
+    secEl.classList.toggle('closed', closed); secEl.querySelector(':scope > .sh > [data-fold]')?.setAttribute('aria-expanded', String(!closed));
+    const f = { ...(folds[scope] || {}) }; if (closed) f[key] = 1; else delete f[key];
+    if (Object.keys(f).length) folds[scope] = f; else delete folds[scope]; store.set('folds', folds);
+    const pv = secEl.closest('#panel > .pv'); if (pv) pv.__html = panelHTML();   // the panel now matches what it would draw: no redraw for this
+  }
+  const sec = (key, title, body, acts = '') => { const shut = isFolded(key); return `<div class="sec${shut ? ' closed' : ''}" data-sec="${key}"><div class="sh"><button class="t" data-fold aria-expanded="${!shut}">${title}${ic('chev')}</button><div class="acts">${acts}</div></div><div class="sbody">${body}</div></div>`; };
   const productRow = (id, extra = '') => { const p = PR[id]; const on = S.view === 'product' && S.product === id;
     return row(`data-product="${id}" data-ctx="product" aria-current="${on}"`, `${pIconFull(p, 16)}<span class="t">${esc(p.name)}</span>${p.status === 'soon' ? '<span class="tag">Soon</span>' : ''}${extra}<span class="more" data-more>${ic('more')}</span>`, p.status === 'soon' ? 'soon' : ''); };
 
@@ -1138,7 +1149,7 @@
     if (S.view === 'global') { const gn = { anima: 'Anima', community: 'Community', market: 'Marketplace', library: 'Library', projects: 'Projects', tasks: 'Tasks', workspace: 'Workspace', inbox: 'Inbox', settings: 'Settings', places: 'Places', support: 'Support', releases: 'Releases', shell: 'Cloud Shell' }[S.global]; if (!S.item) return `<b>${gn}</b>`;
       if (S.global === 'library' && S.item.startsWith('f/')) { const f = libFiles().find((x) => 'f/' + x.id === S.item); return `<a data-crumb="">${gn}</a>${sep}<b>${esc(f ? f.name : 'File')}</b>`; }   // a file's id address reads as its name
       // a path is a trail you can walk back up: every segment but the last is a link (GitHub, Finder)
-      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'workspace' && parts[0] === 'Knowledge' && i === 1 ? 'Tenet' : S.global === 'settings' && window.XENO_SETTINGS?.label ? window.XENO_SETTINGS.label(x) : S.global === 'market' && window.XENO_MARKET?.label ? window.XENO_MARKET.label(x) : S.global === 'places' && window.XENO_PLACES?.label ? window.XENO_PLACES.label(x) : S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'shell' && window.XENO_SHELL?.label ? window.XENO_SHELL.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Skills' && window.XENO_SKILLS?.label ? window.XENO_SKILLS.label(x, i, parts) : S.global === 'workspace' && i === 1 && parts[0] === 'Teams' && window.XENO_TEAMS?.served ? (window.XENO_TEAMS.label(x) || 'Team') : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.label ? window.XENO_DIRECTORY.label(x, i, parts) :S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : x);
+      const parts = S.item.split('/'), lbl = (x, i) => (S.global === 'workspace' && parts[0] === 'Knowledge' && i === 1 ? 'Tenet' : S.global === 'settings' && window.XENO_SETTINGS?.label ? window.XENO_SETTINGS.label(x) : S.global === 'market' && window.XENO_MARKET?.label ? window.XENO_MARKET.label(x) : S.global === 'places' && window.XENO_PLACES?.label ? window.XENO_PLACES.label(x) : S.global === 'tasks' && window.XENO_TASKS?.label ? window.XENO_TASKS.label(x) : S.global === 'support' && window.XENO_SUPPORT?.label ? window.XENO_SUPPORT.label(x) : S.global === 'shell' && window.XENO_SHELL?.label ? window.XENO_SHELL.label(x) : S.global === 'releases' && window.XENO_RELEASES?.label ? window.XENO_RELEASES.label(x) : S.global === 'community' && i === 0 && window.XENO_PG_FORUM.find((t) => t.id === x) ? window.XENO_PG_FORUM.find((t) => t.id === x).title : S.global === 'community' && i > 0 && parts[0] === 'My reports' ? '#' + x : S.global === 'workspace' && i === 1 && parts[0] === 'Agents' && window.XENO_AGENTS?.isId?.(x) ? window.XENO_AGENTS.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Skills' && window.XENO_SKILLS?.label ? window.XENO_SKILLS.label(x, i, parts) : S.global === 'workspace' && i === 1 && parts[0] === 'Teams' && window.XENO_TEAMS?.served ? (window.XENO_TEAMS.label(x) || 'Team') : S.global === 'workspace' && i === 1 && parts[0] === 'Divisions' && window.XENO_DIVISIONS?.isId?.(x) ? window.XENO_DIVISIONS.nameOf(x) : S.global === 'workspace' && i === 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.isId?.(x) ? window.XENO_DIRECTORY.nameOf(x) : S.global === 'workspace' && i >= 1 && parts[0] === 'Directory' && window.XENO_DIRECTORY?.label ? window.XENO_DIRECTORY.label(x, i, parts) :S.global === 'workspace' && i === 1 && parts[0] === 'Services' && window.XENO_SERVICES?.isId?.(x) ? window.XENO_SERVICES.nameOf(x) : S.global === 'projects' && i >= 2 && parts[i - 1] === 'Canvas' && window.XENO_CANVAS?.nameOf ? (window.XENO_CANVAS.nameOf(x) || 'Canvas') : x);
       return `<a data-crumb="">${gn}</a>` + parts.map((x, i) => { const name = lbl(x, i); return name == null ? '' : sep + (i < parts.length - 1 ? `<a data-crumb="${esc(parts.slice(0, i + 1).join('/'))}">${esc(name)}</a>` : `<b>${esc(name)}</b>`); }).join(''); }
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) {
@@ -1190,7 +1201,7 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div>${stTop ? (stTop.left ? `<span class="pg-top-sep" aria-hidden="true"></span>${stTop.left}` : '') : ''}${window.XENO_GENERATIONS?.route?.() ? '' : isChat && window.XENO_CHAT && window.XENO_CHAT.served ? `<button class="tb-mid" data-chat-transcript aria-live="polite" data-tip="Copy the whole conversation, with its diagnostics">${ic('copy')}<span>Copy transcript</span></button>` : ''}<div class="sp"></div>${stTop ? stTop.right : ''}${window.XENO_GENERATIONS?.route?.() ? window.XENO_GENERATIONS.viewSwitch() : isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
-  window.XW = { get S() { return S; }, go, reloadData: (key) => { try { if (DS[key]) DS[key].err = null; load(key); } catch {} }, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const html = panelHTML(); if (pv && pv.__html === html) return markItems(pv); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${html}</div>`).__html = html; const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
+  window.XW = { get S() { return S; }, go, setFold, reloadData: (key) => { try { if (DS[key]) DS[key].err = null; load(key); } catch {} }, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const html = panelHTML(); if (pv && pv.__html === html) return markItems(pv); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${html}</div>`).__html = html; const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
   let lastPlaceDrawn = null;
@@ -1326,6 +1337,9 @@
     const [m, kind, id, ...rest] = String(h || '').split('?')[0].replace(/^#\/?/, '').split('/'); const rawItem = rest.join('/'); let item = null; try { item = rawItem ? decodeURIComponent(rawItem) : null; } catch { item = rawItem || null; }
     const modeOk = MODES.some((x) => x.id === m);
     if (m === 'adaptive') return { view: 'adaptive' };
+    // a product whose interface is an area (data.js `page`): its product address lands on the area, once that is live
+    const pg = kind === 'p' && PR[id] && PR[id].status !== 'soon' && PR[id].page;
+    if (pg && (window.XENO_ZONE_LIVE || {})[pg[0] + '.' + pg[1]]) return { view: 'zone', mode: pg[0], zone: pg[1], zoneOf: 'mode', item: item || pg[2] || null };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
       if (kind === 'p' && PR[id]) return { view: 'product', product: id, zoneOf: 'overview', item };
       if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases', 'shell'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
@@ -1361,8 +1375,8 @@
   }
   const panelMem = store.get('panelMem', {});
   const panelKey = () => stateToHash();
-  function savePanelMem() { const pb = $('#panel > .pv .pbody'); if (!pb) return; panelMem[panelKey()] = { scroll: pb.scrollTop, closed: [...document.querySelectorAll('#panel > .pv .sec.closed')].map((s) => s.dataset.sec) }; store.set('panelMem', panelMem); }
-  function restorePanelMem(pv) { const m = panelMem[panelKey()]; if (!m || !pv) return; m.closed.forEach((k) => pv.querySelector(`.sec[data-sec="${CSS.escape(k)}"]`)?.classList.add('closed')); const pb = pv.querySelector('.pbody'); if (pb) pb.scrollTop = m.scroll || 0; }
+  function savePanelMem() { const pb = $('#panel > .pv .pbody'); if (!pb) return; panelMem[panelKey()] = { scroll: pb.scrollTop, closed: [] }; store.set('panelMem', panelMem); }
+  function restorePanelMem(pv) { const m = panelMem[panelKey()]; if (!m || !pv) return; const pb = pv.querySelector('.pbody'); if (pb) pb.scrollTop = m.scroll || 0; }
   // the chat moved to another conversation by itself: the address follows, in place (the chat owns that history entry)
   function setChatItem(item) {
     if (S.view !== 'product' || S.product !== 'chat' || (S.item || null) === (item || null)) return;
@@ -1395,7 +1409,13 @@
     if (!applyingHash) syncHash(false);
   }
   // a product opens INSIDE the current context (mode is a lens) — it never switches the mode
-  const openProduct = (id) => go('product', { product: id });
+  // A web product whose interface is a workspace area (data.js `page`) opens that area — once it is really there
+  // (its platform module registered XENO_ZONE_LIVE). Otherwise its landing, as before.
+  const openProduct = (id) => {
+    const p = PR[id], pg = p && p.status !== 'soon' && p.page;
+    if (pg && (window.XENO_ZONE_LIVE || {})[pg[0] + '.' + pg[1]]) return go('zone', { mode: pg[0], zone: pg[1], zoneOf: 'mode', item: pg[2] || null });
+    return go('product', { product: id });
+  };
   const openMode = (id) => {
     const last = lastPlace[id];
     if (id === 'overview') { if (last && (last.view !== 'zone' || zonesFor('overview').some((z) => z.id === last.zone))) go(last.view, { ...last, zoneOf: 'overview' }); else go('dashboard'); toast('Overview'); return; }
@@ -2142,18 +2162,18 @@
     // sidebar section headings
     C.register({ id: 'section', sel: '#panel .sec > .sh', priority: 2, build: (n) => {
       const sec = n.closest('.sec'), all = () => [...document.querySelectorAll('#panel .pv .sec')], closed = sec.classList.contains('closed');
-      return [[{ label: closed ? 'Expand' : 'Collapse', icon: closed ? 'down' : 'up', run: () => sec.classList.toggle('closed') },
-        { label: 'Collapse others', icon: 'minus', run: () => all().forEach((s) => s.classList.toggle('closed', s !== sec)) }],
-      [{ label: 'Expand all', icon: 'down', run: () => all().forEach((s) => s.classList.remove('closed')) },
-        { label: 'Collapse all', icon: 'up', run: () => all().forEach((s) => s.classList.add('closed')) }]];
+      return [[{ label: closed ? 'Expand' : 'Collapse', icon: closed ? 'down' : 'up', run: () => setFold(sec, !closed) },
+        { label: 'Collapse others', icon: 'minus', run: () => all().forEach((s) => setFold(s, s !== sec)) }],
+      [{ label: 'Expand all', icon: 'down', run: () => all().forEach((s) => setFold(s, false)) },
+        { label: 'Collapse all', icon: 'up', run: () => all().forEach((s) => setFold(s, true)) }]];
     } });
 
     // the sidebar itself (its empty space, its header)
     C.register({ id: 'panel', sel: '#panel .pv', priority: -1, build: (n) => {
       const primary = n.querySelector('.pbody > .act.primary');
       return [[...(primary ? [{ label: primary.textContent.replace(/Ctrl.*$/, '').trim() || 'New', icon: 'plus', run: () => primary.click() }] : []), { label: 'Search', icon: 'search', kbd: 'Ctrl K', run: () => openPalette() }],
-        [{ label: 'Expand all sections', icon: 'down', run: () => n.querySelectorAll('.sec').forEach((s) => s.classList.remove('closed')) },
-          { label: 'Collapse all sections', icon: 'up', run: () => n.querySelectorAll('.sec').forEach((s) => s.classList.add('closed')) }],
+        [{ label: 'Expand all sections', icon: 'down', run: () => n.querySelectorAll('.sec').forEach((s) => setFold(s, false)) },
+          { label: 'Collapse all sections', icon: 'up', run: () => n.querySelectorAll('.sec').forEach((s) => setFold(s, true)) }],
         [{ label: 'Hide sidebar', icon: 'sidebar', kbd: 'Ctrl \\', run: () => setPanel('closed') }]];
     } });
 
@@ -2276,7 +2296,7 @@
     if (b.hasAttribute('data-expand')) return setPanel('open');
     if (b.hasAttribute('data-back')) return S.item ? go(S.view, { item: null }) : goModeHome();
     if (b.hasAttribute('data-switch')) return openSwitcher();
-    if (b.hasAttribute('data-fold')) return b.closest('.sec').classList.toggle('closed');
+    if (b.hasAttribute('data-fold')) { const s = b.closest('.sec'); return setFold(s, !s.classList.contains('closed')); }
     if (b.dataset.project) { const n = b.dataset.project; S.openProjects.has(n) ? S.openProjects.delete(n) : S.openProjects.add(n); b.closest('.pj').classList.toggle('open'); return; }
     if (b.dataset.chat) { document.querySelectorAll('[data-chat][aria-current]').forEach((n) => n.setAttribute('aria-current', 'false')); b.setAttribute('aria-current', 'true'); return; }
     if (b.hasAttribute('data-newchat') || b.dataset.newin) return toast(b.dataset.newin ? `New chat in ${b.dataset.newin}` : 'New chat');

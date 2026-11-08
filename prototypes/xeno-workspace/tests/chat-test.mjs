@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url); const puppeteer = require('puppe
 const { createServer } = await import('vite'); const { xenoWorkspace } = await import('../../../scripts/vite-workspace.mjs');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'PASS' : 'FAIL', m); };
-const PORT = 5191, base = `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env.TEST_PORT) || 5191, base = `http://127.0.0.1:${PORT}`;
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
 const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
@@ -91,7 +91,7 @@ try {
     ok(v.hash === `#/overview/p/chat/${D}`, 'a message that does not come from the chat frame is ignored');
     // leaving and coming back keeps the same running chat
     await p.evaluate(() => { document.getElementById('xw-chat-frame').contentWindow.__draft = 'half a sentence'; window.XW.go('global', { global: 'library' }); }); await wait(600); v = await view(p);
-    ok(!v.on && v.frames === 1 && v.note !== 'none', 'on another page the chat is hidden, not removed');
+    ok(!v.on && v.frames === 1, 'on another page the chat is hidden, not removed');   // (it also asked for the sample-data note there; no area shows sample data any more, so the note is gone everywhere)
     await p.goBack(); await wait(700); v = await view(p);
     ok(v.on && v.over && v.born === born && v.path === `/chat/c/${D}` && await p.evaluate(() => document.getElementById('xw-chat-frame').contentWindow.__draft === 'half a sentence'), 'Back returns to the same running chat, with what was in it');
     // New chat
@@ -376,6 +376,33 @@ try {
     const nar = await p.evaluate(() => { const f = document.getElementById('xw-chat-frame'), s = document.getElementById('xw-chat-side'); return { mainHidden: getComputedStyle(f).visibility === 'hidden', sideW: s.getBoundingClientRect().width, back: getComputedStyle(document.querySelector('#xw-chat-side-ui .xw-side-main')).display !== 'none' }; });
     ok(nar.mainHidden && nar.sideW > 300 && nar.back, 'on a narrow window the side chat takes the whole space and offers Main chat (' + JSON.stringify(nar) + ')');
     ok(errs.length === 0, 'no page errors with a side chat (' + errs.slice(0, 2).join(' | ') + ')');
+    await p.close(); }
+  { // the sidebar's sections fold and stay folded (owner, 2026-11-08): Projects and Recents, by default, everywhere
+    reset(); const { p, errs } = await open('#/overview/p/chat'); await wait(800);
+    const st = () => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#panel > .pv .sec')].map((s) => [s.dataset.sec, { closed: s.classList.contains('closed'), exp: s.querySelector('[data-fold]')?.getAttribute('aria-expanded'), rows: s.querySelector('.sbody').getBoundingClientRect().height }])));
+    let v = await st();
+    ok(v.projects && v.recents && !v.projects.closed && !v.recents.closed && v.recents.exp === 'true', 'Projects and Recents start open, and say so');
+    const arrow = await p.$eval('#panel .sec[data-sec="recents"] .sh [data-fold] svg', (e) => +getComputedStyle(e).opacity);
+    ok(arrow > 0.3, `each heading shows its arrow without hovering (${arrow})`);
+    await p.click('#panel .sec[data-sec="recents"] .sh [data-fold]'); await wait(450); v = await st();
+    ok(v.recents.closed && v.recents.exp === 'false' && v.recents.rows === 0 && !v.projects.closed, 'clicking Recents folds it, and only it');
+    await p.click('#panel .sec[data-sec="projects"] .sh [data-fold]'); await wait(450); v = await st();
+    ok(v.projects.closed && v.recents.closed, 'Projects folds too');
+    await p.evaluate(() => { document.querySelector('#panel > .pv').__html = ''; window.XW.render(); }); await wait(900); v = await st();
+    ok(v.projects.closed && v.recents.closed, 'new data arriving keeps them folded');
+    await p.evaluate((id) => { location.hash = '#/overview/p/chat/' + id; }, A); await wait(1200); v = await st();
+    ok(v.projects.closed && v.recents.closed, 'opening a chat keeps them folded');
+    await p.reload({ waitUntil: 'domcontentloaded' }); await wait(1800); v = await st();
+    ok(v.projects.closed && v.recents.closed, 'and so does coming back to the page');
+    await p.click('#panel .sec[data-sec="recents"] .sh [data-fold]'); await wait(450); v = await st();
+    ok(!v.recents.closed && v.recents.rows > 0 && v.projects.closed, 'clicking again opens it');
+    await p.evaluate(() => { location.hash = '#/overview'; }); await wait(900);
+    const other = await p.evaluate(() => [...document.querySelectorAll('#panel > .pv .sec.closed')].map((s) => s.dataset.sec));
+    ok(!other.length, `folding in Chat doesn't fold another place's sidebar (${other})`);
+    const scopes = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('xw.folds') || '{}')));
+    ok(scopes.join() === 'product:chat', `it is remembered for Chat only (${scopes})`);
+    await p.evaluate(() => { localStorage.removeItem('xw.folds'); });
+    ok(errs.length === 0, 'no page errors while folding (' + errs.slice(0, 2).join(' | ') + ')');
     await p.close(); }
 } catch (e) { ok(false, 'threw: ' + String(e.message).split('\n')[0]); }
 await b.close(); await server.close();

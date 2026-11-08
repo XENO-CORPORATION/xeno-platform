@@ -181,6 +181,35 @@ async function main() {
     await pool.query("SELECT pg_notify('project_changed', $1)", [secret]);
     await new Promise((r) => setTimeout(r, 300));
     ok(!told.some((t) => t.url.includes(pm.j.canvas.id)), 'and a change in another project tells this canvas nothing');
+
+    // losing access ends the live seat: a ticket only gates joining, so the service is asked to close what's left
+    const ended = async (ms = 1500) => { const t0 = Date.now(); let first = 0; while (Date.now() - t0 < ms) { if (!first && told.some((t) => t.url.endsWith('/revoke'))) first = Date.now(); if (first && Date.now() - first > 300) break; await new Promise((r) => setTimeout(r, 50)); } return told.splice(0).filter((t) => t.url.endsWith('/revoke')).map((t) => ({ canvas: t.url.split('/v1/workspace.canvas/')[1].split('/')[0], sub: JSON.parse(Buffer.from(t.token.split(' ')[1].split('.')[1], 'base64url').toString()).sub, typ: JSON.parse(Buffer.from(t.token.split(' ')[1].split('.')[0], 'base64url').toString()).typ })); };
+    const mapId = pm.j.canvas.id, del = (o, rel, s) => pool.query('DELETE FROM relationship_tuples WHERE object_type = $1 AND object_id = $2 AND relation = $3 AND subject_type = $4 AND subject_id = $5', [...o.split(':'), rel, ...s.split(':')]);
+    told.splice(0);
+    await writeTuples(pool, { writes: [{ object: `project:${shared}`, relation: 'editor', subject: `user:${bob}` }] });
+    await del(`project:${shared}`, 'editor', `user:${bob}`);
+    const demoted = await ended();
+    ok(demoted.some((x) => x.canvas === mapId && x.sub === String(bob) && x.typ === 'xeno-live-revoke+jwt') && !demoted.some((x) => x.sub === String(ada)), `an editor made a viewer has their live seat on the project's canvases closed, and nobody else's (${JSON.stringify(demoted)})`);
+    await writeTuples(pool, { writes: [{ object: `project:${shared}`, relation: 'viewer', subject: `user:${eve}` }] });
+    await del(`project:${shared}`, 'viewer', `user:${eve}`);
+    ok((await ended()).some((x) => x.canvas === mapId && x.sub === String(eve)), 'someone removed from the project has theirs closed');
+    await writeTuples(pool, { writes: [{ object: `project:${shared}`, relation: 'editor', subject: `user:${bob}` }, { object: `project:${shared}`, relation: 'reviewer', subject: `user:${bob}` }] });
+    await del(`project:${shared}`, 'reviewer', `user:${bob}`);
+    ok(!(await ended(700)).length, 'losing a relation that leaves them an editor closes nothing');
+    const builder = (await pool.query('SELECT user_id FROM agent_identities WHERE public_id = $1', [agent.id])).rows[0].user_id;
+    await writeTuples(pool, { writes: [{ object: `project:${shared}`, relation: 'editor', subject: `user:${builder}` }] });
+    await del(`project:${shared}`, 'editor', `user:${builder}`);
+    ok((await ended()).some((x) => x.canvas === mapId && x.sub === String(ada)), 'an agent that lost access has its seat closed, through its person (the service closes by person)');
+    const carl = await mk('cwc-carl');
+    // a company project inherits from its workspace (project#parent@workspace, chatProjectAuthority.js)
+    await writeTuples(pool, { writes: [{ object: `project:${shared}`, relation: 'parent', subject: `workspace:${ws}` }, { object: `workspace:${ws}`, relation: 'editor', subject: `user:${carl}` }] });
+    const viaWs = await live.createTicket(pool, { id: carl, kind: 'human', username: 'carl' }, `workspace.canvas/${mapId}`).catch(() => null);
+    await del(`workspace:${ws}`, 'editor', `user:${carl}`);
+    ok(viaWs?.role === 'editor' && (await ended()).some((x) => x.canvas === mapId && x.sub === String(carl)), 'someone who edited it through the workspace, removed from the workspace, has theirs closed');
+    await writeTuples(pool, { writes: [{ object: `workspace:${ws}`, relation: 'editor', subject: `user:${carl}` }] });
+    await del(`project:${shared}`, 'parent', `workspace:${ws}`);
+    const moved2 = await ended();
+    ok(moved2.some((x) => x.canvas === mapId && x.sub === String(carl)) && !moved2.some((x) => x.sub === String(bob)), 'a project moved out of its workspace closes the seats of those who reached it only through the workspace');
     stopFeed();
 
     // 6. MCP

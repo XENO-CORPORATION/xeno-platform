@@ -157,7 +157,7 @@ What an agent can do on the XENO platform: **237 capabilities**. What it cannot 
 - **`canvas.canvas.create`** — Start a canvas. With `project`, everyone on the project sees it (you must be able to edit the project); without, it is yours alone.
   - arguments: `name`* string, `project` string
   - reply: `canvas` — id, name, revision, project, url, items[] (id, type, x, y, width, height and what it shows), connections[] (id, from, to, link?, label?).
-- **`canvas.item.add`** — Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.
+- **`canvas.item.add`** — Put items on a canvas: image and video nodes (a prompt, and the Library files or the running generation that fill it), tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.
   - arguments: `canvas`* string, `items`* array
   - reply: `canvas` — id, name, revision, project, url, items[] (id, type, x, y, width, height and what it shows), connections[] (id, from, to, link?, label?).; `added` — The new items’ ids, in the order given.
 - **`canvas.canvas.open_as`** — Lay a project (its objectives, tasks, conversations and active runs) or a division (what is inside it, its objectives, projects and active runs) out on a canvas. Opening it again returns the same canvas. A division’s map holds only what you may see.
@@ -166,8 +166,8 @@ What an agent can do on the XENO platform: **237 capabilities**. What it cannot 
 - **`canvas.connection.create`** — Draw a connection between two items. Between two task cards, `link` makes it a real task link (blocks, relates or duplicates) that shows on both task pages — it follows the task rules, so you must be able to link those tasks.
   - arguments: `canvas`* string, `from`* string, `to`* string, `link` string, `label` string
   - reply: `canvas` — id, name, revision, project, url, items[] (id, type, x, y, width, height and what it shows), connections[] (id, from, to, link?, label?).
-- **`canvas.item.update`** — Move or resize items, change a note’s text or a group’s label, or remove items or connections from the canvas. Removing a task card never deletes the task.
-  - arguments: `canvas`* string, `items` array, `remove` array
+- **`canvas.item.update`** — Move or resize items, change a note’s text, a group’s label or an image/video node’s prompt, change what a connection means (between two task cards, link makes it a real task link), or remove items or connections from the canvas. Removing a task card never deletes the task, and a task link stays on the task pages.
+  - arguments: `canvas`* string, `items` array, `connections` array, `remove` array
   - reply: `canvas` — id, name, revision, project, url, items[] (id, type, x, y, width, height and what it shows), connections[] (id, from, to, link?, label?).
 
 ## chat

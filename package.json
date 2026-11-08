@@ -45,6 +45,8 @@
     "test:fonts": "node src/server/tests/fonts.test.mjs",
     "test:font-file": "node --test scripts/font-file.test.mjs",
     "test:fonts-ui": "node prototypes/xeno-workspace/tests/fonts-test.mjs",
+    "test:products-live-ui": "node prototypes/xeno-workspace/tests/products-live-test.mjs",
+    "test:products-live-mutation": "node scripts/products-live-mutation-check.mjs",
     "test:brand-kits": "node src/server/tests/brand-kits.test.mjs",
     "test:brand-kits-ui": "node prototypes/xeno-workspace/tests/brand-kits-test.mjs",
     "test:forms": "node src/server/tests/forms.test.mjs",
