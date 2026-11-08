@@ -1838,7 +1838,9 @@ html body .live-chat button[aria-label="Voice input options"][aria-label="Voice 
 @starting-style{.panel .sec.folding:not(.closed) .sbody,.panel .pj.folding.open > .kids{height:0;opacity:0}}
 /* closed rows leave the layout once the motion ends (display:none), so nothing can find or focus them */
 .panel .sec.closed .sbody,.panel .pj:not(.open) > .kids{display:none;height:0;opacity:0;transition:height .22s var(--close),opacity .14s ease,display .22s allow-discrete}
-.panel .sh button.t svg{transition:opacity .15s,transform .22s var(--open)}
+.panel .sh button.t svg{opacity:.55;transition:opacity .15s,transform .22s var(--open)}
+.panel .sh button.t:hover,.panel .sh button.t:focus-visible{color:var(--p-t2)}
+.panel .sh button.t:hover svg,.panel .sh button.t:focus-visible svg{opacity:1}
 @media (prefers-reduced-motion:reduce){.panel .sbody,.panel .pj > .kids{transition:none}}
 .panel .row[aria-current="true"] svg.i{color:var(--p-t1)}
 .panel .row .row-mk{width:15px;height:15px;flex:none;display:grid;place-items:center;opacity:.72;transition:opacity .12s}

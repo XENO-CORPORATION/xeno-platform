@@ -517,8 +517,8 @@
   const panelMenu = () => { const C = window.XCM; if (!C || !C.register) return; C.register({ id: 'chat-panel', sel: '#panel .pv', priority: 0, when: () => X()?.S?.view === 'product' && X()?.S?.product === 'chat', build: (n) => {
     const primary = n.querySelector('.pbody > .act.primary');
     return [[{ label: 'New chat', icon: 'plus', run: () => (primary ? primary.click() : open(null)) }, { label: 'New chat in new tab', icon: 'external', run: () => window.open(chatUrl(null), '_blank', 'noopener') }, { label: 'New chat beside', icon: 'sidebar', run: () => openSide(NEW_SIDE) }],
-      [{ label: 'Expand all sections', icon: 'down', run: () => n.querySelectorAll('.sec').forEach((s) => s.classList.remove('closed')) },
-        { label: 'Collapse all sections', icon: 'up', run: () => n.querySelectorAll('.sec').forEach((s) => s.classList.add('closed')) }],
+      [{ label: 'Expand all sections', icon: 'down', run: () => n.querySelectorAll('.sec').forEach((s) => X()?.setFold?.(s, false)) },
+        { label: 'Collapse all sections', icon: 'up', run: () => n.querySelectorAll('.sec').forEach((s) => X()?.setFold?.(s, true)) }],
       [...(sideItem() !== undefined ? [{ label: 'Close the side chat', icon: 'x', run: closeSide }] : []), { label: 'Hide sidebar', icon: 'sidebar', kbd: 'Ctrl \\', run: () => document.querySelector('[data-collapse]')?.click() }]];
   } }); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', () => { menu(); panelMenu(); }); else { menu(); panelMenu(); }
