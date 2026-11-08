@@ -49,6 +49,10 @@ const FORMAT = ['XDOC_FORMAT', 'XDOC_VERSION', 'XDOC_EXTENSION', 'DOCUMENT_NODE_
   'validateContent', 'parseXdoc', 'serializeXdoc', 'plainText', 'wordCount', 'pageLinksIn', 'nodeTypesIn', 'emptyContent', 'XdocError'];
 const MARKDOWN = ['markdownToDocument', 'documentToMarkdown'];
 const EDITOR = [...FORMAT, ...MARKDOWN, 'DocumentController', 'DOCUMENT_FORMAT_COMMANDS', 'DOCUMENT_TOOLBAR', 'mountDocumentSurface'];
+const COLLAB_NAMES = ['SHARED_FIELD', 'createCollaborationExtensions', 'seedSharedDocument', 'replaceSharedDocument', 'sharedDocumentContent', 'isSharedDocumentEmpty'];
+const COLLAB = fromSource ? `export { ${COLLAB_NAMES.join(', ')} } from './collaboration.ts';\nexport * as Y from 'yjs';\nexport { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness';\n`
+  : `export { ${COLLAB_NAMES.join(', ')} } from './collaboration.js';\nexport * as Y from 'yjs';\nexport { Awareness, encodeAwarenessUpdate, applyAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness';\n`;
+if (!fromSource && !existsSync(path.join(entryDir, 'collaboration.js'))) throw new Error(`@xenosystem/blocks@${pkg.version} has no /docs/collaboration — pin ≥ 0.24.0 in scripts/workspace-docs-source`);
 const STAMP = `export const BUILT_FROM = ${JSON.stringify(stamp)};\n`;
 
 // From the package: `/docs/core` for the editor and `/docs/format` for the server (both ≥ 0.21.0). The `/docs`
@@ -57,7 +61,9 @@ const STAMP = `export const BUILT_FROM = ${JSON.stringify(stamp)};\n`;
 const ix = fromSource ? './index.ts' : './core.js';
 if (!fromSource && !['core.js', 'format.js'].every((f) => existsSync(path.join(entryDir, f)))) throw new Error(`@xenosystem/blocks@${pkg.version} has no /docs/core and /docs/format — pin ≥ 0.21.0 in scripts/workspace-docs-source`);
 await build({
-  stdin: { contents: `export { ${EDITOR.join(', ')} } from '${ix}';\n${STAMP}`, resolveDir: entryDir, loader: 'ts', sourcefile: 'workspace-docs-entry.ts' },
+  // live co-editing (≥ 0.24.0): the collaboration module, and THE Yjs and Awareness it binds to. Exported from this one bundle
+  // so the live session (XENO Multiplayer's client) works on the same Yjs as the editor: y-prosemirror checks types by identity.
+  stdin: { contents: `export { ${EDITOR.join(', ')} } from '${ix}';\n${COLLAB}${STAMP}`, resolveDir: entryDir, loader: 'ts', sourcefile: 'workspace-docs-entry.ts' },
   outfile: 'prototypes/xeno-workspace/docs-editor.js', bundle: true, format: 'iife', globalName: 'XenoDocs', platform: 'browser', target: 'es2022', minify: true, legalComments: 'eof',
   banner: { js: banner('the workspace Write / Notes editor (window.XenoDocs)') },
 });

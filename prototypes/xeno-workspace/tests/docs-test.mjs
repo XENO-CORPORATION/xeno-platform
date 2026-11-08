@@ -47,6 +47,7 @@ async function open(hash) {
   p.on('request', async (q) => { const u = new URL(q.url()); const json = (body, status = 200) => q.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (!u.pathname.startsWith('/api/')) return q.continue();
     const sent = q.postData() ? JSON.parse(q.postData()) : null;
+    if (u.pathname === '/api/live/tickets') (db.tickets = db.tickets || []).push(sent && sent.resource);
     if (u.pathname.startsWith('/api/workspace-docs') || u.pathname.startsWith('/api/library/assets/file')) db.calls.push([q.method(), u.pathname + u.search, sent]);
     if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
     if (u.pathname === '/api/workspace-docs' && q.method() === 'GET') { const k = u.searchParams.get('kind'), s = (u.searchParams.get('q') || '').toLowerCase();
@@ -57,7 +58,8 @@ async function open(hash) {
       if (!d || (db.trash.has(d.id) && rest !== '/untrash')) return json({ success: false, code: 'not_found', error: 'Document not found' }, 404);
       if (!rest && q.method() === 'GET') return json({ success: true, doc: view(d), backlinks: backlinks(d.id) });
       if (!rest && q.method() === 'PUT') { if (sent.expectedVersion !== d.versions.at(-1).id) return json({ success: false, code: 'version_conflict', error: 'newer' }, 409);
-        const f = JSON.parse(sent.xdoc); Object.assign(d, { title: sent.title, content: f.content }); d.versions.push({ id: vid(), content: f.content, title: sent.title }); return json({ success: true, doc: view(d), backlinks: backlinks(d.id) }); }
+        // as the service: the file (xdoc) or the document (content) — the live editor saves the shared document as content
+        const f = sent.xdoc ? JSON.parse(sent.xdoc) : { content: sent.content }; db.saves = (db.saves || 0) + 1; Object.assign(d, { title: sent.title, content: f.content }); d.versions.push({ id: vid(), content: f.content, title: sent.title }); return json({ success: true, doc: view(d), backlinks: backlinks(d.id) }); }
       if (rest === '/versions') return json({ success: true, versions: [...d.versions].reverse().map((v, i) => ({ id: v.id, createdAt: new Date().toISOString(), current: i === 0 })) });
       let r = rest.match(/^\/versions\/([^/]+)\/restore$/);
       if (r) { const v = d.versions.find((x) => x.id === r[1]); Object.assign(d, { content: v.content, title: v.title }); d.versions.push({ id: vid(), content: v.content, title: v.title }); return json({ success: true, doc: view(d), backlinks: backlinks(d.id) }); }
@@ -142,6 +144,8 @@ try {
         note: document.querySelector('[data-dc-note]')?.textContent || '', tools: !!document.querySelector('[data-dc-fmt]'), editable: document.querySelector('[data-dc-body] .ProseMirror')?.getAttribute('contenteditable') }; });
     ok(!s.pwned && !s.img && !s.js && !s.words, `a hostile stored file renders nothing of itself (${JSON.stringify(s)})`);
     ok(s.readOnly && s.status === 'unsupported' && /XENO Docs/.test(s.note) && !s.tools && s.editable === 'false', 'it opens read-only, says why, and offers no toolbar or Save');
+    await wait(600);
+    ok(await p.evaluate(() => window.XENO_DOCS_LIVE.sessions().length) === 0 && !(db.tickets || []).some((r) => String(r).includes(EVIL)), `and it never becomes a shared document: nobody even asks to join it live (${(db.tickets || []).length} ticket(s) asked for other documents)`); 
     ok(!errs.length, `no page errors (${errs.join(' | ')})`); await p.close(); }
 
   // ── 4. page links, backlinks, search, delete/undo, versions, share

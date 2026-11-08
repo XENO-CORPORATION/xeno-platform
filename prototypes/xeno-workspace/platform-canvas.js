@@ -295,19 +295,45 @@
   function sourceOf(n) { const e = C.doc.edges.find((x) => x.toNode === n.id); const a = e && nodeById(e.fromNode); return a && a.type === 'media' && a.media.versions.length ? mediaOut(a.media) : null; }
   function docBody(n) {
     const d = docOf(n.ref.id);
-    if (C.editing === n.id && d.ready) return `<textarea class="xn-page-ed" data-cv-text="${esc(n.id)}" aria-label="Document">${esc(d.markdown)}</textarea>`;
+    // writing happens in XENO Docs' own editor on the shared document, over this node (drawFrames, DOCED); this is the page as saved
     return `<div class="xn-page"><h3>${esc(d.title || '…')}</h3>${d.markdown ? (window.XENO_TASKS?.md ? window.XENO_TASKS.md(d.markdown, null, {}) : esc(d.markdown)) : ''}</div>`;
   }
   const docs = new Map(), chats = new Map();
   function docOf(id) {
     let d = docs.get(id); if (d) return d; d = {}; docs.set(id, d);
-    api('GET', '/api/workspace-docs/' + encodeURIComponent(id)).then((r) => { if (r.ok) { Object.assign(d, { ready: true, title: r.d.doc.title, markdown: r.d.doc.markdown || '', versionId: r.d.doc.versionId }); draw(); } }).catch(() => {});
+    api('GET', '/api/workspace-docs/' + encodeURIComponent(id)).then((r) => { if (r.ok) { Object.assign(d, { ready: true, title: r.d.doc.title, markdown: r.d.doc.markdown || '', versionId: r.d.doc.versionId, content: r.d.doc.content, xdoc: r.d.doc.xdoc, canEdit: !!r.d.doc.canEdit, format: r.d.doc.format }); draw(); } }).catch(() => {});
     return d;
   }
-  async function saveDoc(id) {
-    const d = docs.get(id); if (!d || !d.ready || !d.changed) return; d.changed = false;
-    const r = await api('PUT', '/api/workspace-docs/' + encodeURIComponent(id), { markdown: d.markdown, expectedVersion: d.versionId }).catch(() => null);
-    if (r && r.ok) d.versionId = r.d.doc.versionId; else toast(said(r, 'That edit couldn’t be saved'));
+  // Writing in a document node: XENO Docs' editor (the one Office › Write mounts) on the document's SHARED copy
+  // (platform-docs.js XENO_DOCS_LIVE: XENO Multiplayer workspace.doc/<file id>), so someone in Write and someone here, or two
+  // people here, write in one document — formatting intact, both edits landing — and one screen saves it as a version.
+  const DOCED = new Map();   // node id → { el, live, unmount, file }
+  async function docEdit(n) {
+    if (DOCED.has(n.id) || !window.XENO_DOCS_LIVE) return;
+    const d = docOf(n.ref.id); if (!d.ready) return;
+    const Lib0 = await window.XENO_DOCS_LIVE.editorLib().catch(() => null);
+    if (!Lib0 || !window.XENO_DOCS_LIVE.shareable(Lib0, d)) return toast(!d.canEdit ? 'You can read this document but not write in it' : 'Open it in Write: it has something this editor can’t write here');
+    DOCED.set(n.id, { el: document.createElement('i'), opening: true, file: n.ref.id });
+    const me = { id: P.user && P.user.id, name: (P.user && (P.user.display_name || P.user.username)) || 'Someone' };
+    const [Lib, live] = await Promise.all([window.XENO_DOCS_LIVE.editorLib(), window.XENO_DOCS_LIVE.open(n.ref.id, { content: d.content, xdoc: d.xdoc, versionId: d.versionId, title: d.title, canEdit: true, me })]).catch(() => []);
+    const slot = DOCED.get(n.id);
+    if (!slot || !Lib || !live) { DOCED.delete(n.id); if (live) live.close(); return toast('The document couldn’t be opened for writing'); }
+    const el = document.createElement('div'); el.className = 'xn-frame xn-docframe'; el.dataset.cvFrame = n.id; el.dataset.cvDoc = n.ref.id;
+    const page = document.createElement('div'); page.className = 'xn-page xn-page--live'; el.append(page);
+    const ctrl = new Lib.DocumentController({ host: { emit: (port) => { if (port === 'save') live.requestSave(); } } });
+    ctrl.load({ id: n.ref.id, versionId: live.version(), title: live.title(), content: d.content });
+    const unmount = Lib.mountDocumentSurface(page, ctrl, { shared: true, history: false, extensions: live.extensions(), label: 'Document text', placeholder: 'Write…' });
+    DOCED.set(n.id, { el, live, unmount, ctrl, file: n.ref.id });
+    C.editing = n.id; C.sel = new Set([n.id]); draw();
+    setTimeout(() => page.querySelector('.ProseMirror')?.focus(), 0);
+  }
+  function docDone(id) {
+    const e = DOCED.get(id); if (!e) return; DOCED.delete(id);
+    if (e.unmount) e.unmount(); e.el.remove();
+    if (C.editing === id) C.editing = null;
+    // the page under it shows the document as written down once its screen has saved it
+    if (e.live) e.live.close().then(() => { docs.delete(e.file); draw(); });
+    draw();
   }
   function chatBody(n, r) {
     const k = n.ref.id; let c = chats.get(k);
@@ -329,6 +355,12 @@
   const FRAMES = new Map();   // node id → { el, path }
   function drawFrames() {
     const layer = document.querySelector('[data-cv-frames]'); if (!layer) return;
+    for (const [id, e] of DOCED) {
+      if (e.opening) continue;
+      const n = nodeById(id); if (!n) { docDone(id); continue; }
+      if (e.el.parentNode !== layer) layer.append(e.el);   // the same element, so the editor and what is typed in it live on
+      Object.assign(e.el.style, { left: n.x + 'px', top: n.y + 'px', width: n.width + 'px', height: n.height + 'px' });
+    }
     for (const [id, f] of FRAMES) {
       const n = nodeById(id), r = n && n.type === 'xeno-ref' && n.ref.kind === 'chat' ? fileOrChat(n) : null, path = r && !r.missing ? chatPathOf(r) : null;
       if (!path) { f.el.remove(); FRAMES.delete(id); continue; }
@@ -837,9 +869,11 @@
   }, true);
   // the press that opened it still has its mouse-down to come, which takes focus off anything: hand it back after that
   function writeOn(n) { C.editing = n.id; C.sel = new Set([n.id]); draw(); setTimeout(() => document.querySelector('[data-cv-text]')?.focus(), 0); }
-  function openNode(n) { if (!n) return; if (n.type === 'xeno-ref' && n.ref.kind === 'file' && fileOf(n.ref.id).doc && docOf(n.ref.id).ready) { writeOn(n); return; } if (n.type === 'text') writeOn(n); else if (n.type === 'group') rename(n.id); else if (n.type === 'xeno-ref' && n.ref.kind !== 'task') { const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id]; if (r && r.url) location.assign(r.url); } else if (n.type === 'xeno-ref') X().go('global', { global: 'tasks', item: n.ref.id }); else if (n.type === 'link') window.open(n.url, '_blank', 'noopener'); }
+  function openNode(n) { if (!n) return; if (n.type === 'xeno-ref' && n.ref.kind === 'file' && fileOf(n.ref.id).doc && docOf(n.ref.id).ready) { docEdit(n); return; } if (n.type === 'text') writeOn(n); else if (n.type === 'group') rename(n.id); else if (n.type === 'xeno-ref' && n.ref.kind !== 'task') { const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id]; if (r && r.url) location.assign(r.url); } else if (n.type === 'xeno-ref') X().go('global', { global: 'tasks', item: n.ref.id }); else if (n.type === 'link') window.open(n.url, '_blank', 'noopener'); }
   addEventListener('pointerdown', (e) => {
     const stage = e.target.closest?.('[data-cv-stage]'); if (!stage || !C.doc || e.button > 1) return;
+    // pressing anywhere else on the board ends writing in a document node (its screen saves what is pending)
+    for (const id of [...DOCED.keys()]) if (!e.target.closest(`[data-cv-frame="${id}"]`)) docDone(id);
     if (e.target.closest('textarea, a, video, button.cv-open, .xn-who, .xn-steps button, .xn-dock, .xn-say, .xn-close, .xn-frame')) return;
     closeAdd(); C.at = null;
     if (!e.target.closest('[data-cv-text]')) stage.focus({ preventScroll: true });
@@ -917,8 +951,8 @@
     else { C.view.x -= e.deltaX; C.view.y -= e.deltaY; store(C.id, C.view); draw(); }
   }, { passive: false });
 
-  addEventListener('input', (e) => { const pr = e.target.closest?.('[data-cv-prompt]'); if (pr) { const x = nodeById(pr.dataset.cvPrompt); if (x) { x.media.prompt = pr.value; pushLive(); C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } return; } const t = e.target.closest?.('[data-cv-text]'); if (!t) return; const n = nodeById(t.dataset.cvText); if (n && n.type === 'xeno-ref') { const d = docs.get(n.ref.id); if (d) { d.markdown = t.value; d.changed = true; clearTimeout(d.t); d.t = setTimeout(() => saveDoc(n.ref.id), 900); } return; } if (n) { if (!t.__snap) { t.__snap = 1; before(); } n.text = t.value; C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } });
-  addEventListener('focusout', (e) => { const t = e.target.closest?.('[data-cv-text]'); if (!t) return; { const x = nodeById(t.dataset.cvText); if (x?.type === 'xeno-ref') saveDoc(x.ref.id); } setTimeout(() => { if (C.editing === t.dataset.cvText && !document.activeElement?.closest?.('[data-cv-text]')) { C.editing = null; draw(); } }, 0); });
+  addEventListener('input', (e) => { const pr = e.target.closest?.('[data-cv-prompt]'); if (pr) { const x = nodeById(pr.dataset.cvPrompt); if (x) { x.media.prompt = pr.value; pushLive(); C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } return; } const t = e.target.closest?.('[data-cv-text]'); if (!t) return; const n = nodeById(t.dataset.cvText); if (n) { if (!t.__snap) { t.__snap = 1; before(); } n.text = t.value; C.dirty = true; clearTimeout(C.timer); C.timer = setTimeout(save, SAVE_MS); } });
+  addEventListener('focusout', (e) => { const t = e.target.closest?.('[data-cv-text]'); if (!t) return; setTimeout(() => { if (C.editing === t.dataset.cvText && !document.activeElement?.closest?.('[data-cv-text]')) { C.editing = null; draw(); } }, 0); });
   addEventListener('keydown', (e) => {
     if (e.code === 'Space' && document.querySelector('[data-cv-stage]') && !e.target.closest?.('input, textarea')) { space = true; }
     if (!document.querySelector('[data-cv-stage]') || !C.doc || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
@@ -933,6 +967,7 @@
     else if (e.key === '-' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); zoomAt(1 / 1.2); }
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
+  addEventListener('keydown', (e) => { const fr = e.key === 'Escape' && e.target.closest?.('.xn-docframe'); if (fr) { e.preventDefault(); docDone(fr.dataset.cvFrame); document.querySelector('[data-cv-stage]')?.focus({ preventScroll: true }); } }, true);
   const ACT = {
     'add-task': addTask, 'chat-here': (id) => chatHere(id), 'chat-done': (id) => chatDone(id), 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, add: (_, el) => { const r = el.getBoundingClientRect(); openAdd(r.left, r.bottom + 6); }, who: (id, el) => whoPick(id, el), step: (a) => stepTo(a), 'media-go': () => mediaGo(), 'media-pick': (k, el) => mediaPick(k, el), ver: (i) => { const m = nodeById([...C.sel][0])?.media; if (m) { before(); m.cur = Number(i); change(); } }, 'to-video': () => { const n = nodeById([...C.sel][0]); if (n) { C.at = { x: n.x + n.width + 80, y: n.y }; addMedia('video', n.id); } }, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },

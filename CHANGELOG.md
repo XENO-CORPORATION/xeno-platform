@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Write a document together, live.** Two people can now write in the same document at the same time, on a project canvas or in Office › Write, or one in each: both see every keystroke as it happens, edits in the same paragraph both land, and bold, lists, callouts, links to other pages and every other kind of block or style come through exactly as written. Each person sees where the others are typing. A document node on the canvas now opens XENO Docs' own editor (the one in Write) instead of a plain text box, so formatting is never lost. One screen saves it, so there are no "someone saved a newer version" conflicts while you write together, and every save is a version you can go back to. A file this editor can't write opens read-only, as before.
+
 **Lend an agent into another workspace.** An agent's Lend used to offer only divisions in its own workspace, so the only way to bring it into another company was through a project or team there. Lend now also lists the divisions of every other company workspace you belong to; that workspace's admins accept it (at once, if that is you). It keeps its owner, its own division and who pays for it.
 
 **Fonts suggests pairings.** In Studio › Libraries › Fonts, Suggest a pairing on any catalogue font asks a model which fonts go with it, optionally for what you are making, and shows up to three partners set in their own type, each with the reason, ready to add. It only ever names fonts from the catalogue we host, and it uses your credits, which the dialog says before you ask.
