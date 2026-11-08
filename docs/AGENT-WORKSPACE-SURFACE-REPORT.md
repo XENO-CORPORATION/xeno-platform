@@ -20,7 +20,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | account | 117 | 4 | 58 | 55 | 33 | 75 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
 | browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
-| forms | 45 | 18 | 20 | 7 | 18 | 22 | 5 | 0 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 1, `stock:write` 1 |
+| forms | 46 | 18 | 21 | 7 | 18 | 22 | 5 | 1 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 2, `stock:write` 1 |
 | canvas | 23 | 6 | 17 | 0 | 5 | 14 | 4 | 0 | `tasks:write` 14, `tasks:read` 3 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |

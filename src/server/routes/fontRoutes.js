@@ -4,6 +4,7 @@
  *   GET    /catalogue?q=&category=    the open catalogue, with pairings
  *   GET    /face.css?ids=a,b          @font-face rules for catalogue families
  *   GET    /                          this workspace's fonts: catalogue families and uploads
+ *   POST   /pairings/suggest {family, purpose?}   catalogue fonts a model suggests with it, on the asker's credits
  *   POST   /families {family}         add a family from the catalogue · DELETE /families/:family
  *   DELETE /uploads/:id               remove an upload from the workspace
  *   POST   /uploads/:id/takedown {reason}    XENO staff, for a rights holder's complaint
@@ -23,6 +24,8 @@ export const actorOf = async (req) => {
 };
 export const fail = (res, e) => {
   if (e instanceof F.FontError) return res.status(e.status).json({ success: false, code: e.code, error: e.message });
+  // a suggestion's model call: out of credits (402), refused (403), rate-limited (429) or no model reachable (503) say so
+  if ([402, 403, 429, 503].includes(e && e.http)) return res.status(e.http).json({ success: false, code: e.code || 'pairing_unavailable', error: e.http === 402 ? 'Not enough credits for a suggestion' : e.http === 503 ? 'No model is reachable right now' : e.message });
   console.error('Fonts failed:', e); return res.status(500).json({ success: false, error: 'Internal server error' });
 };
 const run = (fn) => async (req, res) => { try { res.json({ success: true, ...(await fn(req, await actorOf(req))) }); } catch (e) { fail(res, e); } };
@@ -35,6 +38,7 @@ router.get('/face.css', (req, res) => {
   res.type('text/css').set('Cache-Control', 'private, max-age=3600').send(F.faceCss(ids, { weights: weights.length ? weights : null }));
 });
 router.get('/', run((req, a) => F.listWorkspaceFonts(req.db, a, { workspace: ws(req) })));
+router.post('/pairings/suggest', run((req, a) => F.suggestPairings(req.db, a, { workspace: ws(req), family: b(req).family, purpose: b(req).purpose })));
 router.post('/families', run((req, a) => F.addFamily(req.db, a, { workspace: ws(req), family: b(req).family })));
 router.delete('/families/:family', run((req, a) => F.removeFamily(req.db, a, { workspace: ws(req), family: req.params.family })));
 router.delete('/uploads/:id', run((req, a) => F.removeUpload(req.db, a, { workspace: ws(req), id: req.params.id })));

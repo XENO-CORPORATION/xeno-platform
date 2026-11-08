@@ -11450,6 +11450,11 @@
       "class": "safe",
       "scope": "fonts:read"
     },
+    "route:fontRoutes.js:POST /pairings/suggest": {
+      "status": "planned",
+      "class": "external",
+      "scope": "fonts:read"
+    },
     "route:fontRoutes.js:POST /families": {
       "status": "capability",
       "capability": "fonts.family.add",

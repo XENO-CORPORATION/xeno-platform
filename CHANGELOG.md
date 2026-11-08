@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Fonts suggests pairings.** In Studio › Libraries › Fonts, Suggest a pairing on any catalogue font asks a model which fonts go with it, optionally for what you are making, and shows up to three partners set in their own type, each with the reason, ready to add. It only ever names fonts from the catalogue we host, and it uses your credits, which the dialog says before you ask.
+
 **The product list says what works.** Assets, Fonts, Stock, CRM, Forms and Scheduling were still marked "Soon" in the workspace although each has run there for weeks. They are now listed as working, and choosing one opens its real page (Studio › Libraries, Corpo › Customers, Forms, Scheduling), including from search and from an old link. The Assets, Fonts and Stock product pages on the site no longer call themselves a documentation scaffold: each says what works today, what is next, and links into the workspace. Support Desk (answering your own customers) and Mail stay marked "Soon": the desk is not built, and XENO Mail's server is offline.
 
 **Every canvas node looks the same way.** Files that aren't pictures or documents, links, groups, verdicts, runs, objectives, divisions and older image cards were still the old boxes. They now follow the new node design: the name sits above the object, a selected node gets a thin drawn line, and every corner has the curved resize handle. Something you can no longer open keeps its place, quieter, so the layout doesn't jump. A project shown on a division's map is a normal card again, with its open tasks and status.
