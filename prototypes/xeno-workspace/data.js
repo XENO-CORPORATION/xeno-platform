@@ -16,7 +16,9 @@ window.XENO_ME = (() => {
 window.XENO_FILE_ICON_DIR = window.XENO_ICON_BASE + 'file-icons/svg/';
 
 // kind: 'desktop' (opens in Hub), 'web' (runs here), 'chat'
-const P = (id, name, opts = {}) => ({ id, name, icon: opts.icon === undefined ? `xeno-${id}` : opts.icon, code: opts.code, status: opts.status || 'live', kind: opts.kind || 'desktop', blurb: opts.blurb || '' });
+// page: [mode, area, item] — a web product whose real interface IS a workspace area. Opening it goes to that area
+// (app.js openProduct), once the area's platform module has registered it in XENO_ZONE_LIVE; until then, the landing.
+const P = (id, name, opts = {}) => ({ id, name, icon: opts.icon === undefined ? `xeno-${id}` : opts.icon, code: opts.code, status: opts.status || 'live', kind: opts.kind || 'desktop', blurb: opts.blurb || '', page: opts.page || null });
 
 window.XENO_PRODUCTS = Object.fromEntries([
   // Studio
@@ -38,9 +40,9 @@ window.XENO_PRODUCTS = Object.fromEntries([
   P('enhance-video', 'Video', { icon: null, code: 'Vi', kind: 'web', blurb: 'Upscale, smooth and steady' }),
   P('enhance-audio', 'Audio', { icon: null, code: 'Au', kind: 'web', blurb: 'Clean up, separate, level' }),
   P('enhance-3d', '3D', { icon: null, code: '3D', kind: 'web', blurb: 'Retopologise, reduce, sharpen textures' }),
-  P('assets', 'Assets', { status: 'soon', kind: 'web', blurb: 'Brand kits and shared libraries' }),
-  P('fonts', 'Fonts', { status: 'soon', kind: 'web', blurb: 'Fonts and pairing' }),
-  P('stock', 'Stock', { status: 'soon', kind: 'web', blurb: 'Stock media' }),
+  P('assets', 'Assets', { kind: 'web', blurb: 'Brand kits and shared libraries', page: ['studio', 'libraries', null] }),   // platform-assets.js
+  P('fonts', 'Fonts', { kind: 'web', blurb: 'Fonts and pairing', page: ['studio', 'libraries', 'fonts'] }),   // platform-fonts.js
+  P('stock', 'Stock', { kind: 'web', blurb: 'Stock media', page: ['studio', 'libraries', 'stock'] }),   // platform-stock.js
   // Office
   P('docs', 'Docs', { blurb: 'Documents' }),
   P('sheets', 'Sheets', { blurb: 'Spreadsheets' }),
@@ -57,10 +59,12 @@ window.XENO_PRODUCTS = Object.fromEntries([
   // Corpo
   P('company', 'Company', { kind: 'web', blurb: 'Your company, people and agents' }),
   P('seats', 'Teams & seats', { icon: null, code: 'Ts', kind: 'web', blurb: 'Members and seats' }),
-  P('crm', 'CRM', { icon: null, code: 'Cr', status: 'soon', kind: 'web', blurb: 'Customers and pipeline' }),
+  P('crm', 'CRM', { icon: null, code: 'Cr', kind: 'web', blurb: 'Customers and pipeline', page: ['corpo', 'customers', null] }),   // platform-customers.js
+  // Support Desk = a workspace answering ITS OWN customers (catalog: XENO Cura, horizon). Not built: XENO support
+  // (platform-support.js) is people asking XENO, a different product, so it is not shown here as this one.
   P('desk', 'Support Desk', { icon: null, code: 'Sd', status: 'soon', kind: 'web', blurb: 'Tickets and chat in one inbox' }),
-  P('forms', 'Forms', { icon: null, code: 'Fm', status: 'soon', kind: 'web', blurb: 'Forms and surveys' }),
-  P('scheduling', 'Scheduling', { icon: null, code: 'Sc', status: 'soon', kind: 'web', blurb: 'Booking pages' }),
+  P('forms', 'Forms', { icon: null, code: 'Fm', kind: 'web', blurb: 'Forms and surveys', page: ['corpo', 'forms', null] }),   // platform-forms.js
+  P('scheduling', 'Scheduling', { icon: null, code: 'Sc', kind: 'web', blurb: 'Booking pages', page: ['corpo', 'scheduling', null] }),   // platform-scheduling.js
   P('spectra', 'Spectra', { status: 'soon', kind: 'web', blurb: 'Analytics and dashboards' }),
   // Dev
   P('agent', 'Agent', { blurb: 'Build with agents' }),
