@@ -214,39 +214,63 @@
     async newInvoice() {
       const o = S.d.registration?.registeredOffice?.country || '', last = Array.isArray(S.inv) && S.inv[0]?.invoice.currency, small = S.d.profile.taxStatus === 'small_business';
       const iso = (t) => new Date(t).toISOString().slice(0, 10), DATE = /^\d{4}-\d{2}-\d{2}$/, realDate = (x) => DATE.test(x) && !Number.isNaN(Date.parse(x)), said = /[.!?]$/.test(S.d.profile.taxStatusNote || '') ? S.d.profile.taxStatusNote : `${S.d.profile.taxStatusNote}.`;
-      await D().form({ title: 'New invoice', sub: `${small ? `No tax is charged. It will say: ${said}` : `The seller is this ${S.d.profile.entityKind === 'sole_proprietor' ? 'business' : 'company'}.`} Once issued it can’t be changed, only reversed by a credit note.`, submit: 'Review', fields: [
-        { id: 'b', label: 'Customer', required: true, max: 200 }, { id: 'bt', label: 'Customer’s tax number', max: 40 },
+      // The customer comes from Corpo › Customers, this workspace's own CRM (services/customers.js): pick one and its
+      // billing details fill in. A new customer, or changed details, is saved back there once the invoice is issued.
+      const wsq = `?workspace=${encodeURIComponent(S.d.org.id)}`;
+      const cr = await api('GET', `/api/customers/companies${wsq}`).catch(() => null);
+      const companies = cr && cr.ok && Array.isArray(cr.d.companies) ? cr.d.companies : [];
+      const byId = new Map(companies.map((c) => [c.id, c]));
+      const fill = (c, { set }) => { const b = (c && c.billing) || {}, a = b.address || {};
+        set('b', b.name || (c ? c.name : '')); set('bt', b.vatId || ''); set('bs', a.line1 || ''); set('bp', a.postalCode || ''); set('bc', a.city || ''); set('br', a.countrySubdivision || ''); set('bk', a.country || o); };
+      const cols = [{ id: 'item', label: 'Item', max: 200, w: 'minmax(0,3fr)' }, { id: 'q', label: 'Quantity', value: '1', max: 12, num: true, w: 'minmax(0,1fr)' }, { id: 'price', label: 'Unit price', max: 20, num: true, placeholder: '100.00', w: 'minmax(0,1.3fr)' },
+        ...(small ? [] : [{ id: 'rate', label: 'Tax %', value: '0', max: 6, num: true, w: 'minmax(0,.9fr)' }])];
+      // The running total uses the same arithmetic as the check below (net rounded per line, then its tax).
+      let cur = last || 'EUR';
+      const totalOf = (rows) => rows.reduce((n, r) => { const u = toMinor(r.price || '', cur), q = Number(r.q || 0), t = small ? 0 : Number(r.rate || 0); if (u === null || !(q > 0)) return n; const net = Math.round(q * u); return n + net + Math.round(net * t / 100); }, 0);
+      await D().form({ title: 'New invoice', size: 'lg', sub: `${small ? `No tax is charged. It will say: ${said}` : `The seller is this ${S.d.profile.entityKind === 'sole_proprietor' ? 'business' : 'company'}.`} Once issued it can’t be changed, only reversed by a credit note.`, submit: 'Review', fields: [
+        { id: 'cust', label: 'Customer', type: 'select', value: '', options: [['', companies.length ? 'A new customer…' : 'A new customer'], ...companies.map((c) => [c.id, c.name])],
+          hint: companies.length ? 'From Corpo › Customers. Picking one fills in their details.' : 'Customers you bill are kept in Corpo › Customers, so next time you can pick them.',
+          onChange: (v, io) => fill(byId.get(v) || null, io) },
+        { id: 'b', label: 'Billed to', required: true, max: 200 }, { id: 'bt', label: 'Customer’s tax number', max: 40 },
         { id: 'bs', label: 'Street and number', required: true, max: 200 }, { id: 'bp', label: 'Postal code', max: 20 },
         { id: 'bc', label: 'City', required: true, max: 120 }, { id: 'br', label: 'State or region', max: 120 },
         { id: 'bk', label: 'Country', type: 'select', value: o, options: [['', 'Choose…'], ...COUNTRIES.filter(([c]) => c.length === 2)], required: true },
-        { id: 'cur', label: 'Currency', type: 'select', value: last || 'EUR', options: CURRENCIES.map((c) => [c, c]) },
-        { id: 'item', label: 'Item', required: true, max: 200 }, { id: 'q', label: 'Quantity', value: '1', max: 12 }, { id: 'price', label: 'Unit price', required: true, max: 20, placeholder: '100.00' },
-        ...(small ? [] : [{ id: 'rate', label: 'Tax rate %', value: '0', max: 6 }, { id: 'reason', label: 'If no tax: why', max: 200, hint: 'An invoice that charges no tax has to say why.' }]),
-        { id: 'more', label: 'More lines', type: 'textarea', rows: 2, max: 2000, placeholder: small ? 'Item; quantity; unit price' : 'Item; quantity; unit price; tax %', hint: 'One per line.' },
+        { id: 'save', label: 'Customer details', type: 'seg', value: 'save', options: [['save', 'Save to Customers'], ['once', 'Only on this invoice']] },
+        { id: 'cur', label: 'Currency', type: 'select', value: cur, options: CURRENCIES.map((c) => [c, c]), onChange: (v) => { cur = v; } },
+        { id: 'lines', label: 'Lines', type: 'rows', cols, min: 1, maxRows: 100, add: 'Add a line', required: true, summary: (rows) => (rows.length ? `Total ${money(totalOf(rows), cur)}` : '') },
+        ...(small ? [] : [{ id: 'reason', label: 'If a line charges no tax: why', max: 200, hint: 'An invoice that charges no tax has to say why.' }]),
         { id: 'sup', label: 'Date of supply', required: true, max: 10, value: iso(Date.now()), placeholder: 'YYYY-MM-DD', hint: 'When you delivered it. For work over a period, the first day.' }, { id: 'until', label: 'Supplied until', max: 10, placeholder: 'YYYY-MM-DD', hint: 'Only for a period.' },
         { id: 'due', label: 'Due date', required: true, max: 10, value: iso(Date.now() + 14 * 86400000), placeholder: 'YYYY-MM-DD' }, { id: 'note', label: 'Note', max: 500 },
       ], onSubmit: async (v) => {
-        const cur = v.cur, lines = [], line = (item, q, price, rate) => {
-          const unitPrice = toMinor(price, cur), quantity = Number(q), r = Number(rate || 0);
-          if (unitPrice === null) return `“${price}” isn’t an amount in ${cur} (${decimals(cur)} decimals).`;
-          if (!(quantity > 0)) return `“${q}” isn’t a quantity.`;
-          if (!(r >= 0 && r <= 100)) return `“${rate}” isn’t a tax rate.`;
-          if (small) { lines.push({ itemName: item, quantity, unitPrice }); return null; }
-          if (r === 0 && !v.reason) return 'Say why no tax is charged.';
-          lines.push({ itemName: item, quantity, unitPrice, ...(r > 0 ? { vatCategory: 'S', vatRate: r } : { vatCategory: 'O', exemptionReason: v.reason }) });
-          return null;
-        };
-        const bad = line(v.item, v.q, v.price, v.rate) || v.more.split('\n').map((x) => x.trim()).filter(Boolean).reduce((e, x) => { if (e) return e; const [a, b, p, r] = x.split(';').map((y) => y.trim()); return a && b && p ? line(a, b, p, r) : `Write “${x}” as: item; quantity; unit price${small ? '' : '; tax %'}.`; }, null);
-        if (bad) return bad;
+        cur = v.cur; const lines = [];
+        for (const [i, r] of v.lines.entries()) {
+          const n = `Line ${i + 1}`, unitPrice = toMinor(r.price || '', cur), quantity = Number(r.q || ''), rate = Number(r.rate || 0);
+          if (!r.item) return `${n}: say what it is.`;
+          if (unitPrice === null) return `${n}: “${r.price || ''}” isn’t an amount in ${cur} (${decimals(cur)} decimals).`;
+          if (!(quantity > 0)) return `${n}: “${r.q || ''}” isn’t a quantity.`;
+          if (small) { lines.push({ itemName: r.item, quantity, unitPrice }); continue; }
+          if (!(rate >= 0 && rate <= 100)) return `${n}: “${r.rate}” isn’t a tax rate.`;
+          if (rate === 0 && !v.reason) return `${n} charges no tax: say why.`;
+          lines.push({ itemName: r.item, quantity, unitPrice, ...(rate > 0 ? { vatCategory: 'S', vatRate: rate } : { vatCategory: 'O', exemptionReason: v.reason }) });
+        }
+        if (!lines.length) return 'Add at least one line.';
         if (!realDate(v.sup)) return 'Write the date of supply as YYYY-MM-DD.';
         if (v.until && !realDate(v.until)) return 'Write the last day as YYYY-MM-DD.';
         if (v.until && v.until < v.sup) return 'The period can’t end before it starts.';
         if (!realDate(v.due)) return 'Write the due date as YYYY-MM-DD.';
         const total = lines.reduce((n, l) => { const net = Math.round(l.quantity * l.unitPrice); return n + net + Math.round(net * (l.vatRate || 0) / 100); }, 0);
-        if (!await D().confirm({ title: `Issue this invoice for ${money(total, cur)}?`, body: `To ${v.b}. It takes the next number and can’t be changed afterwards.${S.d.profile.paymentAccount ? '' : ' It won’t say where to pay: add your account under Getting paid first if it should.'}`, action: 'Issue invoice', danger: false })) return 'Not issued.';
-        const r = await api('POST', `/api/orgs/${S.d.org.id}/invoices`, { currency: cur, buyer: { name: v.b, ...(v.bt ? { vatId: v.bt } : {}), address: { line1: v.bs, city: v.bc, ...(v.bp ? { postalCode: v.bp } : {}), ...(v.br ? { countrySubdivision: v.br } : {}), country: v.bk } }, lines, dueDate: v.due, ...(v.until ? { invoicingPeriod: { start: v.sup, end: v.until } } : { deliveryDate: v.sup }), ...(v.note ? { note: v.note } : {}) }).catch(() => null);
+        const address = { line1: v.bs, city: v.bc, ...(v.bp ? { postalCode: v.bp } : {}), ...(v.br ? { countrySubdivision: v.br } : {}), country: v.bk };
+        if (!await D().confirm({ title: `Issue this invoice for ${money(total, cur)}?`, body: `To ${v.b}, ${lines.length === 1 ? 'one line' : `${lines.length} lines`}. It takes the next number and can’t be changed afterwards.${S.d.profile.paymentAccount ? '' : ' It won’t say where to pay: add your account under Getting paid first if it should.'}`, action: 'Issue invoice', danger: false })) return 'Not issued.';
+        const r = await api('POST', `/api/orgs/${S.d.org.id}/invoices`, { currency: cur, buyer: { name: v.b, ...(v.bt ? { vatId: v.bt } : {}), address }, lines, dueDate: v.due, ...(v.until ? { invoicingPeriod: { start: v.sup, end: v.until } } : { deliveryDate: v.sup }), ...(v.note ? { note: v.note } : {}) }).catch(() => null);
         if (!r || !r.ok) return why(r, 'That invoice couldn’t be issued.');
-        toast(`Issued ${r.d.number}`); S.inv = null; S.act = null; goItem(`invoices/${r.d.number}`); return null;
+        // Saved back to Customers only AFTER the invoice is issued, and never blocking it: the invoice is the record.
+        if (v.save === 'save') {
+          const billing = { name: v.b, ...(v.bt ? { vatId: v.bt } : {}), address }, pick = byId.get(v.cust);
+          const s2 = pick ? await api('PATCH', `/api/customers/companies/${encodeURIComponent(pick.id)}${wsq}`, { billing }).catch(() => null)
+            : await api('POST', `/api/customers/companies${wsq}`, { name: v.b, billing }).catch(() => null);
+          toast(!s2 || !s2.ok ? `Issued ${r.d.number}. The customer’s details weren’t saved to Customers: ${why(s2, 'try again there')}` : `Issued ${r.d.number}${pick ? '' : `. ${v.b} is now in Customers`}`);
+        } else toast(`Issued ${r.d.number}`);
+        S.inv = null; S.act = null; goItem(`invoices/${r.d.number}`); return null;
       } });
     },
     async credit(number) {

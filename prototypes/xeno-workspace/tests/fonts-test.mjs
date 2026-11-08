@@ -16,7 +16,7 @@ const b = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
 const USER = { id: 7, username: 'test-person', email: 'test@example.test', display_name: 'Test Person', avatar_url: null, email_verified: true };
 const fam = (id, family, category, pairs = []) => ({ id, family, category, weights: [400, 700], styles: ['normal'], license: { type: 'OFL-1.1' }, licenseUrl: `https://updates.example/fonts/${id}/LICENSE.txt`, pairsWith: pairs });
 const CAT = [fam('inter', 'Inter', 'sans-serif', [{ id: 'jetbrains-mono', family: 'JetBrains Mono', role: 'body' }]), fam('lora', 'Lora', 'serif'), fam('jetbrains-mono', 'JetBrains Mono', 'monospace')];
-const db = { mine: [], uploads: [], calls: [], refuse: null, faces: [], multipart: null };
+const db = { mine: [], uploads: [], calls: [], refuse: null, faces: [], multipart: null, suggest: [], broke: false };
 const tmp = path.join(os.tmpdir(), `xeno-font-${process.pid}.ttf`); fs.writeFileSync(tmp, Buffer.from('a font'));
 
 const p = await b.newPage(); await p.setViewport({ width: 1400, height: 900 });
@@ -34,6 +34,7 @@ p.on('request', (q) => { const u = new URL(q.url()); const json = (body, status 
   if (u.pathname === '/api/fonts/catalogue') return json({ success: true, families: CAT });
   if (u.pathname === '/api/fonts/face.css') { db.faces.push(u.search); return q.respond({ status: 200, contentType: 'text/css', body: '' }); }
   if (u.pathname === '/api/fonts' && M === 'GET') return json({ success: true, catalogue: db.mine.map((id) => ({ ...CAT.find((f) => f.id === id), agentAdded: false })), uploads: db.uploads });
+  if (u.pathname === '/api/fonts/pairings/suggest' && M === 'POST') { const s2 = JSON.parse(q.postData()); db.suggest.push(s2); if (db.broke) return json({ success: false, error: 'Not enough credits for a suggestion' }, 402); return json({ success: true, family: CAT[0], pairs: [{ id: 'lora', family: 'Lora', category: 'serif', role: 'heading', reason: 'A calligraphic serif against a neutral sans.' }] }); }
   if (u.pathname === '/api/fonts/families' && M === 'POST') { const s = JSON.parse(q.postData()); db.mine.push(s.family); return json({ success: true, font: {} }); }
   if (u.pathname.startsWith('/api/fonts/families/') && M === 'DELETE') { db.mine = db.mine.filter((x) => x !== u.pathname.split('/').pop()); return json({ success: true, removed: true }); }
   if (u.pathname === '/api/fonts/uploads' && M === 'POST' && q.headers()['x-xeno-csrf'] !== 'csrf-tok') { db.calls.push('upload-without-csrf'); return json({ success: false, error: 'CSRF validation failed' }, 403); }
@@ -65,6 +66,14 @@ try {
   ok(db.mine.includes('inter') && await p.evaluate(() => !!document.querySelector('[data-ft-family="inter"] [data-ft-added]')), 'Add puts it in the workspace, and the catalogue says so');
   if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + '/fonts-catalogue.png' });
 
+  // a model's pairing: asks what it's for, says it uses credits, shows only what came back, each addable
+  await p.click('[data-ft-ai="jetbrains-mono"]'); await wait(400);
+  ok(/uses your credits/.test(await p.evaluate(() => document.querySelector('.xd')?.innerText || '')) && !db.suggest.length, 'Suggest a pairing says it uses credits, and asks nothing yet');
+  await p.type('#xdf-purpose', 'a bakery menu'); await p.click('.xd [data-xd-submit]'); await wait(900);
+  ok(db.suggest.at(-1)?.family === 'jetbrains-mono' && db.suggest.at(-1)?.purpose === 'a bakery menu', 'it asks for that family, with the purpose');
+  ok(/Suggested by a model for “a bakery menu”/.test(await main()) && /calligraphic serif/.test(await main()) && !!(await p.$('[data-ft-ai-for="jetbrains-mono"] [data-ft-add="lora"]')), 'the suggestion shows under the card, with its reason and Add');
+  db.broke = true; await p.click('[data-ft-ai="lora"]'); await wait(300); await p.click('.xd [data-xd-submit]'); await wait(700);
+  ok(/Not enough credits/.test(await p.evaluate(() => document.querySelector('.xd')?.innerText || '')), 'out of credits says so, in the dialog'); await p.keyboard.press('Escape'); await wait(300); db.broke = false;
   await p.click('[data-ft-tab="mine"]'); await wait(700);
   ok(!!(await p.$('[data-ft-mine="inter"]')), 'it shows in the workspace');
   await uploadViaPage(); await wait(400);

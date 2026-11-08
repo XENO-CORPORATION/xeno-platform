@@ -143,6 +143,8 @@ p.on('request', (q) => {
   { const pm = u.pathname.match(/^\/api\/marketplace\/skills\/([0-9a-f-]{36})\/preview$/); if (pm) { const l = db.mkt.listings.find((x) => x.id === pm[1]); if (!l || l.status !== 'published') return json(404, { success: false }); const v = l.versions.find((x) => x.version === l.current);
     return json(200, { success: true, listing: { id: l.id, title: l.title, summary: l.summary, license: l.license, trustTier: 'community', installCount: 0, publisher: { name: db.mkt.dev.name, handle: db.mkt.dev.handle }, pricing: [{ model: 'free', priceCredits: 0 }] },
       current: { id: 'v', version: v.version, hash: v.hash, name: v.name, description: v.description, skillMd: v.md, files: ['SKILL.md', 'scripts/check.sh'], scripts: ['scripts/check.sh'] }, versions: [{ id: 'v', version: v.version, publishedAt: new Date().toISOString() }] }); } }
+  if (u.pathname === '/api/divisions' && method === 'GET' && db.lendDivisions && u.searchParams.get('workspace') === 'w-acme') return json(200, { success: true, canManage: false, divisions: [{ id: 'd-acme-dev', name: 'Dev', lifecycle: 'active' }, { id: 'd-acme-old', name: 'Old', lifecycle: 'archived' }] });
+  { const lm = u.pathname.match(/^\/api\/agents\/([^/]+)\/lend$/); if (lm && method === 'POST') { const a = db.agents.find((x) => x.id === lm[1]); a.lentTo = [...(a.lentTo || []), { id: 'lend-1', state: 'proposed', waitingFor: 'target', workspace: { id: 'w-acme', name: 'Acme' }, division: { id: b.divisionId, name: 'Dev' } }]; return json(200, { success: true, agent: view(a) }); } }
   if (u.pathname === '/api/workspaces') return json(200, { success: true, workspaces: [{ id: 'w-acme', name: 'Acme', workspace_type: 'team' }, { id: 'w-me', name: 'Mine', workspace_type: 'personal' }] });
   if (u.pathname === '/api/workspaces/w-acme/members') return json(200, { success: true, members: [{ user_id: 'u1', display_name: 'Me', role: 'owner' }, { user_id: 'u-cal', display_name: 'Cal', role: 'editor' }] });
   if (u.pathname === '/api/account/security') return json(200, { success: true, security: { confirmation: { confirmed: true }, methods: ['password'] } });
@@ -465,6 +467,15 @@ try {
   await p.evaluate(() => document.querySelector('.xd [data-v="w-acme"], .xd [value="w-acme"]')?.click()); await submit();
   ok(db.calls.some(([m, u, b]) => m === 'POST' && u === `/api/agents/${a.id}/transfers` && b.workspaceId === 'w-acme'), 'Move to a company offers it to the chosen company (personal workspaces are not offered)');
   ok(/Offered to its new owner/.test(await main()), 'the pending move is shown on its page');
+  // Lend: straight into a division of ANOTHER workspace the person belongs to (agentLending.lend; its admins decide)
+  db.lendDivisions = true; await fresh(`/workspace/workspace/Agents/${a.id}/Settings`);
+  await p.click('[data-xag="lend"]'); await settle(700);
+  const lendOpts = await p.evaluate(() => [...document.querySelectorAll('.xd [role="radio"]')].map((x) => x.dataset.v + '=' + x.innerText.replace(/\s+/g, ' ')));
+  ok(lendOpts.some((o) => o.startsWith('d-acme-dev=') && /Acme · Dev/.test(o)) && !lendOpts.some((o) => o.startsWith('d-acme-old')), `Lend offers another workspace’s divisions, never an archived one (${lendOpts.join(' | ')})`);
+  await p.evaluate(() => document.querySelector('.xd [data-v="d-acme-dev"]')?.click()); await submit();
+  ok(db.calls.some(([m, u, b]) => m === 'POST' && u === `/api/agents/${a.id}/lend` && b.divisionId === 'd-acme-dev'), 'choosing it lends the agent into that division');
+  ok(/Offered to Acme/.test(await p.evaluate(() => document.getElementById('toast')?.innerText || '')), 'and says the other workspace’s admins decide');
+  delete a.lentTo; db.lendDivisions = false; await fresh(`/workspace/workspace/Agents/${a.id}/Access`);   // back where the next step starts
   // a company agent whose accountable admin left: paused, and an admin takes it over
   Object.assign(a, { owner: { kind: 'company', workspaceId: 'w-acme', name: 'Acme' }, accountable: { userId: 'u-bea', name: 'Bea' }, paused: 'needs_owner', transfers: [] });
   await fresh(`/workspace/workspace/Agents/${a.id}/Access`); let tt = await main();

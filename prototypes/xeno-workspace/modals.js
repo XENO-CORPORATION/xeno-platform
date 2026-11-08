@@ -57,8 +57,37 @@
     if (f.type === 'seg') return `<div class="xd-f xd-f--row" data-f="${f.id}"><span class="xd-lab" id="${id}">${esc(f.label)}</span><div class="xd-seg" role="radiogroup" aria-labelledby="${id}">${f.options.map(([v, l]) => `<button type="button" role="radio" aria-checked="${v === f.value}" tabindex="${v === f.value ? 0 : -1}" data-v="${esc(v)}">${esc(l)}</button>`).join('')}</div></div>`;
     if (f.type === 'checks') return `<div class="xd-f" data-f="${f.id}"><span class="xd-lab">${esc(f.label)}</span><div class="xd-checks">${f.options.map(([v, l, sub, av]) => `<button type="button" role="checkbox" aria-checked="${(f.value || []).includes(v)}" data-v="${esc(v)}">${av || ''}<span><b>${esc(l)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><i class="xd-tick">${ic('check')}</i></button>`).join('')}</div>${hint}<small class="xd-err" hidden></small></div>`;
     if (f.type === 'icon') return `<div class="xd-f" data-f="${f.id}"><span class="xd-lab" id="${id}">${esc(f.label)}</span><div class="xd-icons" role="radiogroup" aria-labelledby="${id}">${ICONS.map((k) => `<button type="button" role="radio" aria-checked="${k === (f.value || 'folder')}" tabindex="${k === (f.value || 'folder') ? 0 : -1}" data-v="${k}" aria-label="${k}">${ic(k)}</button>`).join('')}</div></div>`;
+    // rows: a small table the person adds lines to (an invoice's items). f.cols = [{ id, label, max, placeholder, value, num, w }],
+    // f.value = the starting rows, f.min (default 1) rows always stay, f.maxRows caps it, f.add = the add button's words,
+    // f.summary(rows) = a live line under the table (a total). Its value is the rows, with empty ones left out.
+    if (f.type === 'rows') return `<div class="xd-f" data-f="${f.id}"><span class="xd-lab" id="${id}">${esc(f.label)}</span><div class="xd-rows" role="table" aria-labelledby="${id}" style="--xd-cols:${(f.cols || []).map((c) => c.w || '1fr').join(' ')} 32px"><div class="xd-rows-h" role="row">${(f.cols || []).map((c) => `<span role="columnheader">${esc(c.label)}</span>`).join('')}<span></span></div><div class="xd-rows-b">${(f.value && f.value.length ? f.value : Array.from({ length: f.min ?? 1 }, () => ({}))).map((r) => rowHTML(f, r)).join('')}</div></div><div class="xd-rows-foot"><button type="button" class="xd-btn ghost" data-rows-add>${ic('plus')}${esc(f.add || 'Add a line')}</button><span class="xd-rows-sum" aria-live="polite"></span></div>${hint}<small class="xd-err" hidden></small></div>`;
     if (f.type === 'chips') return `<div class="xd-f" data-f="${f.id}">${lab}<div class="xd-chips" data-chips><span class="xd-chiplist"></span><input id="${id}" placeholder="${esc(f.placeholder || '')}" autocomplete="off" spellcheck="false"></div>${hint}<small class="xd-err" hidden></small></div>`;
     return `<div class="xd-f" data-f="${f.id}">${lab}<input id="${id}" value="${esc(f.value || '')}" maxlength="${f.max || 80}" placeholder="${esc(f.placeholder || '')}" autocomplete="${f.type === 'password' ? 'current-password' : f.type === 'code' ? 'one-time-code' : 'off'}" spellcheck="false"${f.type === 'password' ? ' type="password"' : ''}${f.type === 'number' ? ' inputmode="decimal"' : ''}${f.type === 'code' ? ' inputmode="numeric"' : ''}>${hint}<small class="xd-err" hidden></small></div>`;
+  }
+  function rowHTML(f, r = {}) {
+    return `<div class="xd-row" role="row">${(f.cols || []).map((c) => `<input data-col="${esc(c.id)}" aria-label="${esc(c.label)}" value="${esc(r[c.id] ?? c.value ?? '')}" maxlength="${c.max || 80}" placeholder="${esc(c.placeholder || '')}" autocomplete="off" spellcheck="false"${c.num ? ' inputmode="decimal"' : ''}>`).join('')}<button type="button" class="xd-ib" data-rows-x aria-label="Remove this line" data-tip="Remove">${ic('x')}</button></div>`;
+  }
+  function wireRows(sh, fields) {
+    for (const f of fields.filter((x) => x.type === 'rows')) {
+      const w = sh.querySelector(`[data-f="${f.id}"]`), body = w.querySelector('.xd-rows-b'), min = f.min ?? 1;
+      const sync = () => { const n = body.children.length; body.querySelectorAll('[data-rows-x]').forEach((b) => { b.disabled = n <= min; });
+        w.querySelector('[data-rows-add]').disabled = !!f.maxRows && n >= f.maxRows;
+        const sum = w.querySelector('.xd-rows-sum'); if (f.summary) sum.textContent = f.summary(valueOf(sh, f)) || ''; };
+      w.addEventListener('click', (e) => {
+        if (e.target.closest('[data-rows-add]')) { body.insertAdjacentHTML('beforeend', rowHTML(f)); body.lastElementChild.querySelector('input')?.focus(); sync(); }
+        const x = e.target.closest('[data-rows-x]'); if (x && body.children.length > min) { const row = x.closest('.xd-row'), next = row.nextElementSibling || row.previousElementSibling; row.remove(); next?.querySelector('input')?.focus(); sync(); }
+      });
+      w.addEventListener('input', sync);
+      f._sync = sync; sync();
+    }
+  }
+  // fields that react to another (picking a customer fills the address): f.onChange(value, { set, get }) after a change
+  function wireChanges(sh, fields) {
+    const set = (id, v) => { const w = sh.querySelector(`[data-f="${id}"]`); const el = w && w.querySelector('input,textarea,select'); if (el) { el.value = v ?? ''; } };
+    const get = (id) => { const f = fields.find((x) => x.id === id); return f ? valueOf(sh, f) : undefined; };
+    for (const f of fields.filter((x) => typeof x.onChange === 'function')) {
+      sh.querySelector(`[data-f="${f.id}"]`)?.addEventListener('change', () => f.onChange(valueOf(sh, f), { set, get }));
+    }
   }
   // radio groups and segmented controls: arrow keys move, Space/Enter pick (WAI-ARIA radio group)
   function wireChoices(sh) {
@@ -85,6 +114,7 @@
   const valueOf = (sh, f) => { const w = sh.querySelector(`[data-f="${f.id}"]`);
     if (f.type === 'choice' || f.type === 'seg' || f.type === 'icon') return w.querySelector('[aria-checked="true"]')?.dataset.v ?? null;
     if (f.type === 'checks') return [...w.querySelectorAll('[aria-checked="true"]')].map((x) => x.dataset.v);
+    if (f.type === 'rows') return [...w.querySelectorAll('.xd-row')].map((row) => Object.fromEntries([...row.querySelectorAll('[data-col]')].map((i) => [i.dataset.col, i.value.trim()]))).filter((r) => Object.values(r).some(Boolean));
     if (f.type === 'chips') { const inp = w.querySelector('input'); return [...w.querySelectorAll('[data-chip]')].map((x) => x.dataset.chip).concat(inp.value.trim() ? inp.value.split(/[,;\s]+/).filter(Boolean) : []); }
     const el = w.querySelector('input,textarea,select'); return f.type === 'password' ? el.value : el.value.trim(); };
 
@@ -97,7 +127,7 @@
     return new Promise((resolve) => {
       let done = false;
       const api = openShell({ size, label: title, html, dirty: () => fields.some((f) => JSON.stringify(valueOf(api.sh, f)) !== JSON.stringify(initial[f.id])), onClose: () => { if (!done) resolve(null); } });
-      wireChoices(api.sh); wireChips(api.sh);
+      wireChoices(api.sh); wireChips(api.sh); wireRows(api.sh, fields); wireChanges(api.sh, fields);
       fields.forEach((f) => { initial[f.id] = valueOf(api.sh, f); });
       const submitNow = async () => {
         api.sh.querySelectorAll('.xd-err').forEach((e) => { e.hidden = true; e.textContent = ''; }); api.sh.querySelectorAll('.xd-f.bad').forEach((x) => x.classList.remove('bad'));
@@ -106,7 +136,7 @@
         fields.forEach((f) => { if (bad) return; const v = vals[f.id]; let msg = null;
           if (f.required && (v == null || v === '' || (Array.isArray(v) && !v.length))) msg = f.type === 'checks' ? 'Pick at least one.' : `${f.label} is required.`;
           else if (f.validate) msg = f.validate(v, vals);
-          if (msg) { bad = f.id; const w = api.sh.querySelector(`[data-f="${f.id}"]`); w.classList.add('bad'); const e = w.querySelector('.xd-err'); if (e) { e.hidden = false; e.textContent = msg; } (w.querySelector('input,textarea,[role="radio"],[role="checkbox"]'))?.focus(); } });
+          if (msg) { bad = f.id; const w = api.sh.querySelector(`[data-f="${f.id}"]`); w.classList.add('bad'); const e = w.querySelector('.xd-err'); if (e) { e.hidden = false; e.textContent = msg; } (w.querySelector('input,textarea,select,[role="radio"],[role="checkbox"]'))?.focus(); } });
         if (bad) return;
         const err = await onSubmit?.(vals); if (err) { const w = api.sh.querySelector('.xd-warn'); w.hidden = false; w.textContent = err; return; }
         done = true; resolve(vals); api.close('submit');

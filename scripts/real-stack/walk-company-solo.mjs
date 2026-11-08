@@ -1,7 +1,7 @@
 // Walk 9: one person running a business, in a real browser, the way a German Kleingewerbe would set up on Corpo › Company: a
 // sole proprietor with only a tax number and a small-business note, then the day the exemption ends. Pass SHOTS=<dir> to keep the views.
 import path from 'node:path';
-import { browser, page, ok, failures, newPerson, go, text, fill, submit, wait } from './lib.mjs';
+import { browser, page, ok, failures, newPerson, go, text, fill, fillRow, submit, wait } from './lib.mjs';
 const b = await browser(); const p = await page(b);
 const shot = (name) => (process.env.SHOTS ? p.screenshot({ path: path.join(process.env.SHOTS, `solo-${name}.png`) }) : null);
 const errAt = []; p.on('pageerror', (e) => errAt.push(`${e.message.slice(0, 60)} @ ${p.url()}`));
@@ -53,13 +53,13 @@ try {
   await submit(p); await wait(1800);
   ok(/of €25,000\.00/.test(await text(p, '#main')), 'a small business sees its year against its limit', (await text(p, '#main')).slice(0, 400));
   await press('data-co2="newInvoice"');
-  ok(!(await p.$('#xdf-rate')) && !(await p.$('#xdf-reason')), 'a new invoice doesn’t ask about tax');
+  ok(!(await p.$('.xd [data-col="rate"]')) && !(await p.$('#xdf-reason')), 'a new invoice doesn’t ask about tax');
   ok(await p.$eval('#xdf-sup', (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.value)) && await p.$eval('#xdf-due', (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.value)), 'it offers the date of supply and a due date');
   ok(/§ 19 UStG\. Once issued/.test(await text(p, '.xd')), 'and its note reads as a sentence');
   ok((await text(p, '.xd')).includes(NOTE), 'and shows what it will say');
   await fill(p, 'b', 'A Client GmbH'); await fill(p, 'bs', 'Hafenstraße 2'); await fill(p, 'bp', '20095'); await fill(p, 'bc', 'Hamburg'); await select('bk', 'DE'); await select('cur', 'EUR');
-  await fill(p, 'item', 'Video edit'); await fill(p, 'price', '250');
-  await fill(p, 'more', 'Thumbnail; 2; 25');
+  await fillRow(p, 'lines', 1, { item: 'Video edit', price: '250' });
+  await fillRow(p, 'lines', 2, { item: 'Thumbnail', q: '2', price: '25' });
   await submit(p);
   await p.waitForSelector('.xd [data-xd-ok]', { timeout: 10000 }); await p.click('.xd:last-of-type [data-xd-ok]'); await wait(3000);
   t = await text(p, '#main');
@@ -92,7 +92,7 @@ try {
   await submit(p); await wait(1500);
   await tab('Invoices');
   await press('data-co2="newInvoice"');
-  ok(!!(await p.$('#xdf-rate')), 'the day the exemption ends, invoices ask about tax again');
+  ok(!!(await p.$('.xd [data-col="rate"]')), 'the day the exemption ends, invoices ask about tax again');
   await p.keyboard.press('Escape'); await wait(500);
   ok(!!(await p.$('[data-co2-open]')) || /-0001/.test(await text(p, '#main')), 'and the invoice from before is still there');
   await p.evaluate(() => document.querySelector('[data-co2-open]')?.click()); await wait(2000);
