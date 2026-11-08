@@ -405,6 +405,7 @@
     "walk:real-stack": "node scripts/real-stack/run-all.mjs",
     "test:stream-disconnect": "node --test scripts/stream-disconnect.test.mjs",
     "test:company-orgs": "node src/server/tests/company-orgs.test.mjs",
+    "test:customers-billing-mutation": "node scripts/customers-billing-mutation-check.mjs",
     "test:company-legal-vendor": "node scripts/company-legal-vendor.mjs && node scripts/company-legal-vendor.mjs --self-test",
     "test:chat-stream-disconnect": "node --test scripts/chat-stream-disconnect.test.mjs"
   },

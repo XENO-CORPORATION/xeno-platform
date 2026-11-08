@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Invoices pick the customer, and take real lines.** In Corpo › Company, New invoice has a table of lines (item, quantity, unit price and tax per line, with a running total) instead of a first line plus a box of text, and a Customer choice from Corpo › Customers that fills in who is billed, their tax number and address. A new customer, or changed details, is saved back to Customers once the invoice is issued (or kept to that invoice only, if you choose). A customer company in Customers now holds those billing details.
+
 **Sidebar sections fold, and stay folded.** Every sidebar heading, like Projects and Recents in Chat, shows its arrow and folds or opens on a click. What you fold is remembered for that place, across new chats arriving, opening a chat and coming back later.
 
 **One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.

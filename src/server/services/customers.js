@@ -73,7 +73,25 @@ async function contactRow(db, ctx, contactId) {
 const shapeContact = (r) => r && ({ id: r.id, workspaceId: r.workspace_id, name: r.name, email: r.email, phone: r.phone, title: r.title,
   tags: r.tags || [], source: r.source, companyId: r.company_id, companyName: r.company_name || null, createdAt: r.created_at, updatedAt: r.updated_at,
   url: `/workspace/corpo/customers/contacts/${r.id}` });
-const shapeCompany = (r) => r && ({ id: r.id, name: r.name, domain: r.domain, notes: r.notes, contacts: r.contacts != null ? Number(r.contacts) : undefined, createdAt: r.created_at });
+const shapeCompany = (r) => r && ({ id: r.id, name: r.name, domain: r.domain, notes: r.notes, billing: r.billing || null, contacts: r.contacts != null ? Number(r.contacts) : undefined, createdAt: r.created_at });
+// The details an invoice needs about this customer (Corpo › Company › New invoice picks them). Every field is the
+// customer's own words; the invoice rules (xeno-company) decide what an invoice requires, so nothing here is required
+// beyond a country being a country. Unknown keys are dropped, never stored.
+const COUNTRY = /^[A-Z]{2}$/;
+function billingOf(v) {
+  if (v == null || v === '') return null;
+  if (typeof v !== 'object' || Array.isArray(v)) throw new CustomersError('Billing details must be an object', 'invalid_billing');
+  const a = v.address && typeof v.address === 'object' ? v.address : {};
+  const country = text(a.country, 'country', 60, false);
+  if (country && !COUNTRY.test(country.toUpperCase())) throw new CustomersError('The country must be a two-letter code, like DE or RO', 'invalid_country');
+  const out = { name: text(v.name, 'billing name', 200, false), vatId: text(v.vatId, 'tax number', 40, false),
+    address: { line1: text(a.line1, 'street', 200, false), postalCode: text(a.postalCode, 'postal code', 20, false), city: text(a.city, 'city', 120, false),
+      countrySubdivision: text(a.countrySubdivision, 'region', 120, false), country: country ? country.toUpperCase() : null } };
+  for (const k of Object.keys(out.address)) if (out.address[k] == null) delete out.address[k];
+  if (!Object.keys(out.address).length) delete out.address;
+  for (const k of ['name', 'vatId']) if (out[k] == null) delete out[k];
+  return Object.keys(out).length ? out : null;
+}
 const shapeDeal = (r) => r && ({ id: r.id, title: r.title, amountCents: Number(r.amount_cents), currency: r.currency, closeDate: r.close_date,
   stageId: r.stage_id, stageName: r.stage_name || null, outcome: r.outcome || null, state: r.state, contactId: r.contact_id, companyId: r.company_id, contactName: r.contact_name || null });
 const shapeActivity = (r) => ({ id: r.id, kind: r.kind, body: r.body, state: r.state, agentDrafted: r.agent_drafted, authorName: r.author_name || null,
@@ -205,8 +223,21 @@ export async function createCompany(db, actor, input = {}) {
   const domain = text(input.domain, 'domain', 200, false);
   const d = domain ? domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '') : null;
   if (d && (await db.query('SELECT 1 FROM crm_companies WHERE workspace_id = $1 AND lower(domain) = $2', [ctx.workspaceId, d])).rowCount) throw new CustomersError('A company with that domain already exists', 'duplicate_company', 409);
-  const r = (await db.query('INSERT INTO crm_companies (workspace_id, name, domain, notes, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-    [ctx.workspaceId, text(input.name, 'name', 200), d, text(input.notes, 'notes', 20000, false) || '', ctx.agentId || ctx.userId])).rows[0];
+  const r = (await db.query('INSERT INTO crm_companies (workspace_id, name, domain, notes, created_by, billing) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+    [ctx.workspaceId, text(input.name, 'name', 200), d, text(input.notes, 'notes', 20000, false) || '', ctx.agentId || ctx.userId, billingOf(input.billing)])).rows[0];
+  return shapeCompany(r);
+}
+/** Change a company's name, notes or billing details. Only what is sent changes; `billing: null` clears it. */
+export async function updateCompany(db, actor, companyId, input = {}) {
+  const ctx = await workspaceFor(db, actor, input.workspace, 'editor');
+  const sets = [], vals = [id(companyId, 'company'), ctx.workspaceId];
+  const set = (col, v) => { vals.push(v); sets.push(`${col} = $${vals.length}`); };
+  if ('name' in input) set('name', text(input.name, 'name', 200));
+  if ('notes' in input) set('notes', text(input.notes, 'notes', 20000, false) || '');
+  if ('billing' in input) set('billing', billingOf(input.billing));
+  if (!sets.length) throw new CustomersError('Nothing to change', 'nothing_to_change');
+  const r = (await db.query(`UPDATE crm_companies SET ${sets.join(', ')}, updated_at = now() WHERE id = $1 AND workspace_id = $2 RETURNING *`, vals)).rows[0];
+  if (!r) throw new CustomersError('Company not found', 'company_not_found', 404);
   return shapeCompany(r);
 }
 export async function deleteCompany(db, actor, companyId, { workspace } = {}) {

@@ -1911,6 +1911,11 @@
       "class": "safe",
       "scope": "customers:read"
     },
+    "route:customersRoutes.js:PATCH /companies/:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "customers:write"
+    },
     "route:customersRoutes.js:PATCH /contacts/:id": {
       "status": "planned",
       "class": "reversible",
