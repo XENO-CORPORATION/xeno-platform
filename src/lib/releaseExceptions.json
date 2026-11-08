@@ -1,10 +1,4 @@
 {
   "note": "Declared, reasoned exceptions where productCatalog.status deliberately disagrees with the measured release. NOT a way to silence the gate — each entry states why and what would retire it.",
-  "acknowledged": {
-    "architect": {
-      "measured": "0.1.0 published 2026-03-17",
-      "reason": "Same shape — release notes describe a 'workspace UI' with a '3D viewport placeholder'. Scaffold, not product.",
-      "retireWhen": "Architect ships real CAD/BIM behaviour behind the UI."
-    }
-  }
+  "acknowledged": {}
 }

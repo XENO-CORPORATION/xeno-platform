@@ -151,9 +151,9 @@ export const PRODUCTS: Product[] = [
   { slug: 'pdf', name: 'XENO PDF', tagline: 'Edit, convert, sign and chat with PDFs.', category: 'Office', status: 'coming-soon', delivery: 'soon', repo: 'xeno-pdf' },
 
   // ── Library ───────────────────────────────────────────────
-  { slug: 'stock', name: 'XENO Stock', tagline: 'Royalty-free and AI-generated media.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-stock' },
-  { slug: 'fonts', name: 'XENO Fonts', tagline: 'Browse and sync fonts for any project.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-fonts' },
-  { slug: 'assets', name: 'XENO Assets', tagline: 'Central DAM with versions and review.', category: 'Library', status: 'coming-soon', delivery: 'soon', repo: 'xeno-assets' },
+  { slug: 'stock', name: 'XENO Stock', tagline: 'Royalty-free and AI-generated media.', category: 'Library', status: 'beta', delivery: 'web', launchPath: '/workspace/studio/spaces/libraries/stock', repo: 'xeno-stock' },
+  { slug: 'fonts', name: 'XENO Fonts', tagline: 'Browse and sync fonts for any project.', category: 'Library', status: 'beta', delivery: 'web', launchPath: '/workspace/studio/spaces/libraries/fonts', repo: 'xeno-fonts' },
+  { slug: 'assets', name: 'XENO Assets', tagline: 'Central DAM with versions and review.', category: 'Library', status: 'beta', delivery: 'web', launchPath: '/workspace/studio/spaces/libraries', repo: 'xeno-assets' },
   // Notes 0.2.0 (2026-07-27) is the first build that actually carries links + graph —
   // the withdrawn 0.1.0 scaffold was packaged ~60 min BEFORE the engine commit landed.
   // Verified in the packaged asar: the wikiLink TipTap mark and Backlinks UI are in the

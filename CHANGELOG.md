@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**The product list says what works.** Assets, Fonts, Stock, CRM, Forms and Scheduling were still marked "Soon" in the workspace although each has run there for weeks. They are now listed as working, and choosing one opens its real page (Studio › Libraries, Corpo › Customers, Forms, Scheduling), including from search and from an old link. The Assets, Fonts and Stock product pages on the site no longer call themselves a documentation scaffold: each says what works today, what is next, and links into the workspace. Support Desk (answering your own customers) and Mail stay marked "Soon": the desk is not built, and XENO Mail's server is offline.
+
 **One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.
 
 ## 2026-11-06
