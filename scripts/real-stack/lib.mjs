@@ -66,6 +66,12 @@ export async function newPerson(p, first = 'Alex') {
 }
 /** Workspace dialogs (XD): fill a field by id, submit, read the open dialog. */
 export const fill = async (p, id, v) => { const sel = `#xdf-${id}`; await p.waitForSelector(sel, { timeout: 10000 }); await p.click(sel, { clickCount: 3 }); await p.type(sel, String(v), { delay: 5 }); };
+/** A 'rows' field (an invoice's lines): fill line n (1-based) column by column; Add a line first when it isn't there yet. */
+export const fillRow = async (p, field, n, cols) => {
+  const rows = `.xd [data-f="${field}"] .xd-row`;
+  while ((await p.$$(rows)).length < n) { await p.click(`.xd [data-f="${field}"] [data-rows-add]`); await wait(150); }
+  for (const [col, v] of Object.entries(cols)) { const sel = `${rows}:nth-child(${n}) [data-col="${col}"]`; await p.$eval(sel, (e) => { e.value = ''; }); await p.type(sel, String(v), { delay: 5 }); }   // emptied first: a column may start with a value (quantity 1)
+};
 export const submit = async (p) => { await p.click('.xd [data-xd-ok], .xd [data-xd-submit], .xd button[type="submit"]'); await wait(1500); };
 export const dialog = (p) => p.evaluate(() => { const all = document.querySelectorAll('.xd [role=dialog]'); const d = all[all.length - 1]; return d ? (d.innerText.trim() || d.textContent) : ''; });
 /** The message a dialog shows after a refused submit (.xd-warn), or ''. */

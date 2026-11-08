@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Invoices pick the customer, and take real lines.** In Corpo › Company, New invoice has a table of lines (item, quantity, unit price and tax per line, with a running total) instead of a first line plus a box of text, and a Customer choice from Corpo › Customers that fills in who is billed, their tax number and address. A new customer, or changed details, is saved back to Customers once the invoice is issued (or kept to that invoice only, if you choose). A customer company in Customers now holds those billing details.
+
 **"Updated just now" means it.** Support, Tasks, Releases and the Community pages said "Updated just now" at the bottom whatever had happened, including after a load that failed. The line now says what really happened: Couldn't load (with Retry), Couldn't refresh (keeping what was already shown, and when it last worked), or Updated, only after a load that worked. A failed Support queue, Deploys, Features or Notes list now says it failed instead of showing an empty list, and staff stay on their own view when a check fails instead of being shown the customer's.
 
 **Reply to a chat right on the canvas.** A chat on the canvas used to show its thread and send you to Chat to answer. Now press Reply under the thread and the chat opens in the node itself: the same chat as in Chat, with the same models, tools and project context, and the answer streams in place. Move the node, zoom or keep working on the canvas and what you've typed stays. Done closes it again.
