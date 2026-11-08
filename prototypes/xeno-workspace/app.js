@@ -1337,6 +1337,9 @@
     const [m, kind, id, ...rest] = String(h || '').split('?')[0].replace(/^#\/?/, '').split('/'); const rawItem = rest.join('/'); let item = null; try { item = rawItem ? decodeURIComponent(rawItem) : null; } catch { item = rawItem || null; }
     const modeOk = MODES.some((x) => x.id === m);
     if (m === 'adaptive') return { view: 'adaptive' };
+    // a product whose interface is an area (data.js `page`): its product address lands on the area, once that is live
+    const pg = kind === 'p' && PR[id] && PR[id].status !== 'soon' && PR[id].page;
+    if (pg && (window.XENO_ZONE_LIVE || {})[pg[0] + '.' + pg[1]]) return { view: 'zone', mode: pg[0], zone: pg[1], zoneOf: 'mode', item: item || pg[2] || null };
     if (m === 'overview') { if (kind === 'z' && id && zonesFor('overview').some((z) => z.id === id)) return { view: 'zone', zone: id, zoneOf: 'overview', item };
       if (kind === 'p' && PR[id]) return { view: 'product', product: id, zoneOf: 'overview', item };
       if (kind === 'g' && ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases', 'shell'].includes(id)) return { view: 'global', global: id, zoneOf: 'overview', item };
@@ -1406,7 +1409,13 @@
     if (!applyingHash) syncHash(false);
   }
   // a product opens INSIDE the current context (mode is a lens) — it never switches the mode
-  const openProduct = (id) => go('product', { product: id });
+  // A web product whose interface is a workspace area (data.js `page`) opens that area — once it is really there
+  // (its platform module registered XENO_ZONE_LIVE). Otherwise its landing, as before.
+  const openProduct = (id) => {
+    const p = PR[id], pg = p && p.status !== 'soon' && p.page;
+    if (pg && (window.XENO_ZONE_LIVE || {})[pg[0] + '.' + pg[1]]) return go('zone', { mode: pg[0], zone: pg[1], zoneOf: 'mode', item: pg[2] || null });
+    return go('product', { product: id });
+  };
   const openMode = (id) => {
     const last = lastPlace[id];
     if (id === 'overview') { if (last && (last.view !== 'zone' || zonesFor('overview').some((z) => z.id === last.zone))) go(last.view, { ...last, zoneOf: 'overview' }); else go('dashboard'); toast('Overview'); return; }
