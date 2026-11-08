@@ -167,6 +167,18 @@ async function bytesOf(db, f) {
   try { return readContent(text, f.metadata.xeno_doc); } catch (e) { throw refusal(e); }
 }
 
+/**
+ * Who someone is on a document in XENO Multiplayer (`workspace.doc/<file id>`, services/liveTickets.js): the same access
+ * every read and save here uses. Editor → 'editor', a reader → 'viewer'; nothing → not found (the ticket learns nothing).
+ * The live document is the edit everyone is making; writing it down to a version stays saveDoc's, with its checks.
+ */
+export async function docLiveRole(db, actor, id) {
+  const who = await personOf(db, actor);
+  const f = await current(db, who, id);
+  if (!f) throw new DocsError('Document not found', 'not_found', 404);
+  const edit = !!(await getAuthorizedLibraryFile(db, { type: 'user', id: who.userId }, f.id, 'editor'));
+  return { role: edit ? 'editor' : 'viewer', fileId: String(f.file_id), userId: who.userId, agentId: who.agentId };
+}
 export async function getDoc(db, actor, { id } = {}) {
   const who = await personOf(db, actor);
   const f = await current(db, who, id);

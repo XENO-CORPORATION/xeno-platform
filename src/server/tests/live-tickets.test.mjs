@@ -74,6 +74,20 @@ async function main() {
   const at = verify((await live.createTicket(pool, A(agentU, 'agent', 'agent'), res)).ticket, 'xeno-live-ticket+jwt').claims;
   check(at.kind === 'agent' && at.sub === String(owner) && at.act?.sub === String(agentU) && at.xeno_role === 'editor', 'an agent: kind agent, sub = its person, act.sub = itself, never above editor');
 
+  // a document written together (workspace.doc/<file id>): the role is the document's own access, as every read and save
+  const docs = await import('../services/workspaceDocs.js');
+  const made = (await docs.createDoc(pool, { id: editor, kind: 'human' }, { kind: 'doc', title: 'Plan', workspace: ws, markdown: 'First line' })).doc;
+  const dres = `workspace.doc/${made.id}`;
+  for (const [who, id, want] of [['editor', editor, 'editor'], ['viewer', viewer, 'viewer']]) {
+    const c = verify((await live.createTicket(pool, A(id, 'human', who), dres)).ticket, 'xeno-live-ticket+jwt').claims;
+    check(c.xeno_role === want && c.xeno_resource === dres && c.sub === String(id), `a document's ${who} joins it as ${want}`);
+  }
+  check(await code(() => live.createTicket(pool, A(stranger), dres)) === 'not_found', 'someone who cannot read the document gets no ticket, and learns nothing about it');
+  const v2 = (await docs.saveDoc(pool, { id: editor, kind: 'human' }, { id: made.id, markdown: 'Second', expectedVersion: made.versionId })).doc;
+  check(v2.versionId !== made.versionId && await code(() => live.createTicket(pool, A(editor), `workspace.doc/${made.versionId}`)) === 'not_file_id', 'a document is joined by its file id, never one of its versions (so everyone is in the same one)');
+  const ad = verify((await live.createTicket(pool, A(agentU, 'agent', 'agent'), dres)).ticket, 'xeno-live-ticket+jwt').claims;
+  check(ad.kind === 'agent' && ad.sub === String(owner) && ad.act?.sub === String(agentU), 'an agent joins a document for its person');
+
   // the route
   const app = express();
   app.use(express.json());

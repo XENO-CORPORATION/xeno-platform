@@ -56,17 +56,150 @@
     return loading;
   }
 
+  // ─────────────────────────────── writing together (XENO Multiplayer, `workspace.doc/<file id>`)
+  // Everyone with a document open — here in Write or Notes, or on a document node of a project canvas — writes in ONE shared
+  // document: XENO Docs' own collaboration (@xenosystem/blocks/docs/collaboration: TipTap Collaboration over Y.js, field
+  // `prosemirror`), so every block and mark travels intact and two people typing in one paragraph both land. The transport
+  // is XENO Multiplayer (services/liveTickets.js checks access on every join). ONE screen writes it down as a version — the
+  // first person who can edit, by connection, the same rule the live canvas uses — and everyone sees it saved. A newer
+  // version saved where nobody was writing is put in when the first person opens it again; while people are writing, the
+  // shared document is everyone's merge and is written over it (the other version stays in Versions).
+  // Without XENO Multiplayer it still works alone: the same editor, saving as before.
+  const LIVE_SRC = new URL('live-client.js', SELF || new URL('/workspace/', location.href)).href;
+  let liveClient = null;
+  const loadLive = () => liveClient || (liveClient = new Promise((ok, no) => {
+    if (window.XenoLive) return ok(window.XenoLive);
+    const s = document.createElement('script'); s.src = LIVE_SRC; s.onload = () => ok(window.XenoLive); s.onerror = () => { liveClient = null; no(new Error('live client')); }; document.head.append(s);
+  }));
+  const SAVE_MS = 1200, SAVED = Symbol('docs-saved'), sessions = new Map();
+  /** A colour per person for their caret, from the theme's own scale (never a literal). */
+  const caretColor = (seed) => { const cs = getComputedStyle(document.documentElement), names = ['--n68', '--n56', '--n85', '--n44', '--n102']; let h = 0; for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return cs.getPropertyValue(names[h % names.length]).trim() || cs.getPropertyValue('--text').trim(); };
+  async function openLive(fileId, { content, versionId, title, canEdit, me, xdoc }) {
+    const key = String(fileId).toLowerCase();
+    let s = sessions.get(key);
+    if (s) { s.users += 1; return s.ready; }
+    const Lib = await editorLib();
+    const doc = new Lib.Y.Doc(), meta = doc.getMap('meta'), awareness = new Lib.Awareness(doc);
+    // what the file carries besides its text (XENO Docs' comment threads, when it was made) is kept through every save
+    let file = null; try { file = xdoc ? Lib.parseXdoc(xdoc) : null; } catch { file = null; }
+    s = { file, key, Lib, doc, meta, awareness, users: 1, conn: null, seeded: false, people: [], timer: 0, saving: false, listeners: new Set(), canEdit: !!canEdit, saved: { versionId, content, title }, me: me || { name: 'Someone' } };
+    sessions.set(key, s);
+    const emit = () => { for (const f of s.listeners) try { f(s); } catch {} };
+    s.live = () => !!(s.conn && s.conn.status === 'open' && s.seeded);
+    /** The first person who can edit, by connection: the same answer on every screen, and the next one if they leave. */
+    s.isLead = () => { if (!s.canEdit) return false; if (!s.live()) return true; const self = s.conn.self; if (!self || self.role === 'viewer') return false; return !s.people.some((p) => p.role !== 'viewer' && p.kind === 'human' && String(p.conn) < String(self.conn)); };
+    s.extensions = () => Lib.createCollaborationExtensions({ document: doc, cursors: { awareness, user: { name: s.me.name, color: caretColor(s.me.id || s.me.name) } } });
+    s.version = () => meta.get('version') || s.saved.versionId;
+    s.title = () => meta.get('title') || s.saved.title;
+    s.setTitle = (t) => { if (s.canEdit && t !== meta.get('title')) doc.transact(() => meta.set('title', String(t))); };
+    async function save() {
+      clearTimeout(s.timer);
+      if (!s.isLead() || s.saving || !s.seeded) return;
+      s.saving = true; s.pending = false; emit();
+      const body = () => ({ title: s.title(), xdoc: Lib.serializeXdoc({ id: key, title: s.title(), content: Lib.sharedDocumentContent(doc), created: s.file?.created ?? Date.now(), lastModified: Date.now(), ...(s.file?.commentThreads ? { commentThreads: s.file.commentThreads } : {}) }), expectedVersion: s.version() });
+      let r = await api('PUT', `/api/workspace-docs/${encodeURIComponent(key)}`, body()).catch(() => null);
+      if (r && !r.ok && r.d && r.d.code === 'version_conflict' && !s.live()) { s.saving = false; s.error = 'Someone saved a newer version. Reopen it to see their changes.'; toast(s.error); emit(); return; }
+      if (r && !r.ok && r.d && r.d.code === 'version_conflict') {
+        // saved somewhere nobody here was writing: the shared document is everyone's merge — write it over the newer one
+        const g = await api('GET', `/api/workspace-docs/${encodeURIComponent(key)}`).catch(() => null);
+        if (g && g.ok) { doc.transact(() => meta.set('version', g.d.doc.versionId), SAVED); r = await api('PUT', `/api/workspace-docs/${encodeURIComponent(key)}`, body()).catch(() => null); }
+      }
+      s.saving = false;
+      if (r && r.ok) doc.transact(() => { meta.set('version', r.d.doc.versionId); meta.set('savedAt', Date.now()); }, SAVED);
+      else { s.error = (r && r.d && r.d.error) || 'That did not save.'; toast(s.error); }
+      emit(); if (s.pending) s.saveSoon();
+    }
+    s.saveSoon = () => { s.pending = true; if (!s.isLead()) return; clearTimeout(s.timer); s.timer = setTimeout(save, SAVE_MS); };
+    /** Save now: the lead writes it down; anyone else asks the lead to (so it is still written by one screen). */
+    s.requestSave = () => { if (s.isLead()) return save(); try { s.conn.signal({ save: true }); } catch {} };
+    s.replaceWith = (content2, versionId2, title2) => doc.transact(() => { Lib.replaceSharedDocument(doc, content2); meta.set('version', versionId2); if (title2) meta.set('title', title2); }, SAVED);
+    // what changed decides: the text or the title is an edit to write down; a version stamp from a save is not
+    doc.on('afterTransaction', (tr) => {
+      if (tr.origin === SAVED || !s.seeded) { emit(); return; }
+      const edit = [...tr.changed.entries()].some(([type, keys]) => type !== meta || keys.has('title'));
+      if (edit) { s.dirty = true; s.saveSoon(); }
+      emit();
+    });
+    // a new version was written down (by whichever screen saves): on every other screen nothing is waiting any more
+    meta.observe((ev) => { if (ev.keysChanged.has('version') && !s.isLead()) s.pending = false; emit(); });
+    function seed() {
+      if (s.seeded) return;
+      const alone = !s.conn || s.conn.status !== 'open' || !s.conn.participants().length;
+      // alone, the saved file wins when the shared document is empty or was built from an older version; with others
+      // already writing, theirs is the document
+      try {
+        if (s.canEdit && alone && (Lib.isSharedDocumentEmpty(doc) || meta.get('version') !== s.saved.versionId)) s.replaceWith(s.saved.content, s.saved.versionId, s.saved.title);
+      } catch (e) { sessions.delete(key); try { s.conn && s.conn.close(); } catch {} s.reject(e); return; }   // not a document this schema writes: read it instead
+      s.seeded = true; s.dirty = false; emit(); s.resolve(s);
+    }
+    s.ready = new Promise((r, no) => { s.resolve = r; s.reject = no; });
+    /** No XENO Multiplayer for this opening: the same editor, alone. The connection is closed, so a seed made here can never
+     *  merge into a room someone else seeded; a newer version saved meanwhile is refused at save, as before. */
+    function alone() { if (s.seeded) return; const c = s.conn; s.conn = null; try { c && c.close(); } catch {} seed(); }
+    // carets: this screen's awareness rides on its XENO Multiplayer presence; the others' come back as participants
+    const others = new Set();
+    function pullCarets() {
+      const now = new Set(), added = [], updated = [], removed = [];
+      for (const p of s.people) { const st = p.state; if (!st || !st.aw || st.cid === doc.clientID) continue; now.add(st.cid); (others.has(st.cid) ? updated : added).push(st.cid); awareness.states.set(st.cid, st.aw); awareness.meta.set(st.cid, { clock: (awareness.meta.get(st.cid)?.clock || 0) + 1, lastUpdated: Date.now() }); }
+      for (const c of others) if (!now.has(c)) { removed.push(c); awareness.states.delete(c); awareness.meta.delete(c); }
+      others.clear(); now.forEach((c) => others.add(c));
+      if (added.length || updated.length || removed.length) { awareness.emit('change', [{ added, updated, removed }, 'remote']); awareness.emit('update', [{ added, updated, removed }, 'remote']); }
+    }
+    awareness.on('update', (_c, origin) => { if (origin === 'local' && s.conn && s.conn.status === 'open') s.conn.setPresence({ cid: doc.clientID, aw: awareness.getLocalState() }); });
+    s.caretTimer = setInterval(pullCarets, 10000);   // keeps the others' carets from ageing out while nobody moves
+    loadLive().then((X_) => {
+      if (!sessions.has(key)) return;
+      const conn = X_.joinLive({ type: 'workspace.doc', id: key, Y: Lib.Y, doc, ticket: async (resource) => { const r = await api('POST', '/api/live/tickets', { resource }); if (!r.ok) throw new Error(said(r, 'No ticket')); return r.d.ticket; } });
+      s.conn = conn;
+      conn.on('status', (st) => { if (st === 'reconnecting' && !s.seeded) return alone();   // could not join: this opening is local
+        if (st === 'open' && !s.seeded) setTimeout(() => { if (s.conn === conn) seed(); }, 500); if (st === 'ended' && conn.ended?.code === 4403) { s.canEdit = false; toast('Your access to this document changed'); } emit(); });
+      conn.on('participants', (p) => { s.people = p || []; pullCarets(); emit(); if (s.isLead() && s.pending) s.saveSoon(); });
+      conn.on('signal', ({ data }) => { if (data && data.save && s.isLead()) save(); });
+    }).catch(() => alone());
+    setTimeout(() => { if (!s.seeded && (!s.conn || s.conn.status !== 'open')) alone(); }, 3000);
+    s.on = (f) => { s.listeners.add(f); return () => s.listeners.delete(f); };
+    s.close = async () => {
+      s.users -= 1; if (s.users > 0) return;
+      if (s.pending && s.isLead()) await save();
+      sessions.delete(key); clearInterval(s.caretTimer); clearTimeout(s.timer);
+      try { s.conn && s.conn.close(); } catch {} try { awareness.destroy(); } catch {} try { doc.destroy(); } catch {}
+    };
+    return s.ready;
+  }
+  /** Written together only when this schema writes it: someone who can edit, in the current format, valid content. A file the
+   *  schema refuses opens read-only as before, and never becomes a shared document. */
+  function shareable(Lib, d) {
+    if (!d || !d.canEdit || d.format === 'markdown' || !d.content) return false;
+    try { if (d.xdoc) Lib.parseXdoc(d.xdoc); return !Lib.validateContent(d.content).length; } catch { return false; }
+  }
+  window.XENO_DOCS_LIVE = { open: openLive, editorLib, shareable, sessions: () => [...sessions.values()].map((s) => ({ key: s.key, live: s.live(), lead: s.isLead(), version: s.version(), saving: s.saving, pending: !!s.pending })) };
+
   /** One controller + one mounted surface per zone, kept across re-renders: the page is redrawn as a string, so the
    *  editor's element lives off-page and is moved into each new placeholder (see adopt()). */
-  function surfaceFor(z, Lib) {
+  function surfaceFor(z, Lib, live = null) {
     const S = Z(z);
-    if (S.ctrl) return S;
+    // a document someone can edit is written in its shared copy: its own surface, bound to that document (one per document)
+    if (S.ctrl && (S.live || null) === live) return S;
+    if (S.unmount) { S.unmount(); S.unmount = null; }
+    if (S.offLive) { S.offLive(); S.offLive = null; }
+    S.live = live;
     S.ctrl = new Lib.DocumentController({ host: { emit: (port, value) => onIntent(z, port, value) } });
-    S.host = document.createElement('div');
+    const old = S.host; S.host = document.createElement('div');
     S.host.className = 'dc-surface';
-    S.unmount = Lib.mountDocumentSurface(S.host, S.ctrl, { placeholder: `Write your ${ZONES[z].noun}…`, label: `${ZONES[z].noun} text` });
+    if (old && old.parentNode) old.replaceWith(S.host);
+    S.unmount = Lib.mountDocumentSurface(S.host, S.ctrl, { placeholder: `Write your ${ZONES[z].noun}…`, label: `${ZONES[z].noun} text`, ...(live ? { shared: true, history: false, extensions: live.extensions() } : {}) });
     S.ctrl.subscribe(() => syncChrome(z));
+    if (live) S.offLive = live.on(() => liveChanged(z));
     return S;
+  }
+  /** The shared document moved on: a save by the screen that writes it down, or the title someone else typed. */
+  function liveChanged(z) {
+    const S = Z(z), L = S.live; if (!L || !S.ctrl) return;
+    const st = S.ctrl.getState(), v = L.version();
+    if (L.title() !== st.title) { const ti = document.querySelector(`[data-dc-page][data-dc-zone="${z}"] [data-dc-title]`); if (ti && document.activeElement !== ti) ti.value = L.title(); }
+    if (L.saving) { if (st.status !== 'saving') S.ctrl.setStatus('saving'); }
+    else if (!L.pending && L.seeded && (st.versionId !== v || st.dirty || st.status === 'saving')) { S.ctrl.saved(v); if (S.open) S.open.versionId = v; }
+    syncChrome(z);
   }
   /** Put each zone's live editor into the page's (freshly drawn, empty) placeholder. */
   function adopt() {
@@ -93,6 +226,7 @@
     const S = Z(z);
     if (port === 'openPage') { const into = S.list.some((x) => x.id === value.pageId) ? z : (z === 'write' ? 'notes' : 'write'); return go(into, value.pageId); }
     if (port !== 'save') return;
+    if (S.live) { S.live.setTitle(value.title); S.live.requestSave(); return; }   // written down by the one screen that saves the shared document
     const r = await api('PUT', `/api/workspace-docs/${encodeURIComponent(value.id)}`, { title: value.title, xdoc: value.xdoc, expectedVersion: value.expectedVersion }).catch(() => null);
     if (!r || !r.ok) {
       const conflict = r && r.d && r.d.code === 'version_conflict';
@@ -120,7 +254,12 @@
     if (!Lib) { S.open = { error: 'The editor could not be loaded. Reload the page to try again.' }; return paint(); }
     if (!r || !r.ok) { S.open = { error: said(r, 'This document could not be opened.') }; return paint(); }
     S.open = { ...r.d.doc, backlinks: r.d.backlinks || [] };
-    surfaceFor(z, Lib).ctrl.load({ id: S.open.id, versionId: S.open.versionId, title: S.open.title, xdoc: S.open.xdoc, readOnly: !S.open.canEdit });
+    // someone who can edit writes in the shared document; a reader reads the saved version
+    const prev = S.live;
+    const live = shareable(Lib, S.open) ? await window.XENO_DOCS_LIVE.open(S.open.id, { content: S.open.content, xdoc: S.open.xdoc, versionId: S.open.versionId, title: S.open.title, canEdit: true, me: { id: P.user && P.user.id, name: (P.user && (P.user.display_name || P.user.username)) || 'Someone' } }).catch(() => null) : null;
+    if (S.openId !== id) { if (live) live.close(); return; }
+    if (prev && prev !== live) prev.close();
+    surfaceFor(z, Lib, live).ctrl.load({ id: S.open.id, versionId: live ? live.version() : S.open.versionId, title: live ? live.title() : S.open.title, xdoc: S.open.xdoc, readOnly: !S.open.canEdit });
     paint();
   }
 
@@ -215,7 +354,7 @@
     if ('dcHistory' in d) { if (S.versions) { S.versions = null; return paint(); } const r = await send('GET', `/api/workspace-docs/${encodeURIComponent(id)}/versions`); if (r) { S.versions = r.versions; paint(); } return; }
     if (d.dcRestore) {
       const r = await send('POST', `/api/workspace-docs/${encodeURIComponent(id)}/versions/${encodeURIComponent(d.dcRestore)}/restore`, {}, 'Version restored');
-      if (r) { S.open = { ...r.doc, backlinks: r.backlinks || [] }; S.versions = null; S.ctrl.load({ id: S.open.id, versionId: S.open.versionId, title: S.open.title, xdoc: S.open.xdoc, readOnly: !S.open.canEdit }); load(z); }
+      if (r) { S.open = { ...r.doc, backlinks: r.backlinks || [] }; S.versions = null; if (S.live) S.live.replaceWith(r.doc.content, r.doc.versionId, r.doc.title); S.ctrl.load({ id: S.open.id, versionId: S.open.versionId, title: S.open.title, xdoc: S.open.xdoc, readOnly: !S.open.canEdit }); load(z); }
       return;
     }
     if ('dcTrash' in d) { const r = await send('POST', `/api/workspace-docs/${encodeURIComponent(id)}/trash`, {}, 'Moved to the trash'); if (r) { S.undo = { id, title: S.open.title }; S.openId = null; S.open = null; await load(z); go(z, null); } return; }
@@ -230,7 +369,7 @@
   let searchTimer = 0;
   document.addEventListener('input', (e) => {
     const ti = e.target.closest('[data-dc-title]');
-    if (ti && ti.closest('[data-dc-page]')) { const S = Z(ti.closest('[data-dc-page]').dataset.dcZone); if (S.ctrl) S.ctrl.setTitle(ti.value); return; }
+    if (ti && ti.closest('[data-dc-page]')) { const S = Z(ti.closest('[data-dc-page]').dataset.dcZone); if (S.ctrl) S.ctrl.setTitle(ti.value); if (S.live) S.live.setTitle(ti.value); return; }
     const t = e.target.closest('[data-dc-search]'); if (!t || !t.closest('[data-dc-page]')) return;
     const z = t.closest('[data-dc-page]').dataset.dcZone; clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { Z(z).q = t.value.trim(); load(z).then(() => { const i = document.querySelector('[data-dc-search]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }); }, 250);

@@ -16,7 +16,7 @@ const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.l
 const now = () => new Date().toISOString();
 const ME = { id: 'u1', kind: 'human', name: 'Me' };
 const LIVE_CLIENT = fs.readFileSync(path.join(repo, 'prototypes/xeno-workspace/live-client.js'), 'utf8');
-const FAKE_HUB = `;XenoLive = { ...XenoLive, joinLive: ({ id, ticket, Y, doc }) => {
+const FAKE_HUB = `;XenoLive = { ...XenoLive, joinLive: ({ type, id, ticket, Y, doc }) => {
   const ch = new BroadcastChannel('live' + id), conn = Math.random().toString(36).slice(2), peers = new Map(), L = new Map();
   const emit = (e, v) => (L.get(e) || []).forEach((f) => f(v));
   const me = { conn, sub: conn, name: 'P' + conn.slice(0, 3), kind: 'human', role: 'editor', act: null, state: null };
@@ -30,7 +30,7 @@ const FAKE_HUB = `;XenoLive = { ...XenoLive, joinLive: ({ id, ticket, Y, doc }) 
     else if (m.k === 'end' && m.conn === conn) { api.status = 'ended'; api.ended = { code: m.code, reason: 'your access to this has ended' }; emit('status', 'ended'); }
   };
   ticket('workspace.canvas/' + id).then(() => { api.status = 'open'; api.self = me; ch.postMessage({ k: 'hello', p: me, reply: true }); emit('status', 'open'); });
-  window.__live = api; window.__hub = ch; return api;
+  if (type === 'workspace.canvas') { window.__live = api; window.__hub = ch; } else window.__liveDoc = api; return api;
 } };`;
 const db = { itemPeople: {}, peopleSet: [], joined: [], tickets: [], liveOn: false, tasks: [], seq: 0, canvases: [], links: [], puts: [], docs: [], moved: [], chats: [], generated: [], done: false };
 const GEN = 'e0000000-0000-4000-8000-000000000001', GF = 'd0000000-0000-4000-8000-00000000000a';
@@ -62,7 +62,9 @@ const handler = (q) => {
   if (u.pathname === '/api/generations/quote') return json(200, { quoteToken: 'q', maxRetailCredits: 12 });
   if (u.pathname === '/api/generations' && method === 'POST') { db.generated.push(b); return json(202, { generation: { id: GEN, state: 'queued' } }); }
   if (u.pathname === '/api/tasks/assignees') return json(200, { success: true, assignees: [{ id: 'u2', name: 'Ada' }] });
-  const dg = u.pathname.match(/^\/api\/workspace-docs\/([\w-]+)$/); if (dg) { if (method === 'PUT') { db.docPut = b; return json(200, { success: true, doc: { versionId: 'v-doc-2' } }); } return json(200, { success: true, doc: { id: dg[1], versionId: 'v-doc-1', title: 'Plan', markdown: 'First line' } }); }
+  // a document as Office › Write serves it: its content (XENO Docs' JSON), who may edit it, and a new version per save
+  if (u.pathname === '/api/workspace-docs' && method === 'GET') return json(200, { success: true, docs: [{ id: 'c0000000-0000-4000-8000-00000000000d', title: db.docTitle || 'Plan', excerpt: '', updatedAt: now() }] });
+  const dg = u.pathname.match(/^\/api\/workspace-docs\/([\w-]+)$/); if (dg) { if (method === 'PUT') { db.docPut = b; (db.docPuts = db.docPuts || []).push(b); if (b.xdoc) db.docContent = JSON.parse(b.xdoc).content; db.docV = (db.docV || 1) + 1; return json(200, { success: true, doc: { id: dg[1], versionId: 'v-doc-' + db.docV, title: b.title || 'Plan' } }); } const content = db.docContent || { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'First line' }] }] }; return json(200, { success: true, doc: { id: dg[1], versionId: 'v-doc-' + (db.docV || 1), title: 'Plan', markdown: 'First line', content, canEdit: true, format: 'xdoc', backlinks: [] }, backlinks: [] }); }
   const ts = u.pathname.match(/^\/api\/tasks\/(T-\d+)\/transition$/); if (ts) { (db.moves = db.moves || []).push(b.to); const t = db.tasks.find((x) => x.key === ts[1]); t.status = b.to; return json(200, { success: true, task: t }); }
   const pt = u.pathname.match(/^\/api\/tasks\/(T-\d+)$/); if (pt && method === 'PATCH' && b.assigneeId) { db.assigned = { key: pt[1], body: b }; return json(200, { success: true, task: { key: pt[1], title: 'x', status: 'todo', assignee: { id: 'u2', name: 'Ada' } } }); }
   const jf = u.pathname.match(/^\/api\/chat\/projects\/([\w-]+)\/files$/); if (jf) { db.joined.push({ kind: 'file', project: jf[1], id: b.storage_key }); return json(200, { success: true, file: {} }); }
@@ -303,9 +305,12 @@ try {
   // a document is a page you write on
   const dp = await box(pg + ' .xn-page');
   await p.mouse.click(dp.x, dp.y); await p.mouse.click(dp.x, dp.y); await settle(500);
-  ok(!!(await p.$(pg + ' [data-cv-text]')), 'double-clicking a document writes on it, in place');
-  await p.keyboard.type(' more'); await settle(1500);
-  ok(db.docPut?.expectedVersion === 'v-doc-1' && /more/.test(db.docPut.markdown), 'and it saves to the real document, against the version it opened');
+  const docFrame = async () => { for (let i = 0; i < 40; i++) { if (await p.$('.xn-docframe .ProseMirror')) return true; await settle(200); } return false; };
+  ok(await docFrame(), 'double-clicking a document opens XENO Docs’ own editor on it, in place');
+  await p.keyboard.press('End'); await p.keyboard.type(' more'); await settle(2200);
+  ok(db.docPut?.expectedVersion === 'v-doc-1' && /more/.test(db.docPut.xdoc) && JSON.parse(db.docPut.xdoc).format === 'xeno.xdoc' && !('markdown' in db.docPut), `and it saves the document itself, as a .xdoc file (not Markdown), against the version it opened (${JSON.stringify(db.docPut || {}).slice(0, 160)})`);
+  await p.keyboard.press('Escape'); await settle(400);
+  ok(!(await p.$('.xn-docframe')), 'Escape ends writing in it');
   await p.mouse.click(bd.l + 30, bd.t + 30); await settle(300);
   // a task moves from its card, one allowed step at a time
   const stepKey = db.canvases[0].content.nodes.find((n) => n.ref?.kind === 'task').ref.id, moved0 = (db.moves || []).length; db.tasks.find((t) => t.key === stepKey).status = 'todo'; await p.evaluate(() => XENO_CANVAS.act('reload')); await settle(700);
@@ -382,6 +387,42 @@ try {
   ok(db.writers.size === 1, `one screen writes the shared canvas down, not everyone (${db.writers.size})`);
   const onCanvas = db.tasks.find((x) => db.canvases[0].content.nodes.some((n) => n.ref?.id === x.key)); onCanvas.title = 'Renamed elsewhere'; await a.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await b2.evaluate(() => window.__hub.postMessage({ k: 'changed' })); await settle(900);
   ok(/Renamed elsewhere/.test(await a.$eval('[data-cv-stage]', (e) => e.textContent)), 'told something changed in the project, the cards update');
+  // two people writing in the same document node at once, and a third in Office › Write: ONE shared document
+  // (XENO Docs' collaboration over XENO Multiplayer `workspace.doc/<file id>`), formatting kept, written down by one screen
+  {
+    const DOC = 'c0000000-0000-4000-8000-00000000000d', puts0 = (db.docPuts || []).length;
+    db.docWriters = new Set();
+    const pagesOf = [a, b2];
+    for (const [i, pg] of pagesOf.entries()) pg.on('request', (q) => { if (q.method() === 'PUT' && q.url().includes('/api/workspace-docs/')) db.docWriters.add(i); });
+    const open = async (pg) => { await pg.bringToFront(); await pg.evaluate(() => XENO_CANVAS.act('fit')); await settle(300); const dn = await pg.evaluate((id) => [...document.querySelectorAll('[data-cv-node]')].find((e) => e.querySelector('.xn-page') && e.innerText.includes('Plan'))?.dataset.cvNode, DOC); const bx = await (await pg.$(`[data-cv-node="${dn}"] .xn-page`)).boundingBox(); await pg.mouse.click(bx.x + bx.width / 2, bx.y + bx.height / 2); await pg.mouse.click(bx.x + bx.width / 2, bx.y + bx.height / 2); for (let i = 0; i < 40 && !(await pg.$('.xn-docframe .ProseMirror')); i++) await settle(200); return dn; };
+    await open(a); await settle(800); await open(b2); await settle(1500);
+    // the words, without the other writers' caret labels drawn among them
+    const text = (pg, sel = '.xn-docframe .ProseMirror') => pg.$eval(sel, (e) => { const c = e.cloneNode(true); c.querySelectorAll('.collaboration-cursor__caret').forEach((x) => x.remove()); return c.textContent; }).catch(() => '');
+    ok(/First line/.test(await text(a)) && /First line/.test(await text(b2)) && (await text(a)).split('First line').length === 2, `both open the same document, seeded once (${JSON.stringify(await text(b2))})`);
+    // at the same moment: A writes in bold at the end, B writes at the start of the same paragraph
+    await a.bringToFront(); await a.click('.xn-docframe .ProseMirror'); await a.keyboard.press('End'); await a.keyboard.down('Control'); await a.keyboard.press('b'); await a.keyboard.up('Control'); await a.keyboard.type(' AAA');
+    await b2.bringToFront(); await b2.click('.xn-docframe .ProseMirror'); await b2.keyboard.press('Home'); await b2.keyboard.type('BBB ');
+    await settle(2600);
+    const bare = (pg) => pg.$eval('.xn-docframe .ProseMirror', (e) => { const c = e.cloneNode(true); c.querySelectorAll('.collaboration-cursor__caret, .ProseMirror-separator, .ProseMirror-trailingBreak').forEach((x) => x.remove()); return c.innerHTML; });
+    const htmlA = await bare(a), htmlB = await bare(b2);
+    ok(htmlA === htmlB && /BBB First line/.test(await text(a)) && /AAA/.test(await text(b2)), `two writing in one paragraph at once both land, and both screens show the same document (${JSON.stringify(await text(a))})`);
+    ok(/<strong>[^<]*AAA<\/strong>/.test(htmlB), 'and the formatting one of them typed reaches the other intact');
+    const saved = (db.docPuts || []).slice(puts0), last = saved.at(-1);
+    ok(saved.length >= 1 && db.docWriters.size === 1 && (() => { const c = JSON.stringify(JSON.parse(last.xdoc).content); return /BBB/.test(c) && /AAA/.test(c) && /"type":"bold"/.test(c); })(), `one screen writes it down, whole, as the document itself (${db.docWriters.size} writer(s), ${saved.length} save(s))`);
+    // a third person, in Office › Write, is in the same document
+    const w = await br.newPage(); await w.setViewport({ width: 1400, height: 900 }); w.on('pageerror', (e) => errs.push(e.message)); await w.setRequestInterception(true); w.on('request', handler);
+    await w.goto(`${base}/workspace/office/spaces/write/${DOC}`, { waitUntil: 'domcontentloaded' });
+    for (let i = 0; i < 50 && !(await w.$('[data-dc-body] .ProseMirror')); i++) await settle(200);
+    await settle(1500);
+    ok(/BBB First line/.test(await text(w, '[data-dc-body] .ProseMirror')), 'Office › Write opens the same live document');
+    await w.click('[data-dc-body] .ProseMirror'); await w.keyboard.press('End'); await w.keyboard.type(' from Write'); await settle(1500);
+    ok(/from Write/.test(await text(a)) && /from Write/.test(await text(b2)), 'what is written in Write appears on the canvas node as it is typed');
+    const carets = await a.$$eval('.xn-docframe .collaboration-cursor__label', (els) => els.map((e) => e.textContent));
+    ok(carets.length >= 1, `each writer sees where the others are writing (${carets.join(', ')})`);
+    await w.close();
+    for (const pg of pagesOf) { await pg.bringToFront(); await pg.keyboard.press('Escape'); }
+    await settle(600);
+  }
   // access taken away while it is open: the service closes that seat (4403) and the page reads the canvas again as who they are now
   db.canvases[0].readonly = true; const bConn = await b2.evaluate(() => window.__live.self.conn); await a.evaluate((c) => window.__hub.postMessage({ k: 'end', conn: c, code: 4403 }), bConn); await settle(1500);
   ok(/View only/.test(await b2.$eval('#main', (e) => e.innerText)) && !(await b2.$('[data-cv-act="add"]')) && !(await a.evaluate(() => /View only/.test(document.querySelector('#main').innerText))), 'a seat closed because access changed reopens as what is left (view only), and only for them');

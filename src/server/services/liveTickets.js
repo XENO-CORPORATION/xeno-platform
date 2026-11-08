@@ -18,6 +18,7 @@ import { issuerForHost } from '../config/hosts.js';
 import { getSigningKey } from '../utils/oidcProvider.js';
 import { canvasRole } from './spawnCanvases.js';
 import { canvasLiveRole, CanvasError as WorkspaceCanvasError } from './canvases.js';
+import { docLiveRole, DocsError } from './workspaceDocs.js';
 
 export const AUDIENCE = 'xeno-multiplayer';
 export const TICKET_TYP = 'xeno-live-ticket+jwt';
@@ -52,6 +53,18 @@ export const RESOURCE_TYPES = Object.freeze({
       return { role: agent && role === 'owner' ? 'editor' : role, userId: agent ? (actor.owner?.id ?? actor.owner) : actor.id, agentId: agent ? actor.id : null };
     } catch (e) {
       if (e instanceof WorkspaceCanvasError) throw new LiveTicketError(e.message, e.code, e.status);
+      throw e;
+    }
+  },
+  // A document (Office › Write and Notes, and a document node on a canvas): <id> is its stable file id. Everyone writing in
+  // it joins the same shared document; one screen writes it down as a version through workspaceDocs.saveDoc.
+  'workspace.doc': async (db, actor, id) => {
+    try {
+      const r = await docLiveRole(db, { id: actor.id, kind: actor.kind }, id);
+      if (r.fileId.toLowerCase() !== String(id).toLowerCase()) throw new LiveTicketError('Join a document by its file id', 'not_file_id', 404);
+      return { role: r.role, userId: r.userId, agentId: r.agentId };
+    } catch (e) {
+      if (e instanceof DocsError) throw new LiveTicketError(e.status === 404 ? 'Document not found' : e.message, e.code, e.status);
       throw e;
     }
   },
