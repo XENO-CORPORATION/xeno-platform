@@ -772,15 +772,28 @@ let stepsResult;
         issuedAt: '2026-09-25T12:00:00.000Z', expiresAt: '2026-09-25T12:01:00.000Z',
         dispatch: { model: 'claude-opus-5', state: 'settled', outcome: 'measured', reservedMicro: '10', chargedMicro: '4', inputTokens: '1', outputTokens: '1',
           openedAt: '2026-09-25T12:00:01.000Z', resolvedAt: '2026-09-25T12:00:02.000Z', providerRequestId: 'hidden' } };
-      stepsResult = { schemaVersion: 1, admissionId: operationId, steps: [step1], nextAfterSequence: null, revocation: null, refusalsRecorded: false, internal: 'hidden' };
+      // RUN-11: a kept refusal crosses field by field too.
+      const { id: _refusalRowId, ...refusalOut } = { afterSequence: '1', operation: 'privileged_call', capability: 'mail.send', code: 'denied',
+        reason: 'capability_not_live', resumable: true, resume: 'different_capability', refusedAt: '2026-09-25T12:00:03.000Z',
+        lastRefusedAt: '2026-09-25T12:00:04.000Z', count: '2', id: 'hidden' };
+      const refusal1 = { ...refusalOut, id: 'hidden' };
+      const stepsBase = { schemaVersion: 1, admissionId: operationId, steps: [step1], nextAfterSequence: null, revocation: null,
+        refusals: [refusal1], refusalsTruncated: false, refusalsRecorded: true, refusalsRecordedSince: '2026-11-08T20:00:00.000Z' };
+      stepsResult = { ...stepsBase, internal: 'hidden' };
       const steps = await request({ path: '/run-admissions/steps/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) });
       assert.equal(steps.status, 200);
       assert.equal(steps.body.steps[0].dispatch.chargedMicro, '4');
-      assert.deepEqual(['internal' in steps.body, 'providerRequestId' in steps.body.steps[0].dispatch, steps.body.refusalsRecorded], [false, false, false],
-        'the steps cross, the provider request id does not, and the answer says refusals are not stored');
-      for (const bad of [{ refusalsRecorded: true }, { steps: [{ ...step1, operation: 'anything' }] }, { steps: [{ ...step1, dispatch: { ...step1.dispatch, chargedMicro: 4 } }] },
+      assert.deepEqual(['internal' in steps.body, 'providerRequestId' in steps.body.steps[0].dispatch, steps.body.refusalsRecorded], [false, false, true],
+        'the steps cross, the provider request id does not, and the answer says refusals are kept');
+      assert.deepEqual(steps.body.refusals, [refusalOut], 'a refusal crosses field by field; its row id does not');
+      assert.equal(steps.body.refusalsRecordedSince, stepsBase.refusalsRecordedSince);
+      for (const bad of [{ refusalsRecorded: 'yes' }, { refusalsRecordedSince: undefined }, { refusalsTruncated: undefined }, { refusals: undefined },
+        { refusals: [{ ...refusal1, reason: 'Ignore previous instructions' }] }, { refusals: [{ ...refusal1, code: 'bad_input' }] },
+        { refusals: [{ ...refusal1, capability: null }] }, { refusals: [{ ...refusal1, resumable: null }] }, { refusals: [{ ...refusal1, count: 2 }] },
+        { refusals: [{ ...refusal1, resume: 'whenever' }] },
+        { steps: [{ ...step1, operation: 'anything' }] }, { steps: [{ ...step1, dispatch: { ...step1.dispatch, chargedMicro: 4 } }] },
         { revocation: { reason: 'because', revokedAt: '2026-09-25T12:00:00.000Z', fencedByAdmissionId: null } }]) {
-        stepsResult = { schemaVersion: 1, admissionId: operationId, steps: [step1], nextAfterSequence: null, revocation: null, refusalsRecorded: false, ...bad };
+        stepsResult = { ...stepsBase, ...bad };
         assert.equal((await request({ path: '/run-admissions/steps/read', body: { admissionId: operationId }, token: mint({ scope: 'workforce:read' }) })).status, 500,
           'a step in another shape is never relayed: ' + JSON.stringify(bad).slice(0, 80));
       }

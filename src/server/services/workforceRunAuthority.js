@@ -234,10 +234,14 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
   if (!signingKey?.kid || !signingKey?.privatePem) fail('unavailable', 'lease_signing_unavailable');
 
   let terminal = null;
+  // RUN-11: set once the caller is known to be this run's actor. Only then is a refusal the run's to keep;
+  // a stranger's request against someone else's admission records nothing, because it learns nothing.
+  let owned = false;
   const result = await authorityTransaction(pool, async (db) => {
     const row = (await db.query('SELECT * FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
     // Only the actor that was admitted may drive the run. Anyone else learns nothing about it.
     if (!row || row.actor_user_id !== actor.actorUserId || row.client_id !== actor.clientId) fail('not_found', 'admission_not_found');
+    owned = true;
     if (row.target_workspace_id) await lockWorkspaceAuthority(db, row.target_workspace_id);
     await lockApiKeyWorkforceAuthority(db, actor, 'workforce:manage');
     // Serialize the admission's lease sequence; the database guard holds the same rule independently.
@@ -309,10 +313,32 @@ export async function authorizeRunStep(pool, authenticatedContext, value, { sign
     // RUN-07: say what the refusal means for CONTINUING this run, so a runtime need not hard-code the
     // reason list. Derived here from the reason alone; a reason the platform has not classified gets none.
     const resume = error instanceof RunAdmissionError ? STEP_REFUSAL_RESUME.get(error.details?.reason) : null;
+    // RUN-11: keep the refusal itself, in its own write -- the step rolled back, the record of it must not.
+    // Failing to keep it never replaces the refusal the runtime is owed.
+    if (owned && error instanceof RunAdmissionError && RECORDED_REFUSAL_CODES.has(error.code)) {
+      await recordStepRefusal(pool, { admissionId, operation, capability, code: error.code, reason: error.details.reason, resume })
+        .catch((recordError) => console.error('[RunAuthority] step refusal not recorded:', recordError.message));
+    }
     if (resume) throw new RunAdmissionError(error.code, error.details.reason, { ...error.details, resumable: resume.resumable, resume: resume.resume });
     throw error;
   });
   return result;
+}
+
+/** RUN-11: the refusals a run keeps -- decisions about THIS step. Malformed input, an unknown run and a
+ * platform fault are not the run's refusals and are not kept. */
+const RECORDED_REFUSAL_CODES = new Set(['denied', 'needs_approval']);
+const REASON_WORD = /^[a-z0-9_]{1,64}$/;
+async function recordStepRefusal(db, { admissionId, operation, capability, code, reason, resume }) {
+  if (!REASON_WORD.test(reason ?? '')) return;
+  // Where it sits among the leases, and when, are set by the database. A repeat of the same refusal
+  // before the next lease only counts.
+  await db.query(`INSERT INTO workforce_run_step_refusals(admission_id,after_sequence,operation,capability,code,reason,resumable,resume)
+      VALUES($1,0,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT ON CONSTRAINT workforce_run_step_refusal_once
+      DO UPDATE SET repeat_count = workforce_run_step_refusals.repeat_count + 1, last_refused_at = clock_timestamp()`,
+  [admissionId, operation, operation === 'privileged_call' ? capability : null, code, reason,
+    resume ? resume.resumable : null, resume ? resume.resume : null]);
 }
 
 /** Stop a run deliberately: the actor, or anyone who may act for its workspace target. Idempotent. */
@@ -376,13 +402,15 @@ export async function readRunAuthority(pool, authenticatedContext, admissionIdVa
 }
 
 /**
- * NFR-06: a run's steps, for a Runs screen -- every lease this admission was issued, in sequence, and
- * for each provider dispatch the draw that consumed it (model, state, tokens, what was charged). Same
- * visibility as readRunAuthority: only the admitted actor. A read; it commits nothing.
+ * NFR-06 / RUN-11: a run's steps, for a Runs screen -- every lease this admission was issued, in
+ * sequence, with the draw that consumed each provider dispatch (model, state, tokens, what was charged);
+ * and every step it was REFUSED, placed after the lease it followed (`afterSequence`, 0 before the
+ * first). Same visibility as readRunAuthority: only the admitted actor. A read; it commits nothing.
  *
- * What is NOT here, said in the answer rather than left as silence: a refused step is never stored (it
- * rolls back with its transaction; only a terminal loss is recorded, as the revocation), so
- * `refusalsRecorded` is false and an empty refusal list must not read as "nothing was refused".
+ * A page carries the refusals that happened among its own leases -- from `afterSequence` up to, not
+ * including, its last lease when another page follows -- so each refusal appears on exactly one page.
+ * `refusalsRecorded` is false for a run admitted before refusals were kept: its list may be missing
+ * some, and must not read as "nothing was refused".
  */
 export const RUN_STEPS_PAGE_MAX = 200;
 export async function readRunSteps(pool, authenticatedContext, value) {
@@ -394,7 +422,8 @@ export async function readRunSteps(pool, authenticatedContext, value) {
   if (!/^\d{1,18}$/.test(after)) fail('bad_input', 'after_sequence_invalid');
   const limit = value.limit === undefined ? 100 : value.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > RUN_STEPS_PAGE_MAX) fail('bad_input', 'limit_invalid');
-  const row = (await pool.query('SELECT actor_user_id FROM workforce_run_admissions WHERE id=$1', [admissionId])).rows[0];
+  const row = (await pool.query(`SELECT actor_user_id, admitted_at, workforce_run_step_refusals_since() AS since
+    FROM workforce_run_admissions WHERE id=$1`, [admissionId])).rows[0];
   if (!row || row.actor_user_id !== actorUserId) fail('not_found', 'admission_not_found');
   // One more than asked, to say whether another page exists without a count query.
   const rows = (await pool.query(`SELECT l.*, d.model, d.state AS draw_state, d.outcome, d.reserved_micro, d.charged_micro,
@@ -411,12 +440,21 @@ export async function readRunSteps(pool, authenticatedContext, value) {
       outputTokens: r.output_tokens === null ? null : String(r.output_tokens),
       openedAt: r.draw_opened_at.toISOString(), resolvedAt: r.resolved_at ? r.resolved_at.toISOString() : null } : null,
   }));
+  const nextAfterSequence = more ? steps.at(-1).sequence : null;
+  const refusalRows = (await pool.query(`SELECT * FROM workforce_run_step_refusals
+    WHERE admission_id=$1 AND after_sequence >= $2::bigint AND ($3::bigint IS NULL OR after_sequence < $3::bigint)
+    ORDER BY after_sequence, first_refused_at, id LIMIT $4`, [admissionId, after, nextAfterSequence, RUN_STEPS_PAGE_MAX + 1])).rows;
+  const refusals = refusalRows.slice(0, RUN_STEPS_PAGE_MAX).map((r) => ({
+    afterSequence: String(r.after_sequence), operation: r.operation, capability: r.capability, code: r.code, reason: r.reason,
+    resumable: r.resumable, resume: r.resume, refusedAt: r.first_refused_at.toISOString(),
+    lastRefusedAt: r.last_refused_at.toISOString(), count: String(r.repeat_count),
+  }));
   const fence = await fenceOf(pool, admissionId);
-  return { schemaVersion: 1, admissionId, steps,
-    nextAfterSequence: more ? steps.at(-1).sequence : null,
+  return { schemaVersion: 1, admissionId, steps, nextAfterSequence,
     revocation: fence ? { reason: fence.reason, revokedAt: fence.revokedAt.toISOString(),
       fencedByAdmissionId: fence.admissionId !== admissionId ? fence.admissionId : null } : null,
-    refusalsRecorded: false };
+    refusals, refusalsTruncated: refusalRows.length > RUN_STEPS_PAGE_MAX,
+    refusalsRecorded: row.admitted_at >= row.since, refusalsRecordedSince: row.since.toISOString() };
 }
 
 /** RUN-10: the revocation that fences this admission -- its own, or the nearest ancestor's -- or null. */
