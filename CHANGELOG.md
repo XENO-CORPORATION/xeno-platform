@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Sidebar sections fold, and stay folded.** Every sidebar heading, like Projects and Recents in Chat, shows its arrow and folds or opens on a click. What you fold is remembered for that place, across new chats arriving, opening a chat and coming back later.
+
 **One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.
 
 ## 2026-11-06
