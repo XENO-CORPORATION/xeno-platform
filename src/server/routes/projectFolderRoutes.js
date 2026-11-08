@@ -16,7 +16,7 @@
  */
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { ProjectFolderError, ensureProjectFolder, listProjectFolders, listProjectFiles, readProjectFile, writeProjectFile, removeProjectFile, moveProjectFile, projectChanges } from '../services/projectFolders.js';
+import { ProjectFolderError, ensureProjectFolder, listProjectFolders, listProjectFiles, readProjectFile, writeProjectFile, removeProjectFile, moveProjectFile, projectChanges, projectAppOf } from '../services/projectFolders.js';
 
 const MAX_BYTES = 100 * 1024 * 1024;   // the same ceiling as any Storage upload
 
@@ -31,7 +31,7 @@ export default function projectFolderRoutes({ uploadsDir }) {
   });
   router.use('/:app', (req, res, next) => {
     if (req.auth?.kind === 'oidc') {
-      if (req.auth.clientId !== req.params.app) return res.status(403).json({ success: false, code: 'wrong_app', error: 'This app can only reach its own projects' });
+      if (projectAppOf(req.auth.clientId) !== req.params.app) return res.status(403).json({ success: false, code: 'wrong_app', error: 'This app can only reach its own projects' });
       // an app's token carries what the person consented to: reading needs storage:read, any change storage:write
       const need = req.method === 'GET' || req.method === 'HEAD' ? 'storage:read' : 'storage:write';
       if (!String(req.auth.scope || '').split(/\s+/).includes(need)) return res.status(403).json({ success: false, code: 'scope_missing', error: `This sign-in lacks ${need}; sign in again to allow it` });

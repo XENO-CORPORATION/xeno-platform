@@ -20,6 +20,15 @@ import { storeFileObject, localLibraryPath } from './storageObjects.js';
 import { cleanLibraryName, trashLibraryItem } from './libraryOrganise.js';
 import { reconcileShares, sharedFolderAccess } from './storageShares.js';
 
+/**
+ * The app whose projects an OIDC client reaches. One product's deployments share ONE shelf: XENO GameDev on a PC
+ * (`xeno-gamedev-local`) and hosted at gamedev.xenosystem.ai (`xeno-gamedev`) are the same person's same games, so a
+ * game made on the phone opens on the PC. Explicit pairs, never a suffix rule: a client registered later as
+ * `<x>-local` must not reach `<x>`'s projects by its name alone.
+ */
+const PROJECT_APP_OF_CLIENT = { 'xeno-gamedev-local': 'xeno-gamedev' };
+export const projectAppOf = (clientId) => PROJECT_APP_OF_CLIENT[clientId] ?? clientId;
+
 export class ProjectFolderError extends Error { constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const APP = /^[a-z][a-z0-9-]{1,63}$/;

@@ -180,7 +180,7 @@ async function main() {
     // ── an app's own token reaches only that app's projects ──
     await migrateAccountV2(pool);   // the OIDC provider's tables (a separate migration, as in auth-token-confusion.test)
     const REDIRECT = 'https://workshop.xenosystem.ai/api/auth/callback';
-    for (const id of ['xeno-workshop', 'xeno-post']) {
+    for (const id of ['xeno-workshop', 'xeno-post', 'xeno-gamedev', 'xeno-gamedev-local']) {
       // the checked-in authority policy, exactly as migrate-oidc-clients seeds it
       await pool.query(`INSERT INTO oauth_clients (client_id, name, redirect_uris, surface, allowed_scopes) VALUES ($1, $1, ARRAY[$2], 'xeno_api', $3) ON CONFLICT (client_id) DO UPDATE SET allowed_scopes = EXCLUDED.allowed_scopes`, [id, REDIRECT, scopesForClient(id)]);
     }
@@ -192,6 +192,16 @@ async function main() {
     assert.equal((await call('GET', `${W}/files`, await appToken('xeno-workshop'))).status, 200, 'the Workshop reaches its own project');
     const other = await call('GET', `${W}/files`, await appToken('xeno-post'));
     assert.equal(other.status, 403); assert.equal(other.body.code, 'wrong_app', 'another app cannot reach the Workshop’s projects');
+    // ── one product, two deployments, one shelf: GameDev on the PC and hosted reach the same games ──
+    const GD = `/xeno-gamedev/${crypto.randomUUID()}`;
+    assert.equal((await call('PUT', GD, await appToken('xeno-gamedev'), { json: { name: 'Gamedev shelf' } })).status, 201);
+    assert.equal((await call('PUT', `${GD}/files/content?path=session.json`, await appToken('xeno-gamedev'), { bytes: Buffer.from('{}') })).status, 201);
+    const fromPc = await call('GET', `${GD}/files`, await appToken('xeno-gamedev-local'));
+    assert.equal(fromPc.status, 200, 'the PC studio reaches a game made online');
+    assert.deepEqual(fromPc.body.files.map((f) => f.path), ['session.json']);
+    const pcElsewhere = await call('GET', `${W}/files`, await appToken('xeno-gamedev-local'));
+    assert.equal(pcElsewhere.status, 403); assert.equal(pcElsewhere.body.code, 'wrong_app', 'the GameDev PC client reaches no other app');
+    assert.equal((await call('GET', `${GD}/files`, await appToken('xeno-workshop'))).status, 403, 'and no other app reaches GameDev');
     // ── an app's token does only what the person consented to ──
     const none = await call('GET', `${W}/files`, await appToken('xeno-workshop', 'openid profile'));
     assert.equal(none.status, 403); assert.equal(none.body.code, 'scope_missing', 'reading needs storage:read');

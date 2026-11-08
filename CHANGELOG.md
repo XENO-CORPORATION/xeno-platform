@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-08
+
+**One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.
+
 ## 2026-11-06
 
 **New canvas nodes.** The project canvas fills the page, and you add to it by right-clicking the board, with search and single-key shortcuts. A picture or video is its own node: select it and a panel opens underneath with the prompt, settings and versions, and it generates in place, with connected images feeding a video. Documents are pages you can write on directly, chats show their thread, tasks show their progress, and every node has a person in its corner. Drag a corner to resize: pictures keep their shape, everything else takes any size.
