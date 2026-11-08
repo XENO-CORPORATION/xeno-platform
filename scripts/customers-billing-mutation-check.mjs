@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path'; import { fileURLToPath } from 'node:url';
 import pg from '../src/server/node_modules/pg/lib/index.js';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SVC = path.join(repo, 'src/server/services/customers.js'), MIG = path.join(repo, 'src/server/database/migrations/20261123090000-crm-company-billing.sql');
+const SVC = path.join(repo, 'src/server/services/customers.js'), MIG = path.join(repo, 'src/server/database/migrations/20261130090000-crm-company-billing.sql');
 const MUTATIONS = [
   ['a viewer may change billing details', SVC, "export async function updateCompany(db, actor, companyId, input = {}) {\n  const ctx = await workspaceFor(db, actor, input.workspace, 'editor');", "export async function updateCompany(db, actor, companyId, input = {}) {\n  const ctx = await workspaceFor(db, actor, input.workspace, 'viewer');"],
   ['any text passes as a country', SVC, "if (country && !COUNTRY.test(country.toUpperCase()))", "if (false)"],
