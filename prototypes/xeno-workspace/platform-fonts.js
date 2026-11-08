@@ -14,7 +14,7 @@
   const toast = (m) => X()?.toast?.(m);
   const said = (r, fallback) => (r && r.d && typeof r.d.error === 'string' && r.d.error) || fallback;
   const CATS = [['', 'All'], ['sans-serif', 'Sans serif'], ['serif', 'Serif'], ['monospace', 'Mono'], ['display', 'Display'], ['handwriting', 'Handwriting']];
-  const S = { status: 'idle', ws: undefined, mine: null, cat: null, q: '', category: '', error: null, faces: new Set(), sample: 'The quick brown fox jumps over the lazy dog' };
+  const S = { status: 'idle', ws: undefined, mine: null, cat: null, q: '', category: '', error: null, faces: new Set(), ai: {}, sample: 'The quick brown fox jumps over the lazy dog' };
 
   const wsId = () => (window.XENO_SCOPE && window.XENO_SCOPE.served ? window.XENO_SCOPE.uuid() : null);
   const q = (extra = {}) => { const p = new URLSearchParams(); if (S.ws) p.set('workspace', S.ws); for (const [k, v] of Object.entries(extra)) if (v !== '' && v != null) p.set(k, v); const s = p.toString(); return s ? '?' + s : ''; };
@@ -57,7 +57,20 @@
     return `<div class="ft-bar"><input class="in" data-ft-q value="${esc(S.q)}" placeholder="Search fonts" aria-label="Search fonts"><input class="in ft-sample" data-ft-sample value="${esc(S.sample)}" aria-label="Sample text" maxlength="120">
       <div class="ft-cats">${CATS.map(([v, l]) => `<button class="btn ghost${S.category === v ? ' on' : ''}" data-ft-cat="${esc(v)}" aria-pressed="${S.category === v}">${esc(l)}</button>`).join('')}</div></div>
       ${list.length ? `<div class="ft-grid" data-ft-list>${list.map((f) => `<article class="ft-card" data-ft-family="${esc(f.id)}"><header><b>${esc(f.family)}</b><small>${esc(f.license.type)} · ${f.weights.length} weight${f.weights.length === 1 ? '' : 's'}</small></header>${specimen(f.family)}
-        ${f.pairsWith.length ? `<small class="ft-pairs">Pairs with ${f.pairsWith.slice(0, 3).map((p) => esc(p.family)).join(', ')}</small>` : ''}<div class="ft-row"><a class="btn ghost" href="${esc(f.licenseUrl)}" target="_blank" rel="noopener">Licence</a>${added(f.id) ? '<small data-ft-added>In this workspace</small>' : h.btn('Add', `data-ft-add="${esc(f.id)}"`, true, 'plus')}</div></article>`).join('')}</div>` : h.box('search', 'No fonts match', 'Try a shorter word or another category.', '', 'sm')}`;
+        ${f.pairsWith.length ? `<small class="ft-pairs">Pairs with ${f.pairsWith.slice(0, 3).map((p) => esc(p.family)).join(', ')}</small>` : ''}<div class="ft-row"><a class="btn ghost" href="${esc(f.licenseUrl)}" target="_blank" rel="noopener">Licence</a><span class="ft-acts">${h.btn('Suggest a pairing', `data-ft-ai="${esc(f.id)}"`, true, 'spark')}${added(f.id) ? '<small data-ft-added>In this workspace</small>' : h.btn('Add', `data-ft-add="${esc(f.id)}"`, true, 'plus')}</span></div>${aiFor(f.id)}</article>`).join('')}</div>` : h.box('search', 'No fonts match', 'Try a shorter word or another category.', '', 'sm')}`;
+  }
+  // A model's suggestion for one family (POST /api/fonts/pairings/suggest): catalogue fonts only, each with its reason
+  const aiFor = (id) => { const a = S.ai[id]; if (!a) return '';
+    loadFaces(a.pairs.map((x) => x.id));
+    return `<div class="ft-ai" data-ft-ai-for="${esc(id)}"><small class="ft-ai-h">Suggested by a model${a.purpose ? ` for “${esc(a.purpose)}”` : ''}</small>${a.pairs.map((x) => `<div class="ft-ai-p" data-ft-ai-pick="${esc(x.id)}"><b style="font-family:'${esc(x.family).replace(/'/g, '')}',var(--font-sans,sans-serif)">${esc(x.family)}</b><small>${esc(x.role === 'heading' ? 'for headings' : x.role === 'accent' ? 'as an accent' : 'for text')}</small><p>${esc(x.reason)}</p>${added(x.id) ? '<small data-ft-added>In this workspace</small>' : H().btn('Add', `data-ft-add="${esc(x.id)}"`, true, 'plus')}</div>`).join('')}</div>`; };
+  async function suggest(id) {
+    const f = (S.cat || []).find((x) => x.id === id), name = f ? f.family : id;
+    await D().form({ title: `Pair ${name}`, sub: 'A model picks partners from the open catalogue and says why. It uses your credits.', size: 'sm', submit: 'Suggest',
+      fields: [{ id: 'purpose', label: 'What it’s for', max: 300, placeholder: 'e.g. a bakery’s menu and signs' }],
+      onSubmit: async (v) => { const r = await api('POST', '/api/fonts/pairings/suggest', withWs({ family: id, ...(v.purpose ? { purpose: v.purpose } : {}) })).catch(() => null);
+        if (!r || !r.ok) return said(r, 'No suggestion came back. Try again.');
+        S.ai[id] = { pairs: r.d.pairs || [], purpose: v.purpose || '' }; return null; } });
+    paint();
   }
   /** The body of the Fonts tab; platform-assets.js draws the page around it. */
   function body() {
@@ -88,13 +101,14 @@
     if ('ftQ' in t.dataset) { S.q = t.value; clearTimeout(timer); timer = setTimeout(() => { paint(); const i = document.querySelector('#main [data-ft-q]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 200); }
   });
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('#main [data-ft-reload],#main [data-ft-tab],#main [data-ft-cat],#main [data-ft-add],#main [data-ft-remove],#main [data-ft-unup],#main [data-ft-upload-btn]');
+    const t = e.target.closest('#main [data-ft-reload],#main [data-ft-tab],#main [data-ft-cat],#main [data-ft-add],#main [data-ft-ai],#main [data-ft-remove],#main [data-ft-unup],#main [data-ft-upload-btn]');
     if (!t) return;
     e.preventDefault(); e.stopPropagation();
     const d = t.dataset;
     if ('ftReload' in d) return load();
     if (d.ftTab) return goto(d.ftTab === 'catalogue' ? 'fonts/catalogue' : 'fonts');
     if ('ftCat' in d) { S.category = d.ftCat; return paint(); }
+    if (d.ftAi) return suggest(d.ftAi);
     if (d.ftAdd) { const r = await api('POST', '/api/fonts/families', withWs({ family: d.ftAdd })).catch(() => null); if (!r || !r.ok) return toast(said(r, 'It couldn’t be added.')); toast('Added to this workspace'); return load(); }
     if (d.ftRemove) { const r = await api('DELETE', `/api/fonts/families/${encodeURIComponent(d.ftRemove)}` + q()).catch(() => null); if (!r || !r.ok) return toast(said(r, 'It couldn’t be removed.')); toast('Removed'); return load(); }
     if (d.ftUnup) { const r = await api('DELETE', `/api/fonts/uploads/${encodeURIComponent(d.ftUnup)}` + q()).catch(() => null); if (!r || !r.ok) return toast(said(r, 'It couldn’t be removed.')); toast('Removed. The file is still in your Library.'); return load(); }
