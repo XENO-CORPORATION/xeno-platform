@@ -8371,6 +8371,16 @@
       "class": "reversible",
       "scope": "workspace:admin"
     },
+    "ui:modals.js:data-rows-add": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "workspace:admin"
+    },
+    "ui:modals.js:data-rows-x": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "workspace:admin"
+    },
     "ui:modals.js:data-sec": {
       "status": "excluded",
       "category": "view-state",

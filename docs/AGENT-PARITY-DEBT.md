@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2062 actions · 237 agent capability · 1385 planned (debt) · 440 excluded · **coverage 14.6%** of the 1622 owed.
+**Total:** 2064 actions · 237 agent capability · 1387 planned (debt) · 440 excluded · **coverage 14.6%** of the 1624 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -13,8 +13,8 @@ Every action a person can take on the platform, and whether an agent can take it
 | commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
 | workspace | 197 | 23 | 108 | 66 | 17.6% |
+| workspace-ui | 193 | 4 | 103 | 86 | 3.7% |
 | chat | 104 | 0 | 102 | 2 | 0% |
-| workspace-ui | 191 | 4 | 101 | 86 | 3.8% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 93 | 5 | 85 | 3 | 5.6% |
 | account | 117 | 4 | 58 | 55 | 6.5% |
@@ -1399,7 +1399,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-work.js:data-share-remove`
 - `ui:platform-work.js:data-share-role`
 
-## workspace-ui — 101 planned
+## workspace-ui — 103 planned
 
 - `ui:actions.js:data-ac`
 - `ui:actions.js:data-sc-del`
@@ -1486,6 +1486,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:modals.js:data-export`
 - `ui:modals.js:data-plan`
 - `ui:modals.js:data-pref-sw`
+- `ui:modals.js:data-rows-add`
+- `ui:modals.js:data-rows-x`
 - `ui:modals.js:data-signout`
 - `ui:modals.js:data-xd-act`
 - `ui:pages.js:data-reply`
