@@ -36,7 +36,7 @@ const GEN = 'e0000000-0000-4000-8000-000000000001', GF = 'd0000000-0000-4000-800
 const mk = (b) => { const t = { key: 'T-' + ++db.seq, number: db.seq, title: b.title, status: b.status || 'todo', kind: 'task', priority: b.priority || 'none', area: 'studio', project: null, assignee: null, labels: [], events: [], links: [], reporter: ME, createdAt: now(), updatedAt: now(), can: { edit: true, moves: [] } }; db.tasks.push(t); return t; };
 mk({ title: 'Design the onboarding', status: 'in_progress', priority: 'high' }); mk({ title: 'Write the copy' }); mk({ title: 'Ship it' });
 const recs = (c) => Object.fromEntries(c.content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => { const t = db.tasks.find((x) => x.key === n.ref.id); return [n.ref.id, t ? { key: t.key, title: t.title, status: t.status, priority: t.priority, project: null, assignee: null } : { key: n.ref.id, missing: true }]; }));
-const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'c0000000-0000-4000-8000-00000000000d': { id: 'c0000000-0000-4000-8000-00000000000d', doc: true, name: 'Plan', type: 'Document', url: '/workspace/office/spaces/write/c0000000-0000-4000-8000-00000000000d' }, [GF]: { id: GF, version: GF, name: 'dawn.png', type: 'image/png', url: '/workspace/library' }, 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' } } } });
+const out = (c) => ({ id: c.id, name: c.name, area: 'studio', project: c.project || null, revision: String(c.revision), items: c.content.nodes.length, updatedAt: now(), can: { edit: !c.readonly, delete: !c.readonly }, content: c.content, records: { tasks: recs(c), generations: { [GEN]: { id: GEN, state: db.done ? 'succeeded' : 'running', prompt: 'a bunker at dawn', files: db.done ? [GF] : [] } }, files: { 'c0000000-0000-4000-8000-00000000000d': { id: 'c0000000-0000-4000-8000-00000000000d', doc: true, name: 'Plan', type: 'Document', url: '/workspace/office/spaces/write/c0000000-0000-4000-8000-00000000000d' }, [GF]: { id: GF, version: GF, name: 'dawn.png', type: 'image/png', url: '/workspace/library' }, 'f0000000-0000-4000-8000-000000000001': { id: 'f0000000-0000-4000-8000-000000000001', name: 'brief.pdf', type: 'application/pdf', bytes: 2400000, url: '/workspace/library?sel=f0000000-0000-4000-8000-000000000001' }, 'f0000000-0000-4000-8000-000000000002': { id: 'f0000000-0000-4000-8000-000000000002', missing: true } }, chats: { 'c0000000-0000-4000-8000-000000000001': { id: 'c0000000-0000-4000-8000-000000000001', title: 'Kickoff notes', url: '/workspace/apps/chat/c0000000-0000-4000-8000-000000000001' }, 'c0000000-0000-4000-8000-00000000000e': { id: 'c0000000-0000-4000-8000-00000000000e', title: 'Ideas', url: '/workspace/apps/chat/projects/a0000000-0000-4000-8000-000000000001/c/c0000000-0000-4000-8000-00000000000e' } } } });
 
 const server = await createServer({ configFile: false, root: repo, logLevel: 'error', appType: 'custom', optimizeDeps: { noDiscovery: true, entries: [] }, plugins: [xenoWorkspace(repo)], server: { host: '127.0.0.1', port: PORT, strictPort: true } });
 await server.listen();
@@ -47,6 +47,8 @@ const handler = (q) => {
   const u = new URL(q.url());
   // XENO Multiplayer stands in here: the real Yjs from live-client.js, passed between two pages by a BroadcastChannel
   if (u.pathname.endsWith('/live-client.js')) return db.liveOn ? q.respond({ status: 200, contentType: 'text/javascript', body: LIVE_CLIENT + FAKE_HUB }) : q.respond({ status: 503, body: '' });
+  // the real chat app stands in as a page that says which address it was opened at
+  if (u.pathname.startsWith('/chat/')) { (db.chatPages = db.chatPages || []).push(u.pathname); return q.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><body><textarea id="q" aria-label="Message"></textarea><script>window.__path = location.pathname</script></body>' }); }
   if (u.pathname.startsWith('/overview/')) return q.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><body></body>' });
   if (!u.pathname.startsWith('/api/')) return q.continue();
   const method = q.method(); let b = {}; try { b = q.postData() ? JSON.parse(q.postData()) : {}; } catch { b = {}; }
@@ -227,6 +229,23 @@ try {
   const kinds = () => db.canvases[0].content.nodes.filter((n) => n.type === 'xeno-ref').map((n) => n.ref.kind);
   const saved2 = async () => { await settle(1200); return kinds(); };
   const k2 = await saved2(); ok(k2.includes('file') && k2.includes('chat'), `and both land on the canvas (${k2.join()})`);
+  // a chat on the canvas is answered in place, in the REAL chat at its own address: the same app and send path as Chat
+  const cn = db.canvases[0].content.nodes.find((n) => n.ref?.kind === 'chat' && n.ref.id === 'c0000000-0000-4000-8000-00000000000e'), at0 = p.url();
+  await p.evaluate(() => XENO_CANVAS.act('fit')); await settle(300);
+  await p.click(`[data-cv-node="${cn.id}"] [data-cv-act="chat-here"]`); await settle(1500);
+  const fr = await p.$eval(`[data-cv-frame="${cn.id}"] iframe`, (e) => ({ src: new URL(e.src).pathname, loaded: e.contentWindow.__path })).catch(() => null);
+  ok(fr && fr.src === `/chat/projects/${pid}/c/${cn.ref.id}` && fr.loaded === fr.src, `Reply opens the real chat in the node, at the chat's own address (${JSON.stringify(fr)})`);
+  if (process.env.CANVAS_SHOT_CHAT) await p.screenshot({ path: process.env.CANVAS_SHOT_CHAT });
+  await p.evaluate((id) => { const w = document.querySelector(`[data-cv-frame="${id}"] iframe`).contentWindow; w.__mark = 7; w.document.getElementById('q').value = 'half typed'; }, cn.id);
+  const lb = await box(`[data-cv-node="${cn.id}"] .xn-label b`), loads0 = db.chatPages.length;
+  await p.mouse.move(lb.x, lb.y); await p.mouse.down(); await p.mouse.move(lb.x + 80, lb.y + 40, { steps: 6 }); await p.mouse.up(); await settle(500);
+  await p.evaluate(() => XENO_CANVAS.act('zoom-in')); await settle(300); await p.mouse.click(st.r - 40, st.t + 40); await settle(300);
+  const kept = await p.evaluate((id) => { const f = document.querySelector(`[data-cv-frame="${id}"]`), n = document.querySelector(`[data-cv-node="${id}"]`), w = f && f.querySelector('iframe').contentWindow; return { mark: w && w.__mark, typed: w && w.document.getElementById('q').value, same: !!f && f.style.left === n.style.left && f.style.top === n.style.top && f.style.width === n.style.width }; }, cn.id);
+  ok(kept.mark === 7 && kept.typed === 'half typed' && kept.same && db.chatPages.length === loads0, `moving, zooming and repainting keep the same chat open, with what was typed, over its node (${JSON.stringify(kept)})`);
+  ok(p.url() === at0, 'and the canvas keeps its own address');
+  await p.click(`[data-cv-node="${cn.id}"] [data-cv-act="chat-done"]`); await settle(300);
+  ok(!(await p.$(`[data-cv-frame="${cn.id}"]`)) && !!(await p.$(`[data-cv-node="${cn.id}"] [data-cv-act="chat-here"]`)), 'Done closes it and the node shows the thread again');
+  await p.evaluate(() => XENO_CANVAS.act('fit')); await settle(300);
   // the board's own menu, where you asked for it
   const bd = await box('[data-cv-stage]'), spot = { x: bd.l + 120, y: bd.b - 120 };
   await p.mouse.click(spot.x, spot.y, { button: 'right' }); await settle(250);

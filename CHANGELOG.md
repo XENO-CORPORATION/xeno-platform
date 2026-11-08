@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Reply to a chat right on the canvas.** A chat on the canvas used to show its thread and send you to Chat to answer. Now press Reply under the thread and the chat opens in the node itself: the same chat as in Chat, with the same models, tools and project context, and the answer streams in place. Move the node, zoom or keep working on the canvas and what you've typed stays. Done closes it again.
+
 **One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.
 
 ## 2026-11-06
