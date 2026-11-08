@@ -19,6 +19,8 @@ import * as tasks from './xenoTasks.js';
 import * as agentMediaMcp from './agentMediaMcp.js';
 import * as agentMedia from './agentMedia.js';
 import * as canvasMcp from './canvasMcp.js';
+import * as projectItemPeopleMcp from './projectItemPeopleMcp.js';
+import { ItemPeopleError } from './projectItemPeople.js';
 import * as placesMcp from './placesMcp.js';
 import * as modesMcp from './modesMcp.js';
 import * as peopleMcp from './peopleMcp.js';
@@ -80,6 +82,14 @@ export const SERVICES = Object.freeze([
     tools: () => canvasMcp.TOOLS,
     call: (db, actor, name, args) => canvasMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof canvases.CanvasError,
+  },
+  {
+    // who is on a file, a chat or a picture in a project (services/projectItemPeople.js; off unless PROJECT_ITEM_PEOPLE=true)
+    category: 'projects', title: 'Projects', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Projects: who is responsible for each file, chat and picture in a project (tasks keep their own assignee).',
+    tools: () => projectItemPeopleMcp.TOOLS,
+    call: (db, actor, name, args) => projectItemPeopleMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof ItemPeopleError,
   },
   {
     category: 'places', title: 'Places', version: '1.0.0', timeoutMs: 20_000,

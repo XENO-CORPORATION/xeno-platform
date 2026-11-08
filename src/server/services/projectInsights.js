@@ -54,6 +54,9 @@ export async function people(db, me, projectId) {
   }
   // people first, then agents (Linear lists them apart); each by role, then name
   out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'human' ? -1 : 1) || (RANK[b.relation] || 0) - (RANK[a.relation] || 0) || a.name.localeCompare(b.name));
+  // what each is on in the project besides tasks (services/projectItemPeople.js; nothing when it is off)
+  const on = await (await import('./projectItemPeople.js')).countsByPerson(db, me, projectId);
+  for (const x of out) if (on[x.id]) x.on = on[x.id];
   return { project: { id: String(p.id), name: p.name }, people: out, you: { relation: await role(db, me.id, projectId), canManage: admin } };
 }
 

@@ -12,6 +12,7 @@
 import { defineCapability } from './define.js';
 import * as tasksMcp from '../services/tasksMcp.js';
 import * as canvasMcp from '../services/canvasMcp.js';
+import * as projectItemPeopleMcp from '../services/projectItemPeopleMcp.js';
 import * as agentsMcp from '../services/agentsMcp.js';
 import * as agentMediaMcp from '../services/agentMediaMcp.js';
 import * as forumMcp from '../services/forumMcp.js';
@@ -46,7 +47,7 @@ import * as skillsMcp from '../services/skillsMcp.js';
 
 /** The tools each bound category executes, by category. */
 export const BOUND_TOOLS = Object.freeze({
-  inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, agents: agentsMcp.TOOLS,
+  inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, projects: projectItemPeopleMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
   forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, brand: brandKitsMcp.TOOLS, fonts: fontsMcp.TOOLS, stock: stockMcp.TOOLS, corpus_local: corpusLocalMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
@@ -104,6 +105,9 @@ const ROWS = [
   ['canvas.canvas.open_as', 'canvas', 'open_as', 'undoable', { reply: obj({ canvas: CANVAS_REPLY.properties.canvas, created: { type: 'boolean', description: 'true when this call made the map; false when it already existed.' } }, ['canvas']), idempotency: NAT('opening the same project or division again returns the same canvas') }],
   ['canvas.connection.create', 'canvas', 'connect', 'undoable', { reply: CANVAS_REPLY, idempotency: NONE('no request key yet: a retried call adds a second connection') }],
   ['canvas.item.update', 'canvas', 'update', 'irreversible', { reply: CANVAS_REPLY, idempotency: NAT('moves and edits set absolute values; removing a removed item is a no-op') }],
+  // ── projects: who is on a project item (services/projectItemPeople.js; a person or an agent; one live person, history kept)
+  ['projects.item_person.list', 'projects', 'item_people', 'safe', { reply: obj({ item: { type: 'object', description: 'kind and id (a file by its stable file id).' }, people: { type: 'array', description: 'id, name, kind (human|agent), assignedAt of each person on it now.' }, before: { type: 'array', description: 'Who was on it, newest first, with endedAt.' } }, ['item', 'people']) }],
+  ['projects.item_person.set', 'projects', 'set_item_person', 'undoable', { reply: obj({ item: { type: 'object' }, people: { type: 'array', description: 'Who is on it now.' } }, ['item', 'people']), idempotency: NAT('setting the person already on it changes nothing') }],
   // ── places (the building of each workspace; a projection of workforce records, scope-filtered on the server)
   ['places.place.list', 'places', 'list', 'safe', { reply: obj({ items: { type: 'array', description: 'id, name, workspace, city (plot), floors (closed floors carry no name), counts and your access of each building you can enter.' } }, ['items']) }],
   ['places.place.get', 'places', 'get', 'safe', { provenance: 'untrusted', reply: obj({ place: { type: 'object', description: 'The building summary and your access.' }, spec: { type: 'object', description: 'snap (divisions, teams, memberships, principals, runs, closedDivisionIds) and record (the saved layout).' }, access: { type: 'object', description: 'role, permissions (watch talk handoff edit host), scope.' } }, ['place', 'spec', 'access']) }],

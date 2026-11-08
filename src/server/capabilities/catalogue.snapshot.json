@@ -618,6 +618,34 @@
    ]
   },
   {
+   "name": "projects.item_person.list",
+   "wire": "projects__item_person__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "tasks:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "projects_item_people"
+   ]
+  },
+  {
+   "name": "projects.item_person.set",
+   "wire": "projects__item_person__set",
+   "version": "1.0.0",
+   "class": "undoable",
+   "scope": "tasks:write",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "projects_set_item_person"
+   ]
+  },
+  {
    "name": "places.place.list",
    "wire": "places__place__list",
    "version": "1.0.0",

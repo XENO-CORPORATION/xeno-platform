@@ -31,6 +31,7 @@ import * as tasks from './xenoTasks.js';
 import { latestFor } from './storageVersions.js';
 import { readable as readableDivision, mayManage } from './workforceDivisions.js';
 import { resolveTenetCards } from './xenoCorpus.js';
+import { peopleOn } from './projectItemPeople.js';
 
 export class CanvasError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -260,8 +261,18 @@ export async function getCanvas(db, me, id) {
   const media = content.nodes.filter((n) => n.type === 'media').map((n) => n.media);
   const of = (kind) => [...new Set([...content.nodes.filter((n) => n.type === 'xeno-ref' && n.ref.kind === kind).map((n) => n.ref.id),
     ...(kind === 'file' ? media.flatMap((m) => m.versions) : kind === 'generation' ? media.map((m) => m.generation).filter(Boolean) : [])])];
-  return { ...summary(c, s), content, records: { tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')),
+  // who is on each document, chat and picture, read live from the project (services/projectItemPeople.js), as tasks are
+  const people = c.project_id ? await peopleOn(db, me, c.project_id, content.nodes.map(itemOf).filter(Boolean)) : { enabled: false, people: {} };
+  return { ...summary(c, s), content, peopleLive: people.enabled && !!c.project_id, records: { people: people.people, tasks: await resolveRefs(db, me, content.nodes), files: await resolveFiles(db, me, of('file')), chats: await resolveChats(db, me, of('chat')),
     projects: await resolveProjects(db, me, of('project')), divisions: await resolveDivisions(db, me, of('division')), objectives: await resolveObjectives(db, me, of('objective')), runs: await resolveRuns(db, me, of('run')), tenets: await resolveTenetCards(db, me, of('tenet')), generations: await resolveGenerations(db, me, of('generation')) } };
+}
+
+/** The project item a node stands for, as projectItemPeople names it: a file or chat card, or a picture by its first version (or, while it is
+ *  still being made, its generation). Notes, links, groups and workforce cards are not items people are put on. */
+export function itemOf(n) {
+  if (n.type === 'xeno-ref' && (n.ref.kind === 'file' || n.ref.kind === 'chat' || n.ref.kind === 'generation')) return { kind: n.ref.kind, id: n.ref.id };
+  if (n.type === 'media') return n.media.versions.length ? { kind: 'file', id: n.media.versions[0] } : n.media.generation ? { kind: 'generation', id: n.media.generation } : null;
+  return null;
 }
 
 /**

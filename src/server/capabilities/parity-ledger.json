@@ -21,6 +21,7 @@
     "browserRelayRoutes.js": "browser-shell",
     "browserRoutes.js": "browser-shell",
     "canvasRoutes.js": "canvas",
+    "projectItemPeopleRoutes.js": "projects",
     "chatRoutes.js": "chat",
     "cliAuthRoutes.js": "account",
     "clientPolicyRoutes.js": "platform",
@@ -983,6 +984,26 @@
       "status": "planned",
       "class": "reversible",
       "scope": "workspace:admin"
+    },
+    "route:projectItemPeopleRoutes.js:GET /item-people/enabled": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:projectItemPeopleRoutes.js:GET /:projectId/items/:kind/:itemId/people",
+      "class": "safe",
+      "scope": "none",
+      "because": "whether the feature is on, for a screen; an agent learns the same from projects.item_person.list, which answers not_enabled when it is off"
+    },
+    "route:projectItemPeopleRoutes.js:GET /:projectId/items/:kind/:itemId/people": {
+      "status": "capability",
+      "capability": "projects.item_person.list",
+      "class": "safe",
+      "scope": "tasks:read"
+    },
+    "route:projectItemPeopleRoutes.js:PUT /:projectId/items/:kind/:itemId/people": {
+      "status": "capability",
+      "capability": "projects.item_person.set",
+      "class": "reversible",
+      "scope": "tasks:write"
     },
     "route:canvasRoutes.js:DELETE /:id": {
       "status": "planned",

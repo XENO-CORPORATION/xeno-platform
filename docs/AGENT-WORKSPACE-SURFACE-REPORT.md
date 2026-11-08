@@ -34,5 +34,6 @@ Per division: how many actions a person can take, how many an agent can take tod
 | mail | 21 | 14 | 2 | 5 | 9 | 11 | 1 | 0 | `mail:write` 2 |
 | compute | 32 | 18 | 1 | 13 | 16 | 9 | 7 | 0 | `compute:read` 1 |
 | docs | 11 | 11 | 0 | 0 | 5 | 6 | 0 | 0 | — |
+| projects | 3 | 2 | 0 | 1 | 2 | 1 | 0 | 0 | — |
 
 Scopes (one-way names, approved 2026-10-20): `storage:read`, `storage:write`, `share:create`, `library:read`, `library:write`, `tasks:read`, `tasks:write`, `chat:read`, `chat:write`, `agents:read`, `agents:write`, `wallet:read`, `wallet:spend`, `workspace:read`, `workspace:admin`, `places:read`, `places:write`, `marketplace:read`, `marketplace:write`, `forum:read`, `forum:write`, `inbox:read`, `inbox:write`, `publish:read`, `publish:write`, `forms:read`, `forms:write`, `brand:read`, `brand:write`, `fonts:read`, `fonts:write`, `stock:read`, `stock:write`, `corpus_local:read`, `analytics:read`, `analytics:write`, `docs:read`, `docs:write`, `scheduling:read`, `scheduling:write`, `customers:read`, `customers:write`, `automate:read`, `automate:write`, `message:read`, `message:write`, `mail:read`, `mail:write`, `compute:read`, `compute:write`.
