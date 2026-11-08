@@ -41,6 +41,7 @@
     const r = await api('GET', '/api/forum/threads?sort=active&limit=100').catch(() => null);
     if (r && r.ok && Array.isArray(r.d.threads)) { C.threads = r.d.threads.map(shapeThread); window.XENO_PG_FORUM = C.threads; C.status = 'ready'; }
     else { C.threads = []; window.XENO_PG_FORUM = []; C.status = 'error'; }
+    H().fresh('community', { ok: C.status === 'ready', reload: () => loadList() });   // the status bar says what this load really did
     repaint();
   }
   async function loadThread(id) {
@@ -49,15 +50,16 @@
       C.detail.set(id, { ...shapeThread(t), body: posts[0] ? posts[0].body : '', opId: posts[0] ? posts[0].id : null, subscribed: !!t.subscribed, duplicateOf: t.duplicateOf || null, hidden: (t.hiddenReplies || []).map((h) => h.position),
         posts: posts.slice(1).map((p) => ({ id: p.id, position: p.position, author: author(p.author), body: p.body, at: p.createdAt, answer: p.isAnswer, score: p.score, advisory: p.advisoryCount, myVote: p.myVote || 0, mine: P.user && p.author && p.author.handle === P.user.username })) });
     } else C.detail.set(id, { missing: true, error: r && r.status !== 404 });
+    H().fresh('community:thread', { ok: !!(r && (r.ok || r.status === 404)), reload: () => loadThread(id) });
     repaint();
   }
   async function loadMe() { const r = await api('GET', '/api/forum/me').catch(() => null); C.me = r && r.ok ? r.d : { capabilities: {}, actor: {} }; repaint(); }
   const mod = () => !!(C.me && C.me.capabilities && C.me.capabilities.review_flags);
-  async function loadTickets() { const r = await api('GET', '/api/forum/tickets/mine').catch(() => null); C.tickets = r && r.ok ? r.d.tickets : 'error'; repaint(); }
-  async function loadTicket(id) { const r = await api('GET', '/api/forum/tickets/' + encodeURIComponent(id)).catch(() => null); C.ticket.set(id, r && r.ok ? r.d.ticket : { missing: true }); repaint(); }
+  async function loadTickets() { const r = await api('GET', '/api/forum/tickets/mine').catch(() => null); C.tickets = r && r.ok ? r.d.tickets : 'error'; H().fresh('community:tickets', { ok: !!(r && r.ok), reload: () => loadTickets() }); repaint(); }
+  async function loadTicket(id) { const r = await api('GET', '/api/forum/tickets/' + encodeURIComponent(id)).catch(() => null); C.ticket.set(id, r && r.ok ? r.d.ticket : { missing: true, error: !(r && (r.status === 404 || r.status === 403)) }); H().fresh('community:ticket', { ok: !!(r && (r.ok || r.status === 404 || r.status === 403)), reload: () => loadTicket(id) }); repaint(); }
   async function loadModeration() {
     const [f, l] = await Promise.all([mod() ? api('GET', '/api/forum/flags').catch(() => null) : Promise.resolve(null), api('GET', '/api/forum/moderation-log').catch(() => null)]);
-    C.flags = f && f.ok ? f.d.flags || [] : []; C.log = l && l.ok ? l.d.log || [] : 'error'; repaint();
+    C.flags = f && f.ok ? f.d.flags || [] : []; C.log = l && l.ok ? l.d.log || [] : 'error'; H().fresh('community:moderation', { ok: !!(l && l.ok) && (!f || !!f.ok), reload: () => { C.flags = null; C.log = null; loadModeration(); } }); repaint();
   }
 
   // ---------- pages ----------
@@ -89,12 +91,12 @@
     return h.page(h.head({ eyebrow: '<a data-go="community">Community</a>', title: 'My reports', sub: 'Every problem and idea you sent — what happened to it, and the version it was fixed in.', acts: h.btn('Report a problem', 'data-xa="report"', false, 'plus') })
       + `<section class="pg-sec"><h3>Private tickets</h3><p class="pg-dim wf-note">Only you, the XENO team and that product’s developer agent can read these.</p>${C.tickets === 'error' ? '<p class="pg-dim" data-cm-state="error">Your tickets couldn’t be loaded.</p>' : `<ul class="mk-owns">${T.map((t) => `<li class="mk-own" data-cm-ticket="${esc(t.shortId)}"><span class="pg-thumb pg-thumb--ic sq">${ic(t.kind === 'feature' ? 'megaphone' : t.kind === 'feedback' ? 'chat' : 'edit')}</span><span class="mk-own-m"><a data-cml="ticket" data-arg="${esc(t.shortId)}"><b>${esc(t.title)}</b></a><small>${esc(h.cap(t.kind))} · ${esc(t.product)}${t.fixedIn ? ' · fixed in ' + esc(t.fixedIn) : ''}</small></span>${h.chip(t.statusLabel)}</li>`).join('') || '<li class="pg-dim">No private tickets.</li>'}</ul>`}</section>
       <section class="pg-sec"><h3>Posted in Community</h3><ul class="mk-owns">${mine.map((t) => `<li class="mk-own"><span class="mk-own-m"><a data-cml="open" data-arg="${esc(t.id)}"><b>${esc(t.title)}</b></a><small>${esc(t.space)}</small></span>${h.chip(STATE[t.state] || t.state)}</li>`).join('') || '<li class="pg-dim">Nothing posted publicly.</li>'}</ul></section>`
-      + h.foot('community', 'GET /api/forum/tickets/mine'));
+      + h.foot('community:tickets', 'GET /api/forum/tickets/mine'));
   }
   function ticketPage(id) {
     const t = C.ticket.get(id);
     if (!t) { loadTicket(id); return loadingPage('Loading the ticket'); }
-    if (t.missing) return missingPage('Ticket not found', 'It may belong to someone else, or the link is wrong.');
+    if (t.missing) return missingPage(t.error ? 'Ticket didn’t load' : 'Ticket not found', t.error ? 'The ticket couldn’t be loaded. Try again in a moment.' : 'It may belong to someone else, or the link is wrong.');
     const h = H(), idx = TSTEPS.findIndex((x) => x[0] === t.status), closed = t.status === 'closed';
     const acts = (t.thread ? h.btn('Open public thread', `data-cml="open" data-arg="${esc(t.thread.shortId)}"`, true, 'link') : h.btn('Make public', `data-cml="publish" data-arg="${esc(id)}"`, true, 'community')) + (closed ? '' : h.btn('Close', `data-cml="close" data-arg="${esc(id)}"`, true, 'x'));
     return h.page(h.head({ obj: true, eyebrow: '<a data-go="community">Community</a> · <a data-cml="mine">My reports</a>', title: t.title, sub: `Private ticket · ${h.cap(t.kind)} · ${esc(t.product)} · ${esc(t.statusLabel)}`, acts })
@@ -103,7 +105,7 @@
       + ((t.attachments||[]).length?`<section class="pg-sec"><h3>Private evidence</h3>${t.attachments.map(a=>`<figure class="xr-attachment">${a.type.startsWith('image/')?`<img src="${esc(a.url)}" alt="${esc(a.name)}" loading="lazy">`:`<video src="${esc(a.url)}" controls preload="metadata"></video>`}<figcaption><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name)}</a></figcaption></figure>`).join('')}<p class="pg-dim">Making this ticket public keeps its evidence private.</p></section>`:'')
       + `<div class="pg-thread"><article class="pg-post op"><div><header><b>You</b><small>${h.ago(t.createdAt)} ago</small></header><p>${esc(t.body || t.title)}</p></div></article>${(t.posts || []).map((p) => `<article class="pg-post${p.author.reporter ? '' : ' answer'}${p.kind === 'status' ? ' cm-status' : ''}"><div><header><b>${esc(p.author.reporter ? 'You' : p.author.name || 'XENO')}</b>${p.author.kind === 'agent' ? '<em class="pg-kind">Agent</em>' : ''}<small>${h.ago(p.createdAt)} ago</small></header><p>${esc(p.body)}</p></div></article>`).join('')}
         ${closed ? '<p class="cm-banner">' + ic('check') + '<span>This ticket is closed.</span></p>' : `<form class="pg-reply" data-cm-ticket-reply="${esc(id)}"><textarea rows="3" placeholder="Add to this ticket" aria-label="Reply"></textarea><div><span class="pg-dim">Only you, the XENO team and the product’s developer agent see this.</span><button class="pg-btn" type="submit">${ic('send')}<span>Send</span></button></div></form>`}</div>`
-      + h.foot('community', `GET /api/forum/tickets/${esc(id)}`));
+      + h.foot('community:ticket', `GET /api/forum/tickets/${esc(id)}`));
   }
   function moderation() {
     if (!C.me) { loadMe(); return loadingPage('Moderation'); }
@@ -116,7 +118,7 @@
     return h.page(h.head({ eyebrow: '<a data-go="community">Community</a>', title: 'Moderation', sub: 'Reports waiting for review, and every action moderators took — in public.' })
       + `<section class="pg-sec"><h3>Waiting for review</h3>${mod() ? `<ul class="mk-sls">${q || '<li class="pg-dim" data-cm-state="empty-queue">Nothing waiting. Reports from people and agents land here.</li>'}</ul>` : '<p class="pg-dim">Moderators review reports here.</p>'}<p class="pg-dim wf-note">Agents can report a post for review — never remove one.</p></section>
       <section class="pg-sec" id="cm-log"><h3>Moderation log</h3>${C.log === 'error' ? '<p class="pg-dim">The log couldn’t be loaded.</p>' : `<ul class="mk-rcl cm-log" data-cm-log>${L.map((x) => `<li><span>${new Date(x.at).toLocaleDateString('en', { day: 'numeric', month: 'short' })}</span><span>${esc(OUT[x.outcome] || x.outcome)} ${x.thread ? `“${esc(x.thread.title)}”` : ''}${x.duplicateOf ? ` → “${esc(x.duplicateOf.title)}”` : ''}${x.reason ? ' — ' + esc((R[x.reason] || x.reason).toLowerCase()) : ''}</span><b>${esc(x.moderator)}</b></li>`).join('') || '<li class="pg-dim" data-cm-state="empty-log">No moderation actions yet.</li>'}</ul>`}</section>`
-      + h.foot('community', 'GET /api/forum/moderation-log'));
+      + h.foot('community:moderation', 'GET /api/forum/moderation-log'));
   }
   function route(it) {
     if (C.status === 'loading' && !it) return null;

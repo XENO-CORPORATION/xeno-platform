@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**"Updated just now" means it.** Support, Tasks, Releases and the Community pages said "Updated just now" at the bottom whatever had happened, including after a load that failed. The line now says what really happened: Couldn't load (with Retry), Couldn't refresh (keeping what was already shown, and when it last worked), or Updated, only after a load that worked. A failed Support queue, Deploys, Features or Notes list now says it failed instead of showing an empty list, and staff stay on their own view when a check fails instead of being shown the customer's.
+
 **One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.
 
 ## 2026-11-06
