@@ -717,9 +717,18 @@
   }
   async function lend() {
     const a = S.one; if (!a) return;
+    // Lend it to a division in its own workspace, or into ANOTHER workspace you belong to (agentLending.lend: offered by
+    // its owner, accepted by that workspace's admin; in at once when you are that admin). An agent works in a division,
+    // so the choice is always a division, grouped by its workspace. It keeps its owner, its own division and its payer.
     const taken = new Set((a.lentTo || []).map((l) => l.division ? l.division.id : 'ws:' + l.workspace.id));
-    const opts = S.divisions.filter((d) => d.id !== (a.division && a.division.id) && !taken.has(d.id)).map((d) => [d.id, d.name, `Works on ${d.name}’s projects too`]);
-    if (!opts.length) return toast(S.divisions.length ? 'It already works in every division here' : 'Create a division first — or lend it from the other workspace’s Divisions page');
+    const here = (a.workspace && a.workspace.id) || (a.owner && a.owner.workspaceId) || null;
+    const free = (ds) => ds.filter((d) => d.lifecycle !== 'archived' && d.id !== (a.division && a.division.id) && !taken.has(d.id));
+    const opts = free(S.divisions).map((d) => [d.id, d.name, `Works on ${d.name}’s projects too`]);
+    const wl = await api('GET', '/api/workspaces').catch(() => null);
+    const others = ((wl && wl.ok && wl.d.workspaces) || []).filter((w) => w.workspace_type !== 'personal' && String(w.id) !== String(here || ''));
+    const lists = await Promise.all(others.map((w) => api('GET', `/api/divisions?workspace=${encodeURIComponent(w.id)}`).catch(() => null)));
+    others.forEach((w, i) => { const r = lists[i]; if (r && r.ok) for (const d of free(r.d.divisions || [])) opts.push([d.id, `${w.name} · ${d.name}`, `In ${w.name}: its admins decide`]); });
+    if (!opts.length) return toast(S.divisions.length || others.length ? 'There is no division left to lend it to' : 'Create a division first, or join another workspace');
     const v = await D().form({ title: `Lend ${a.name}`, sub: 'It keeps its owner, its own division and who pays for it. You can end it at any time.', submit: 'Lend', size: 'sm', fields: [
       { id: 'division', label: 'To', type: 'choice', cols: 1, required: true, options: opts }] });
     if (!v) return;
@@ -727,7 +736,7 @@
     if (!r) return;
     S.one = r.d.agent; const l = S.one.lentTo.find((x) => x.division && x.division.id === v.division);
     const ch = await api('GET', `/api/agents/${a.id}/project-choices`); if (ch.ok) S.choices = ch.d.projects || [];
-    toast(l && l.state === 'accepted' ? `${a.name} now also works in ${l.division.name}` : 'Offered — its admin decides'); paint();
+    toast(l && l.state === 'accepted' ? `${a.name} now also works in ${l.division.name}` : `Offered to ${l ? l.workspace.name : 'that workspace'} — its admins decide`); paint();
   }
   async function unlend(id) {
     const a = S.one; const l = (a.lentTo || []).find((x) => x.id === id); if (!l) return;
