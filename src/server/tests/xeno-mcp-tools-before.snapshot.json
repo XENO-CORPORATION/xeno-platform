@@ -478,7 +478,7 @@
   {
    "name": "canvas_add",
    "title": "Canvases: Put items on a canvas",
-   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "description": "Put items on a canvas: image and video nodes (a prompt, and the Library files or the running generation that fill it), tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -511,7 +511,9 @@
           "tenet",
           "note",
           "link",
-          "group"
+          "group",
+          "image",
+          "video"
          ]
         },
         "project": {
@@ -557,6 +559,28 @@
         "label": {
          "type": "string",
          "description": "For a group."
+        },
+        "prompt": {
+         "type": "string",
+         "description": "For an image or video node: what it shows (the prompt a person sees and can generate from)."
+        },
+        "versions": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "description": "For an image or video node: Library file ids it already has (e.g. what image_generate made), newest last; the last is shown."
+        },
+        "generation": {
+         "type": "string",
+         "description": "For an image or video node: a generation still running (see image_generate); the node becomes its file when it finishes."
+        },
+        "model": {
+         "type": "string"
+        },
+        "ratio": {
+         "type": "string",
+         "description": "e.g. 1:1, 16:9."
         },
         "x": {
          "type": "number"
@@ -657,7 +681,7 @@
   {
    "name": "canvas_update",
    "title": "Canvases: Move, edit or remove items",
-   "description": "Move or resize items, change a note’s text or a group’s label, or remove items or connections from the canvas. Removing a task card never deletes the task.",
+   "description": "Move or resize items, change a note’s text, a group’s label or an image/video node’s prompt, change what a connection means (between two task cards, link makes it a real task link), or remove items or connections from the canvas. Removing a task card never deletes the task, and a task link stays on the task pages.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -696,9 +720,38 @@
         },
         "label": {
          "type": "string"
+        },
+        "prompt": {
+         "type": "string"
         }
        }
       }
+     },
+     "connections": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "link": {
+         "type": "string",
+         "enum": [
+          "blocks",
+          "relates",
+          "duplicates"
+         ]
+        },
+        "label": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Connections to change: what it means between two tasks, or its label."
      },
      "remove": {
       "type": "array",
@@ -1492,7 +1545,7 @@
   {
    "name": "canvas_add",
    "title": "Canvases: Put items on a canvas",
-   "description": "Put items on a canvas: tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
+   "description": "Put items on a canvas: image and video nodes (a prompt, and the Library files or the running generation that fill it), tasks (by key, e.g. T-12 — the card always shows the task as it is now), Library files, chats, projects, divisions, objectives, runs and Corpus tenets (by id, also live; a tenet card shows its latest signed verdict — a card shows the record’s status now; a canvas never changes the record), notes (markdown), links and groups. Without x/y they are laid out to the right of what is there. Returns each new item’s id.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -1525,7 +1578,9 @@
           "tenet",
           "note",
           "link",
-          "group"
+          "group",
+          "image",
+          "video"
          ]
         },
         "project": {
@@ -1571,6 +1626,28 @@
         "label": {
          "type": "string",
          "description": "For a group."
+        },
+        "prompt": {
+         "type": "string",
+         "description": "For an image or video node: what it shows (the prompt a person sees and can generate from)."
+        },
+        "versions": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "description": "For an image or video node: Library file ids it already has (e.g. what image_generate made), newest last; the last is shown."
+        },
+        "generation": {
+         "type": "string",
+         "description": "For an image or video node: a generation still running (see image_generate); the node becomes its file when it finishes."
+        },
+        "model": {
+         "type": "string"
+        },
+        "ratio": {
+         "type": "string",
+         "description": "e.g. 1:1, 16:9."
         },
         "x": {
          "type": "number"
@@ -1671,7 +1748,7 @@
   {
    "name": "canvas_update",
    "title": "Canvases: Move, edit or remove items",
-   "description": "Move or resize items, change a note’s text or a group’s label, or remove items or connections from the canvas. Removing a task card never deletes the task.",
+   "description": "Move or resize items, change a note’s text, a group’s label or an image/video node’s prompt, change what a connection means (between two task cards, link makes it a real task link), or remove items or connections from the canvas. Removing a task card never deletes the task, and a task link stays on the task pages.",
    "inputSchema": {
     "type": "object",
     "required": [
@@ -1710,9 +1787,38 @@
         },
         "label": {
          "type": "string"
+        },
+        "prompt": {
+         "type": "string"
         }
        }
       }
+     },
+     "connections": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id"
+       ],
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "link": {
+         "type": "string",
+         "enum": [
+          "blocks",
+          "relates",
+          "duplicates"
+         ]
+        },
+        "label": {
+         "type": "string"
+        }
+       }
+      },
+      "description": "Connections to change: what it means between two tasks, or its label."
      },
      "remove": {
       "type": "array",

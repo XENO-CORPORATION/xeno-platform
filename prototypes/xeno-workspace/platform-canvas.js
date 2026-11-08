@@ -118,7 +118,12 @@
     const conn = X_.joinLive({ type: 'workspace.canvas', id, Y: X_.Y, doc, ticket: async (resource) => {
       const r = await api('POST', '/api/live/tickets', { resource }); if (!r.ok) throw new Error(said(r, 'No ticket')); return r.d.ticket; } });
     NOW.conn = conn;
-    conn.on('status', (s) => { if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople(); });
+    conn.on('status', (s) => {
+      // access ended while it was open (removed from the project, or now only a viewer): read the canvas again as who
+      // they are now — gone ("not shared with you") or view only. Nothing they type after this is written anywhere.
+      if (s === 'ended' && conn.ended?.code === 4403 && NOW.conn === conn) { stopLive(); clearTimeout(C.timer); C.dirty = false; C.id = null; toast('Your access to this canvas changed'); open(id).then(paint); return; }
+      if (s === 'open' && !NOW.seeded) setTimeout(() => { if (NOW.conn === conn) seed(); }, 500); drawPeople();
+    });
     conn.on('participants', (p) => { NOW.people = p || []; drawPeople(); if (live() && isLead() && C.dirty) save(); });
     conn.on('signal', ({ data }) => { if (data && data.changed) changedElsewhere(); });
   }
@@ -216,46 +221,56 @@
   function nodeHtml(n) {
     const sel = C.sel.has(n.id) ? ' cv-n--sel' : '';
     const pos = `style="left:${n.x}px;top:${n.y}px;width:${n.width}px;height:${n.height}px"`;
-    const grips = C.can?.edit ? `${n.type === 'group' ? '' : `<i class="xn-grip xn-grip--tl" data-cv-grip="${esc(n.id)}" data-c="tl"></i><i class="xn-grip xn-grip--bl" data-cv-grip="${esc(n.id)}" data-c="bl"></i>`}<i class="${n.type === 'group' ? 'cv-grip' : 'xn-grip xn-grip--br'}" data-cv-grip="${esc(n.id)}" data-c="br"></i><i class="cv-wire" data-cv-wire="${esc(n.id)}" title="Drag to another item to connect">${ic('plus')}</i>` : '';
-    const xn = (kind, label, inner, opts = {}) => `<div class="cv-n xn xn--${kind}${opts.cls || ''}${sel}" data-cv-node="${esc(n.id)}"${opts.attr || ''} ${pos}><div class="xn-label">${ic(opts.icon || 'doc')}<b>${esc(label)}</b>${opts.em ? `<em>${esc(opts.em)}</em>` : ''}</div><div class="xn-edge"><div class="xn-obj">${inner}</div></div>${opts.noWho ? '' : whoOf(n)}${grips}</div>`;
+    const grips = C.can?.edit ? `<i class="xn-grip xn-grip--tl" data-cv-grip="${esc(n.id)}" data-c="tl"></i><i class="xn-grip xn-grip--bl" data-cv-grip="${esc(n.id)}" data-c="bl"></i><i class="xn-grip xn-grip--br" data-cv-grip="${esc(n.id)}" data-c="br"></i><i class="cv-wire" data-cv-wire="${esc(n.id)}" title="Drag to another item to connect">${ic('plus')}</i>` : '';
+    // a node with nobody in its corner has no scooped corner either (xn--plain)
+    const xn = (kind, label, inner, opts = {}) => `<div class="cv-n xn xn--${kind}${opts.noWho ? ' xn--plain' : ''}${opts.cls || ''}${sel}" data-cv-node="${esc(n.id)}"${opts.attr || ''} ${pos}><div class="xn-label"${opts.labelAttr || ''}>${ic(opts.icon || 'doc')}<b>${esc(label)}</b>${opts.em ? `<em>${esc(opts.em)}</em>` : ''}</div><div class="xn-edge"><div class="xn-obj">${inner}</div></div>${opts.noWho ? '' : whoOf(n)}${grips}</div>`;
+    // the card body every record node shares: one line of state, the name, and a foot with where it lives
+    const card = ({ top = '', title = '', foot = '', url = '', titleCls = '' }) => `<div class="xn-card">${top ? `<div class="xn-card-top">${top}</div>` : ''}<b class="cv-task-t${titleCls}">${esc(title)}</b><div class="xn-card-f">${foot}<span class="tk-sp"></span>${url ? `<a class="cv-open" href="${esc(url)}" title="Open">${ic('open')}</a>` : ''}</div></div>`;
+    const gone = (label, why, icon) => xn('gone', label, `<div class="xn-card"><b class="cv-task-t">Not available</b><span class="tk-dim">${esc(why)}</span></div>`, { noWho: true, icon });
     if (n.type === 'media') return mediaNode(n, xn);
-    if (n.type === 'group') return `<div class="cv-n cv-n--group${sel}" data-cv-node="${esc(n.id)}" ${pos}><b class="cv-group-l" data-cv-edit="${esc(n.id)}">${esc(n.label || 'Group')}</b>${grips}</div>`;
+    if (n.type === 'group') return xn('group', n.label || 'Group', '', { noWho: true, icon: 'layers', labelAttr: ` data-cv-edit="${esc(n.id)}"` });
     if (n.type === 'text') {
       const body = C.editing === n.id ? `<textarea class="cv-text-ed" data-cv-text="${esc(n.id)}" aria-label="Note">${esc(n.text)}</textarea>` : `<div class="cv-text">${n.text ? (window.XENO_TASKS?.md ? window.XENO_TASKS.md(n.text, null, {}) : esc(n.text)) : '<span class="tk-dim">Double-click to write</span>'}</div>`;
       return `<div class="cv-n cv-n--text xn xn--note${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="xn-label">${ic('edit')}<b>Note</b></div><div class="xn-edge"><div class="xn-obj">${body}</div></div>${grips}</div>`;
     }
-    if (n.type === 'link') { let host = n.url; try { host = new URL(n.url).host; } catch {} return `<div class="cv-n cv-n--link${sel}" data-cv-node="${esc(n.id)}" ${pos}>${ic('link')}<div><b>${esc(host)}</b><a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.url)}</a></div>${grips}</div>`; }
+    if (n.type === 'link') {
+      let host = n.url; try { host = new URL(n.url).host; } catch {}
+      return xn('link', host, `<div class="xn-card xn-linkc"><b class="cv-task-t">${esc(host)}</b><a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.url)}</a></div>`, { noWho: true, icon: 'link' });
+    }
     if (n.ref.kind === 'tenet') {   // a XENO Corpus verdict card: the tenet's latest signed verdict, read live as this reader
       const r = ((C.refs || {}).tenet || {})[n.ref.id] || { loading: true };
-      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">Tenet</small><b>Not available</b><span class="tk-dim">Retired, or not shared with you</span>${grips}</div>`;
+      if (r.missing) return gone('Tenet', 'Retired, or not shared with you', 'check');
       const st = r.state ? { held: 'Held', lapsed: 'Lapsed', error: 'Error' }[r.state] : 'Never assayed';
-      return `<div class="cv-n cv-n--task cv-n--tenet cv-n--v-${esc(r.state || 'none')}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic('check')}<small class="tk-key">${esc(r.key || 'Tenet')}</small></div><b class="cv-task-t">${esc(r.claim || '…')}</b><div class="cv-task-f"><small class="tk-dim cv-verdict">${esc(st)}${r.at ? ' · ' + esc(new Date(r.at).toLocaleDateString()) : ''}${r.superseded ? ' · superseded' : ''}</small></div>${grips}</div>`;
+      return xn('tenet', r.key || 'Tenet', card({ top: `<span class="xn-verdict-dot"></span><small class="cv-verdict">${esc(st)}${r.at ? ' · ' + esc(new Date(r.at).toLocaleDateString()) : ''}${r.superseded ? ' · superseded' : ''}</small>`, title: r.claim || '…' }), { noWho: true, icon: 'check', cls: ` cv-n--tenet cv-n--v-${esc(r.state || 'none')}`, em: 'Verdict' });
     }
-    if (n.ref.kind === 'project') {
+    // the project a map is OF is its title; a project shown on another map (a division's) is a card like the rest
+    if (n.ref.kind === 'project' && n.id === 'root-project') {
       const r = ((C.refs || {}).project || {})[n.ref.id] || {};
-      if (!r.missing) return xn('project', '', `<div class="xn-title">${esc(r.name || '…')}</div><div class="xn-facts"><span><b>${r.openTasks ?? 0}</b> open</span><span><b>${r.doneTasks ?? 0}</b> done</span></div>`, { noWho: true, icon: 'folder' }).replace('<div class="xn-label">', '<div class="xn-label" hidden>');
+      if (!r.missing) return xn('project', '', `<div class="xn-title">${esc(r.name || '…')}</div><div class="xn-facts"><span><b>${r.openTasks ?? 0}</b> open</span><span><b>${r.doneTasks ?? 0}</b> done</span></div>`, { noWho: true, icon: 'folder', attr: ' data-cv-kind="project"' }).replace('<div class="xn-label">', '<div class="xn-label" hidden>');
     }
     if (WF[n.ref.kind]) {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, [label, icon] = WF[n.ref.kind];
-      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${label}</small><b>Not available</b><span class="tk-dim">Gone, or not shared with you</span>${grips}</div>`;
+      if (r.missing) return gone(label, 'Gone, or not shared with you', icon);
       const st = r.status || '';
-      return `<div class="cv-n cv-n--task cv-n--wf cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" data-cv-kind="${n.ref.kind}" ${pos}><div class="cv-task-top">${ic(icon)}<small class="tk-key">${label}</small><small class="cv-st cv-st--${esc(st)}">${esc(STATUS[st] || st)}</small></div><b class="cv-task-t">${esc(r.name || r.title || r.agent || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(wfLine(n.ref.kind, r))}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
+      return xn(n.ref.kind, label, card({ top: `<small class="cv-st cv-st--${esc(st)}">${esc(STATUS[st] || st)}</small>`, title: r.name || r.title || r.agent || '…', foot: `<small class="tk-dim">${esc(wfLine(n.ref.kind, r))}</small>`, url: r.url }), { noWho: true, icon, cls: ` cv-n--wf cv-n--${n.ref.kind}`, attr: ` data-cv-kind="${n.ref.kind}"` });
     }
-    if (n.ref.kind === 'generation') {
+    if (n.ref.kind === 'generation') {   // an older image card, made before images were nodes: it waits the same way
       const g = (C.refs.generation || {})[n.ref.id] || {}, bad = g.missing || ['failed', 'cancelled'].includes(g.state);
-      return `<div class="cv-n cv-n--task cv-n--image${bad ? ' cv-n--gone' : ''}${sel}" data-cv-node="${esc(n.id)}" data-cv-generation="${esc(n.ref.id)}" ${pos}><div class="cv-task-top">${ic('image')}<small class="tk-key">Image</small><small class="tk-dim">${bad ? 'Didn’t finish' : 'Generating…'}</small></div><b class="cv-task-t">${esc(g.prompt || '…')}</b>${grips}</div>`;
+      return xn('media', (g.prompt || 'Image').split(/[,.]/)[0].slice(0, 34) || 'Image', `<div class="xn-media"><span class="xn-crop a"></span><span class="xn-crop b"></span><span class="xn-crop c"></span><span class="xn-crop d"></span><div class="xn-ask">${bad ? 'Didn’t finish' : 'Generating…'}</div>${bad ? '' : '<div class="xn-run"></div>'}</div>`, { icon: 'image', cls: bad ? ' xn--gone' : '', attr: ` data-cv-generation="${esc(n.ref.id)}"` });
     }
     if (n.ref.kind !== 'task') {
       const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id] || { loading: true }, isF = n.ref.kind === 'file';
       if (isF && r.doc) return xn('doc', r.name?.replace(/\.xdoc$/, '') || 'Document', docBody(n), { icon: 'doc' });
-      if (n.ref.kind === 'chat' && !r.missing) return xn('chat', r.title || 'Chat', chatBody(n, r), { icon: 'chat' });
+      if (n.ref.kind === 'chat' && !r.missing) return xn('chat', r.title || 'Chat', chatBody(n, r), { icon: 'chat', cls: FRAMES.has(n.id) ? ' xn--live' : '' }).replace('</div><div class="xn-edge">', FRAMES.has(n.id) ? `<button class="xn-close" data-cv-act="chat-done" data-arg="${esc(n.id)}">Done</button></div><div class="xn-edge">` : '</div><div class="xn-edge">');
       if (isF && r.version && /^image\/(jpeg|png|gif|webp)$/.test(String(r.type))) return xn('image', r.name || 'Image', `<div class="xn-media"><img alt="${esc(r.name)}" src="/api/library/assets/${esc(r.version)}/content" draggable="false"></div>`, { icon: 'image' });
-      if (r.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${isF ? 'File' : 'Chat'}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
-      const sub = isF ? [r.type, r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : ''].filter(Boolean).join(' · ') : [r.messages != null ? r.messages + (r.messages === 1 ? ' message' : ' messages') : '', r.status === 'active' ? 'active now' : r.at ? new Date(r.at).toLocaleDateString() : ''].filter(Boolean).join(' · ');
-      return `<div class="cv-n cv-n--task cv-n--${n.ref.kind}${sel}" data-cv-node="${esc(n.id)}" ${pos}><div class="cv-task-top">${ic(isF ? 'doc' : 'chat')}<small class="tk-key">${isF ? 'File' : 'Chat'}</small></div><b class="cv-task-t">${esc((isF ? r.name : r.title) || '…')}</b><div class="cv-task-f"><small class="tk-dim">${esc(sub)}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div>${grips}</div>`;
+      if (r.missing) return gone(isF ? 'File' : 'Chat', 'Deleted, or not shared with you', isF ? 'file' : 'chat');
+      // any other file: the kind of file is the object, named outside it, with its size and the way to open it
+      const size = r.bytes != null ? (r.bytes > 1e6 ? (r.bytes / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(r.bytes / 1e3)) + ' KB') : '';
+      const ext = (String(r.name || '').match(/\.([a-z0-9]{1,6})$/i) || [, String(r.type || '').split('/')[1] || 'file'])[1].slice(0, 6).toUpperCase();
+      return xn('file', r.name || 'File', `<div class="xn-card xn-filec"><div class="xn-ext">${esc(r.loading ? '' : ext)}</div><b class="cv-task-t">${esc(r.name || '…')}</b><div class="xn-card-f"><small class="tk-dim">${esc([r.type, size].filter(Boolean).join(' · '))}</small><span class="tk-sp"></span>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open">${ic('open')}</a>` : ''}</div></div>`, { icon: 'file' });
     }
     const t = C.records[n.ref.id] || { key: n.ref.id, loading: true };
-    if (t.missing) return `<div class="cv-n cv-n--task cv-n--gone${sel}" data-cv-node="${esc(n.id)}" ${pos}><small class="tk-key">${esc(n.ref.id)}</small><b>Not available</b><span class="tk-dim">Deleted, or not shared with you</span>${grips}</div>`;
+    if (t.missing) return gone(n.ref.id, 'Deleted, or not shared with you', 'check');
     const step = STEPS.indexOf(t.status);
     return xn('task', 'Task', `<div class="xn-task"><div class="xn-tk"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span>${esc(LABEL[t.status] || '')}${readyBadge(t.key)}</div><b class="cv-task-t">${esc(t.title || '…')}</b><div class="xn-steps">${STEPS.map((x, i) => `<button class="${i <= step ? 'on' : ''}" data-cv-act="step" data-arg="${esc(t.key)}|${x}" title="${esc(LABEL[x])}" aria-label="${esc(LABEL[x])}"></button>`).join('')}</div></div>`, { attr: ` data-cv-task="${esc(t.key)}"`, icon: 'check', em: t.key });
   }
@@ -298,8 +313,38 @@
     const k = n.ref.id; let c = chats.get(k);
     if (!c) { c = { msgs: [] }; chats.set(k, c); api('GET', '/api/chat/conversations/' + encodeURIComponent(k)).then((x) => { if (x.ok) { c.msgs = (x.d.messages || x.d.conversation?.messages || []).slice(-8); draw(); } }).catch(() => {}); }
     const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.text || ''));
-    return `<div class="xn-chat"><div class="xn-thread">${c.msgs.map((m) => (m.role === 'user' ? `<div class="xn-msg--me">${esc(textOf(m))}</div>` : `<div class="xn-msg"><small>${esc(m.agent_name || 'XENO')}</small>${esc(textOf(m))}</div>`)).join('') || '<span class="tk-dim">This chat stays with the project.</span>'}</div><a class="xn-say" href="${esc(r.url || '#')}">Continue in Chat</a></div>`;
+    // replying happens in the real chat, in place (drawFrames): the same app, send path and streaming as Chat
+    const here = chatPathOf(r);
+    return `<div class="xn-chat"><div class="xn-thread">${c.msgs.map((m) => (m.role === 'user' ? `<div class="xn-msg--me">${esc(textOf(m))}</div>` : `<div class="xn-msg"><small>${esc(m.agent_name || 'XENO')}</small>${esc(textOf(m))}</div>`)).join('') || '<span class="tk-dim">This chat stays with the project.</span>'}</div>${here ? `<div class="xn-sayrow"><button class="xn-say" data-cv-act="chat-here" data-arg="${esc(n.id)}">Reply…</button>${r.url ? `<a class="cv-open" href="${esc(r.url)}" title="Open in Chat" aria-label="Open in Chat">${ic('open')}</a>` : ''}</div>` : `<a class="xn-say" href="${esc(r.url || '#')}">Continue in Chat</a>`}</div>`;
   }
+  /** The chat app's own address for a chat card (the one the workspace's Chat frame shows: platform-chat.js pathFor). */
+  function chatPathOf(r) {
+    const u = String(r && r.url || ''); let m = u.match(/\/apps\/chat\/projects\/([\w-]+)\/c\/([\w-]+)$/);
+    if (m) return `/chat/projects/${m[1]}/c/${m[2]}`;
+    m = u.match(/\/apps\/chat\/([\w-]+)$/); return m ? `/chat/c/${m[1]}` : null;
+  }
+  // A chat being replied to holds the REAL chat (src/lib/workspaceEmbed.ts: inside /workspace it drops its shell) in a
+  // same-origin frame over its node. Frames live in their own layer, apart from the nodes, so a repaint or a drag never
+  // reloads one and loses a half-typed message or a streaming answer. Each person's own: nothing is saved on the canvas.
+  const FRAMES = new Map();   // node id → { el, path }
+  function drawFrames() {
+    const layer = document.querySelector('[data-cv-frames]'); if (!layer) return;
+    for (const [id, f] of FRAMES) {
+      const n = nodeById(id), r = n && n.type === 'xeno-ref' && n.ref.kind === 'chat' ? fileOrChat(n) : null, path = r && !r.missing ? chatPathOf(r) : null;
+      if (!path) { f.el.remove(); FRAMES.delete(id); continue; }
+      if (f.el.parentNode !== layer || f.path !== path) {
+        f.el.remove(); f.path = path;
+        f.el = document.createElement('div'); f.el.className = 'xn-frame'; f.el.dataset.cvFrame = id;
+        f.el.innerHTML = `<iframe title="Chat" allow="clipboard-read; clipboard-write; microphone" src="${esc(path)}"></iframe>`;
+        // the composer wears the workspace's design, as the side chat does (platform-chat.js dress)
+        f.el.firstChild.addEventListener('load', () => { try { const d = f.el.firstChild.contentDocument, css = document.getElementById('xw-chat-frame')?.contentDocument?.getElementById('xw-composer')?.textContent; if (d && css && !d.getElementById('xw-composer')) { const st = d.createElement('style'); st.id = 'xw-composer'; st.textContent = css; (d.head || d.documentElement).appendChild(st); } } catch {} });
+        layer.append(f.el);
+      }
+      Object.assign(f.el.style, { left: n.x + 'px', top: n.y + 'px', width: n.width + 'px', height: n.height + 'px' });
+    }
+  }
+  function chatHere(id) { const n = nodeById(id); if (!n || FRAMES.has(id)) return; FRAMES.set(id, { el: document.createElement('i'), path: null }); C.sel = new Set([id]); draw(); }
+  function chatDone(id) { const f = FRAMES.get(id); if (!f) return; f.el.remove(); FRAMES.delete(id); const n = nodeById(id); if (n) chats.delete(n.ref.id); draw(); }
   // ───────────────────────── dependency graph (xeno-orchestrator on the platform: /api/orchestrator/graph)
   // The graph is the project's own `blocks` links between tasks; this lays it out on the canvas in the order the work
   // can happen (left → right by dependency depth) and marks each card Ready / Waiting. It adds no second store: the
@@ -366,7 +411,7 @@
     world.querySelector('[data-cv-nodes]').innerHTML = [...groups, ...rest].map(nodeHtml).join('');
     world.querySelector('[data-cv-edges]').innerHTML = edgesSvg();
     const zl = document.querySelector('[data-cv-zoom]'); if (zl) zl.textContent = Math.round(z * 100) + '%';
-    drawPeople(); drawDock();
+    drawPeople(); drawDock(); drawFrames();
     const ed = world.querySelector('[data-cv-text]'); if (ed && document.activeElement !== ed) { ed.focus(); const at = caret || [ed.value.length, ed.value.length]; ed.setSelectionRange(at[0], at[1]); }
     inspector();
   }
@@ -415,7 +460,7 @@
         <div class="cv-cursors" data-cv-cursors></div>
         <div class="cv-world" data-cv-world><div class="xn-dock" data-cv-dock hidden></div>
           <svg class="cv-svg" width="1" height="1"><defs><marker id="cv-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs><g data-cv-edges></g><path data-cv-ghost class="cv-e-ghost"/></svg>
-          <div data-cv-nodes></div>
+          <div data-cv-nodes></div><div class="xn-frames" data-cv-frames></div>
         </div>
       </div>
       <div class="cv-insp" data-cv-insp></div>
@@ -795,7 +840,7 @@
   function openNode(n) { if (!n) return; if (n.type === 'xeno-ref' && n.ref.kind === 'file' && fileOf(n.ref.id).doc && docOf(n.ref.id).ready) { writeOn(n); return; } if (n.type === 'text') writeOn(n); else if (n.type === 'group') rename(n.id); else if (n.type === 'xeno-ref' && n.ref.kind !== 'task') { const r = ((C.refs || {})[n.ref.kind] || {})[n.ref.id]; if (r && r.url) location.assign(r.url); } else if (n.type === 'xeno-ref') X().go('global', { global: 'tasks', item: n.ref.id }); else if (n.type === 'link') window.open(n.url, '_blank', 'noopener'); }
   addEventListener('pointerdown', (e) => {
     const stage = e.target.closest?.('[data-cv-stage]'); if (!stage || !C.doc || e.button > 1) return;
-    if (e.target.closest('textarea, a, video, button.cv-open, .xn-who, .xn-steps button, .xn-dock')) return;
+    if (e.target.closest('textarea, a, video, button.cv-open, .xn-who, .xn-steps button, .xn-dock, .xn-say, .xn-close, .xn-frame')) return;
     closeAdd(); C.at = null;
     if (!e.target.closest('[data-cv-text]')) stage.focus({ preventScroll: true });
     const at = toBoard(stage, e.clientX, e.clientY), edit = C.can?.edit;
@@ -889,7 +934,7 @@
   }, true);
   addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
   const ACT = {
-    'add-task': addTask, 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, add: (_, el) => { const r = el.getBoundingClientRect(); openAdd(r.left, r.bottom + 6); }, who: (id, el) => whoPick(id, el), step: (a) => stepTo(a), 'media-go': () => mediaGo(), 'media-pick': (k, el) => mediaPick(k, el), ver: (i) => { const m = nodeById([...C.sel][0])?.media; if (m) { before(); m.cur = Number(i); change(); } }, 'to-video': () => { const n = nodeById([...C.sel][0]); if (n) { C.at = { x: n.x + n.width + 80, y: n.y }; addMedia('video', n.id); } }, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
+    'add-task': addTask, 'chat-here': (id) => chatHere(id), 'chat-done': (id) => chatDone(id), 'new-task': newTaskHere, 'new-doc': newDocHere, 'new-chat': newChatHere, add: (_, el) => { const r = el.getBoundingClientRect(); openAdd(r.left, r.bottom + 6); }, who: (id, el) => whoPick(id, el), step: (a) => stepTo(a), 'media-go': () => mediaGo(), 'media-pick': (k, el) => mediaPick(k, el), ver: (i) => { const m = nodeById([...C.sel][0])?.media; if (m) { before(); m.cur = Number(i); change(); } }, 'to-video': () => { const n = nodeById([...C.sel][0]); if (n) { C.at = { x: n.x + n.width + 80, y: n.y }; addMedia('video', n.id); } }, assign: () => { const n = nodeById([...C.sel][0]); if (n && n.ref) assignHere(n.ref.id); }, 'add-file': () => addRef('file'), 'add-chat': () => addRef('chat'), 'add-tenet': addTenet, 'add-note': () => addNote(), 'add-link': addLink, 'add-group': () => addGroup(false), 'group-sel': () => addGroup(true),
     delete: removeSel, rename: () => rename(), 'zoom-in': () => zoomAt(1.2), 'zoom-out': () => zoomAt(1 / 1.2), fit: () => { fit(); store(C.id, C.view); draw(); },
     menu: (_, el) => canvasMenu(el), reload: () => { const id = C.id; C.id = null; open(id); }, reopen: () => { const id = C.id; C.id = null; open(id); paint(); },
     deps: () => layoutDeps(), back: () => leave(C.project), new: newCanvas, 'retry-list': () => { L.list = null; paint(); }, 'edge-kind': (k) => edgeKind(k),

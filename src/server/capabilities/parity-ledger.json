@@ -8927,32 +8927,38 @@
       "because": "changes only what the screen shows"
     },
     "ui:platform-canvas.js:data-add": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.add",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-edge": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-grip": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-node": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-text": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-wire": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.connection.create",
       "class": "reversible",
       "scope": "tasks:write"
     },
