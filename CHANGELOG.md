@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**"Updated just now" means it.** Support, Tasks, Releases and the Community pages said "Updated just now" at the bottom whatever had happened, including after a load that failed. The line now says what really happened: Couldn't load (with Retry), Couldn't refresh (keeping what was already shown, and when it last worked), or Updated, only after a load that worked. A failed Support queue, Deploys, Features or Notes list now says it failed instead of showing an empty list, and staff stay on their own view when a check fails instead of being shown the customer's.
+
 **Reply to a chat right on the canvas.** A chat on the canvas used to show its thread and send you to Chat to answer. Now press Reply under the thread and the chat opens in the node itself: the same chat as in Chat, with the same models, tools and project context, and the answer streams in place. Move the node, zoom or keep working on the canvas and what you've typed stays. Done closes it again.
 
 **Agents can work on a canvas the way people do.** Through XENO MCP, an agent can now put image and video nodes on a canvas (with their prompt, and the files or running generation that fill them), change a node's prompt, and change what a connection means: between two tasks that makes a real task link, as it does on screen. Moving, resizing, writing notes and connecting were already there. Everything goes through the same rules as the screen, so an agent can only change a canvas its person may edit.

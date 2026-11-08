@@ -27,17 +27,21 @@
 
   async function loadFor(it) {
     const [a, id] = String(it || '').split('/');
+    // what this load really did goes to the status bar (XENO_PAGES.fresh), and a list that failed says so instead of "none"
+    let ok = true; const failed = (r, what) => { ok = false; return { error: said(r, `${what} did not load`) }; };
+    H().fresh('releases', { loading: true, reload: () => refresh() });
     // staff comes from the session's role (P.isStaff), never from /summary answering a customer 404
-    if (S.staff === null) { await P.ready; S.staff = P.isStaff(); if (S.staff) { const s = await api('GET', '/api/releases/summary'); if (s.ok) S.summary = s.d.summary; else S.staff = false; } }
-    if (a === 'whats-new' || !S.staff) { const r = await api('GET', '/api/releases/whats-new'); S.news = r.ok ? r.d.notes || [] : { error: said(r, 'What’s new did not load') }; }
+    if (S.staff === null) { await P.ready; S.staff = P.isStaff(); if (S.staff) { const s = await api('GET', '/api/releases/summary'); if (s.ok) S.summary = s.d.summary; else if (s.status === 403 || s.status === 404) S.staff = false; else S.summary = failed(s, 'The summary'); } }   // refused = not staff after all; a failure is a failure, not a demotion
+    if (a === 'whats-new' || !S.staff) { const r = await api('GET', '/api/releases/whats-new'); S.news = r.ok ? r.d.notes || [] : failed(r, 'What’s new'); }
     else if (a === 'deploys' && id) {
       const [r, n] = await Promise.all([api('GET', `/api/releases/deploys/${encodeURIComponent(id)}`), api('GET', `/api/releases/deploys/${encodeURIComponent(id)}/internal-note`)]);
-      S.deploy = r.ok ? r.d.deploy : { missing: true }; S.inote = n.ok ? n.d.note : n.status === 404 ? { none: true } : { error: said(n, 'The internal note did not load') };
+      S.deploy = r.ok ? r.d.deploy : r.status === 404 ? { missing: true } : failed(r, 'This deploy'); S.inote = n.ok ? n.d.note : n.status === 404 ? { none: true } : { error: said(n, 'The internal note did not load') };
     }
-    else if (a === 'deploys') { S.moreError='';const r = await api('GET', '/api/releases/deploys?limit=200'); S.deploys = r.ok ? r.d.deploys || [] : [];S.deploysMore=r.ok&&S.deploys.length===200;if(!r.ok)S.moreError=said(r,'Deploys could not be loaded.'); }
-    else if (a === 'features' && id) { const r = await api('GET', `/api/releases/features/${encodeURIComponent(id)}`); S.feature = r.ok ? r.d.feature : { missing: true }; }
-    else if (a === 'features') { const r = await api('GET', `/api/releases/features?limit=200${S.repo ? '&repo=' + encodeURIComponent(S.repo) : ''}${S.q ? '&q=' + encodeURIComponent(S.q) : ''}`); S.features = r.ok ? r.d.features || [] : [];S.featuresMore=r.ok&&S.features.length===200;S.featuresOffset=S.features.length;S.moreError=r.ok?'':said(r,'Features could not be loaded.'); }
-    else if (a === 'notes') { const r = await api('GET', `/api/releases/notes?state=${encodeURIComponent(S.noteState)}`); S.notes = r.ok ? r.d.notes || [] : []; }
+    else if (a === 'deploys') { S.moreError='';const r = await api('GET', '/api/releases/deploys?limit=200'); S.deploys = r.ok ? r.d.deploys || [] : failed(r, 'Deploys');S.deploysMore=r.ok&&S.deploys.length===200; }
+    else if (a === 'features' && id) { const r = await api('GET', `/api/releases/features/${encodeURIComponent(id)}`); S.feature = r.ok ? r.d.feature : r.status === 404 ? { missing: true } : failed(r, 'This feature'); }
+    else if (a === 'features') { const r = await api('GET', `/api/releases/features?limit=200${S.repo ? '&repo=' + encodeURIComponent(S.repo) : ''}${S.q ? '&q=' + encodeURIComponent(S.q) : ''}`); S.features = r.ok ? r.d.features || [] : failed(r, 'Features');S.featuresMore=r.ok&&S.features.length===200;S.featuresOffset=r.ok?S.features.length:0;S.moreError=''; }
+    else if (a === 'notes') { const r = await api('GET', `/api/releases/notes?state=${encodeURIComponent(S.noteState)}`); S.notes = r.ok ? r.d.notes || [] : failed(r, 'Notes'); }
+    H().fresh('releases', { ok });
     paint();
   }
   async function loadOlder(kind){
@@ -68,7 +72,8 @@
   }
 
   function overviewPage() {
-    const h = H(), s = S.summary || {};
+    const h = H(), s = S.summary && !S.summary.error ? S.summary : {};
+    if (S.summary && S.summary.error) return h.page(head('Releases', 'The platform’s own record: every deploy, every feature, and what customers are told.', null) + tabs('') + h.box('alert', 'The summary did not load', esc(S.summary.error), h.btn('Try again', 'data-rl-reload', true)) + h.foot('releases', 'GET /api/releases/summary', 'record'));
     const stat = (k, v, go_) => `<button class="rl-stat" data-rl-go="${go_}"><b>${esc(v)}</b><span>${esc(k)}</span></button>`;
     return h.page(head('Releases', 'The platform’s own record: every deploy, every feature, and what customers are told.', null) + tabs('')
       + `<div class="rl-stats">${stat('Deploys', s.deploys ?? '—', 'deploys')}${stat('Last deploy', s.lastDeploy ? when(s.lastDeploy) : '—', 'deploys')}${stat('Features', s.features ?? '—', 'features')}${stat('Changes', s.changes ?? '—', 'features')}${stat('Notes to approve', s.drafts ?? '—', 'notes')}</div>`
@@ -77,7 +82,8 @@
   }
 
   function deploysPage() {
-    const h = H(), rows = S.deploys || [];
+    const h = H(), rows = Array.isArray(S.deploys) ? S.deploys : [];
+    if (S.deploys && S.deploys.error) return h.page(head('Deploys', 'Every deploy of the platform.') + tabs('deploys') + h.box('alert', 'Deploys did not load', esc(S.deploys.error), h.btn('Try again', 'data-rl-reload', true)));
     return h.page(head('Deploys', 'Every deploy of the platform. Reconstructed rows say where they came from.') + tabs('deploys')
       + (rows.length ? h.table(['When', 'Service', 'Commit', 'Mode', 'Result', 'PRs', 'Internal note', 'Source'], rows.map((d) => h.tr(`data-rl-go="deploys/${esc(d.id)}"`, [esc(when(d.startedAt)), esc(d.service), `<code>${esc(d.sha)}</code>`, esc(d.mode), h.chip(d.status === 'ok' ? 'OK' : d.status === 'failed' ? 'Failed' : 'Interrupted'), esc(d.prs.length || ''), esc(noteWord(d.internalNote)), esc(d.provenance)])))
         : S.deploys == null ? '' : h.box('check', 'No deploys recorded yet', 'Each deploy writes a row here when it finishes.'))+historyFooter('deploys'));
@@ -107,6 +113,7 @@
   function deployPage() {
     const h = H(), d = S.deploy;
     if (!d) return h.page('');
+    if (d.error) return h.page(h.box('alert', 'This deploy did not load', esc(d.error), h.btn('Try again', 'data-rl-reload', true)));
     if (d.missing) return h.page(h.box('alert', 'Deploy not found', 'It does not exist, or it is not yours to read.', h.btn('Deploys', 'data-rl-go="deploys"', true)));
     const row = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
     const n = S.inote, has = n && !n.none && !n.error;
@@ -118,7 +125,8 @@
   }
 
   function featuresPage() {
-    const h = H(), rows = S.features || [];
+    const h = H(), rows = Array.isArray(S.features) ? S.features : [];
+    if (S.features && S.features.error) return h.page(head('Features', 'Each feature, where it is turned on, and what built it.') + tabs('features') + h.box('alert', 'Features did not load', esc(S.features.error), h.btn('Try again', 'data-rl-reload', true)));
     return h.page(head('Features', 'Each feature, where it is turned on, and what built it.') + tabs('features')
       + `<form class="rl-bar" data-rl-form="filter"><input name="q" value="${esc(S.q)}" placeholder="Search features" aria-label="Search features"><input name="repo" value="${esc(S.repo)}" placeholder="Repository" aria-label="Repository">${h.btn('Filter', 'type="submit"', true)}</form>`
       + (rows.length ? h.table(['Feature', 'Repository', 'Status', 'Enabled for', 'Changes', 'Last change'], rows.map((f) => h.tr(`data-rl-go="features/${esc(f.id)}"`, [esc(f.title), esc(f.repo), h.chip(f.status), esc(scopeWords(f.enabled)), esc(f.changes ?? ''), esc(when(f.lastChangeAt))])))
@@ -129,6 +137,7 @@
   function featurePage() {
     const h = H(), f = S.feature;
     if (!f) return h.page('');
+    if (f.error) return h.page(h.box('alert', 'This feature did not load', esc(f.error), h.btn('Try again', 'data-rl-reload', true)));
     if (f.missing) return h.page(h.box('alert', 'Feature not found', 'It does not exist, or it is not yours to read.', h.btn('Features', 'data-rl-go="features"', true)));
     const opt = (v, cur, l) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`;
     const controls = `<form class="rl-form" data-rl-form="feature">
@@ -149,7 +158,8 @@
   }
 
   function notesPage() {
-    const h = H(), rows = S.notes || [];
+    const h = H(), rows = Array.isArray(S.notes) ? S.notes : [];
+    if (S.notes && S.notes.error) return h.page(head('Notes', 'Agents and staff draft; a person on staff approves before any customer sees it.') + tabs('notes') + h.box('alert', 'Notes did not load', esc(S.notes.error), h.btn('Try again', 'data-rl-reload', true)));
     const F = [['draft', 'Drafts'], ['approved', 'Approved'], ['withdrawn', 'Withdrawn']];
     return h.page(head('Notes', 'Agents and staff draft; a person on staff approves before any customer sees it.') + tabs('notes')
       + `<div class="pg-bar"><div class="pg-seg" role="tablist">${F.map(([k, l]) => `<button role="tab" aria-selected="${S.noteState === k}" data-rl-notes="${k}">${l}</button>`).join('')}</div></div>`

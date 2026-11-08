@@ -55,7 +55,10 @@
       const r = await api('GET', '/api/tasks' + (here ? '?area=' + encodeURIComponent(here) : '')).catch(() => null);
       if (here !== P.area()) { T.loading = null; return load(); }
       T.area = here; T.loading = null;
-      if (r && r.ok && Array.isArray(r.d.tasks)) { T.list = r.d.tasks; T.status = 'ready'; } else if (!T.list) T.status = 'error';
+      const good = !!(r && r.ok && Array.isArray(r.d.tasks));
+      if (good) { T.list = r.d.tasks; T.status = 'ready'; } else if (!T.list) T.status = 'error';
+      // the status bar says whether this load worked; a failed refresh over a list already shown says so, with when it last did
+      H().fresh('tasks', { ok: good, reload: () => load() });
       patch();
     })();
     return T.loading;
