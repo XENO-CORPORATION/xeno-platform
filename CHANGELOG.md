@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Losing access closes the canvas.** Someone removed from a project, or from the workspace it belongs to, or turned from an editor into a viewer, used to stay on the project's open canvas and keep editing until they left. Now their live session is closed as soon as the change is saved, and the canvas reopens as what they can still do: view only, or "not shared with you". People who can still edit are left alone. An agent that loses access closes its person's session too, who simply reopens it.
+
 **The product list says what works.** Assets, Fonts, Stock, CRM, Forms and Scheduling were still marked "Soon" in the workspace although each has run there for weeks. They are now listed as working, and choosing one opens its real page (Studio › Libraries, Corpo › Customers, Forms, Scheduling), including from search and from an old link. The Assets, Fonts and Stock product pages on the site no longer call themselves a documentation scaffold: each says what works today, what is next, and links into the workspace. Support Desk (answering your own customers) and Mail stay marked "Soon": the desk is not built, and XENO Mail's server is offline.
 
 **Every canvas node looks the same way.** Files that aren't pictures or documents, links, groups, verdicts, runs, objectives, divisions and older image cards were still the old boxes. They now follow the new node design: the name sits above the object, a selected node gets a thin drawn line, and every corner has the curved resize handle. Something you can no longer open keeps its place, quieter, so the layout doesn't jump. A project shown on a division's map is a normal card again, with its open tasks and status.
