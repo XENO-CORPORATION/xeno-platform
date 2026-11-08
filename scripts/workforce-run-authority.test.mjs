@@ -180,7 +180,10 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     assert.equal(read.steps[0].dispatch.state, draw.state);
     assert.equal(read.steps[1].dispatch, null, 'a privileged call has no dispatch');
     assert.equal(read.steps[2].dispatch, null, 'a lease no draw consumed is authorized, not spent');
-    assert.equal(read.refusalsRecorded, false, 'the answer says refusals are not stored, so an empty list is not read as none');
+    assert.equal(read.refusalsRecorded, true, 'a run admitted since refusals are kept says its list is complete');
+    assert.deepEqual(read.refusals.map((r) => [r.afterSequence, r.operation, r.capability, r.reason, r.resumable, r.resume, r.count]),
+      [['3', 'privileged_call', 'mail.send', 'capability_not_live', true, 'different_capability', '1']], 'the refused call is kept, after the lease it followed');
+    assert.equal(read.refusalsTruncated, false);
     assert.equal(read.nextAfterSequence, null);
     assert.equal(read.revocation, null);
 
@@ -198,6 +201,65 @@ test('an admitted run re-asks before each step, and live revocation overrides it
     const stopped = await readRunSteps(pool, ctx(owner), { admissionId: id });
     assert.equal(stopped.revocation?.reason, 'stopped_by_actor', 'a stop shows on the steps read');
     assert.equal(stopped.steps.length, 3, 'stopping keeps the history');
+  });
+
+  await t.test('RUN-11: every refused step is kept, placed among the leases, repeats counted, and only for the run’s actor', async () => {
+    const { readRunSteps } = await import('../src/server/services/workforceRunAuthority.js');
+    const ws = await workspace(owner, 'refusals', [['editor', editor]]);
+    const a = await assign(lent.id, 'agent', ws, { type: 'workspace', id: lender }, explicit(['files.read']));
+    const id = await admit(editor, lent, { kind: 'workspace', assignmentId: a });
+    const kept = async () => (await pool.query('SELECT * FROM workforce_run_step_refusals WHERE admission_id=$1 ORDER BY after_sequence, first_refused_at', [id])).rows;
+
+    // Before any lease, twice: one record, counted twice.
+    await rejects(step(editor, id, 'privileged_call', 'files.write'), 'denied', 'capability_not_live');
+    await rejects(step(editor, id, 'privileged_call', 'files.write'), 'denied', 'capability_not_live');
+    // Not the run's refusals: a stranger asking, and a malformed request. Neither is kept.
+    await rejects(step(owner, id, 'privileged_call', 'files.write'), 'not_found', 'admission_not_found', 'someone else learns nothing');
+    await assert.rejects(authorizeRunStep(pool, ctx(editor), { admissionId: id, operation: 'privileged_call', capability: 'files.write', extra: 1 }, { signingKey }));
+    let rows = await kept();
+    assert.deepEqual(rows.map((r) => [String(r.after_sequence), r.reason, String(r.repeat_count)]), [['0', 'capability_not_live', '2']],
+      'one record before the first lease, the repeat counted, nothing kept for the stranger or the malformed request');
+    assert.ok(rows[0].last_refused_at >= rows[0].first_refused_at);
+
+    // After a lease, the same refusal is a new record: it happened somewhere else in the run.
+    await step(editor, id, 'privileged_call', 'files.read');
+    await rejects(step(editor, id, 'privileged_call', 'files.write'), 'denied', 'capability_not_live');
+    await step(editor, id, 'privileged_call', 'files.read');
+    // A terminal loss: the refusal is kept beside the revocation, and the refusal after it too.
+    await pool.query(`UPDATE workforce_workspace_assignments SET state='revoked', revision=revision+1, revoked_at=clock_timestamp(), updated_at=clock_timestamp() WHERE id=$1`, [a]);
+    await rejects(step(editor, id, 'provider_dispatch'), 'denied', 'assignment_not_live');
+    await rejects(step(editor, id, 'provider_dispatch'), 'denied', 'admission_revoked');
+    rows = await kept();
+    assert.deepEqual(rows.map((r) => [String(r.after_sequence), r.operation, r.capability, r.code, r.reason, r.resumable, r.resume]), [
+      ['0', 'privileged_call', 'files.write', 'denied', 'capability_not_live', true, 'different_capability'],
+      ['1', 'privileged_call', 'files.write', 'denied', 'capability_not_live', true, 'different_capability'],
+      ['2', 'provider_dispatch', null, 'denied', 'assignment_not_live', false, 'new_admission'],
+      ['2', 'provider_dispatch', null, 'denied', 'admission_revoked', false, 'new_admission'],
+    ], 'every refusal, in order, with what it means for continuing');
+
+    // The read: the same records, and paging puts each refusal on exactly one page.
+    const all = await readRunSteps(pool, ctx(editor), { admissionId: id });
+    assert.deepEqual(all.refusals.map((r) => [r.afterSequence, r.reason, r.count]),
+      [['0', 'capability_not_live', '2'], ['1', 'capability_not_live', '1'], ['2', 'assignment_not_live', '1'], ['2', 'admission_revoked', '1']]);
+    assert.equal(all.revocation?.reason, 'authority_lost');
+    assert.ok(Date.parse(all.refusals[0].refusedAt) <= Date.parse(all.refusals[0].lastRefusedAt));
+    assert.equal(all.refusalsRecorded, true);
+    const first = await readRunSteps(pool, ctx(editor), { admissionId: id, limit: 1 });
+    assert.equal(first.nextAfterSequence, '1');
+    assert.deepEqual(first.refusals.map((r) => r.afterSequence), ['0'], 'a page carries the refusals before its last lease');
+    const next = await readRunSteps(pool, ctx(editor), { admissionId: id, afterSequence: first.nextAfterSequence });
+    assert.deepEqual(next.steps.map((s) => s.sequence), ['2']);
+    assert.deepEqual(next.refusals.map((r) => r.afterSequence), ['1', '2', '2'], 'and the next page the ones after it');
+
+    // The database holds the rules on its own: the place among the leases is its to set, a record is
+    // never deleted, and only the count and last time may change -- by one.
+    const placed = (await pool.query(`INSERT INTO workforce_run_step_refusals(admission_id,after_sequence,operation,code,reason)
+      VALUES($1,99,'provider_dispatch','denied','test_only') RETURNING after_sequence`, [id])).rows[0];
+    assert.equal(String(placed.after_sequence), '2', 'a writer cannot place a refusal where it did not happen');
+    await assert.rejects(pool.query('DELETE FROM workforce_run_step_refusals WHERE admission_id=$1', [id]), /immutable/);
+    await assert.rejects(pool.query("UPDATE workforce_run_step_refusals SET reason='other' WHERE admission_id=$1", [id]), /only counts a repeat/);
+    await assert.rejects(pool.query('UPDATE workforce_run_step_refusals SET repeat_count=repeat_count+5 WHERE admission_id=$1', [id]), /only counts a repeat/);
+    await assert.rejects(pool.query('TRUNCATE workforce_run_step_refusals'), /immutable/);
   });
 
   await t.test('RUN-03: live revocation overrides the pinned grant before the next privileged call', async () => {

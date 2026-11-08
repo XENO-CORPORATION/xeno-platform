@@ -209,6 +209,9 @@ test('every workforce migration applies in order from an empty database', { skip
         'workforce_run_result_deliveries',
         'workforce_run_results',
         'workforce_run_revocations',
+        // RUN-11, 2026-11-08 (owner: "Save every refusal") -- every refused step of a run, placed among its leases,
+        // repeats counted; cited by workforce-run-authority.test.mjs (the RUN-11 subtest).
+        'workforce_run_step_refusals',
         'workforce_scope_spend_caps',
         // ACCT-07, 2026-10-04 -- an owner's bounded spend approval for an agent; cited by account-agent-approval.test.mjs.
         'workforce_spend_approvals',

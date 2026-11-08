@@ -237,10 +237,24 @@ const DRAW_OUTCOMES = new Set(['measured', 'unmeasured', 'not_dispatched']);
 const REVOCATION_REASONS = new Set(['stopped_by_actor', 'stopped_by_target', 'authority_lost']);
 const digits = (v) => typeof v === 'string' && /^\d{1,20}$/.test(v);
 const iso = (v) => typeof v === 'string' && !Number.isNaN(Date.parse(v));
+// RUN-11: a kept refusal, in the closed shapes the table allows.
+const REFUSAL_CODES = new Set(['denied', 'needs_approval']);
+const REFUSAL_RESUMES = new Set(['fresh_lease', 'budget_top_up', 'different_model', 'settle_open_draws', 'different_capability', 'new_admission']);
+function refusalObservation(r) {
+  if (!digits(r?.afterSequence) || !STEP_OPERATIONS.has(r.operation) || !REFUSAL_CODES.has(r.code)) return null;
+  if (typeof r.reason !== 'string' || !/^[a-z0-9_]{1,64}$/.test(r.reason)) return null;
+  if ((r.operation === 'privileged_call') !== (typeof r.capability === 'string') || (r.capability !== null && typeof r.capability !== 'string')) return null;
+  if (r.resumable === null ? r.resume !== null : (typeof r.resumable !== 'boolean' || !REFUSAL_RESUMES.has(r.resume))) return null;
+  if (!iso(r.refusedAt) || !iso(r.lastRefusedAt) || !digits(r.count) || r.count === '0') return null;
+  return fields(r, ['afterSequence', 'operation', 'capability', 'code', 'reason', 'resumable', 'resume', 'refusedAt', 'lastRefusedAt', 'count']);
+}
 function stepsObservation(value) {
   try {
     if (!value || value.schemaVersion !== 1 || uuid(value.admissionId) !== value.admissionId || !Array.isArray(value.steps)) return null;
-    if (value.refusalsRecorded !== false) return null;
+    if (typeof value.refusalsRecorded !== 'boolean' || !iso(value.refusalsRecordedSince) || typeof value.refusalsTruncated !== 'boolean') return null;
+    if (!Array.isArray(value.refusals)) return null;
+    const refusals = [];
+    for (const r of value.refusals) { const kept = refusalObservation(r); if (!kept) return null; refusals.push(kept); }
     if (value.nextAfterSequence !== null && !digits(value.nextAfterSequence)) return null;
     const steps = [];
     for (const s of value.steps) {
@@ -264,7 +278,8 @@ function stepsObservation(value) {
       if (r.fencedByAdmissionId !== null && uuid(r.fencedByAdmissionId) !== r.fencedByAdmissionId) return null;
       revocation = fields(r, ['reason', 'revokedAt', 'fencedByAdmissionId']);
     }
-    return { schemaVersion: 1, admissionId: value.admissionId, steps, nextAfterSequence: value.nextAfterSequence, revocation, refusalsRecorded: false };
+    return { schemaVersion: 1, admissionId: value.admissionId, steps, nextAfterSequence: value.nextAfterSequence, revocation,
+      refusals, refusalsTruncated: value.refusalsTruncated, refusalsRecorded: value.refusalsRecorded, refusalsRecordedSince: value.refusalsRecordedSince };
   } catch { return null; }
 }
 

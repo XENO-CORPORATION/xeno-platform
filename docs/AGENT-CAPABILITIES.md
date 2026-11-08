@@ -996,7 +996,7 @@ What an agent can do on the XENO platform: **240 capabilities**. What it cannot 
 - **`run.authority.get`** — run.authority.get: what a run may still do, re-derived from live rows.
   - arguments: none
   - reply: —
-- **`run.steps.get`** — run.steps.get: every lease the run was issued, in sequence, each model call with what it was charged. Refused steps are not stored.
+- **`run.steps.get`** — run.steps.get: every lease the run was issued, in sequence, each model call with what it was charged, and every step it was refused with the reason and whether it can resume.
   - arguments: none
   - reply: —
 
