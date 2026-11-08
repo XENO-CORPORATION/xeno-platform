@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Reply to a chat right on the canvas.** A chat on the canvas used to show its thread and send you to Chat to answer. Now press Reply under the thread and the chat opens in the node itself: the same chat as in Chat, with the same models, tools and project context, and the answer streams in place. Move the node, zoom or keep working on the canvas and what you've typed stays. Done closes it again.
+
 **Agents can work on a canvas the way people do.** Through XENO MCP, an agent can now put image and video nodes on a canvas (with their prompt, and the files or running generation that fill them), change a node's prompt, and change what a connection means: between two tasks that makes a real task link, as it does on screen. Moving, resizing, writing notes and connecting were already there. Everything goes through the same rules as the screen, so an agent can only change a canvas its person may edit.
 
 **Losing access closes the canvas.** Someone removed from a project, or from the workspace it belongs to, or turned from an editor into a viewer, used to stay on the project's open canvas and keep editing until they left. Now their live session is closed as soon as the change is saved, and the canvas reopens as what they can still do: view only, or "not shared with you". People who can still edit are left alone. An agent that loses access closes its person's session too, who simply reopens it.
