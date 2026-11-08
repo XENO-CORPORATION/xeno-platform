@@ -21,10 +21,10 @@ Per division: how many actions a person can take, how many an agent can take tod
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
 | browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
 | forms | 45 | 18 | 20 | 7 | 18 | 22 | 5 | 0 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 1, `stock:write` 1 |
-| canvas | 23 | 6 | 17 | 0 | 5 | 14 | 4 | 0 | `tasks:write` 14, `tasks:read` 3 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
 | support | 22 | 8 | 12 | 2 | 4 | 15 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
+| canvas | 23 | 12 | 11 | 0 | 5 | 14 | 4 | 0 | `tasks:write` 8, `tasks:read` 3 |
 | customers | 29 | 7 | 9 | 13 | 9 | 14 | 5 | 1 | `customers:write` 6, `customers:read` 3 |
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |

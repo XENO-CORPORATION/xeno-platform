@@ -114,6 +114,31 @@ async function main() {
     check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [{ id: 'x', type: 'link', url: 'javascript:alert(1)', x: 0, y: 0, width: 100, height: 50 }], edges: [] }, revision: '4' })).j.code === 'invalid_content', 'a javascript: link is refused');
     check((await bob('PUT', `/canvases/${cv.id}`, { content: { nodes: [content.nodes[2], content.nodes[3]], edges: [{ id: 'z', fromNode: 'n', toNode: 'g', xeno: { link: 'blocks' } }] }, revision: '4' })).j.code === 'invalid_link', 'only a wire between two tasks can be a task link');
 
+    // agents use the canvas through the SAME service as the screen: XENO MCP canvas_* (services/canvasMcp.js → saveCanvas)
+    const canvasMcp = await import('../services/canvasMcp.js');
+    const mcp = async (who, tool, args) => JSON.parse((await canvasMcp.callTool(pool, { id: ids[who], kind: 'human' }, tool, { canvas: cv.id, ...args })).content[0].text);
+    const refusedWith = async (fn) => { try { await fn(); return null; } catch (e) { return e.code || e.message; } };
+    const GEN_ID = '00000000-0000-4000-8000-0000000000aa';
+    const added = await mcp('bob', 'add', { items: [{ type: 'image', prompt: 'a bunker door at dawn', versions: [bobFile] }, { type: 'video', prompt: 'the door opens', ratio: '16:9', generation: GEN_ID }, { type: 'note', text: 'From the agent', x: 900, y: 0 }] });
+    const itemOf = (v, id) => v.canvas.items.find((i) => i.id === id), [imId, vdId, ntId] = added.added;
+    const im = itemOf(added, imId), vd = itemOf(added, vdId);
+    check(im.type === 'image' && im.prompt === 'a bunker door at dawn' && im.shown === bobFile && im.file?.name === 'brief-v2.txt' && vd.type === 'video' && vd.generating === GEN_ID && Math.abs(vd.width / vd.height - 16 / 9) < 0.02 && itemOf(added, ntId).text === 'From the agent', 'an agent adds image, video and note nodes; the picture reads its file live');
+    const storedNodes = async () => (await pool.query('SELECT content FROM canvases WHERE id = $1', [cv.id])).rows[0].content.nodes;
+    const imStored = (await storedNodes()).find((n) => n.id === imId);
+    check(imStored.type === 'media' && imStored.media.kind === 'image' && imStored.media.versions[0] === bobFile && imStored.media.cur === 0, 'stored as the same media node the screen makes');
+    const moved = await mcp('bob', 'update', { items: [{ id: ntId, x: 1000, y: 40, width: 320, height: 180, text: 'Edited by the agent' }, { id: imId, prompt: 'a bunker door at dusk' }] });
+    const nt2 = itemOf(moved, ntId);
+    check(nt2.x === 1000 && nt2.y === 40 && nt2.width === 320 && nt2.height === 180 && nt2.text === 'Edited by the agent' && itemOf(moved, imId).prompt === 'a bunker door at dusk', 'an agent moves, resizes and writes nodes');
+    const wired = await mcp('ada', 'connect', { from: 'b', to: 'a' });
+    check(wired.canvas.connections.some((c) => c.id === wired.connection && c.from === 'b' && c.to === 'a' && !c.link), 'an agent connects two items with a plain line');
+    const meant = await mcp('ada', 'update', { connections: [{ id: wired.connection, link: 'relates', label: 'see also' }] });
+    check(meant.canvas.connections.some((c) => c.id === wired.connection && c.link === 'relates' && c.label === 'see also'), 'and gives the line a meaning');
+    check((await ada('GET', `/tasks/${t2.key}`)).j.task.links.some((l) => l.kind === 'relates' && l.task.key === t1.key), 'between two tasks that meaning is a real task link, made through Tasks');
+    check(await refusedWith(() => mcp('cyd', 'add', { items: [{ type: 'note', text: 'x' }] })) === 'not_allowed', 'a project viewer’s agent cannot change the canvas');
+    check(await refusedWith(() => mcp('eve', 'get', {})) === 'canvas_not_found', 'and someone outside the project learns nothing about it');
+    check(await refusedWith(() => mcp('bob', 'add', { items: [{ type: 'image', versions: ['not-a-file'] }] })) === 'invalid_content', 'a picture must name its files by id');
+    check(await refusedWith(() => mcp('bob', 'update', { connections: [{ id: wired.connection, link: 'owns' }] })) === 'invalid_link', 'and a connection can only mean what a task link can');
+
     // list, personal canvas, delete
     check((await cyd('GET', `/canvases?projectId=${proj.id}`)).j.canvases.some((c) => c.id === cv.id), 'project members see its canvases');
     check(!(await eve('GET', '/canvases')).j.canvases.some((c) => c.id === cv.id) && (await eve('GET', `/canvases/${cv.id}`)).s === 404, 'an outsider neither lists nor opens it');
