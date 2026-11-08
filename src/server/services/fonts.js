@@ -5,7 +5,7 @@
  * WHERE FONTS COME FROM (owner decision 2026-10-31): an open-licence catalogue we host, plus a workspace's own uploads.
  *
  * THE CATALOGUE is data, built by scripts/fonts-catalogue.mjs, which reads each family's licence from its own files and refuses
- * anything else. Pairings are written by hand; this is not AI pairing and doesn't claim to be.
+ * anything else. Its pairings are written by hand. suggestPairings asks a model, on the asker's credits, and keeps only catalogue fonts.
  *
  * AN UPLOAD is a private file in the workspace's Library, so it counts against the plan and follows the Library's access rules. It
  * needs a person to say they hold the rights, recorded with who and when, and the font's own licence bits must allow embedding:
@@ -16,6 +16,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as customers from './customers.js';
 import * as inbox from './inbox.js';
@@ -134,4 +135,50 @@ export async function takeDown(db, staff, { id, reason } = {}) {
   await db.query('UPDATE user_files SET deleted_at = now() WHERE id = $1', [r.file_id]);
   await inbox.tell(db, { userId: r.rights_confirmed_by, source: 'fonts', kind: 'font_taken_down', ref: '/workspace/studio/spaces/libraries/fonts', title: `The font ${r.family} was taken down`, detail: why.slice(0, 400), area: 'studio' });
   return { takenDown: true, id: r.id };
+}
+
+// ─────────────────────────────────────────── AI pairing
+// A person (or their agent, on the owner's credits) asks which catalogue fonts go with one family, optionally for a purpose
+// ("a bakery menu"). The model may only name families IN the catalogue: anything else is dropped, so it can never point at
+// a font we don't host or whose licence we haven't read. It goes through the platform's one metered chat path
+// (utils/inferenceMeter.js → utils/xenoChat.js), billed to whoever asked; nothing is stored but the ledger row.
+export const PAIRING_LIMITS = { purpose: 300, pairs: 3, reason: 200, maxOutput: 600 };
+const PAIRING_SYSTEM = [
+  'You are a type designer choosing font pairings from a fixed catalogue.',
+  'Answer with JSON only: {"pairs":[{"id":"<catalogue id>","role":"heading"|"body"|"accent","reason":"<one plain sentence>"}]}.',
+  `Name at most ${PAIRING_LIMITS.pairs} families, only ids from the catalogue given, never the family being paired. Prefer contrast in structure`,
+  'with harmony in proportion, the way an editorial designer would; say in each reason what makes the two work together.',
+].join(' ');
+export function readPairing(content, forId) {
+  const s = String(content || ''), a = s.indexOf('{'), b = s.lastIndexOf('}');
+  let j = null; if (a >= 0 && b > a) { try { j = JSON.parse(s.slice(a, b + 1)); } catch { j = null; } }
+  if (!j || !Array.isArray(j.pairs)) throw new FontError('The suggestion could not be read — try again', 'pairing_unreadable', 502);
+  const seen = new Set(), out = [];
+  for (const p of j.pairs) {
+    const f = p && typeof p.id === 'string' ? familyById(p.id) : null;
+    if (!f || f.id === forId || seen.has(f.id)) continue;
+    seen.add(f.id);
+    out.push({ id: f.id, family: f.family, category: f.category, role: ['heading', 'body', 'accent'].includes(p.role) ? p.role : 'body', reason: String(p.reason || '').trim().slice(0, PAIRING_LIMITS.reason) });
+    if (out.length >= PAIRING_LIMITS.pairs) break;
+  }
+  if (!out.length) throw new FontError('No pairing from the catalogue came back — try again', 'pairing_empty', 502);
+  return out;
+}
+/** Pairings for one catalogue family, suggested by a model. options.complete / options.meter replace the call / the meter in tests. */
+export async function suggestPairings(db, actor, { workspace, family, purpose, model } = {}, options = {}) {
+  const ctx = await scope(db, actor, workspace, 'viewer');
+  const f = familyById(String(family || ''));
+  if (!f) throw new FontError('Pick a font from the catalogue', 'not_in_catalogue', 404);
+  const why = String(purpose || '').trim();
+  if (why.length > PAIRING_LIMITS.purpose) throw new FontError(`Say what it's for in ${PAIRING_LIMITS.purpose} characters or fewer`, 'purpose_too_long');
+  const list = catalogue().families.map((x) => `${x.id} — ${x.family} (${x.category})`).join('\n');
+  const messages = [{ role: 'system', content: PAIRING_SYSTEM },
+    { role: 'user', content: `Catalogue:\n${list}\n\nPair with: ${f.id} — ${f.family} (${f.category}).${why ? `\nWhat it's for, in the person's words: ${JSON.stringify(why)}` : ''}` }];
+  const m = String(model || process.env.FONTS_PAIRING_MODEL || process.env.AGENT_CHAT_DEFAULT_MODEL || 'gpt-6.1-sol');
+  const call = options.complete || (async (args) => (await import('../utils/xenoChat.js')).xenoChatCompletion(args));
+  const meter = options.meter || (await import('../utils/inferenceMeter.js')).meterPremiumChat;
+  const metered = await meter(db, actor.id, { model: m, provider: 'xeno', requestId: `fonts-pairing:${crypto.randomUUID()}`, estInputTokens: Math.ceil(messages.reduce((n, x) => n + x.content.length, 0) / 3), maxTokens: PAIRING_LIMITS.maxOutput, surface: 'fonts_pairing',
+    // no tools: the model can only answer
+    run: async ({ maxOutputTokens }) => { const d = await call({ model: m, messages, max_tokens: maxOutputTokens }); return { content: d.choices?.[0]?.message?.content || '', usage: d.usage, model: d.model || m }; } });
+  return { family: summary(f), pairs: readPairing(metered.result.content, f.id), model: metered.result.model || m, creditsCharged: metered.creditsCharged ?? null, workspace: ctx.workspaceId };
 }

@@ -42,6 +42,19 @@ async function main() {
   const co = await crm.createCompany(pool, E, { ...w, name: 'Acme GmbH', domain: 'https://acme.example/' });
   check(co.domain === 'acme.example', 'a company is added, its domain normalised');
   check(await code(() => crm.createCompany(pool, E, { ...w, name: 'Acme 2', domain: 'ACME.example' })) === 'duplicate_company', 'one company per domain');
+  // billing details: what Corpo › Company's New invoice fills in when this customer is picked
+  const billed = await crm.updateCompany(pool, E, co.id, { ...w, billing: { name: 'Acme GmbH', vatId: 'DE123456789', address: { line1: 'Hafenstr. 2', postalCode: '20095', city: 'Hamburg', country: 'de' }, extra: 'dropped' } });
+  check(billed.billing.address.country === 'DE' && billed.billing.vatId === 'DE123456789' && !('extra' in billed.billing), 'an editor saves billing details; the country is upper-cased, unknown keys are dropped');
+  check((await crm.listCompanies(pool, V, w)).find((c) => c.id === co.id).billing.address.city === 'Hamburg', 'a viewer reads them with the company');
+  check(await code(() => crm.updateCompany(pool, V, co.id, { ...w, billing: { name: 'x' } })) === 'editor_required', 'a viewer cannot change them');
+  check(await code(() => crm.updateCompany(pool, S, co.id, { workspace: other, billing: { name: 'x' } })) === 'company_not_found', 'the owner of another workspace cannot reach this company by id');
+  check(await code(() => crm.updateCompany(pool, E, co.id, { ...w, billing: { address: { country: 'Germany' } } })) === 'invalid_country', 'a country must be a two-letter code');
+  check(await code(() => crm.updateCompany(pool, E, co.id, { ...w, billing: 'nope' })) === 'invalid_billing', 'billing must be an object');
+  check(await code(() => crm.updateCompany(pool, E, co.id, w)) === 'nothing_to_change', 'an empty change is refused, not a silent write');
+  check(await code(() => pool.query('UPDATE crm_companies SET billing = $1 WHERE id = $2', [JSON.stringify({ name: 'x'.repeat(5000) }), co.id])) !== null, 'the database bounds the billing record');
+  const made = await crm.createCompany(pool, E, { ...w, name: 'Billed Ltd', billing: { name: 'Billed Ltd', address: { line1: '1 Way', city: 'Leeds', country: 'GB' } } });
+  check(made.billing.address.country === 'GB', 'a new customer can be created with billing details (a first invoice to them)');
+  check((await crm.updateCompany(pool, E, made.id, { ...w, billing: null })).billing === null, 'billing details can be cleared');
   const ada = await crm.createContact(pool, E, { ...w, name: 'Ada Lovelace', email: 'ADA@acme.example', companyId: co.id, tags: ['vip', 'vip', 'eu'] });
   check(ada.email === 'ada@acme.example' && ada.tags.length === 2 && ada.source === 'manual', 'an editor adds a contact; email lower-cased, tags deduped');
   check(await code(() => crm.createContact(pool, E, { ...w, name: 'Ada again', email: 'ada@ACME.example' })) === 'duplicate_contact', 'one contact per email per workspace (dedupe)');

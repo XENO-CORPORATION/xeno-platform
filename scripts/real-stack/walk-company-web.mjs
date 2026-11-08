@@ -2,7 +2,7 @@
 // Company, issues an invoice, opens it by its address, reverses it, and reads the wallet and activity. Pass SHOTS=<dir> to keep a
 // screenshot of each view for a look at the design.
 import path from 'node:path';
-import { browser, page, ok, failures, newPerson, go, text, fill, submit, dialogWarn, wait } from './lib.mjs';
+import { browser, page, ok, failures, newPerson, go, text, fill, fillRow, submit, dialogWarn, wait } from './lib.mjs';
 const b = await browser(); const p = await page(b);
 const shot = (name) => (process.env.SHOTS ? p.screenshot({ path: path.join(process.env.SHOTS, `${name}.png`) }) : null);
 const errAt = []; p.on('pageerror', (e) => errAt.push(`${e.message.slice(0, 60)} @ ${p.url()}`));
@@ -56,11 +56,13 @@ try {
   await tab('Invoices');
   await press('data-co2="newInvoice"');
   await fill(p, 'b', 'A Client GmbH'); await fill(p, 'bs', '1 Client Street'); await fill(p, 'bc', 'Berlin'); await select('bk', 'DE'); await select('cur', 'USD');
-  await fill(p, 'item', 'Design'); await fill(p, 'price', '100.5');
+  ok((await p.$$eval('.xd [data-f="cust"] option', (o) => o.length)) === 1, 'with no customers yet, the only choice is a new one');
+  await fillRow(p, 'lines', 1, { item: 'Design', price: '100.5' });
   await submit(p); await wait(500);
-  ok(/why no tax/i.test(await dialogWarn(p)), 'no tax has to say why', await dialogWarn(p));
+  ok(/charges no tax: say why/i.test(await dialogWarn(p)), 'no tax has to say why', await dialogWarn(p));
   await fill(p, 'reason', 'Export of services');
-  await fill(p, 'more', 'Hosting; 2; 19.99; 10');
+  await fillRow(p, 'lines', 2, { item: 'Hosting', q: '2', price: '19.99', rate: '10' });
+  ok(/144\.48/.test(await text(p, '.xd [data-f="lines"] .xd-rows-sum')), 'the running total is the invoice’s total', await text(p, '.xd [data-f="lines"] .xd-rows-sum'));
   await shot('new-invoice');
   await submit(p);
   await shot('confirm');
@@ -82,6 +84,15 @@ try {
   ok(/-0001/.test(t) && /-0002/.test(t) && /Reversed/.test(t), 'the list shows both, and the first as reversed', t.slice(0, 500));
   ok(/Local rules for United States weren’t checked/.test(t) && /no tax authority/.test(t), 'and says what was checked', t.slice(-300));
 
+  // the customer was saved to Corpo › Customers, so the next invoice picks them instead of retyping them
+  await press('data-co2="newInvoice"');
+  const opts = await p.$$eval('.xd [data-f="cust"] option', (o) => o.map((x) => x.textContent));
+  ok(opts.includes('A Client GmbH'), 'the customer is now in Customers, and offered', opts.join(' | '));
+  const cid = await p.$$eval('.xd [data-f="cust"] option', (o) => o.find((x) => x.textContent === 'A Client GmbH')?.value);
+  await select('cust', cid); await wait(300);
+  ok((await p.$eval('#xdf-b', (e) => e.value)) === 'A Client GmbH' && (await p.$eval('#xdf-bs', (e) => e.value)) === '1 Client Street' && (await p.$eval('#xdf-bc', (e) => e.value)) === 'Berlin' && (await p.$eval('#xdf-bk', (e) => e.value)) === 'DE', 'picking them fills in their details');
+  await p.keyboard.press('Escape'); await wait(400);
+  if (await p.$('.xd [data-xd-ok]')) { await p.click('.xd:last-of-type [data-xd-ok]'); await wait(400); }   // "discard?" when the dialog was changed
   await tab('Wallet'); await wait(800);
   ok(/credits/i.test(await text(p, '#main')), 'the wallet reads'); await shot('wallet');
   await tab('Activity'); await wait(800);

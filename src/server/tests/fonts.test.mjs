@@ -115,6 +115,21 @@ async function main() {
   ok(/@font-face \{\s+font-family: "Inter";\s+font-style: normal;\s+font-weight: 700;/.test(out) && !/font-weight: 400;\s+font-display/.test(out), 'a kit’s CSS brings its catalogue font, at the weight it uses');
   ok(!/@font-face \{\s+font-family: "Not In/.test(out), 'and only fonts from the catalogue');
 
+  // ── AI pairing: catalogue fonts only, billed to whoever asked, through the one metered chat path
+  const billed = [], asked = [];
+  const meter = async (db, who, o) => { billed.push({ who, surface: o.surface }); return { result: await o.run({ maxOutputTokens: 600 }), creditsCharged: 0.3 }; };
+  const answer = (content) => ({ meter, complete: async (args) => { asked.push(args); return { choices: [{ message: { content } }], usage: { prompt_tokens: 10, completion_tokens: 10 }, model: 'test-model' }; } });
+  const mixed = JSON.stringify({ pairs: [{ id: 'inter', role: 'body', reason: 'itself' }, { id: 'comic-made-up', role: 'heading', reason: 'not hosted' }, { id: 'lato', role: 'body', reason: 'humanist warmth' }, { id: 'lato', role: 'body', reason: 'again' }, { id: 'roboto', role: 'weird', reason: 'x'.repeat(500) }, { id: 'open-sans', role: 'accent', reason: 'a' }, { id: 'poppins', role: 'heading', reason: 'b' }] });
+  const sug = await F.suggestPairings(pool, V, { ...w, family: 'inter', purpose: 'a bakery menu' }, answer('Sure: ' + mixed));
+  ok(sug.pairs.map((x) => x.id).join(',') === 'lato,roboto,open-sans', `only catalogue fonts, never itself, no repeats, at most three (${sug.pairs.map((x) => x.id)})`);
+  ok(sug.pairs[1].role === 'body' && sug.pairs[1].reason.length === F.PAIRING_LIMITS.reason, 'an unknown role reads as body, and a reason is cut to length');
+  ok(billed.at(-1).who === viewer && billed.at(-1).surface === 'fonts_pairing' && sug.creditsCharged === 0.3, 'it is billed to whoever asked, on its own surface');
+  ok(!('tools' in asked.at(-1)) && /bakery menu/.test(asked.at(-1).messages[1].content) && /lato — Lato/.test(asked.at(-1).messages[1].content), 'the model gets the catalogue and the purpose, and no tools');
+  ok(await code(F.suggestPairings(pool, V, { ...w, family: 'not-hosted' }, answer(mixed))) === 'not_in_catalogue', 'a family outside the catalogue is refused before any call');
+  ok(await code(F.suggestPairings(pool, S, { ...w, family: 'inter' }, answer(mixed))) === 'not_a_member', 'a stranger cannot ask in this workspace');
+  ok(await code(F.suggestPairings(pool, V, { ...w, family: 'inter', purpose: 'x'.repeat(301) }, answer(mixed))) === 'purpose_too_long', 'a purpose is bounded');
+  ok(await code(F.suggestPairings(pool, V, { ...w, family: 'inter' }, answer('I cannot help with that'))) === 'pairing_unreadable', 'an answer that is not JSON says so');
+  ok(await code(F.suggestPairings(pool, V, { ...w, family: 'inter' }, answer(JSON.stringify({ pairs: [{ id: 'inter' }, { id: 'nope' }] })))) === 'pairing_empty', 'an answer with no catalogue font says so, instead of an empty list');
   console.log(`\nfonts: ${passed} passed`);
 }
 main().then(async () => { fs.rmSync(dir, { recursive: true, force: true }); await pool.end(); }).catch(async (e) => { console.error(e); fs.rmSync(dir, { recursive: true, force: true }); await pool.end(); process.exit(1); });

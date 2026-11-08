@@ -32,24 +32,30 @@
   const isKey = (it) => /^T-\d+$/i.test(it || '');
 
   async function loadFor(it) {
+    // the status bar says what this load really did (XENO_PAGES.fresh), never "Updated just now" over a failure
+    let ok = true; H().fresh('support', { loading: true, reload: () => refresh() });
     // staff and admin come from the session's role (P.isStaff/isAdmin), never from a staff route refusing a customer
-    if (S.staff === null) { await P.ready; S.staff = P.isStaff(); if (S.staff) { const q = await api('GET', '/api/support/tickets/queue?status=open'); if (q.ok) S.queue = q.d.tickets || []; else S.staff = false; } }
+    if (S.staff === null) { await P.ready; S.staff = P.isStaff(); if (S.staff) { const q = await api('GET', '/api/support/tickets/queue?status=open'); if (q.ok) { S.queue = q.d.tickets || []; S.queueFor = 'open'; } else if (q.status === 403 || q.status === 404) S.staff = false; else S.queue = { error: said(q, 'The queue did not load') }; } }   // refused = not staff after all; a failure stays a failure
     // admins only: Site access is never asked for by anyone else, and then the tab is simply not there
     if (P.isAdmin() && (S.access === null || it === 'access')) { const a = await api('GET', '/api/site-gate/codes'); S.access = a.ok ? a.d.codes || [] : false; }
     else if (!P.isAdmin()) S.access = false;
     if (isKey(it)) {
       const key = it.toUpperCase();
       const r = await api('GET', `/api/support/tickets/${encodeURIComponent(key)}`);
-      S.oneKey = key; S.one = r.ok ? r.d.ticket : { missing: r.status === 404, error: said(r, 'Could not load this request') };
+      S.oneKey = key; S.one = r.ok ? r.d.ticket : { missing: r.status === 404, error: said(r, 'Could not load this request') }; ok = r.ok || r.status === 404;
       if (S.staff && !S.macros) { const m = await api('GET', '/api/support/macros'); S.macros = m.ok ? m.d.macros || [] : []; }
     } else if (it === 'queue' && S.staff) {
       const r = await api('GET', `/api/support/tickets/queue?${S.filter === 'breached' ? 'breached=1&status=open' : S.filter === 'mine' ? 'assignee=me&status=open' : S.filter === 'unassigned' ? 'assignee=none&status=open' : 'status=' + encodeURIComponent(S.filter)}`);
-      S.queue = r.ok ? r.d.tickets || [] : [];
+      // a failed refresh keeps what was there (and says so below) instead of showing an empty queue
+      // (only for the SAME filter: another filter's rows under this one would be wrong, so that shows the failure)
+      if (r.ok) { S.queue = r.d.tickets || []; S.queueFor = S.filter; } else { ok = false; if (S.queueFor !== S.filter) S.queue = { error: said(r, 'The queue did not load') }; }
     } else if (it === 'macros' && S.staff) {
-      const m = await api('GET', '/api/support/macros'); S.macros = m.ok ? m.d.macros || [] : [];
+      const m = await api('GET', '/api/support/macros'); if (m.ok) S.macros = m.d.macros || []; else ok = false;
     } else {
-      const r = await api('GET', '/api/support/tickets/mine'); S.mine = r.ok ? r.d.tickets || [] : { error: said(r, 'Could not load your requests') };
+      const r = await api('GET', '/api/support/tickets/mine');
+      if (r.ok) S.mine = r.d.tickets || []; else { ok = false; if (!Array.isArray(S.mine)) S.mine = { error: said(r, 'Could not load your requests') }; }
     }
+    H().fresh('support', { ok });
     paint();
   }
   let lastLoad = null;
@@ -122,10 +128,10 @@
   }
 
   function queuePage() {
-    const h = H(), rows = S.queue || [];
+    const h = H(), rows = Array.isArray(S.queue) ? S.queue : [];
     const F = [['open', 'Open'], ['mine', 'Mine'], ['unassigned', 'Unassigned'], ['breached', 'Past SLA'], ['new', 'New'], ['waiting_on_customer', 'Waiting'], ['resolved', 'Resolved'], ['closed', 'Closed']];
     const seg = `<div class="pg-bar"><div class="pg-seg" role="tablist">${F.map(([k, l]) => `<button role="tab" aria-selected="${S.filter === k}" data-sp-filter="${k}">${l}</button>`).join('')}</div></div>`;
-    const body = rows.length ? h.table(['Request', 'Requester', 'Priority', 'Status', 'SLA', 'Updated'], rows.map((t) => h.tr(`data-sp-go="${esc(t.key)}"`, [`<b>${esc(t.key)}</b> · ${esc(t.title)}`, esc(t.requester?.name || ''), esc(PRI[t.priority]), h.chip(STAFF_STATUS[t.status] || t.status), t.sla.firstResponseBreached || t.sla.resolutionBreached ? '<span class="sp-bad">Breached</span>' : 'On time', esc(ago(t.updatedAt))])))
+    const body = S.queue && S.queue.error ? h.box('alert', 'The queue did not load', esc(S.queue.error), h.btn('Try again', 'data-sp-reload', true)) : rows.length ? h.table(['Request', 'Requester', 'Priority', 'Status', 'SLA', 'Updated'], rows.map((t) => h.tr(`data-sp-go="${esc(t.key)}"`, [`<b>${esc(t.key)}</b> · ${esc(t.title)}`, esc(t.requester?.name || ''), esc(PRI[t.priority]), h.chip(STAFF_STATUS[t.status] || t.status), t.sla.firstResponseBreached || t.sla.resolutionBreached ? '<span class="sp-bad">Breached</span>' : 'On time', esc(ago(t.updatedAt))])))
       : h.box('check', 'Nothing here', 'No requests match this view.');
     return h.page(h.head({ eyebrow: '<a data-sp-go="">Support</a>', title: 'Support queue', sub: 'Every request to XENO. Agents draft; a person sends.' }) + tabs('queue') + seg + body + h.foot('support', 'GET /api/support/tickets/queue', 'request'));
   }

@@ -32,6 +32,26 @@
     o.picked = new Set(); Object.defineProperty(o, 'sel', { enumerable: true, get: () => sel, set: (v) => { sel = v; if (v == null) o.picked.clear(); } }); UI[key] = o; } return UI[key]; };
   const pstate = (fam) => (store.get('pgState', {}) || {})[fam] || 'normal';
   const loaded = new Set(), AT = {};   // AT: when each page's data last arrived — the status bar's 'Updated …'
+  // On the platform a page's status bar says what its module REALLY fetched, never the prototype's preview state:
+  // XENO_PAGES.fresh(fam, { ok, reload }) after every load (ok false = it failed), fresh(fam, { loading: true }) before.
+  // A served page that never reports says nothing about freshness, rather than 'Updated just now' about data it may not have.
+  const LIVE = {};
+  function fresh(fam, { ok, loading, reload } = {}) {
+    const r = LIVE[fam] || (LIVE[fam] = { at: 0, failed: false, loading: false, reload: null });
+    if (reload) r.reload = reload;
+    if (loading) { r.loading = true; return r; }
+    r.loading = false; if (ok) { r.at = Date.now(); r.failed = false; } else r.failed = true;
+    // a module may repaint only part of its page (Tasks patches its region), so the line updates itself in place
+    requestAnimationFrame(() => document.querySelectorAll(`#main .mfoot [data-fresh-fam="${CSS.escape(fam)}"]`).forEach((n) => { n.innerHTML = liveLine(fam); }));
+    return r;
+  }
+  function liveLine(fam) {
+    const live = LIVE[fam], again = (l) => `<button class="sb-ib" data-pg-reload="${esc(fam)}" aria-label="${l}" data-tip="${l}">${ic('reset')}</button>`;
+    if (!live) return '';
+    if (live.failed) return (live.at ? `<span class="sb-fresh bad"><i></i>Couldn't refresh · <span data-at="${live.at}">Updated ${agoS(live.at)}</span></span>` : `<span class="sb-fresh bad"><i></i>Couldn't load</span>`) + (live.reload ? again('Retry') : '');
+    if (!live.at) return '<span class="sb-fresh live"><i></i>Loading…</span>';
+    return `<span class="sb-fresh ok"><i></i><span data-at="${live.at}">Updated ${agoS(live.at)}</span></span>${live.reload ? again('Refresh') : ''}`;
+  }
 
   // ---------- shared parts ----------
   // collection pages hand their title, summary and actions to the main header bar (one header, not two);
@@ -504,7 +524,9 @@
   const STATE_L = { normal: 'Normal', empty: 'First use', loading: 'Loading', error: 'Error', denied: 'No access' };
   function statusBar(f, root, facts = '') {
     const fam = f.dataset.fam, api = f.dataset.api, noun = f.dataset.noun, st = pstate(fam), loading = !!root.querySelector('.pg--loading');
-    const fresh = st === 'error' ? `<span class="sb-fresh bad"><i></i>Couldn't load</span>` : st === 'denied' ? '<span class="sb-fresh"><i></i>No access</span>' : loading ? '<span class="sb-fresh live"><i></i>Loading…</span>' : `<span class="sb-fresh ok"><i></i><span data-at="${AT[fam] || Date.now()}">Updated ${agoS(AT[fam] || Date.now())}</span></span><button class="sb-ib" data-pg-refresh="${esc(fam)}" aria-label="Refresh" data-tip="Refresh">${ic('reset')}</button>`;
+    const fresh = LIVE[fam] ? `<span class="sb-live" data-fresh-fam="${esc(fam)}">${liveLine(fam)}</span>`
+      : window.XENO_PLATFORM?.served ? ''
+      : st === 'error' ? `<span class="sb-fresh bad"><i></i>Couldn't load</span>` : st === 'denied' ? '<span class="sb-fresh"><i></i>No access</span>' : loading ? '<span class="sb-fresh live"><i></i>Loading…</span>' : `<span class="sb-fresh ok"><i></i><span data-at="${AT[fam] || Date.now()}">Updated ${agoS(AT[fam] || Date.now())}</span></span><button class="sb-ib" data-pg-refresh="${esc(fam)}" aria-label="Refresh" data-tip="Refresh">${ic('reset')}</button>`;
     const n = root.querySelectorAll('[data-pg-results] .pg-tr:not(.pg-th), [data-pg-results] .pg-card:not(.pg-card--new), .pg-board .pg-task').length;
     const sel = fam === 'library' && ui('library').sel && window.XENO_PG_LIBRARY.items.find((x) => x.id === ui('library').sel), many = fam === 'library' ? picks() : [];
     const info = loading || st !== 'normal' ? '' : many.length > 1 ? selSummary(many) : sel ? `1 selected · ${esc(sel.name)} · ${bytes(sel.bytes)}` : [n && noun ? `${n} ${noun}${n === 1 ? '' : 's'}${ui(fam).q ? ` matching “${esc(ui(fam).q)}”` : ''}` : '', !ui(fam).q && sumForBar ? esc(sumForBar.split(' · ').filter((x) => x !== `${n} ${noun}${n === 1 ? '' : 's'}`).join(' · ')) : ''].filter(Boolean).join(' · ');
@@ -521,7 +543,7 @@
   addEventListener('resize', syncGutter);
   window.XENO_PAGES = { render, framed, query: (key, q) => { ui(key).q = q || ''; }, repaint: () => repaint(),
     // the page parts, shared so every page — this file's or a module's — is built from the same pieces
-    h: { page, head, tabs, btn, box, table, tr, chip, avatar, foot, ago, plural, cap, esc, ic, projCard, seg, ui, threadPosts } };
+    fresh, h: { page, head, tabs, btn, box, table, tr, chip, avatar, foot, fresh, ago, plural, cap, esc, ic, projCard, seg, ui, threadPosts } };
 
   // ---------- repaint the main view in place (keeps scroll and focus) ----------
   function repaint(focusSel) {
@@ -530,7 +552,11 @@
     const top = mv.scrollTop, act = document.activeElement, q = act?.dataset?.pgQ, pos = act?.selectionStart;
     mv.innerHTML = pf.body; mv.scrollTop = top; mv.querySelector('.pg')?.classList.add('pg--settled');   // a repaint is not an arrival: never replay the entrance
     const ha = document.querySelector('#main .pg-top-acts'); if (ha) ha.innerHTML = pf.acts;
-    const ft = document.querySelector('#main .mfoot'); if (ft) ft.innerHTML = pf.foot;
+    // the footer comes and goes with the page: a first paint without one (a loading shape) must not leave the page without it
+    let ft = document.querySelector('#main .mfoot');
+    if (pf.foot && !ft) { ft = document.createElement('footer'); ft.className = 'mfoot'; mv.after(ft); }
+    if (ft) { if (pf.foot) ft.innerHTML = pf.foot; else ft.remove(); }
+    mv.classList.toggle('has-foot', !!pf.foot);
     const sm = document.querySelector('#main .pg-top-sum'); if (sm) sm.innerHTML = pf.sum;
     const hl = document.querySelector('#main .pg-top-left'); if (hl) hl.innerHTML = pf.left;
     const ht = document.querySelector('#main .pg-top-tools'); if (ht) ht.innerHTML = pf.tools;
@@ -572,7 +598,7 @@
   addEventListener('resize', () => closeDd()); document.addEventListener('scroll', () => closeDd(), true);
   document.addEventListener('click', (e) => {
     const t = e.target; if (!t.closest('#main .pg, #main .pg-top, #main .mfoot')) return;
-    const b = t.closest('[data-pg-seg],[data-pg-view],[data-pg-clear],[data-pg-dd],[data-pg-retry],[data-pg-go-project],[data-pg-file],[data-pg-unsel],[data-pg-star],[data-pg-trash],[data-pg-restore],[data-pg-purge],[data-pg-open-file],[data-pg-download],[data-pg-copylink],[data-pg-chat],[data-pg-item],[data-pg-ws],[data-pg-upload],[data-pg-info],[data-pg-refresh],[data-pg-preview],[data-pg-empty-trash],[data-pg-lib-src],[data-pg-gitem],[data-pg-ws-market],[data-pg-folder],a[data-go]');
+    const b = t.closest('[data-pg-seg],[data-pg-view],[data-pg-clear],[data-pg-dd],[data-pg-retry],[data-pg-reload],[data-pg-go-project],[data-pg-file],[data-pg-unsel],[data-pg-star],[data-pg-trash],[data-pg-restore],[data-pg-purge],[data-pg-open-file],[data-pg-download],[data-pg-copylink],[data-pg-chat],[data-pg-item],[data-pg-ws],[data-pg-upload],[data-pg-info],[data-pg-refresh],[data-pg-preview],[data-pg-empty-trash],[data-pg-lib-src],[data-pg-gitem],[data-pg-ws-market],[data-pg-folder],a[data-go]');
     if (!b) return;
     const x = X(), s = S(), d = b.dataset;
     if (b.matches('a[data-go]')) { e.preventDefault(); return x.go('global', { global: d.go }); }
@@ -606,6 +632,7 @@
     if (d.pgLibSrc) { const u = ui('library'); u.q = pname(d.pgLibSrc); return x.go('global', { global: 'library', item: null }); }
     if (d.pgUpload !== undefined) return pickFiles();
     if (d.pgRefresh) { loaded.delete(d.pgRefresh); return repaint(); }   // a real reload: shapes, then fresh data
+    if (d.pgReload) { const r = LIVE[d.pgReload]; if (r && r.reload) { r.loading = true; r.reload(); } return; }   // a live page: its own module fetches again
     if (d.pgPreview) return openPreview(b);
     if (d.pgInfo !== undefined) { store.set('pgLibInfo', !store.get('pgLibInfo', false)); return repaint(); }
   });

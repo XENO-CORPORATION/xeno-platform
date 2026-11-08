@@ -16,16 +16,16 @@ Per division: how many actions a person can take, how many an agent can take tod
 | places | 9 | 3 | 4 | 2 | 8 | 1 | 0 | 0 | `places:read` 4 |
 | forum | 54 | 8 | 44 | 2 | 22 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 17 |
 | workforce | 303 | 53 | 245 | 5 | 35 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
-| workspace-ui | 191 | 4 | 101 | 86 | 68 | 120 | 3 | 0 | `workspace:admin` 101 |
+| workspace-ui | 193 | 4 | 103 | 86 | 68 | 122 | 3 | 0 | `workspace:admin` 103 |
 | account | 117 | 4 | 58 | 55 | 33 | 75 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
 | browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
-| forms | 45 | 18 | 20 | 7 | 18 | 22 | 5 | 0 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 1, `stock:write` 1 |
-| canvas | 23 | 6 | 17 | 0 | 5 | 14 | 4 | 0 | `tasks:write` 14, `tasks:read` 3 |
+| forms | 46 | 18 | 21 | 7 | 18 | 22 | 5 | 1 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 2, `stock:write` 1 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
 | support | 22 | 8 | 12 | 2 | 4 | 15 | 1 | 2 | `forum:write` 11, `forum:read` 1 |
-| customers | 29 | 7 | 9 | 13 | 9 | 14 | 5 | 1 | `customers:write` 6, `customers:read` 3 |
+| canvas | 23 | 12 | 11 | 0 | 5 | 14 | 4 | 0 | `tasks:write` 8, `tasks:read` 3 |
+| customers | 30 | 7 | 10 | 13 | 9 | 15 | 5 | 1 | `customers:write` 7, `customers:read` 3 |
 | analytics | 10 | 5 | 4 | 1 | 6 | 4 | 0 | 0 | `analytics:write` 4 |
 | publish | 13 | 6 | 4 | 3 | 6 | 4 | 0 | 3 | `publish:write` 3, `publish:read` 1 |
 | releases | 19 | 9 | 4 | 6 | 8 | 11 | 0 | 0 | `workspace:read` 3, `workspace:admin` 1 |

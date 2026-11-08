@@ -1911,6 +1911,11 @@
       "class": "safe",
       "scope": "customers:read"
     },
+    "route:customersRoutes.js:PATCH /companies/:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "customers:write"
+    },
     "route:customersRoutes.js:PATCH /contacts/:id": {
       "status": "planned",
       "class": "reversible",
@@ -8366,6 +8371,16 @@
       "class": "reversible",
       "scope": "workspace:admin"
     },
+    "ui:modals.js:data-rows-add": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "workspace:admin"
+    },
+    "ui:modals.js:data-rows-x": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "workspace:admin"
+    },
     "ui:modals.js:data-sec": {
       "status": "excluded",
       "category": "view-state",
@@ -8912,32 +8927,38 @@
       "because": "changes only what the screen shows"
     },
     "ui:platform-canvas.js:data-add": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.add",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-edge": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-grip": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-node": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-text": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.item.update",
       "class": "reversible",
       "scope": "tasks:write"
     },
     "ui:platform-canvas.js:data-cv-wire": {
-      "status": "planned",
+      "status": "capability",
+      "capability": "canvas.connection.create",
       "class": "reversible",
       "scope": "tasks:write"
     },
@@ -11448,6 +11469,11 @@
       "status": "capability",
       "capability": "fonts.workspace.list",
       "class": "safe",
+      "scope": "fonts:read"
+    },
+    "route:fontRoutes.js:POST /pairings/suggest": {
+      "status": "planned",
+      "class": "external",
       "scope": "fonts:read"
     },
     "route:fontRoutes.js:POST /families": {

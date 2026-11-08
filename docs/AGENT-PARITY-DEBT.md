@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2061 actions · 237 agent capability · 1384 planned (debt) · 440 excluded · **coverage 14.6%** of the 1621 owed.
+**Total:** 2065 actions · 243 agent capability · 1382 planned (debt) · 440 excluded · **coverage 15%** of the 1625 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -13,20 +13,20 @@ Every action a person can take on the platform, and whether an agent can take it
 | commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
 | workspace | 197 | 23 | 108 | 66 | 17.6% |
+| workspace-ui | 193 | 4 | 103 | 86 | 3.7% |
 | chat | 104 | 0 | 102 | 2 | 0% |
-| workspace-ui | 191 | 4 | 101 | 86 | 3.8% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | storage | 93 | 5 | 85 | 3 | 5.6% |
 | account | 117 | 4 | 58 | 55 | 6.5% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 75 | 0 | 37 | 38 | 0% |
 | browser-shell | 31 | 0 | 31 | 0 | 0% |
-| forms | 45 | 18 | 20 | 7 | 47.4% |
-| canvas | 23 | 6 | 17 | 0 | 26.1% |
+| forms | 46 | 18 | 21 | 7 | 46.2% |
 | inference | 18 | 0 | 12 | 6 | 0% |
 | scheduling | 22 | 4 | 12 | 6 | 25% |
 | support | 22 | 8 | 12 | 2 | 40% |
-| customers | 29 | 7 | 9 | 13 | 43.8% |
+| canvas | 23 | 12 | 11 | 0 | 52.2% |
+| customers | 30 | 7 | 10 | 13 | 41.2% |
 | analytics | 10 | 5 | 4 | 1 | 55.6% |
 | places | 9 | 3 | 4 | 2 | 42.9% |
 | publish | 13 | 6 | 4 | 3 | 60% |
@@ -289,7 +289,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:shellSessionRoutes.js:POST /:id/signal`
 - `route:shellSessionRoutes.js:POST /join`
 
-## canvas — 17 planned
+## canvas — 11 planned
 
 - `route:canvasRoutes.js:DELETE /:id`
 - `route:officeCanvasRoutes.js:DELETE /canvases/:canvasId`
@@ -302,12 +302,6 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:officeCanvasRoutes.js:POST /canvases/:canvasId/share/disable`
 - `route:officeCanvasRoutes.js:POST /join/:token`
 - `route:officeCanvasRoutes.js:PUT /canvases/:canvasId`
-- `ui:platform-canvas.js:data-add`
-- `ui:platform-canvas.js:data-cv-edge`
-- `ui:platform-canvas.js:data-cv-grip`
-- `ui:platform-canvas.js:data-cv-node`
-- `ui:platform-canvas.js:data-cv-text`
-- `ui:platform-canvas.js:data-cv-wire`
 
 ## chat — 102 planned
 
@@ -542,19 +536,20 @@ Every action a person can take on the platform, and whether an agent can take it
 
 - `route:computeRoutes.js:GET /usage/split`
 
-## customers — 9 planned
+## customers — 10 planned
 
 - `route:customersRoutes.js:DELETE /contacts/:id/links/:kind/:key`
 - `route:customersRoutes.js:GET /companies`
 - `route:customersRoutes.js:GET /duplicates`
 - `route:customersRoutes.js:GET /summary`
+- `route:customersRoutes.js:PATCH /companies/:id`
 - `route:customersRoutes.js:PATCH /contacts/:id`
 - `route:customersRoutes.js:POST /companies`
 - `route:customersRoutes.js:POST /contacts/:id/links`
 - `route:customersRoutes.js:POST /contacts/:id/task`
 - `route:customersRoutes.js:POST /stages`
 
-## forms — 20 planned
+## forms — 21 planned
 
 - `route:brandKitRoutes.js:DELETE /:id`
 - `route:brandKitRoutes.js:DELETE /:id/items`
@@ -569,6 +564,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:fontRoutes.js:DELETE /families/:family`
 - `route:fontRoutes.js:DELETE /uploads/:id`
 - `route:fontRoutes.js:GET /face.css`
+- `route:fontRoutes.js:POST /pairings/suggest`
 - `route:fontRoutes.js:POST /uploads/:id/takedown`
 - `route:formsRoutes.js:DELETE /:id`
 - `route:formsRoutes.js:DELETE /:id/responses`
@@ -1398,7 +1394,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-work.js:data-share-remove`
 - `ui:platform-work.js:data-share-role`
 
-## workspace-ui — 101 planned
+## workspace-ui — 103 planned
 
 - `ui:actions.js:data-ac`
 - `ui:actions.js:data-sc-del`
@@ -1485,6 +1481,8 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:modals.js:data-export`
 - `ui:modals.js:data-plan`
 - `ui:modals.js:data-pref-sw`
+- `ui:modals.js:data-rows-add`
+- `ui:modals.js:data-rows-x`
 - `ui:modals.js:data-signout`
 - `ui:modals.js:data-xd-act`
 - `ui:pages.js:data-reply`

@@ -7,7 +7,7 @@
  *   GET  /contacts/:id/export (GDPR access) · POST /contacts/:id/erase (GDPR erasure, admin)
  *   POST /contacts/:id/activities · POST /activities/:id/keep {discard?}
  *   POST /contacts/:id/links {kind, key} · DELETE /contacts/:id/links/:kind/:key · POST /contacts/:id/task {title}
- *   GET  /companies · POST /companies · DELETE /companies/:id
+ *   GET  /companies · POST /companies · PATCH /companies/:id {name?, notes?, billing?} · DELETE /companies/:id
  *   GET  /pipeline · POST /stages · POST /deals · POST /deals/:id/move {stageId} · POST /deals/:id/confirm · DELETE /deals/:id
  *   POST /import {csv, confirm?, onDuplicate?} (dry-run unless confirm) · GET /duplicates · POST /merge {into, from}
  */
@@ -57,6 +57,7 @@ router.delete('/contacts/:id/links/:kind/:key', ...A, run(async (req) => crm.unl
 router.post('/contacts/:id/task', ...A, run(async (req) => ({ task: await crm.createTaskFor(req.db, req.actor, req.params.id, { workspace: ws(req), title: b(req).title, projectId: b(req).projectId }) })));
 router.get('/companies', ...A, run(async (req) => ({ companies: await crm.listCompanies(req.db, req.actor, { workspace: ws(req) }) })));
 router.post('/companies', ...A, run(async (req) => ({ company: await crm.createCompany(req.db, req.actor, { ...b(req), workspace: ws(req) }) })));
+router.patch('/companies/:id', ...A, run(async (req) => ({ company: await crm.updateCompany(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }) })));
 router.delete('/companies/:id', ...A, run(async (req) => crm.deleteCompany(req.db, req.actor, req.params.id, { workspace: ws(req) })));
 router.get('/pipeline', ...A, run(async (req) => ({ pipeline: await crm.pipeline(req.db, req.actor, { workspace: ws(req) }) })));
 router.post('/stages', ...A, run(async (req) => ({ stage: await crm.createStage(req.db, req.actor, { workspace: ws(req), name: b(req).name, outcome: b(req).outcome }) })));
