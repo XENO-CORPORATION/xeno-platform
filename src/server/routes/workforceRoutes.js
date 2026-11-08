@@ -153,6 +153,7 @@ export const WORKFORCE_SHAPES = Object.freeze({
   '/run-admissions/pin': [pinObservation, true],
   '/run-admissions/revoke': [authorityObservation, false],
   '/run-admissions/authority': [authorityObservation, true],
+  '/run-admissions/steps/read': [stepsObservation, true],
   '/resources/revise-definition': [revisionObservation, false],
   '/resources/revise-definition/read': [revisionObservation, true],
   '/resources/definition/read': [definitionReadObservation, true],
@@ -185,6 +186,7 @@ const defaultAuthorizeStep = async (db, context, body) => {
 };
 const defaultRevokeRun = async (db, context, body) => (await import('../services/workforceRunAuthority.js')).revokeRun(db, context, body.admissionId);
 const defaultReadAuthority = async (db, context, body) => (await import('../services/workforceRunAuthority.js')).readRunAuthority(db, context, body.admissionId);
+const defaultReadSteps = async (db, context, body) => (await import('../services/workforceRunAuthority.js')).readRunSteps(db, context, body);
 
 /** RUN-03: a step authorization is a signed lease plus its public record, and nothing else. */
 const LEASE_FIELDS = ['schemaVersion', 'leaseId', 'admissionId', 'sequence', 'operation', 'capability', 'effectiveCapabilities', 'issuedAt', 'expiresAt', 'kid'];
@@ -225,6 +227,44 @@ function authorityObservation(value) {
     const out = fields(value, ['schemaVersion', 'admissionId', 'revoked', 'reason', 'revokedAt', 'latestLeaseSequence', 'replayed', 'fencedByAdmissionId', 'state', 'durableReason']);
     if (value.remainingMicro !== undefined) { out.remainingMicro = value.remainingMicro; out.reservationExpiresAt = budget.reservationExpiresAt; }
     return out;
+  } catch { return null; }
+}
+
+/** NFR-06: a run's steps, projected field by field. A step or dispatch in any other shape refuses the whole answer. */
+const STEP_OPERATIONS = new Set(['privileged_call', 'provider_dispatch']);
+const DRAW_STATES = new Set(['open', 'settled', 'voided']);
+const DRAW_OUTCOMES = new Set(['measured', 'unmeasured', 'not_dispatched']);
+const REVOCATION_REASONS = new Set(['stopped_by_actor', 'stopped_by_target', 'authority_lost']);
+const digits = (v) => typeof v === 'string' && /^\d{1,20}$/.test(v);
+const iso = (v) => typeof v === 'string' && !Number.isNaN(Date.parse(v));
+function stepsObservation(value) {
+  try {
+    if (!value || value.schemaVersion !== 1 || uuid(value.admissionId) !== value.admissionId || !Array.isArray(value.steps)) return null;
+    if (value.refusalsRecorded !== false) return null;
+    if (value.nextAfterSequence !== null && !digits(value.nextAfterSequence)) return null;
+    const steps = [];
+    for (const s of value.steps) {
+      if (!digits(s.sequence) || !STEP_OPERATIONS.has(s.operation) || !iso(s.issuedAt) || !iso(s.expiresAt)) return null;
+      if (s.capability !== null && typeof s.capability !== 'string') return null;
+      if (!Array.isArray(s.effectiveCapabilities) || s.effectiveCapabilities.some((c) => typeof c !== 'string')) return null;
+      let dispatch = null;
+      if (s.dispatch !== null) {
+        const d = s.dispatch;
+        if (typeof d?.model !== 'string' || !DRAW_STATES.has(d.state) || (d.outcome !== null && !DRAW_OUTCOMES.has(d.outcome))) return null;
+        if (!digits(d.reservedMicro) || !digits(d.chargedMicro) || !iso(d.openedAt) || (d.resolvedAt !== null && !iso(d.resolvedAt))) return null;
+        if ((d.inputTokens !== null && !digits(d.inputTokens)) || (d.outputTokens !== null && !digits(d.outputTokens))) return null;
+        dispatch = fields(d, ['model', 'state', 'outcome', 'reservedMicro', 'chargedMicro', 'inputTokens', 'outputTokens', 'openedAt', 'resolvedAt']);
+      }
+      steps.push({ ...fields(s, ['sequence', 'operation', 'capability', 'effectiveCapabilities', 'issuedAt', 'expiresAt']), dispatch });
+    }
+    let revocation = null;
+    if (value.revocation !== null) {
+      const r = value.revocation;
+      if (!REVOCATION_REASONS.has(r?.reason) || !iso(r.revokedAt)) return null;
+      if (r.fencedByAdmissionId !== null && uuid(r.fencedByAdmissionId) !== r.fencedByAdmissionId) return null;
+      revocation = fields(r, ['reason', 'revokedAt', 'fencedByAdmissionId']);
+    }
+    return { schemaVersion: 1, admissionId: value.admissionId, steps, nextAfterSequence: value.nextAfterSequence, revocation, refusalsRecorded: false };
   } catch { return null; }
 }
 
@@ -676,7 +716,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   reviseAgentDefinition = agentRevision('reviseAgentDefinition'), readAgentRevision = agentRevision('readAgentRevision'),
   readAgentDefinition = agentRevision('readAgentDefinition'),
   authorizeRunStep = defaultAuthorizeStep,
-  revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority, sessionEnv = process.env } = {}) {
+  revokeRun = defaultRevokeRun, readRunAuthority = defaultReadAuthority, readRunSteps = defaultReadSteps, sessionEnv = process.env } = {}) {
   const router = express.Router();
   router.use('/api-key-capabilities', apiKeyWorkforceCapabilityRoutes);
   // OWN-05: two-sided, reviewed, audited ownership transfer. Its own stricter auth bar -- see the router.
@@ -813,6 +853,9 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
     handle(onlyAdmission(revokeRun), ...shaped('/run-admissions/revoke')));
   router.post('/run-admissions/authority', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(onlyAdmission(readRunAuthority), ...shaped('/run-admissions/authority')));
+  // NFR-06: a run's leases in sequence, each dispatch with the draw that consumed it. A read.
+  router.post('/run-admissions/steps/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
+    handle(readRunSteps, ...shaped('/run-admissions/steps/read')));
   // RUN-04: a run's result is reported and delivered to its parent -- both manage acts, because a delivered
   // outcome is what the parent then acts on; reading a run's outcome is a read.
   router.post('/run-admissions/result', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:manage'), parse,
@@ -841,7 +884,7 @@ export function createWorkforceRouter({ createWorkforceResource = defaultCreate,
   router.post('/resources/definition/read', authMiddleware, requireDpopIfBound, requireWorkforceScope('workforce:read'), parse,
     handle(readAgentDefinition, ...shaped('/resources/definition/read')));
   for (const path of ['/resources', '/resources/create-and-assign', '/resources/revise-definition', '/resources/revise-definition/read', '/resources/definition/read', '/resources/list', '/resource-operations/read', '/run-admissions', '/run-admissions/read', '/run-admissions/list', '/run-admissions/pin', '/capacity', '/evaluation',
-    '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority',
+    '/run-admissions/authorize-step', '/run-admissions/revoke', '/run-admissions/authority', '/run-admissions/steps/read',
     '/run-admissions/result', '/run-admissions/deliver', '/run-admissions/outcome',
     '/member-removals', '/member-removals/read', '/member-removals/archive']) {
     router.all(path, (_req, res) => res.set('Allow', 'POST').status(405).json({ success: false, code: 'bad_input', error: 'Method not allowed.' }));

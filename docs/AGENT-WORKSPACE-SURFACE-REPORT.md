@@ -15,7 +15,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | workspace | 197 | 23 | 108 | 66 | 67 | 107 | 22 | 1 | `workspace:admin` 72, `workspace:read` 34, `agents:write` 1, `chat:write` 1 |
 | places | 9 | 3 | 4 | 2 | 8 | 1 | 0 | 0 | `places:read` 4 |
 | forum | 54 | 8 | 44 | 2 | 22 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 17 |
-| workforce | 303 | 53 | 245 | 5 | 35 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
+| workforce | 304 | 54 | 245 | 5 | 36 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
 | workspace-ui | 193 | 4 | 103 | 86 | 68 | 122 | 3 | 0 | `workspace:admin` 103 |
 | account | 117 | 4 | 58 | 55 | 33 | 75 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
