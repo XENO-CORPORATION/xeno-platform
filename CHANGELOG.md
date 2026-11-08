@@ -5,6 +5,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Every canvas node looks the same way.** Files that aren't pictures or documents, links, groups, verdicts, runs, objectives, divisions and older image cards were still the old boxes. They now follow the new node design: the name sits above the object, a selected node gets a thin drawn line, and every corner has the curved resize handle. Something you can no longer open keeps its place, quieter, so the layout doesn't jump. A project shown on a division's map is a normal card again, with its open tasks and status.
+
+**The project name fits in the header.** On a project page the path gave way to the tabs so early that a project read "Projects / BUNK…". The path now keeps its width and the tabs scroll in what's left. A canvas in a project is shown by its name in the path, not its id.
+
 **One shelf for GameDev on the PC and online.** XENO GameDev signs in two ways, from its studio on your PC and at gamedev.xenosystem.ai, and Storage used to file each one's games apart, so a game started on the phone never showed up on the PC. Both now reach the same games in your Storage; neither reaches any other app's projects.
 
 ## 2026-11-06
