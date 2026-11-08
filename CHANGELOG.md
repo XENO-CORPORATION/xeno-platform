@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Lend an agent into another workspace.** An agent's Lend used to offer only divisions in its own workspace, so the only way to bring it into another company was through a project or team there. Lend now also lists the divisions of every other company workspace you belong to; that workspace's admins accept it (at once, if that is you). It keeps its owner, its own division and who pays for it.
+
 **Fonts suggests pairings.** In Studio › Libraries › Fonts, Suggest a pairing on any catalogue font asks a model which fonts go with it, optionally for what you are making, and shows up to three partners set in their own type, each with the reason, ready to add. It only ever names fonts from the catalogue we host, and it uses your credits, which the dialog says before you ask.
 
 **Invoices pick the customer, and take real lines.** In Corpo › Company, New invoice has a table of lines (item, quantity, unit price and tax per line, with a running total) instead of a first line plus a box of text, and a Customer choice from Corpo › Customers that fills in who is billed, their tax number and address. A new customer, or changed details, is saved back to Customers once the invoice is issued (or kept to that invoice only, if you choose). A customer company in Customers now holds those billing details.
