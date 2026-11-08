@@ -58,8 +58,8 @@
     if (!saved) fit();
     paint();
   }
-  const refsOf = (rec) => ({ generation: rec.generations || {}, file: rec.files || {}, chat: rec.chats || {}, project: rec.projects || {}, division: rec.divisions || {}, objective: rec.objectives || {}, run: rec.runs || {}, tenet: rec.tenets || {} });
-  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = refsOf(cv.records); C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; watchImages(); }
+  const refsOf = (rec) => ({ generation: rec.generations || {}, file: rec.files || {}, chat: rec.chats || {}, project: rec.projects || {}, division: rec.divisions || {}, objective: rec.objectives || {}, run: rec.runs || {}, tenet: rec.tenets || {}, people: rec.people || {} });
+  function take(cv) { C.doc = cv.content; C.records = cv.records.tasks || {}; C.refs = refsOf(cv.records); C.rev = cv.revision; C.can = cv.can; C.name = cv.name; C.project = cv.project; C.peopleLive = !!cv.peopleLive; watchImages(); }
   const store = (id, v) => { try { if (v) localStorage.setItem('xw-canvas-view:' + id, JSON.stringify(v)); else return JSON.parse(localStorage.getItem('xw-canvas-view:' + id) || 'null'); } catch { return null; } return null; };
 
   /** call BEFORE changing C.doc: the undo step is the state as it was */
@@ -275,9 +275,15 @@
     return xn('task', 'Task', `<div class="xn-task"><div class="xn-tk"><span class="tk-dot tk-dot--${esc(t.status || 'todo')}"></span>${esc(LABEL[t.status] || '')}${readyBadge(t.key)}</div><b class="cv-task-t">${esc(t.title || '…')}</b><div class="xn-steps">${STEPS.map((x, i) => `<button class="${i <= step ? 'on' : ''}" data-cv-act="step" data-arg="${esc(t.key)}|${x}" title="${esc(LABEL[x])}" aria-label="${esc(LABEL[x])}"></button>`).join('')}</div></div>`, { attr: ` data-cv-task="${esc(t.key)}"`, icon: 'check', em: t.key });
   }
   const STEPS = ['todo', 'in_progress', 'in_review', 'done'];
+  /** The project item a node stands for (services/canvases.js itemOf): who is on it lives in the project, not on this canvas. */
+  function itemKey(n) {
+    if (n.type === 'xeno-ref' && ['file', 'chat', 'generation'].includes(n.ref.kind)) return n.ref.kind + ':' + n.ref.id;
+    if (n.type === 'media') return n.media.versions.length ? 'file:' + n.media.versions[0] : n.media.generation ? 'generation:' + n.media.generation : null;
+    return null;
+  }
   function whoOf(n) {
-    const task = n.type === 'xeno-ref' && n.ref.kind === 'task' ? C.records[n.ref.id] : null;
-    const p = task ? (task.delegate ? { name: task.delegate.name, agent: true } : task.assignee) : (C.people || []).find((x) => String(x.id) === String(n.who));
+    const task = n.type === 'xeno-ref' && n.ref.kind === 'task' ? C.records[n.ref.id] : null, key = C.peopleLive ? itemKey(n) : null, live = key ? ((C.refs.people || {})[key] || [])[0] : null;
+    const p = task ? (task.delegate ? { name: task.delegate.name, agent: true } : task.assignee) : key ? (live ? { name: live.name, agent: live.kind === 'agent' } : null) : (C.people || []).find((x) => String(x.id) === String(n.who));
     const mark = p ? esc(String(p.name || '?').slice(0, 1).toUpperCase()) : ic('plus');
     return `<button class="xn-who ${p ? (p.agent || p.kind === 'agent' ? 'agent' : '') : 'none'}" data-cv-act="who" data-arg="${esc(n.id)}" title="${p ? 'Assigned to ' + esc(p.name) : 'Assign someone'}" aria-label="${p ? 'Assigned to ' + esc(p.name) : 'Assign someone'}"${C.can?.edit ? '' : ' disabled'}>${mark}</button>`;
   }
@@ -745,7 +751,8 @@
   }
   async function whoPick(id, el) {
     const n = nodeById(id); if (!n) return; const list = C.people || [], r = el.getBoundingClientRect(), task = n.type === 'xeno-ref' && n.ref.kind === 'task';
-    const set = async (v) => { if (task) { const x = await api('PATCH', `/api/tasks/${encodeURIComponent(n.ref.id)}`, { assigneeId: v }).catch(() => null); if (!x || !x.ok) return toast(said(x, 'It couldn’t be assigned')); if (x.d.task) C.records[n.ref.id] = x.d.task; draw(); return; } before(); if (v) n.who = v; else delete n.who; change(); };
+    const key = !task && C.peopleLive ? itemKey(n) : null;
+    const set = async (v) => { if (key) { const [kind, id] = key.split(':'); const x = await api('PUT', `/api/projects/${encodeURIComponent(C.project.id)}/items/${kind}/${encodeURIComponent(id)}/people`, { principalId: v }).catch(() => null); if (!x || !x.ok) return toast(said(x, 'It couldn’t be assigned')); C.refs.people = { ...(C.refs.people || {}), [key]: x.d.people }; draw(); status(v ? 'Assigned' : 'Unassigned'); return; } if (task) { const x = await api('PATCH', `/api/tasks/${encodeURIComponent(n.ref.id)}`, { assigneeId: v }).catch(() => null); if (!x || !x.ok) return toast(said(x, 'It couldn’t be assigned')); if (x.d.task) C.records[n.ref.id] = x.d.task; draw(); return; } before(); if (v) n.who = v; else delete n.who; change(); };
     window.XCM?.show([list.map((p) => ({ label: p.name, icon: p.kind === 'agent' ? 'bot' : 'people', run: () => set(String(p.id)) })), [{ label: 'Nobody', run: () => set(null) }]], { x: r.left - 176, y: r.bottom + 4, opener: el });
   }
   async function stepTo(arg) {

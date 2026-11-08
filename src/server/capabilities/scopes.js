@@ -47,7 +47,7 @@ export const ASK_FIRST_SCOPES = Object.freeze(['corpus_local:read']);
 export const AMBIENT_SCOPES = Object.freeze(WORKSPACE_SCOPES.filter((s) => !ASK_FIRST_SCOPES.includes(s)));
 
 export const DIVISION_AREA = Object.freeze({
-  storage: 'storage', studio: 'library', canvas: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
+  storage: 'storage', studio: 'library', canvas: 'tasks', projects: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
   marketplace: 'marketplace', tools: 'marketplace', publish: 'publish', message: 'message', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', forms: 'forms', brand: 'brand', fonts: 'fonts', stock: 'stock', corpus_local: 'corpus_local', support: 'forum', customers: 'customers', mail: 'mail', automate: 'automate', releases: 'workspace', compute: 'compute',
