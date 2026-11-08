@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-08
 
+**Who is on a document, a chat or a picture belongs to the project.** The person in a canvas node's corner used to be a drawing on that one canvas. Now, for documents, files, chats and pictures, it is part of the project, like a task's assignee: every canvas shows the same person, read live; the person is told; Projects › Team assignments shows what each person is on; and agents can read and set it. Only a project editor can put someone on an item, and only someone who can already see the project. A picture keeps its person when it finishes generating. It is switched on per server and starts off.
+
 **"Updated just now" means it.** Support, Tasks, Releases and the Community pages said "Updated just now" at the bottom whatever had happened, including after a load that failed. The line now says what really happened: Couldn't load (with Retry), Couldn't refresh (keeping what was already shown, and when it last worked), or Updated, only after a load that worked. A failed Support queue, Deploys, Features or Notes list now says it failed instead of showing an empty list, and staff stay on their own view when a check fails instead of being shown the customer's.
 
 **Reply to a chat right on the canvas.** A chat on the canvas used to show its thread and send you to Chat to answer. Now press Reply under the thread and the chat opens in the node itself: the same chat as in Chat, with the same models, tools and project context, and the answer streams in place. Move the node, zoom or keep working on the canvas and what you've typed stays. Done closes it again.

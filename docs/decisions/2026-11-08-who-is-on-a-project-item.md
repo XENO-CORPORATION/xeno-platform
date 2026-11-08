@@ -1,6 +1,6 @@
 # Who is on a document, a chat or a picture in a project (2026-11-08)
 
-**Status: PROPOSED — waiting for the owner's yes. Nothing here is built.**
+**Status: ACCEPTED (owner, 2026-11-08: *"we shoudl build hte proep think starting now"*). Built: `migrations/20261124090000-project-item-people.sql`, `services/projectItemPeople.js`, `routes/projectItemPeopleRoutes.js`, XENO MCP `projects_item_people` / `projects_set_item_person`, the canvas and Projects › Team assignments. Gate `PROJECT_ITEM_PEOPLE=true`. Measured before building (production): no canvas node carried a person, so nothing was copied.**
 
 **Owner, 2026-11-06:** *"we want the canvas to be the full infinite canvas of the project … if we create a text file
 there, or deploy whatever node there for image, or a chat session there, all should be part of the project and

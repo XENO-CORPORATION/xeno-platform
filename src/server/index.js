@@ -1,5 +1,6 @@
 import path from 'path';
 import canvasRoutes from './routes/canvasRoutes.js';
+import projectItemPeopleRoutes from './routes/projectItemPeopleRoutes.js';
 import placesRoutes, { agentTurn as placesAgentTurn } from './routes/placesRoutes.js';
 import { meModesRouter, workspaceModesRouter } from './routes/modesRoutes.js';
 import xenoTasksRoutes, { taskTokenAuth, unlessTaskToken, mcpChallenge, protectedResourceMetadata } from './routes/xenoTasksRoutes.js';
@@ -733,6 +734,7 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDi
 // against it in CI without a credential.
 app.get('/api/tasks/openapi.json', (req, res) => { res.set('cache-control', 'public, max-age=300'); res.json(TASKS_OPENAPI); });
 app.use('/api/canvases', databaseMiddleware, authMiddleware, requireActivated, canvasRoutes);
+app.use('/api/projects', databaseMiddleware, authMiddleware, requireActivated, projectItemPeopleRoutes);   // who is on a project item (services/projectItemPeople.js)
 // XENO Places — the building where a workspace's humans and agents work (xeno-places/SPEC.md). Layout, hosted
 // sessions and a scope-filtered snapshot of the live workforce records; it owns no org data.
 app.post('/api/places/:placeId/agents/:pid/turn', databaseMiddleware, authMiddleware, requireActivated, llmLimiter, express.json({ limit: '1mb' }), placesAgentTurn(aiRoutes));
