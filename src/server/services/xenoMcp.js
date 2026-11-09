@@ -42,6 +42,7 @@ import * as mailMcp from './mailMcp.js';
 import * as analyticsMcp from './analyticsMcp.js';
 import * as formsMcp from './formsMcp.js';
 import * as brandKitsMcp from './brandKitsMcp.js';
+import * as sitesMcp from './sitesMcp.js';
 import * as fontsMcp from './fontsMcp.js';
 import * as stockMcp from './stockMcp.js';
 import * as toolsMcp from './toolsMcp.js';
@@ -251,6 +252,14 @@ export const SERVICES = Object.freeze([
     tools: () => fontsMcp.TOOLS,
     call: (db, actor, name, args) => fontsMcp.callTool(db, actor, name, args),
     isToolError: (e) => e instanceof fontsMcp.FontsMcpError,
+  },
+  // XENO Sites (sitesMcp.js): read which sites a workspace published and which version is live. Publishing is in the app that built it.
+  {
+    category: 'sites', title: 'Sites', version: '1.0.0', timeoutMs: 20_000,
+    description: 'Sites: read the sites a workspace has published, every version with its preview address, which one is live and who did what. Building and publishing happen in XENO Workshop; making a site live is a person’s.',
+    tools: () => sitesMcp.TOOLS,
+    call: (db, actor, name, args) => sitesMcp.callTool(db, actor, name, args),
+    isToolError: (e) => e instanceof sitesMcp.SitesMcpError,
   },
   // XENO Assets (brandKitsMcp.js): read a workspace's brand so work stays on it, and propose tokens. Publishing is a person's.
   {

@@ -175,6 +175,7 @@
     "formsRoutes.js": "forms",
     "platform-forms.js": "forms",
     "brandKitRoutes.js": "forms",
+    "siteRecordRoutes.js": "forms",
     "platform-assets.js": "forms",
     "fontRoutes.js": "forms",
     "platform-fonts.js": "forms",
@@ -11747,6 +11748,25 @@
       "class": "irreversible",
       "scope": "none",
       "because": "a credit note is a legal document a company answers for, immutable once issued; only a person who manages the company issues one"
+    },
+    "route:siteRecordRoutes.js:POST /events": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "reversible",
+      "scope": "none",
+      "because": "the app that built a site (XENO Workshop) reports what it published, as the person, under sites:write; an agent publishes through that app, never here"
+    },
+    "route:siteRecordRoutes.js:GET /": {
+      "status": "capability",
+      "capability": "sites.site.list",
+      "class": "safe",
+      "scope": "sites:read"
+    },
+    "route:siteRecordRoutes.js:GET /:id": {
+      "status": "capability",
+      "capability": "sites.site.get",
+      "class": "safe",
+      "scope": "sites:read"
     }
   }
 }

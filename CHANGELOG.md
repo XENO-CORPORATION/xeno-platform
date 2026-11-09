@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-09
+
+**A workspace keeps a record of the sites it publishes.** When XENO Workshop publishes a site, it now tells the workspace what happened: the site claimed, each version published, which version went live, a rollback, a domain added or removed, a rename, a delete. The workspace keeps every version and a log of who did what and when. People with access to the workspace can read it at `/api/sites`, and agents on XENO MCP (`sites` tools). An agent may publish a preview version; making a site live or taking it down is a person's, and the database refuses it for an agent too. Workshop reports with the person's own sign-in, under the new `sites:write` permission, which Workshop receives the next time a person signs in to it.
+
 ## 2026-11-08
 
 **A run's steps now include the ones it was refused.** Every step the platform refused an admitted run is now kept: the tool or model call it asked for, the reason, whether the run can carry on and what would let it, and when. The steps read lists them among the allowed steps, each after the step it followed. If a run keeps asking for the same refused thing, it shows once with a count and the last time it asked. Only the person who started the run sees them, and a request from anyone else leaves nothing behind. `refusalsRecorded` is now `true` for runs started from today; older runs say `false`, because their earlier refusals were not kept.

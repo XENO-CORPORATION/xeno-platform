@@ -85,8 +85,8 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // starts in the workshop runs on, and bills, that person's own account (surface-account seam).
   // storage:read/write (owner, 2026-10-23): a project's files live in the person's XENO Storage
   // (/api/storage/projects/xeno-workshop/*, which checks both and reaches only the Workshop's own projects).
-  'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
-  'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],
+  'xeno-workshop': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write', 'sites:read', 'sites:write'],
+  'xeno-workshop-local': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write', 'sites:read', 'sites:write'],   // sites:*: the Workshop reports each publish to the site record AS THE PERSON (/api/sites/events, xeno-sites 0001 §3)
   // XENO GameDev: the Workshop's set, for the same reasons. The Director and the image lane run on, and bill, the
   // person's own account; a game's project lives in the person's XENO Storage (/api/storage/projects/xeno-gamedev/*).
   'xeno-gamedev': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'storage:read', 'storage:write'],

@@ -49,6 +49,7 @@
     "test:products-live-ui": "node prototypes/xeno-workspace/tests/products-live-test.mjs",
     "test:products-live-mutation": "node scripts/products-live-mutation-check.mjs",
     "test:brand-kits": "node src/server/tests/brand-kits.test.mjs",
+    "test:site-records": "node src/server/tests/site-records.test.mjs",
     "test:brand-kits-ui": "node prototypes/xeno-workspace/tests/brand-kits-test.mjs",
     "test:forms": "node src/server/tests/forms.test.mjs",
     "test:forms-ui": "node prototypes/xeno-workspace/tests/forms-test.mjs",

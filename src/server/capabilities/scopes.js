@@ -30,7 +30,8 @@ export const WORKSPACE_SCOPES = Object.freeze([
   'automate:read', 'automate:write',   // Dev › Automate = XENO Workflow (2026-10-23). Agents draft; turning a workflow on is a person's.
   'message:read', 'message:write',   // Social › Message = XENO Comms (2026-10-23). Agents read and post in channels they belong to.
   'mail:read', 'mail:write',   // Office › Mail = XENO Mail (2026-10-23). Sending is never a scope: a person confirms it on screen.
-  'compute:read', 'compute:write',   // XENO Compute (2026-10-26). Agents run machines billed to their owner; caps and prices are never a scope.
+  'compute:read', 'compute:write',
+  'sites:read', 'sites:write',   // XENO Sites (2026-11-09). An app reports what it published as the person; going live is a person's.   // XENO Compute (2026-10-26). Agents run machines billed to their owner; caps and prices are never a scope.
 ]);
 
 /** Ledger classes (§4 reversibility). The catalogue's `undoable` is the ledger's `reversible`. */
@@ -50,7 +51,7 @@ export const DIVISION_AREA = Object.freeze({
   storage: 'storage', studio: 'library', canvas: 'tasks', projects: 'tasks', tasks: 'tasks', chat: 'chat', inference: 'chat',
   agents: 'agents', workforce: 'agents', commerce: 'wallet', workspace: 'workspace', 'workspace-ui': 'workspace',
   account: 'workspace', platform: 'workspace', places: 'places', forum: 'forum', 'browser-shell': 'workspace',
-  marketplace: 'marketplace', tools: 'marketplace', publish: 'publish', message: 'message', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', forms: 'forms', brand: 'brand', fonts: 'fonts', stock: 'stock', corpus_local: 'corpus_local', support: 'forum', customers: 'customers', mail: 'mail', automate: 'automate', releases: 'workspace', compute: 'compute',
+  marketplace: 'marketplace', tools: 'marketplace', publish: 'publish', message: 'message', analytics: 'analytics', docs: 'docs', scheduling: 'scheduling', forms: 'forms', brand: 'brand', fonts: 'fonts', stock: 'stock', corpus_local: 'corpus_local', support: 'forum', customers: 'customers', mail: 'mail', automate: 'automate', releases: 'workspace', compute: 'compute', sites: 'sites',
   // XENO-WORKFORCE-01 capability divisions (catalogue first segments)
   agent: 'agents', run: 'agents', objective: 'agents', division: 'workspace', funding: 'wallet',
   orchestrator: 'tasks', audit: 'workspace',
