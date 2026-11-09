@@ -40,6 +40,7 @@ import * as inboxMcp from '../services/inboxMcp.js';
 import * as workforceMcp from '../services/workforceMcp.js';
 import * as formsMcp from '../services/formsMcp.js';
 import * as brandKitsMcp from '../services/brandKitsMcp.js';
+import * as sitesMcp from '../services/sitesMcp.js';
 import * as fontsMcp from '../services/fontsMcp.js';
 import * as stockMcp from '../services/stockMcp.js';
 import * as corpusLocalMcp from '../services/corpusLocalMcp.js';
@@ -49,7 +50,7 @@ import * as skillsMcp from '../services/skillsMcp.js';
 export const BOUND_TOOLS = Object.freeze({
   inbox: inboxMcp.TOOLS, tasks: tasksMcp.TOOLS, canvas: canvasMcp.TOOLS, projects: projectItemPeopleMcp.TOOLS, agents: agentsMcp.TOOLS,
   image: agentMediaMcp.IMAGE.tools, video: agentMediaMcp.VIDEO.tools, library: agentMediaMcp.LIBRARY.tools, chat: agentMediaMcp.CHAT.tools,
-  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, brand: brandKitsMcp.TOOLS, fonts: fontsMcp.TOOLS, stock: stockMcp.TOOLS, corpus_local: corpusLocalMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
+  forum: forumMcp.TOOLS.map((t) => ({ ...t, name: t.name.replace(/^forum_/, '') })), places: placesMcp.TOOLS, storage: storageMcp.TOOLS, support: supportMcp.TOOLS, releases: releasesMcp.TOOLS, customers: customersMcp.TOOLS, forms: formsMcp.TOOLS, brand: brandKitsMcp.TOOLS, sites: sitesMcp.TOOLS, fonts: fontsMcp.TOOLS, stock: stockMcp.TOOLS, corpus_local: corpusLocalMcp.TOOLS, compute: computeMcp.TOOLS, automate: automateMcp.TOOLS, publish: publishMcp.TOOLS, message: messageMcp.TOOLS, mail: mailMcp.TOOLS, analytics: analyticsMcp.TOOLS, tools: toolsMcp.TOOLS, docs: docsMcp.TOOLS, scheduling: schedulingMcp.TOOLS, modes: modesMcp.TOOLS, people: peopleMcp.TOOLS, corpus: corpusMcp.TOOLS, research: researchMcp.TOOLS, workforce: workforceMcp.TOOLS, skills: skillsMcp.TOOLS,
 });
 
 const obj = (properties, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
@@ -277,6 +278,9 @@ const ROWS = [
   ['brand.version.get', 'brand', 'get_brand', 'safe', { provenance: 'untrusted', reply: obj({ version: { type: 'integer' }, digest: { type: 'string' }, snapshot: { type: 'object', description: 'name, voice, modes, items [{path, kind, value, valuesByMode}]. Frozen: this version never changes. The voice is written by people.' } }, ['version', 'digest', 'snapshot']) }],
   ['brand.tokens.export', 'brand', 'export_tokens', 'safe', { provenance: 'trusted', reply: obj({ filename: { type: 'string' }, version: { type: 'integer' }, digest: { type: 'string' }, format: { type: 'string' }, text: { type: 'string', description: 'The file’s text. Every value passed validation.' } }, ['filename', 'text']) }],
   ['brand.token.propose', 'brand', 'propose_token', 'undoable', { idempotency: NAT('one token per name per kit: sending the same value again changes nothing'), reply: obj({ item: { type: 'object', description: 'The token in the draft, marked as proposed by an agent until a person publishes.' } }, ['item']) }],
+  // ── sites (services/siteRecords.js). Agents read what is published; publishing is in the building app and going live is a person's.
+  ['sites.site.list', 'sites', 'list_sites', 'safe', { provenance: 'untrusted', reply: obj({ sites: { type: 'array', description: 'id, name, url, live {deploy, since}, domains, disabled of each site. Names are chosen by people.' } }, ['sites']) }],
+  ['sites.site.get', 'sites', 'get_site', 'safe', { provenance: 'untrusted', reply: obj({ site: { type: 'object' }, versions: { type: 'array', description: 'deploy, url (its preview address), files, bytes, branch, checks, live, createdBy, createdAt; newest first.' }, events: { type: 'array', description: 'kind, deploy, detail, by, at; newest first.' } }, ['site', 'versions', 'events']) }],
   // ── forms (Corpo › Forms, services/forms.js). Agents make SIGN-IN links only; public links and deletes are a person's.
   ['forms.form.list', 'forms', 'list_forms', 'safe', { provenance: 'untrusted', reply: obj({ forms: { type: 'array', description: 'id, title, status, responses, url of each form — titles are written by people.' } }, ['forms']) }],
   ['forms.form.get', 'forms', 'get_form', 'safe', { provenance: 'untrusted', reply: obj({ form: { type: 'object', description: 'id, title, description, fields, status, autoActions, links (never a token).' } }, ['form']) }],

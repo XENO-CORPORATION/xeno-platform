@@ -37,6 +37,7 @@ import mailRoutes from './routes/mailRoutes.js';
 import workspaceAnalyticsRoutes from './routes/workspaceAnalyticsRoutes.js';
 import formsRoutes from './routes/formsRoutes.js';
 import brandKitRoutes from './routes/brandKitRoutes.js';
+import siteRecordRoutes from './routes/siteRecordRoutes.js';
 import fontRoutes, { actorOf as fontActorOf, fail as fontFail } from './routes/fontRoutes.js';
 import stockRoutes from './routes/stockRoutes.js';
 import * as fontsService from './services/fonts.js';
@@ -710,6 +711,7 @@ app.use('/api/publish', databaseMiddleware, authMiddleware, requireActivated, pu
 app.use('/api/forms', databaseMiddleware, formsRoutes);
 app.use('/api/stock', databaseMiddleware, stockRoutes);   // XENO Stock, Studio › Libraries (services/stock.js)
 app.use('/api/fonts', databaseMiddleware, fontRoutes);   // XENO Fonts, Studio › Libraries (services/fonts.js)
+app.use('/api/sites', databaseMiddleware, siteRecordRoutes);   // XENO Sites: the workspace's record of published sites (services/siteRecords.js)
 app.use('/api/brand-kits', databaseMiddleware, brandKitRoutes);   // XENO Assets, Studio › Libraries (services/brandKits.js)
 app.use('/api/automate', databaseMiddleware, authMiddleware, requireActivated, automateRoutes);   // Dev › Automate = XENO Workflow (services/xenoWorkflow.js)
 // XENO Message = XENO Comms, server-to-server (services/xenoComms.js). The platform keeps no messages.

@@ -3012,6 +3012,34 @@
    ]
   },
   {
+   "name": "sites.site.list",
+   "wire": "sites__site__list",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "sites:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "sites_list_sites"
+   ]
+  },
+  {
+   "name": "sites.site.get",
+   "wire": "sites__site__get",
+   "version": "1.0.0",
+   "class": "safe",
+   "scope": "sites:read",
+   "surfaces": [
+    "mcp",
+    "rest"
+   ],
+   "aliases": [
+    "sites_get_site"
+   ]
+  },
+  {
    "name": "forms.form.list",
    "wire": "forms__form__list",
    "version": "1.0.0",
