@@ -68,7 +68,11 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // Standalone Agent is a public loopback PKCE client. Keep its authority identical
   // to the existing agent surfaces; unsupported requested scopes are downscoped by
   // the provider, never added to the policy by guesswork.
-  'xeno-agent-interface': [...AGENT_PRODUCT, 'collaboration:use', 'remote:connect'],
+  // `team:read` (2026-11-12): its Account and members page lists the person's workspaces, members and invitations,
+  // and every one of those reads was refused for want of it (measured on desktop 0.3.42: account:INVALID_TOKEN).
+  // Read only. `team:manage` (invite, remove, workspace keys) is NOT here: that is team administration from a
+  // public desktop client, and it waits for the owner's decision.
+  'xeno-agent-interface': [...AGENT_PRODUCT, 'team:read', 'collaboration:use', 'remote:connect'],
   // A browser reaching the person's own PC. It spends nothing and reads nothing here: the relay is all it needs.
   'xeno-remote-web': [...IDENTITY, 'remote:connect'],
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
