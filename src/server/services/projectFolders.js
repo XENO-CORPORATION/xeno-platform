@@ -34,7 +34,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const APP = /^[a-z][a-z0-9-]{1,63}$/;
 const SHA = /^[0-9a-f]{64}$/;
 /** The top folder an app's projects sit in, as a person browsing Storage reads it. */
-const APP_LABEL = { 'xeno-workshop': 'XENO Workshop', 'xeno-gamedev': 'XENO GameDev', projects: 'Projects' };
+const APP_LABEL = { 'xeno-workshop': 'XENO Workshop', 'xeno-gamedev': 'XENO GameDev', 'xeno-spawn-backup': 'Spawn backup', projects: 'Projects' };
 const MAX_DEPTH = 32;
 
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -165,6 +165,15 @@ export async function listProjectFiles(db, userId, app, projectId) {
 async function current(db, app, projectId, p) {
   return (await db.query(`SELECT pf.path, cur.* FROM project_files pf CROSS JOIN LATERAL (${CURRENT}) cur
      WHERE pf.app = $1 AND pf.project_id = $2 AND pf.path = $3`, [app, projectId, p])).rows[0] || null;
+}
+
+/** The current version of one path (null when absent), without listing the project: what an append-only writer checks. */
+export async function projectFileAt(db, userId, app, projectId, rawPath) {
+  await projectFolder(db, userId, app, projectId, 'view');
+  const p = projectPath(rawPath);
+  if (!p) throw new ProjectFolderError('Not a valid project path', 'invalid_path');
+  const r = await current(db, app, projectId, p);
+  return r ? { path: r.path, fileId: String(r.file_id), versionId: String(r.id), size: Number(r.file_size), sha256: r.content_sha256, updatedAt: r.created_at } : null;
 }
 
 /** One file of the project, for reading its bytes. */
