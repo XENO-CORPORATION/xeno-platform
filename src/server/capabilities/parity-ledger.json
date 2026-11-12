@@ -121,6 +121,8 @@
     "spawnCanvasRoutes.js": "agents",
     "spawnDeviceRoutes.js": "agents",
     "spawnProfileRoutes.js": "agents",
+    "spawnItemRoutes.js": "agents",
+    "spawnBackupRoutes.js": "agents",
     "storageSharedRoutes.js": "storage",
     "supportRoutes.js": "support",
     "tokenizerRoutes.js": "chat",
@@ -11767,6 +11769,77 @@
       "capability": "sites.site.get",
       "class": "safe",
       "scope": "sites:read"
+    },
+    "route:spawnBackupRoutes.js:GET /keys": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:PUT /keys/devices/:deviceId": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "reversible",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:POST /keys/devices/:deviceId/approve": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:POST /keys/devices/:deviceId/revoke": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:PUT /keys/recovery": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:GET /objects": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:PUT /objects/:objectId/:part/:n": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnBackupRoutes.js:GET /objects/:objectId/:part/:n": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "none",
+      "because": "XENO Spawn’s end-to-end encrypted conversation backup: only a device holding the account data key can make or use what this carries, so an agent tool would hold nothing it could act on"
+    },
+    "route:spawnItemRoutes.js:GET /": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "agents:read"
+    },
+    "route:spawnItemRoutes.js:PUT /:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "agents:write"
+    },
+    "route:spawnItemRoutes.js:DELETE /:id": {
+      "status": "planned",
+      "class": "irreversible",
+      "scope": "agents:write"
     }
   }
 }

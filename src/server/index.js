@@ -154,6 +154,8 @@ import spawnProfileRoutes from './routes/spawnProfileRoutes.js';
 import spawnSkillRoutes from './routes/spawnSkillRoutes.js';
 import toolsRoutes from './routes/toolsRoutes.js';
 import spawnDeviceRoutes from './routes/spawnDeviceRoutes.js';
+import { spawnItemRouter } from './routes/spawnItemRoutes.js';
+import spawnBackupRoutes from './routes/spawnBackupRoutes.js';
 import spawnCanvasRoutes from './routes/spawnCanvasRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
@@ -810,6 +812,10 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/v2/spawn/skills', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnSkillRoutes);
   app.use('/api/tools', toolsRoutes);
   app.use('/api/v2/spawn/devices', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnDeviceRoutes);
+  // Spawn sync v2: projects, named sessions, and the end-to-end encrypted conversation backup (ciphertext in the person's Storage)
+  app.use('/api/v2/spawn/projects', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnItemRouter('project'));
+  app.use('/api/v2/spawn/sessions', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnItemRouter('session'));
+  app.use('/api/v2/spawn/backup', databaseMiddleware, oidcAuth, requireDpopIfBound, spawnBackupRoutes({ uploadsDir }));
   // Signs in inside the router (authMiddleware + requireDpopIfBound), as the Compute routes do.
   app.use('/api/v2/spawn/canvases', databaseMiddleware, spawnCanvasRoutes);
   app.use('/api/v2/authz', databaseMiddleware, oidcAuth, v2AuthzRoutes);

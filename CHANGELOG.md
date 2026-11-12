@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-12
+
+**Spawn's projects, named sessions and conversations can follow you to another PC.** XENO Spawn can now keep its projects (name, tabs and the folder on each PC) and named sessions on your account, the same way it already keeps profiles, so a second PC gets them too. It can also back up your agent conversations into your XENO Storage, in one "Spawn backup" folder that counts against your space like any other file. The backup is encrypted on your PC before it leaves: XENO stores only scrambled bytes and never has the key, not even for which project or agent a conversation belongs to. A new PC can read it only after one of your PCs approves it, or with the recovery key you keep. Lose every approved PC and the recovery key, and nobody can open the backup, including XENO. Uploads only ever add: a piece already uploaded is never replaced.
+
 ## 2026-11-09
 
 **A workspace keeps a record of the sites it publishes.** When XENO Workshop publishes a site, it now tells the workspace what happened: the site claimed, each version published, which version went live, a rollback, a domain added or removed, a rename, a delete. The workspace keeps every version and a log of who did what and when. People with access to the workspace can read it at `/api/sites`, and agents on XENO MCP (`sites` tools). An agent may publish a preview version; making a site live or taking it down is a person's, and the database refuses it for an agent too. Workshop reports with the person's own sign-in, under the new `sites:write` permission, which Workshop receives the next time a person signs in to it.
