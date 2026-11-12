@@ -25,11 +25,12 @@ test('the Agent is a first-party public loopback client', () => {
   // authority the agent surfaces do not already hold, apart from the named scopes. `remote:connect` is
   // the second (decision 0006, 2026-11-05): the Agent app holds the remote control socket and Shell does not.
   // `team:read` is the third (2026-11-12): the Agent app has an Account and members page that lists the person's
-  // workspaces, members and invitations, and Shell has none. Reading only; `team:manage` is not granted.
+  // workspaces, members and invitations, and Shell has none. `team:manage` is the fourth, the same day: that page
+  // also invites, removes and manages workspace keys (the app's ACCOUNT-WORKSPACE-INTEGRATION.md ceiling).
   const shell = new Set(scopesForClient('xeno-shell'));
   const own = scopesForClient(client.id);
   assert.ok([...shell].every((scope) => own.includes(scope)), 'the Agent lost authority the agent surfaces hold');
-  assert.deepEqual(own.filter((scope) => !shell.has(scope)), ['team:read', 'collaboration:use', 'remote:connect'],
+  assert.deepEqual(own.filter((scope) => !shell.has(scope)), ['team:read', 'team:manage', 'collaboration:use', 'remote:connect'],
     'the Agent holds authority beyond the agent surfaces other than the deliberate additions');
   assert.equal(client.secret, undefined, 'the migration must not invent a client secret');
   assert.equal(CLIENT_AUTHORITY[client.id].includes('openid'), true);
@@ -71,11 +72,11 @@ test('Agent scopes are downscoped by the existing authority policy, not widened'
   // first: correct policy, stale test.
   // `team:read` joined on 2026-11-12: the desktop's Account and members page reads the person's workspaces, and
   // every read was refused without it.
-  assert.deepEqual(granted, ['openid', 'profile', 'email', 'team:read', 'collaboration:use', 'workforce:read', 'workforce:manage']);
+  assert.deepEqual(granted, ['openid', 'profile', 'email', 'team:read', 'team:manage', 'collaboration:use', 'workforce:read', 'workforce:manage']);
   // The property this guards is unchanged: a request is DOWNSCOPED, never honoured beyond
   // the row. The Agent asks for team administration and refresh -- neither is in its row,
-  // so neither is granted, however it asks. Reading teams is granted; administering them is not.
-  for (const scope of ['team:manage', 'offline_access']) {
+  // so it is not granted, however it asks.
+  for (const scope of ['offline_access']) {
     assert.ok(!allowed.has(scope), `the Agent is granted ${scope}, which its authority row does not carry`);
   }
   assert.ok(!OIDC_SCOPES.includes('offline_access'), 'offline_access is not a scope this provider issues');
