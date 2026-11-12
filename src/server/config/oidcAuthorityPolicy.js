@@ -70,9 +70,11 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // the provider, never added to the policy by guesswork.
   // `team:read` (2026-11-12): its Account and members page lists the person's workspaces, members and invitations,
   // and every one of those reads was refused for want of it (measured on desktop 0.3.42: account:INVALID_TOKEN).
-  // Read only. `team:manage` (invite, remove, workspace keys) is NOT here: that is team administration from a
-  // public desktop client, and it waits for the owner's decision.
-  'xeno-agent-interface': [...AGENT_PRODUCT, 'team:read', 'collaboration:use', 'remote:connect'],
+  // `team:manage` (2026-11-12): the same page invites and removes members and lists and makes workspace keys; even
+  // the key LIST is a team:manage read. The app's own design set this ceiling (xeno-agent-interface
+  // docs/ACCOUNT-WORKSPACE-INTEGRATION.md). Role checks are unchanged: the server still lets only an owner or admin
+  // of that workspace change it, whatever the token holds.
+  'xeno-agent-interface': [...AGENT_PRODUCT, 'team:read', 'team:manage', 'collaboration:use', 'remote:connect'],
   // A browser reaching the person's own PC. It spends nothing and reads nothing here: the relay is all it needs.
   'xeno-remote-web': [...IDENTITY, 'remote:connect'],
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
