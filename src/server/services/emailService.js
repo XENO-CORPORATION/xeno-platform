@@ -33,7 +33,7 @@ import { upstreamFetch } from './upstream.js';
  * would mean one careless click permanently disables the only warning the
  * business gets. Nobody can opt out of being told they are being sued for a
  * chargeback. */
-const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened', 'account_code', 'email_changed_notice', 'two_step_changed']);
+const ESSENTIAL_TEMPLATES = new Set(['password_reset', 'email_verification', 'dispute_opened', 'account_code', 'email_changed_notice', 'two_step_changed', 'spawn_backup_device_opened']);
 
 // --------------------------------------------------------------------------
 // XENO branded email wrapper
@@ -600,6 +600,17 @@ const templates = {
       ${hairline(14, 12)}
       ${mailText('If this was you, there’s nothing to do. If it wasn’t, change your password and sign out everywhere from your account page, then contact support.', { muted: true })}
     `, escapeHtml(change)),
+  }),
+
+  // Security notice, essential: a device opened the person's Spawn conversation backup for the first time (standard mode).
+  spawn_backup_device_opened: ({ displayName, deviceName = 'a new device', when = 'just now' }) => ({
+    subject: 'A new device opened your conversation backup',
+    html: wrapInLayout('A new device opened your backup', `
+      ${mailHeading('A new device opened your backup')}
+      ${mailText(`Hi ${escapeHtml(displayName)}. ${escapeHtml(deviceName)} opened your XENO Spawn conversation backup on ${escapeHtml(when)}, right after signing in to your account.`)}
+      ${hairline(14, 12)}
+      ${mailText('If this was you, there’s nothing to do. If it wasn’t, revoke the device in Spawn, change your password and sign out everywhere from your account page, then contact support.', { muted: true })}
+    `, escapeHtml(`${deviceName} opened your conversation backup`)),
   }),
 
   account_code: ({ displayName, code = '000000', purpose, expiresIn }) => ({

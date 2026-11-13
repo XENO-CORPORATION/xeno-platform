@@ -107,6 +107,12 @@ services:
       # here breaks channel connection loudly instead of quietly regressing.
       # ⚠ Losing the value makes every sealed token unrecoverable.
       - SECRET_BOX_KEY=${SECRET_BOX_KEY}
+      # Spawn backup, standard mode (the iCloud model): wraps each account's backup data key
+      # (utils/spawnBackupKek.js). Its own key, apart from SECRET_BOX_KEY. FAIL-CLOSED: unset means the
+      # account copy is unavailable (503), never stored bare. ⚠ Losing it makes every standard-mode
+      # backup unreadable: a second copy lives in the operator secrets store.
+      - SPAWN_BACKUP_KEK=${SPAWN_BACKUP_KEK}
+      - SPAWN_BACKUP_KEK_VERSION=${SPAWN_BACKUP_KEK_VERSION:-1}
       # Per-product inference routing + the provider-key vault
       # (`XENO INFERENCE ROUTING - SPEC.md`). FAILS CLOSED: anything other than
       # the exact string "true" — unset, empty, "TRUE", "1" — leaves BYOK off and

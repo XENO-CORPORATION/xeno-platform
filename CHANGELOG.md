@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-13
 
+**Your Spawn conversation backup works like iCloud.** A PC you sign in on can now open your conversation backup with no extra password and without another PC approving it: XENO keeps a copy of the backup's key, locked with a key of its own that is stored apart from your data. Your conversations are still encrypted on your PC before they are uploaded, so Storage only ever holds scrambled bytes. To keep a new PC from quietly opening it, its first time needs a sign-in in the last 10 minutes, and you get an email naming the device. Every time a device opens the backup it is logged where Spawn can show it. A private mode, where XENO keeps no copy of the key, will come later; turning it on deletes XENO's copy for real.
+
 **Code runs look like the rest of XENO.** When the assistant runs code, it now shows as a step in the turn's list of steps, the same way XENO Agent shows a command: the code, what it printed, any error and how it ended open when you expand it, and each file it made is listed and opens from there. The separate white-headed box drawn inside the reply is gone.
 
 **Your PCs and browsers show as connected when they are.** The list of your connected devices (remote control, your browser, Corpus) could show one as off while it was on, about half the time, because each of our two servers only knew the devices connected to itself. A device now counts as connected when either server has heard from it in the last minute. A device that just went off can still show as on for up to a minute.
