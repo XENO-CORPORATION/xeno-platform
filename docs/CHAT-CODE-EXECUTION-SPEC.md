@@ -144,6 +144,13 @@ exact bytes at a known path (OpenAI `container.file_ids` → `/mnt/data`; Anthro
 - **Proof:** `src/server/tests/chat-sandbox-attachments.test.mjs` (real Postgres). Mutation-checked: removing the
   ReBAC refusal in `getAuthorizedLibraryFile` makes "another person's file is NOT given" fail.
 - **Not yet:** the files of the conversation's project (only its chat attachments are given).
+- **Correction, the same day:** the first version was proven with a stand-in engine and failed in production.
+  The real engine took only 1 MB per request and wrote each file through its start command, which Linux
+  caps at 128 KB per argument, so the 940 KB sheet was refused ("Payload Too Large"). The engine now streams
+  files into the workspace and advertises `workspace-files-streamed` and its `limits` on /health; the
+  platform sends attachments only to such an engine, within the smaller of its budget and ours, and refuses
+  oversize input with a reason before sending. A failed run now shows the person a plain reason.
+  Proof against the real engine: `src/server/tests/chat-sandbox-real-engine.test.mjs`.
 
 ## 8. Build order (causality, not preference)
 

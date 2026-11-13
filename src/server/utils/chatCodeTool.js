@@ -99,3 +99,15 @@ export function codeBudgetExhaustedPayload(runs) {
     error: `code execution budget reached (${runs} run${runs === 1 ? '' : 's'} this turn). Summarise what you have and answer.`,
   };
 }
+
+/**
+ * What the person is shown when a run fails: the plain reason, never the engine's raw error (which can
+ * name internal hosts). Known causes get their own words; anything else stays generic.
+ */
+export function codeErrorForPerson(error) {
+  switch (error?.code) {
+    case 'code_input_too_large': return 'The files given to the code were too large for the code service.';
+    case 'code_engine_unreachable': return 'The code service could not be reached.';
+    default: return 'That code could not be executed.';
+  }
+}

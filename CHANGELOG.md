@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-13
 
+**Attached files of any size reach the code.** The first version only worked for small files: the code service refused anything over about 1 MB, so a picture of almost a megabyte failed with "That code could not be executed." Files up to 64 MB per run now reach the code. When a run fails, the step now says why in plain words (for example, that the files were too large) instead of only that it could not run.
+
 **Code in chat can open the files you attach.** When the assistant runs code in a chat, the pictures, documents and data you attached to that chat are now there for the code to open, exactly as you uploaded them, in an `attachments` folder. Before, the code could not see them, so the assistant asked you to upload the file again. Only files you are allowed to open are given, and a file still being checked for safety is given once the check is done; the assistant is told which files it has and which it could not have. The code can read them but not change them, and they are not copied again into your Library.
 
 ## 2026-11-12

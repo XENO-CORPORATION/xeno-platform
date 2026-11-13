@@ -48,6 +48,7 @@ import {
   parseCodeArguments,
   codeResultPayload,
   codeBudgetExhaustedPayload,
+  codeErrorForPerson,
 } from './chatCodeTool.js';
 import { parseAskUserArguments, askUserAlreadyPendingPayload } from './chatAskUserTool.js';
 
@@ -576,7 +577,7 @@ export function createToolCallRunner({ surface, tools: offered, runSearch, runIm
         // so the model can speak to it, and an event so the user sees the attempt.
         const message = error?.message || 'unknown error';
         working.push(toolResultMessage(id, { error: `code execution failed: ${message}` }));
-        yield { type: 'code_error', index, message };
+        yield { type: 'code_error', index, message, personMessage: codeErrorForPerson(error) };
       }
       return {};
     }
