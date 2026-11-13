@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-13
+
+**Code in chat can open the files you attach.** When the assistant runs code in a chat, the pictures, documents and data you attached to that chat are now there for the code to open, exactly as you uploaded them, in an `attachments` folder. Before, the code could not see them, so the assistant asked you to upload the file again. Only files you are allowed to open are given, and a file still being checked for safety is given once the check is done; the assistant is told which files it has and which it could not have. The code can read them but not change them, and they are not copied again into your Library.
+
 ## 2026-11-12
 
 **XENO Agent on the desktop can read your workspaces.** Its Account and members page showed "could not be verified" for everyone, because the app's sign-in was never allowed to ask to see your teams. It may now read your workspaces, their members and your invitations. Later the same day it was also allowed to manage them (invite, remove, workspace keys), as the app was designed; only an owner or admin of a workspace can still change it. You need to sign out of the app and sign in again once.

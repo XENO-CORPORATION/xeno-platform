@@ -17,7 +17,7 @@ import crypto from 'crypto';
 import { artifactStorage } from './artifactStorage.js';
 
 // Never push more than this into one run, however large the sandbox has grown.
-const RESTORE_MAX_BYTES = 64 * 1024 * 1024;
+export const RESTORE_MAX_BYTES = 64 * 1024 * 1024;
 
 /** The one sandbox for a conversation, created on first use. */
 export async function getOrCreateSandbox(db, conversationId, ownerUserId = null) {

@@ -27,6 +27,7 @@ import { chatTurnLoop } from '../utils/chatAgentLoop.js';
 import { RUN_CODE_TOOL } from '../utils/chatCodeTool.js';
 import { ASK_USER_TOOL } from '../utils/chatAskUserTool.js';
 import { runInSandbox, codeExecutionAvailable, runCodeMetered } from '../services/sandboxSession.js';
+import { assetIdsOf } from '../services/chatSandboxAttachments.js';
 import {
   GENERATE_IMAGE_TOOL, latestConversationImage,
 } from '../utils/chatImageTool.js';
@@ -1117,9 +1118,12 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
               // Execution is metered on the ledger when a rate is set (free by default until the owner
               // prices it — creditCosts.js CODE_EXECUTION_COST). The Library surfacing happens INSIDE
               // the metered run, so a run that is charged is a run whose files were captured.
+              // This turn's attachments may not be saved yet; the saved ones are read from the
+              // conversation. Asset ids only, and each is rechecked as this person (§7a).
               const doRun = () => runInSandbox({
                 db: req.db, conversationId, ownerUserId: userId, language, code,
                 library: { register: registerManagedLibraryFile, uploadsDir: CHAT_IMAGE_UPLOADS_DIR },
+                attachmentItems: messages.filter((m) => m?.role === 'user').flatMap((m) => assetIdsOf([...(m.parts || []), ...(m.attachments || [])])),
               });
               const { result, creditsCharged } = await runCodeMetered({
                 meter: meterMediaGeneration,

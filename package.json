@@ -381,6 +381,7 @@
     "test:chat-sandbox-keys": "node --test scripts/chat-sandbox-storage-key.test.mjs",
     "smoke:chat-sandbox": "node scripts/chat-sandbox-smoke.mjs",
     "test:chat-code-loop": "node --test scripts/chat-code-loop.test.mjs",
+    "test:chat-sandbox-attachments": "node src/server/tests/chat-sandbox-attachments.test.mjs",
     "smoke:chat-code-execution": "node scripts/chat-code-execution-smoke.mjs",
     "test:chat-sandbox-library": "node --test scripts/chat-sandbox-library.test.mjs",
     "test:chat-code-metering": "node --test scripts/chat-code-metering.test.mjs",
