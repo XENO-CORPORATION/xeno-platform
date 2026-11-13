@@ -191,6 +191,20 @@ export function detach(socket) {
 export const liveInstallationIds = () => [...connections.keys()];
 export const isLive = (installationId) => connections.has(String(installationId));
 
+/**
+ * Whether an installation is connected, as far as ANY replica can tell (2026-11-13). `isLive` only knows the sockets
+ * held by this process, so with two replicas a device connected to the other one read as off half the time: the Agent
+ * app listed a person's PC as "may be off" while it was on. The heartbeat stamps `last_seen_at` every 20 s from
+ * whichever replica holds the socket, so a row seen within the last minute is connected somewhere. A device that just
+ * left reads as on for up to that minute; that is the price of an answer every replica agrees on.
+ */
+export const LIVE_SEEN_WITHIN_MS = 60_000;
+export const liveOrSeenRecently = (installation, now = Date.now()) => {
+  if (isLive(installation.id)) return true;
+  const seen = installation.lastSeenAt ? new Date(installation.lastSeenAt).getTime() : NaN;
+  return Number.isFinite(seen) && now - seen >= 0 && now - seen < LIVE_SEEN_WITHIN_MS;
+};
+
 /** Deliver a queued call on this replica, if the browser is here. False means another replica has it. */
 async function deliverHere(db, call) {
   const entry = connections.get(String(call.installation));
