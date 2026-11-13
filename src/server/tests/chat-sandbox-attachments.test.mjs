@@ -30,6 +30,8 @@ const uploadsDir = path.resolve(process.cwd(), 'src/server/uploads', `sandbox-at
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { passed++; console.log('  ok  ' + m); } else { failed++; console.log('FAIL: ' + m); } };
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+// The stand-in engine below behaves like one that streams files (the real one is proven in chat-sandbox-real-engine).
+const STREAMING = { streamed: true, limits: { maxInputTotalBytes: 64 * 1024 * 1024 } };
 
 // a real 1x1 PNG
 const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
@@ -70,7 +72,7 @@ async function main() {
     const registered = [];
     const library = { uploadsDir, register: async (_db, args) => { registered.push(args.originalName); return { id: crypto.randomUUID() }; } };
     const run1 = await runInSandbox({
-      db: pool, conversationId: conv, ownerUserId: ada, language: 'python', code: 'print(1)', uploadsDir, library,
+      db: pool, conversationId: conv, ownerUserId: ada, language: 'python', code: 'print(1)', uploadsDir, library, engine: STREAMING,
       attachmentItems: [{ id: calsFile, name: 'cal-private.txt' }, { id: sheet, name: 'dup.png' }],
       execute: async (request) => {
         seen.push(request.files.map((f) => f.path));
@@ -99,7 +101,7 @@ async function main() {
     check(registered.join() === 'out/measure.json', 'only the new file is copied to the Library');
 
     const run2 = await runInSandbox({
-      db: pool, conversationId: conv, ownerUserId: ada, language: 'python', code: 'print(2)', uploadsDir, library,
+      db: pool, conversationId: conv, ownerUserId: ada, language: 'python', code: 'print(2)', uploadsDir, library, engine: STREAMING,
       execute: async (request) => {
         seen.push(request.files.map((f) => f.path));
         return { status: 'success', stdout: '', stderr: '', exitCode: 0, outputFiles: [{ path: 'attachments/GRIDMASTER sheet.png', content: Buffer.from('overwritten').toString('base64') }] };

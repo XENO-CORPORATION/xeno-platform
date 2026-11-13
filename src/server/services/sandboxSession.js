@@ -22,13 +22,25 @@ const DEFAULT_MEMORY_MB = 256;
 // Cached reachability probe, so the run_code tool is offered only when the engine is actually up
 // (CHAT-CODE-EXECUTION-SPEC.md §5 — never advertise a capability the deploy lacks). Cheap and cached
 // because it runs on the hot path of building a turn's tool list.
-let _probe = { at: 0, ok: false };
+let _probe = { at: 0, ok: false, streamed: false, limits: null };
 const PROBE_TTL_MS = 60_000;
+
+/**
+ * What the probed engine said about itself: whether it streams input files into the workspace
+ * (`workspace-files-streamed`, any size up to its limit) and its advertised `limits`. An engine that
+ * does not stream them wrote each file through its start command, which fails above ~96 KB, so
+ * attachments are only sent to one that does.
+ */
+export function codeEngineInfo() {
+  return { streamed: _probe.streamed, limits: _probe.limits };
+}
 
 /** Is the code-execution engine reachable right now (cached ~60 s)? */
 export async function codeExecutionAvailable(fetchImpl = globalThis.fetch, now = Date.now()) {
   if (now - _probe.at < PROBE_TTL_MS) return _probe.ok;
   let ok = false;
+  let streamed = false;
+  let limits = null;
   try {
     const r = await fetchImpl(`${XENORUN_URL}/api/v1/health`, { method: 'GET' });
     if (r.ok) {
@@ -39,17 +51,19 @@ export async function codeExecutionAvailable(fetchImpl = globalThis.fetch, now =
       // files. run_code is offered only once the DEPLOYED engine advertises workspace-files.
       const hasFileIO = Array.isArray(body?.features) && body.features.includes('workspace-files');
       ok = healthy && hasFileIO;
+      streamed = Array.isArray(body?.features) && body.features.includes('workspace-files-streamed');
+      limits = body?.limits && typeof body.limits === 'object' ? body.limits : null;
     }
   } catch {
     ok = false;
   }
-  _probe = { at: now, ok };
+  _probe = { at: now, ok, streamed, limits };
   return ok;
 }
 
 /** Test seam: force the next availability check to re-probe. */
 export function _resetCodeAvailabilityProbe() {
-  _probe = { at: 0, ok: false };
+  _probe = { at: 0, ok: false, streamed: false, limits: null };
 }
 
 /**
@@ -87,21 +101,29 @@ export async function runCodeMetered({ meter, db, userId, unitCredits, microPerC
 }
 
 /** POST one run to xenorun and return its ExecutionResult (with outputFiles). */
-async function callXenorun(body, fetchImpl) {
+async function callXenorun(body, fetchImpl, maxRequestBytes = null) {
+  const payload = JSON.stringify(body);
+  // Refuse here, with a reason, what the engine would refuse with a bare 413.
+  if (maxRequestBytes && Buffer.byteLength(payload) > maxRequestBytes) {
+    throw Object.assign(new Error('the files given to the code are too large for the code engine'), { code: 'code_input_too_large' });
+  }
   let response;
   try {
     response = await fetchImpl(`${XENORUN_URL}/api/v1/execute`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      body: payload,
     });
   } catch (err) {
     // A dead engine is a distinct, actionable failure — not a run that "returned nothing".
-    throw new Error(`code execution engine unreachable: ${err instanceof Error ? err.message : String(err)}`);
+    throw Object.assign(new Error(`code execution engine unreachable: ${err instanceof Error ? err.message : String(err)}`), { code: 'code_engine_unreachable' });
   }
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`code execution engine error ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+    throw Object.assign(
+      new Error(`code execution engine error ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`),
+      { code: response.status === 413 ? 'code_input_too_large' : 'code_engine_error' },
+    );
   }
   return response.json();
 }
@@ -166,6 +188,7 @@ export async function runInSandbox({
   attachmentItems = [],
   readAttachment = undefined,
   uploadsDir = null,
+  engine = codeEngineInfo(),
 }) {
   if (!conversationId) throw new Error('runInSandbox requires a conversationId');
 
@@ -175,20 +198,29 @@ export async function runInSandbox({
   const restoredBytes = restored.reduce((n, f) => n + Buffer.byteLength(f.content, 'base64'), 0);
 
   // The person's attachments (saved messages + this turn), read as them, into attachments/ (§7a).
-  const attached = ownerUserId
-    ? await readAttachmentsForRun({
+  // The input budget is the smaller of ours and what the engine advertises. An engine that does not
+  // stream files gets none (it fails above ~96 KB per file), and the model is told why.
+  const items = ownerUserId ? [...(await conversationAttachments(db, conversationId)), ...(attachmentItems || [])] : [];
+  const engineInput = Number(engine?.limits?.maxInputTotalBytes) || 0;
+  const inputBudget = Math.min(RESTORE_MAX_BYTES, engineInput || RESTORE_MAX_BYTES);
+  let attached = { files: [], manifest: [], unavailable: [] };
+  if (items.length && engine?.streamed) {
+    attached = await readAttachmentsForRun({
       db,
       userId: ownerUserId,
-      items: [...(await conversationAttachments(db, conversationId)), ...(attachmentItems || [])],
-      budgetBytes: RESTORE_MAX_BYTES - restoredBytes,
+      items,
+      budgetBytes: inputBudget - restoredBytes,
       ...(readAttachment ? { read: readAttachment } : {}),
       uploadsDir,
-    })
-    : { files: [], manifest: [], unavailable: [] };
+    });
+  } else if (items.length) {
+    const byId = new Map(items.map((i) => [i.id, { name: i.name || i.id, reason: 'code_engine_cannot_take_files' }]));
+    attached.unavailable = [...byId.values()];
+  }
   const files = [...restored, ...attached.files];
 
   const request = { language, code, files, collectOutput: true, timeout: timeoutMs, memoryLimit };
-  const run = execute ? await execute(request) : await callXenorun(request, fetchImpl);
+  const run = execute ? await execute(request) : await callXenorun(request, fetchImpl, Number(engine?.limits?.maxRequestBytes) || null);
 
   // Attachments are read-only inputs the Library already holds: never saved back, never re-surfaced.
   // A changed one is reported, so the model knows to write its result under another name.

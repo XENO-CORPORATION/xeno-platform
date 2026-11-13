@@ -1290,7 +1290,7 @@ router.post('/chat/stream', requireEntitlement('canUse'), async (req, res) => {
           case 'code_error':
             // Reported, never silent, never fatal: the model got the failure as a tool result.
             console.warn('[chat/stream] code execution failed', { requestId: reqIdSeed, index: event.index });
-            await send({ type: 'code_error', index: event.index, message: 'That code could not be executed.' });
+            await send({ type: 'code_error', index: event.index, message: event.personMessage || 'That code could not be executed.' });
             break;
           case 'browser_start':
             sawSearch = true;
