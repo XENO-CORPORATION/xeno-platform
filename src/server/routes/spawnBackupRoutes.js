@@ -3,7 +3,13 @@
  * "v2"; owner, 2026-11-12: "periodic uploads of the session into our storage on xenosystem account ... secure our full conversation
  * session with the agents", protected "Encrypted on this PC").
  *
- * THE SERVER NEVER SEES PLAINTEXT AND NEVER HOLDS A KEY. It stores three opaque things for the token's account:
+ * Amended 2026-11-13 (owner: "like how iCloud works correct? no need for an extra backup password right?", then "iCloud
+ * model (Recommended)"): in STANDARD mode the platform also keeps the data key, wrapped with its own key (/keys/account), so a
+ * signed-in device can restore without another device or a recovery key. The conversations themselves are still encrypted on
+ * the device before upload; Storage holds only ciphertext. PRIVATE mode deletes the account wrap and the paragraph below holds
+ * in full again.
+ *
+ * THE SERVER NEVER SEES PLAINTEXT AND NEVER HOLDS A KEY (private mode; see the amendment above for standard mode). It stores three opaque things for the token's account:
  *   keys      the account data key, only WRAPPED: once per device (to that device's X25519 public key) and once to a recovery key
  *             the person keeps. A wrapped key is never rewritten (a database trigger holds it); devices are revoked, not erased.
  *   segments  numbered ciphertext of one object (a transcript), append-only: the same bytes again answer the same, different bytes
@@ -24,6 +30,13 @@
  *   POST   /keys/devices/:deviceId/approve           {byDeviceId, wrappedKey}   an approved device wraps the key to a pending one
  *   POST   /keys/devices/:deviceId/revoke            {byDeviceId?}
  *   PUT    /keys/recovery                            {byDeviceId, wrappedKey}   the recovery-wrapped key (a new one supersedes)
+ *   PUT    /keys/account                             {byDeviceId, dataKey}   STANDARD MODE (the iCloud model, wrap type 0x03): an
+ *                                                    approved device hands the data key to the platform, which keeps it wrapped
+ *                                                    with SPAWN_BACKUP_KEK (utils/spawnBackupKek.js), never bare
+ *   GET    /keys/account?deviceId=                   {dataKey}   a device registered to this account (pending or approved) gets
+ *                                                    the key back. A device's FIRST unwrap needs a sign-in in the last 10 minutes
+ *                                                    and mails the person; every unwrap is logged
+ *   DELETE /keys/account                             {byDeviceId}   PRIVATE MODE: the account wrap is really deleted
  *   GET    /objects                                  every object with its segments and versions (numbers, sizes, sha256, times)
  *   PUT    /objects/:objectId/segments/:n            raw ciphertext   ·   GET the same path reads it back
  *   PUT    /objects/:objectId/versions/:n            raw ciphertext   ·   GET the same path reads it back
@@ -32,12 +45,18 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { DEVICE_ID } from './spawnDeviceRoutes.js';
 import { ensureProjectFolder, listProjectFiles, projectFileAt, readProjectFile, writeProjectFile, ProjectFolderError } from '../services/projectFolders.js';
+import { wrapDataKey, unwrapDataKey, KekUnavailableError } from '../utils/spawnBackupKek.js';
+import { sendEmail } from '../services/emailService.js';
 
 export const BACKUP_APP = 'xeno-spawn-backup';
 export const OBJECT_ID = /^[A-Za-z0-9_-]{16,64}$/;
 export const SEGMENT_MAX_BYTES = 16 * 1024 * 1024;
 const PUBLIC_KEY = /^[A-Za-z0-9_-]{43}$/;            // 32 bytes, base64url without padding (X25519)
 const WRAPPED_KEY = /^[A-Za-z0-9_-]{16,1024}$/;
+const DATA_KEY = /^[A-Za-z0-9_-]{43}$/;              // 32 bytes, base64url without padding
+/** A device's first unwrap needs a sign-in this recent (seconds): a long-lived or stolen token cannot quietly add a device. */
+export const FIRST_UNWRAP_FRESH_SEC = 10 * 60;
+const freshSignIn = (authTime, now = Date.now()) => Number.isFinite(Number(authTime)) && now / 1000 - Number(authTime) <= FIRST_UNWRAP_FRESH_SEC;
 const PART = { segments: 'segments', versions: 'versions' };
 const MAX_NUMBER = 999_999_999;
 
@@ -79,7 +98,10 @@ export function spawnBackupKeyHandlers(db) {
       const devices = (await db.query("SELECT * FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'device' ORDER BY created_at", [userId])).rows;
       const recovery = (await db.query("SELECT wrapped_key, created_at FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'recovery' AND state = 'current'", [userId])).rows[0];
       const events = (await db.query('SELECT kind, device_id, by_device, at FROM spawn_backup_key_events WHERE user_id = $1 ORDER BY at DESC, id DESC LIMIT 200', [userId])).rows;
+      const account = (await db.query("SELECT created_at, kek_version FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'account' AND state = 'current'", [userId])).rows[0];
+      const lastUnwrap = (await db.query("SELECT max(at) AS at FROM spawn_backup_key_events WHERE user_id = $1 AND kind = 'account_unwrapped'", [userId])).rows[0]?.at ?? null;
       return { status: 200, body: { devices: devices.map(shapeDevice), recovery: recovery ? { wrappedKey: recovery.wrapped_key, createdAt: recovery.created_at } : null,
+        account: { present: Boolean(account), createdAt: account?.created_at ?? null, kekVersion: account?.kek_version ?? null, lastUnwrapAt: lastUnwrap },
         events: events.map((e) => ({ kind: e.kind, deviceId: e.device_id, byDeviceId: e.by_device, at: e.at })) } };
     },
 
@@ -179,7 +201,77 @@ export function spawnBackupKeyHandlers(db) {
         return { status: 200, body: { recovery: { wrappedKey: row.wrapped_key, createdAt: row.created_at }, replayed: false } };
       });
     },
+
+    // STANDARD MODE: an approved device gives the platform the data key, kept only wrapped with the platform key.
+    async setAccount(userId, body, env = process.env) {
+      const b = body || {};
+      for (const k of Object.keys(b)) if (!['byDeviceId', 'dataKey'].includes(k)) return err(400, 'UNKNOWN_FIELD', `unknown field ${k}`);
+      if (!DEVICE_ID.test(String(b.byDeviceId))) return err(400, 'BAD_DEVICE_ID', 'byDeviceId format');
+      if (typeof b.dataKey !== 'string' || !DATA_KEY.test(b.dataKey)) return err(400, 'BAD_DATA_KEY', 'dataKey is 32 bytes, base64url without padding');
+      const dataKey = Buffer.from(b.dataKey, 'base64url');
+      return locked(db, userId, async (tx) => {
+        if (!(await approvedDevice(tx, userId, b.byDeviceId))) return err(403, 'APPROVER_NOT_APPROVED', 'only a device that has the key can hand it to the account');
+        const cur = (await tx.query("SELECT * FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'account' AND state = 'current'", [userId])).rows[0];
+        if (cur) {
+          let same = false;
+          try { same = unwrapDataKey(cur.wrapped_key, { userId, wrapId: cur.id, version: cur.kek_version }, env).equals(dataKey); } catch (e) { if (e instanceof KekUnavailableError) throw e; }
+          if (same) return { status: 200, body: { account: { state: 'current', createdAt: cur.created_at, kekVersion: cur.kek_version }, replayed: true } };
+          await tx.query("UPDATE spawn_backup_keys SET state = 'superseded' WHERE id = $1", [cur.id]);
+        }
+        const wrapId = crypto.randomUUID();
+        const { wrapped, version } = wrapDataKey(dataKey, { userId, wrapId }, env);
+        const row = (await tx.query(`INSERT INTO spawn_backup_keys (id, user_id, kind, wrapped_key, state, approved_by, approved_at, kek_version)
+          VALUES ($1,$2,'account',$3,'current',$4,now(),$5) RETURNING *`, [wrapId, userId, wrapped, b.byDeviceId, version])).rows[0];
+        await event(tx, userId, 'account_set', null, b.byDeviceId);
+        return { status: 201, body: { account: { state: 'current', createdAt: row.created_at, kekVersion: row.kek_version }, replayed: false } };
+      });
+    },
+
+    // A device of this account gets the data key back. Its FIRST unwrap needs a fresh sign-in and mails the person.
+    async getAccount(userId, deviceId, { authTime = null, now = Date.now(), env = process.env, notify = null } = {}) {
+      if (!DEVICE_ID.test(String(deviceId))) return err(400, 'BAD_DEVICE_ID', 'deviceId is required');
+      const out = await locked(db, userId, async (tx) => {
+        const device = (await tx.query("SELECT * FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'device' AND device_id = $2", [userId, deviceId])).rows[0];
+        if (!device) return err(403, 'DEVICE_NOT_REGISTERED', 'register this device first');
+        if (device.state === 'revoked') return err(403, 'DEVICE_REVOKED', 'this device was revoked');
+        const wrap = (await tx.query("SELECT * FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'account' AND state = 'current'", [userId])).rows[0];
+        if (!wrap) return err(404, 'ACCOUNT_WRAP_ABSENT', 'this account keeps no copy of the key (no backup yet, or private mode)');
+        const first = !(await tx.query("SELECT 1 FROM spawn_backup_key_events WHERE user_id = $1 AND kind = 'account_unwrapped' AND device_id = $2 LIMIT 1", [userId, deviceId])).rows.length;
+        if (first && !freshSignIn(authTime, now)) return err(401, 'RECENT_SIGN_IN_REQUIRED', 'a new device opens the backup only right after signing in; sign in again and retry');
+        const dataKey = unwrapDataKey(wrap.wrapped_key, { userId, wrapId: wrap.id, version: wrap.kek_version }, env);
+        await event(tx, userId, 'account_unwrapped', deviceId);
+        return { status: 200, body: { dataKey: dataKey.toString('base64url'), kekVersion: wrap.kek_version, firstUnwrap: first }, device };
+      });
+      if (out.status === 200 && out.body.firstUnwrap && notify) {
+        // After the commit, never inside it: the mail is a notice, and a mail failure must not take the key back.
+        Promise.resolve(notify({ userId, deviceName: out.device.name || 'a new device', at: new Date(now) })).catch(() => {});
+      }
+      delete out.device;
+      return out;
+    },
+
+    // PRIVATE MODE: the account wrap is really deleted (every current and superseded copy). Idempotent.
+    async deleteAccount(userId, body) {
+      const b = body || {};
+      for (const k of Object.keys(b)) if (k !== 'byDeviceId') return err(400, 'UNKNOWN_FIELD', `unknown field ${k}`);
+      if (!DEVICE_ID.test(String(b.byDeviceId))) return err(400, 'BAD_DEVICE_ID', 'byDeviceId format');
+      return locked(db, userId, async (tx) => {
+        if (!(await approvedDevice(tx, userId, b.byDeviceId))) return err(403, 'APPROVER_NOT_APPROVED', 'only a device that has the key can remove the account copy');
+        const gone = await tx.query("DELETE FROM spawn_backup_keys WHERE user_id = $1 AND kind = 'account'", [userId]);
+        if (gone.rowCount) await event(tx, userId, 'account_wrap_deleted', null, b.byDeviceId);
+        return { status: 204, body: undefined };
+      });
+    },
   };
+}
+
+/** Mail the person that a device opened their conversation backup for the first time (the iCloud "new sign-in" notice). */
+export async function notifyFirstUnwrap(db, { userId, deviceName, at }) {
+  const user = (await db.query('SELECT email, display_name, username FROM users WHERE id = $1', [userId])).rows[0];
+  if (!user?.email) return;
+  await sendEmail(db, 'spawn_backup_device_opened', user.email, {
+    displayName: user.display_name || user.username || 'there', deviceName, when: at.toUTCString(),
+  }, userId);
 }
 
 /** The object handlers: bytes in the person's Storage, append-only. */
@@ -241,9 +333,10 @@ export function spawnBackupObjectHandlers(db, { uploadsDir }) {
 
 export default function spawnBackupRoutes({ uploadsDir }) {
   const router = express.Router();
-  const send = (res, out) => res.status(out.status ?? 200).json(out.body);
+  const send = (res, out) => (out.status === 204 ? res.status(204).end() : res.status(out.status ?? 200).json(out.body));
   const fail = (res, e) => {
     if (e?.code === 'storage_full') return res.status(507).json({ error: { code: 'STORAGE_FULL', message: e.message } });
+    if (e instanceof KekUnavailableError) return res.status(503).json({ error: { code: 'ACCOUNT_WRAP_UNAVAILABLE', message: 'the account copy of the key is not available right now' } });
     if (e instanceof ProjectFolderError) return res.status(e.status).json({ error: { code: String(e.code).toUpperCase(), message: e.message } });
     console.error('[spawn/backup] error:', e instanceof Error ? e.message : String(e));
     return res.status(500).json({ error: { code: 'PLATFORM_ERROR', message: 'backup failed' } });
@@ -256,6 +349,10 @@ export default function spawnBackupRoutes({ uploadsDir }) {
   router.post('/keys/devices/:deviceId/approve', keys((h, req) => h.approve(req.user.id, req.params.deviceId, req.body)));
   router.post('/keys/devices/:deviceId/revoke', keys((h, req) => h.revoke(req.user.id, req.params.deviceId, req.body)));
   router.put('/keys/recovery', keys((h, req) => h.setRecovery(req.user.id, req.body)));
+  router.put('/keys/account', keys((h, req) => h.setAccount(req.user.id, req.body)));
+  router.get('/keys/account', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); },
+    keys((h, req) => h.getAccount(req.user.id, req.query.deviceId, { authTime: req.auth?.authTime ?? null, notify: (n) => notifyFirstUnwrap(req.db, n) })));
+  router.delete('/keys/account', keys((h, req) => h.deleteAccount(req.user.id, req.body)));
 
   router.get('/objects', objs((h, req) => h.list(req.user.id)));
   router.put('/objects/:objectId/:part/:n', express.raw({ type: () => true, limit: SEGMENT_MAX_BYTES }),

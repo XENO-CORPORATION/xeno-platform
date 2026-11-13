@@ -74,6 +74,7 @@ export const REQUIRED_ENV = {
       { key: 'SCHEDULING_EMAILS', why: 'booking confirmations and reminders are not mailed' },
       { key: 'XENO_WORKFLOW_RUNNER_URL', why: 'Dev › Automate never runs a workflow: every run stays queued (automate_not_configured)' },
       { key: 'XENO_EXTENSION_ORIGINS', why: 'the browser extension is refused by CORS' },
+      { key: 'SPAWN_BACKUP_KEK', why: 'Spawn standard-mode backups cannot keep or return the account copy of their key (503)' },
       { key: 'SUBJECT_HASH_SECRET', why: 'digests fall back to JWT_SECRET, so rotating it orphans every consent record' },
       { key: 'XENO_API_KEY', why: 'chat requests to the inference gateway are unauthenticated' },
       { key: 'CF_TURN_KEY_ID', why: 'XENO Shell sessions fall back to STUN only, so shells behind a blocking NAT cannot meet' },
