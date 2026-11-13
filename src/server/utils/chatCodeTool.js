@@ -22,7 +22,10 @@ export const RUN_CODE_TOOL = Object.freeze({
       'Execute code in a secure sandbox scoped to THIS conversation. The sandbox has a persistent ' +
       'filesystem: files you write in one call are still there on the next call, so you can build up ' +
       'state across turns. There is NO network access. Returns stdout, stderr, the exit code, and any ' +
-      'files left in the working directory. Use it to compute, analyse data, transform or generate ' +
+      'files left in the working directory. Files the person attached to this conversation (images, ' +
+      'documents, data) are already in ./attachments/ with their exact bytes: read them from there instead ' +
+      'of asking for them again, and write results under another name, because attachments are read-only. ' +
+      'Each result lists the attachments present. Use it to compute, analyse data, transform or generate ' +
       'files, and to verify code actually runs — just call it, do not narrate that you are running it.',
     parameters: {
       type: 'object',
@@ -76,6 +79,12 @@ export function codeResultPayload(result) {
     stdout: clip(result.stdout, 8000),
     stderr: clip(result.stderr, 4000),
     files_written: (result.savedFiles || []).map((f) => ({ path: f.path, size: f.size })),
+    ...(result.attachments && result.attachments.length
+      ? { attachments: result.attachments.map((a) => ({ path: a.path, type: a.type, size: a.size })) }
+      : {}),
+    ...(result.attachmentsUnavailable && result.attachmentsUnavailable.length
+      ? { attachments_unavailable: result.attachmentsUnavailable }
+      : {}),
     ...(result.skippedFiles && result.skippedFiles.length
       ? { files_not_saved: result.skippedFiles }
       : {}),

@@ -119,6 +119,32 @@ clear right answer:
   distinct from inference credits. Zero-work execs void the hold (mirrors 0-token turns).
 - **Quotas:** per-workspace size cap and expiry (avoids the unbounded-workspace mistake in §3).
 
+## 7a. Attachments in the sandbox (2026-11-13)
+
+**Found:** a person attached the GRIDMASTER sheet and asked the agent to measure it from its colours. The run
+saw an empty `/workspace` and the agent had to ask for the file again, because a run was given only what
+earlier runs had written (`restoreSandboxFiles`), never the chat's attachments.
+
+**The leaders' model, now ours:** a file uploaded into a chat is in the code tool from the first run, with its
+exact bytes at a known path (OpenAI `container.file_ids` → `/mnt/data`; Anthropic `container_upload`).
+
+- **Which files:** the Library asset ids on the conversation's saved user messages, plus the current turn's
+  parts (`chatSandboxAttachments.js`). Asset ids only, never a path or URL from the model.
+- **How they are read:** through `readAuthorizedLibraryBytes` (`libraryBytes.js`), the one reader of a
+  person's Library bytes, as the person running the code: ReBAC `viewer`, scanned (`ingestion_safe`), managed
+  store only (realpath), bounded read, type sniffed, SHA-256 equal to the recorded one. Image generation's
+  references use the same reader with their own type and size rule.
+- **Where:** `attachments/<name>` in the working directory; names cleaned to one path segment and made unique.
+  Up to 50 files, 32 MB each, within the run's 64 MB input budget after the sandbox's own files.
+- **Read-only, never copied:** the Library already holds them, so an unchanged attachment the run leaves is not
+  saved into the sandbox store or the Library again, and a changed one is refused (`attachments_are_read_only`).
+- **What the model sees:** the `run_code` description says attachments are in `./attachments/`; each result
+  lists them (`attachments`: path, type, size) and those it could not have (`attachments_unavailable`: name and
+  reason: `forbidden`, `not_ready`, `changed`, `over_run_budget`, …). A refusal never fails the run.
+- **Proof:** `src/server/tests/chat-sandbox-attachments.test.mjs` (real Postgres). Mutation-checked: removing the
+  ReBAC refusal in `getAuthorizedLibraryFile` makes "another person's file is NOT given" fail.
+- **Not yet:** the files of the conversation's project (only its chat attachments are given).
+
 ## 8. Build order (causality, not preference)
 
 0. **This proposal + approval.** (No infra decision — the substrate is xenorun, already deployed.)

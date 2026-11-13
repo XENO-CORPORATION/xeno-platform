@@ -12,7 +12,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { getOrCreateSandbox, restoreSandboxFiles, saveSandboxFiles } from './chatSandbox.js';
+import { getOrCreateSandbox, restoreSandboxFiles, saveSandboxFiles, RESTORE_MAX_BYTES } from './chatSandbox.js';
+import { conversationAttachments, readAttachmentsForRun, isAttachmentPath } from './chatSandboxAttachments.js';
 
 const XENORUN_URL = (process.env.XENORUN_URL || 'http://xenorun:3000').replace(/\/+$/, '');
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -162,23 +163,52 @@ export async function runInSandbox({
   fetchImpl = globalThis.fetch,
   execute = null,
   library = null,
+  attachmentItems = [],
+  readAttachment = undefined,
+  uploadsDir = null,
 }) {
   if (!conversationId) throw new Error('runInSandbox requires a conversationId');
 
   const sandbox = await getOrCreateSandbox(db, conversationId, ownerUserId);
-  const files = await restoreSandboxFiles(db, sandbox.id);
+  // The sandbox's own files first, minus anything under the reserved attachments folder.
+  const restored = (await restoreSandboxFiles(db, sandbox.id)).filter((f) => !isAttachmentPath(f.path));
+  const restoredBytes = restored.reduce((n, f) => n + Buffer.byteLength(f.content, 'base64'), 0);
+
+  // The person's attachments (saved messages + this turn), read as them, into attachments/ (§7a).
+  const attached = ownerUserId
+    ? await readAttachmentsForRun({
+      db,
+      userId: ownerUserId,
+      items: [...(await conversationAttachments(db, conversationId)), ...(attachmentItems || [])],
+      budgetBytes: RESTORE_MAX_BYTES - restoredBytes,
+      ...(readAttachment ? { read: readAttachment } : {}),
+      uploadsDir,
+    })
+    : { files: [], manifest: [], unavailable: [] };
+  const files = [...restored, ...attached.files];
 
   const request = { language, code, files, collectOutput: true, timeout: timeoutMs, memoryLimit };
   const run = execute ? await execute(request) : await callXenorun(request, fetchImpl);
 
+  // Attachments are read-only inputs the Library already holds: never saved back, never re-surfaced.
+  // A changed one is reported, so the model knows to write its result under another name.
+  const attachedHash = new Map(attached.manifest.map((m) => [m.path, m.sha256]));
+  const changedAttachments = [];
+  const outputFiles = (Array.isArray(run.outputFiles) ? run.outputFiles : []).filter((f) => {
+    if (!isAttachmentPath(f.path)) return true;
+    const hash = crypto.createHash('sha256').update(Buffer.from(f.content || '', 'base64')).digest('hex');
+    if (attachedHash.get(f.path) !== hash) changedAttachments.push({ path: f.path, reason: 'attachments_are_read_only' });
+    return false;
+  });
+
   // Capture whatever the run left in /workspace back into the sandbox, enforcing the quota.
   let persistence = { saved: [], skipped: [] };
   let libraryAssets = [];
-  if (Array.isArray(run.outputFiles) && run.outputFiles.length > 0) {
-    persistence = await saveSandboxFiles(db, sandbox, run.outputFiles);
+  if (outputFiles.length > 0) {
+    persistence = await saveSandboxFiles(db, sandbox, outputFiles);
     if (library && ownerUserId && persistence.saved.length > 0) {
       // Surface only the files that were actually saved this run, with their bytes (from the run).
-      const contentByPath = new Map(run.outputFiles.map((f) => [f.path, f.content]));
+      const contentByPath = new Map(outputFiles.map((f) => [f.path, f.content]));
       libraryAssets = await surfaceRunFilesToLibrary({
         db,
         userId: ownerUserId,
@@ -198,7 +228,9 @@ export async function runInSandbox({
     exitCode: run.exitCode ?? null,
     executionTime: run.executionTime ?? 0,
     savedFiles: persistence.saved,
-    skippedFiles: persistence.skipped,
+    skippedFiles: [...persistence.skipped, ...changedAttachments],
+    attachments: attached.manifest.map(({ path: p, type, size }) => ({ path: p, type, size })),
+    attachmentsUnavailable: attached.unavailable,
     outputFilesTruncated: Boolean(run.outputFilesTruncated),
     libraryAssets,
   };

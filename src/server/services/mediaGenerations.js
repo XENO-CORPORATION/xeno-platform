@@ -1,13 +1,9 @@
-import { localLibraryPath } from './storageObjects.js';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { resolvePrincipal } from './agentIdentity.js';
 import { currentArea } from '../utils/resourceArea.js';
 import { prepareAccountQuota } from './usageCreditsService.js';
 import { requireResourceRelation, userPrincipal, withTransaction } from './chatProjectAuthority.js';
-import { getAuthorizedLibraryFile, sniffMime } from './libraryAssets.js';
+import { readAuthorizedLibraryBytes, LibraryReadError } from './libraryBytes.js';
 import { mediaGateway } from '../utils/mediaGenerationGateway.js';
 import { generationError, validateGenerationRequest, requestHash, tariffFor, UUID } from './mediaGenerationCatalog.js';
 
@@ -29,33 +25,17 @@ export async function assertGenerationPlacement(db,actor,request){
     if(!row||row.project_id!==request.projectId)throw generationError('conversation_project_mismatch',404);
   }
 }
-// Canonical asset IDs only. Realpath defeats a planted symlink/junction; bounded handle reads
-// defeat stat/read TOCTOU growth. No LLM-controlled file path or remote reference URL is accepted.
+// Canonical asset IDs only. The checks (access, scan, store path, bounded read, type and hash) live in
+// the one shared reader, libraryBytes.js; this keeps image generation's own rule: PNG/JPEG/WebP up to 20 MB.
+const REFERENCE_ERRORS={forbidden:['reference_forbidden',404],not_ready:['reference_not_ready',409],invalid_media:['invalid_reference_media',422],path_forbidden:['reference_path_forbidden',422],too_large:['reference_too_large',413],changed:['reference_changed',409]};
 export async function readGenerationReferences(db,actor,ids,{uploadsDir=null}={}){
   let total=0;const references=[];
-  // The uploads folder is mounted at two paths in the containers (compose: /app/uploads and /app/src/server/uploads),
-  // and an asset's stored path may name either. Both are the managed store; nothing else is.
-  const here=path.dirname(fileURLToPath(import.meta.url));
-  const roots=(await Promise.all((uploadsDir?[uploadsDir]:[path.resolve(here,'../uploads'),path.resolve('src/server/uploads')]).map(dir=>fs.realpath(dir).catch(()=>null)))).filter(Boolean);
   for(const id of ids){
-    const file=await getAuthorizedLibraryFile(db,userPrincipal(actor.id),id);
-    if(!file)throw generationError('reference_forbidden',404);
-    if(!file.ingestion_safe)throw generationError('reference_not_ready',409);
-    if(!['image/png','image/jpeg','image/webp'].includes(file.mime_type)||Number(file.file_size)>MAX_REFERENCE_BYTES)throw generationError('invalid_reference_media',422);
-    await localLibraryPath(db,file);   // XENO Storage: bring the bytes back from the object store when the cached copy is gone
-    const real=await fs.realpath(file.storage_path).catch(()=>null);
-    if(!real||!roots.some(root=>real.startsWith(`${root}${path.sep}`)))throw generationError('reference_path_forbidden',422);
-    const handle=await fs.open(real,'r');let bytes;
-    try{
-      const stat=await handle.stat();if(!stat.isFile()||stat.size>MAX_REFERENCE_BYTES)throw generationError('reference_too_large',413);
-      const buffer=Buffer.alloc(MAX_REFERENCE_BYTES+1);let read=0;
-      while(read<buffer.length){const chunk=await handle.read(buffer,read,buffer.length-read,null);if(!chunk.bytesRead)break;read+=chunk.bytesRead;}
-      if(read>MAX_REFERENCE_BYTES||read!==Number(file.file_size))throw generationError('reference_changed',409);
-      bytes=buffer.subarray(0,read);
-    }finally{await handle.close();}
-    if(!bytes.length||sniffMime(bytes,'application/octet-stream')!==file.mime_type||crypto.createHash('sha256').update(bytes).digest('hex')!==file.content_sha256)throw generationError('reference_changed',409);
-    total+=bytes.length;if(total>MAX_REFERENCES_TOTAL_BYTES)throw generationError('references_too_large',413);
-    references.push(`data:${file.mime_type};base64,${bytes.toString('base64')}`);
+    let read;
+    try{read=await readAuthorizedLibraryBytes(db,actor.id,id,{maxBytes:MAX_REFERENCE_BYTES,allowedMimes:['image/png','image/jpeg','image/webp'],uploadsDir});}
+    catch(error){if(error instanceof LibraryReadError){const [code,status]=REFERENCE_ERRORS[error.reason];throw generationError(code,status);}throw error;}
+    total+=read.bytes.length;if(total>MAX_REFERENCES_TOTAL_BYTES)throw generationError('references_too_large',413);
+    references.push(`data:${read.file.mime_type};base64,${read.bytes.toString('base64')}`);
   }
   return references;
 }
