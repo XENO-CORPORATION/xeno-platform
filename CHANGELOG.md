@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-13
 
+**Code runs look like the rest of XENO.** When the assistant runs code, it now shows as a step in the turn's list of steps, the same way XENO Agent shows a command: the code, what it printed, any error and how it ended open when you expand it, and each file it made is listed and opens from there. The separate white-headed box drawn inside the reply is gone.
+
 **Your PCs and browsers show as connected when they are.** The list of your connected devices (remote control, your browser, Corpus) could show one as off while it was on, about half the time, because each of our two servers only knew the devices connected to itself. A device now counts as connected when either server has heard from it in the last minute. A device that just went off can still show as on for up to a minute.
 
 **Attached files of any size reach the code.** The first version only worked for small files: the code service refused anything over about 1 MB, so a picture of almost a megabyte failed with "That code could not be executed." Files up to 64 MB per run now reach the code. When a run fails, the step now says why in plain words (for example, that the files were too large) instead of only that it could not run.

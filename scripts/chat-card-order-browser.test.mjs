@@ -150,7 +150,9 @@ try {
   await check('an older card goes under its text, and an older run stays where it was', async () => {
     await chat.waitForSelector(`[data-chat-generation="${OLD_CARD}"]`, { timeout: 15000 });
     await assertOrder(['Older words above the older card.', `#${OLD_CARD}`]);
-    await assertOrder(['.chat-code', 'Older words under the older run.']);
+    // A code run is a step in the turn's rail now (XENO Agent's command step), not a card in the body.
+    assert.equal(await chat.evaluate(() => document.querySelectorAll('.chat-code').length), 0, 'the old in-body code card is gone');
+    assert.ok(await chat.evaluate(() => document.querySelectorAll('.xa-row[data-step="shell"]').length) >= 1, 'the run is a command step in the rail');
   });
 
   await send('owner', 'Make the robot a hero image');
@@ -178,14 +180,14 @@ try {
   await send('parts', 'Run it and then propose');
   await check('several parts: words, run, words, card, while it streams', async () => {
     await chat.waitForSelector(`[data-chat-generation="${LAST_CARD}"]`, { timeout: 20000 }); await wait(400);
-    await assertOrder(['First words, before the run.', '.chat-code@1', 'Middle words, after the run.', `#${LAST_CARD}`]);
+    await assertOrder(['First words, before the run.', 'Middle words, after the run.', `#${LAST_CARD}`]);
   });
   releaseHold();
   await wait(1500);
   await send('after', 'Run it, then tell me');
   await check('text after a step stays after it', async () => {
     await chat.waitForFunction(() => /Words written after the only run\./.test(document.body.innerText), { timeout: 20000 }); await wait(300);
-    await assertOrder(['.chat-code@2', 'Words written after the only run.']);
+    await assertOrder(['Words written after the only run.']);
   });
   releaseHold();
   for (let i = 0; i < 100 && saved.filter((m) => m.role === 'assistant').length < 3; i++) await wait(100);
@@ -195,8 +197,8 @@ try {
   await check('after a reload every turn is in the same order', async () => {
     await wait(600); await shot('reloaded');
     await assertOrder([OWNER, `#${NEW_CARD}`]);
-    await assertOrder(['First words, before the run.', '.chat-code@1', 'Middle words, after the run.', `#${LAST_CARD}`]);
-    await assertOrder(['.chat-code@2', 'Words written after the only run.']);
+    await assertOrder(['First words, before the run.', 'Middle words, after the run.', `#${LAST_CARD}`]);
+    assert.equal(await chat.evaluate(() => document.querySelectorAll('.chat-code').length), 0, 'no in-body code card after a reload either');
   });
   await check('no page error anywhere in the run', async () => { assert.deepEqual(pageErrors, [], JSON.stringify(pageErrors).slice(0, 400)); });
 } finally { await browser.close(); await server.close(); process.chdir(previous); }
