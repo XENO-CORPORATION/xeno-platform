@@ -70,7 +70,6 @@ import {
 import { buildChatSystemPrompt, CHAT_MODE_PLACEHOLDERS, modeUsesXenoSearch, type ChatMode } from './chatModeConfig';
 import ChatTurnHead from './ChatTurnHead';
 import { ChatGeneratedImages, imageAssetFor, type ChatTurnImageView } from './ChatGeneratedImage';
-import { ChatCodeExecution } from './ChatCodeExecution';
 import { ChatUserMessage } from './ChatUserMessage';
 import { pasteBecomesFile, makePastedTextFile, pastedFiles } from './chatPaste';
 import { ChatQueue } from './ChatQueue';
@@ -7547,7 +7546,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
                  * A run is a step of the turn too (2026-09-27): `code_start` opens the block with the
                  * source and a running state, `code_result` closes it with the exit, output and any
                  * produced files (each already a Library asset), and `code_error` keeps the block and
-                 * says why. The block is drawn by ChatCodeExecution where the run happened in the reply.
+                 * says why. It is drawn as a command step in the turn's rail (chatTurnTranscript.ts codeToolCall).
                  */
                 turnRecord = stampTextAt(turnRecord, applyTurnEvent(turnRecord, event as Parameters<typeof applyTurnEvent>[1]), streamedText.length);
                 // a priced run bills when it lands, so the header balance moves now (free by default)
@@ -17678,7 +17677,6 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               const results: LibraryViewerItem[] = all.map((assetId, index) => ({ id: `generation:${assetId}`, name: `XENO image${all.length > 1 ? ` ${index + 1}` : ''}`, asset: { assetId, name: 'XENO image', mimeType: assetId === opened.assetId ? opened.mime : 'image/png', contentUrl: `/api/library/assets/${encodeURIComponent(assetId)}/content` }, context: 'Chat' }));
                                               setLibraryViewerSelection({ items: [...conversationLibraryViewerItems.filter(item => !results.some(r => r.asset?.assetId === item.asset?.assetId)), ...results], activeId: `generation:${opened.assetId}` });
                                           }} />;
-                                              if (part.kind === 'code') return <ChatCodeExecution key={`code:${part.steps[0].id}`} steps={part.steps} live={live} />;
                                               return (
                                                   /* Do not put prose-pre:bg-* / child bg utilities on this wrapper:
                                                      theme CSS uses [class*="bg-…"] and would paint the whole answer. */

@@ -13,6 +13,7 @@
 import React, { useMemo } from 'react';
 import { TranscriptTurn, type TranscriptActions } from '@xenosystem/agent-conversation/components/agent/transcript/Transcript';
 import { toTranscriptMessage, type ChatTurnRecord, type StepsMode, chatFaviconUrl } from './chatTurnTranscript';
+import { libraryService } from '@/services/libraryService';
 
 /** This surface has no asks (no tool needs a grant in Chat), so every ask action is a refusal. */
 const NO_ASKS: TranscriptActions['ask'] = {
@@ -57,12 +58,31 @@ export const ChatTurnHead: React.FC<ChatTurnHeadProps> = ({
     () => toTranscriptMessage({ id: messageId, thinking, streaming, replyStarted, expectingThought, hadThought, timestamp, model, turn }),
     [messageId, thinking, streaming, replyStarted, expectingThought, hadThought, timestamp, model, turn],
   );
+  // A file a code run produced opens its Library copy. A path with no asset was never surfaced, so
+  // nothing opens rather than a dead link.
+  const producedFiles = useMemo(() => {
+    const byPath = new Map<string, string>();
+    for (const step of turn?.steps ?? []) {
+      if (step.kind !== 'code') continue;
+      for (const file of step.files ?? []) if (file.assetId) byPath.set(file.path, file.assetId);
+    }
+    return byPath;
+  }, [turn]);
   const actions = useMemo<TranscriptActions>(() => ({
     ask: NO_ASKS,
     copy: copyText,
     openExternal,
+    ...(producedFiles.size ? {
+      openPath: (path: string) => {
+        const assetId = producedFiles.get(path);
+        if (!assetId) return;
+        void libraryService.createSignedLink(assetId, { download: false })
+          .then((href) => { if (href) window.open(href, '_blank', 'noopener'); })
+          .catch(() => { /* a link that cannot be made opens nothing; never throw from a click */ });
+      },
+    } : {}),
     ...(onThinkingTime ? { rememberThinkingTime: (ms: number) => onThinkingTime(messageId, ms) } : {}),
-  }), [messageId, onThinkingTime]);
+  }), [messageId, onThinkingTime, producedFiles]);
 
   return (
     /* `xa-collapsed` is what the stylesheet keys the collapsed behaviour on — the live line's

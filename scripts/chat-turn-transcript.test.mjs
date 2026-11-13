@@ -109,6 +109,14 @@ try {
     check('a code run is a run_code tool call, succeeded, in a segment', codeMsg.toolCalls.length === 1 && codeMsg.toolCalls[0].toolName === 'run_code' && codeMsg.toolCalls[0].status === 'done' && codeMsg.toolCalls[0].outcome === 'succeeded' && codeMsg.segments[0].toolCallId === codeMsg.toolCalls[0].id);
     const liveCode = toTranscriptMessage({ id: 'mcode2', streaming: true, replyStarted: false, turn: applyTurnEvent(newTurnRecord(1000), { type: 'code_start', index: 0, language: 'go', code: 'x' }, 1100) });
     check('a running code step is a running run_code tool call', liveCode.toolCalls[0].toolName === 'run_code' && liveCode.toolCalls[0].status === 'running');
+    check('the run carries its code as the command the rail draws (XENO Agent\'s command step)', codeMsg.toolCalls[0].params.command === 'print(1)' && codeMsg.toolCalls[0].params.language === 'python');
+    check('its output is in the form the rail reads: stdout, then exit', codeMsg.toolCalls[0].result === '1\nexit: 0');
+    const failedRun = closeTurnRecord(applyTurnEvent(applyTurnEvent(newTurnRecord(1000), { type: 'code_start', index: 0, language: 'python', code: 'boom' }, 1100), { type: 'code_result', index: 0, status: 'error', exitCode: 1, stdout: 'a', stderr: 'Traceback' }, 1900), 2500);
+    const failedMsg = toTranscriptMessage({ id: 'mfail', streaming: false, replyStarted: true, timestamp: 1000, turn: failedRun });
+    check('a failed run keeps stderr apart and its exit', failedMsg.toolCalls[0].result === 'a\n[stderr]\nTraceback\nexit: 1' && failedMsg.toolCalls[0].outcome === 'failed');
+    const withFiles = { ...codeRecord, steps: codeRecord.steps.map((step) => ({ ...step, files: [{ path: 'out/chart.png', assetId: 'a1' }, { path: 'notes.txt' }] })) };
+    const filesMsg = toTranscriptMessage({ id: 'mfiles', streaming: false, replyStarted: true, timestamp: 1000, turn: withFiles });
+    check('each file a run produced is the rail\'s own file step, after the run', filesMsg.toolCalls.length === 3 && filesMsg.toolCalls[1].toolName === 'write' && filesMsg.toolCalls[1].params.file_path === 'out/chart.png' && filesMsg.toolCalls[2].params.file_path === 'notes.txt' && filesMsg.segments.length === 3);
   }
 
   // ── a reply's body, in the order it happened (2026-11-06) ──────────────
@@ -135,25 +143,28 @@ try {
       { type: 'delta', text: '\n\nTwo.' }, { type: 'image_start', index: 0, prompt: 'p', aspectRatio: '1:1' }, { type: 'image_start', index: 1, prompt: 'q', aspectRatio: '1:1' },
       { type: 'delta', text: '\n\nThree.' }, { type: 'generation_proposal', generation },
     ]);
-    check('several parts keep their order, and neighbours of a kind stay one group', JSON.stringify(shape(turnBodyParts(parts.record, parts.text))) === JSON.stringify(['text:One.', 'code:2', 'text:Two.', 'images:2', 'text:Three.', 'generation']));
-    const first = fold([{ type: 'code_start', index: 0, language: 'python', code: 'a' }, { type: 'delta', text: 'After the run.' }]);
-    check('text after a step stays after it', JSON.stringify(shape(turnBodyParts(first.record, first.text))) === JSON.stringify(['code:1', 'text:After the run.']));
-    const code = { id: 'code-1', kind: 'code', language: 'python', code: 'a', startedAt: 1 };
+    check('several parts keep their order, and neighbours of a kind stay one group; code runs are in the rail, not the body', JSON.stringify(shape(turnBodyParts(parts.record, parts.text))) === JSON.stringify(['text:One.\n\nTwo.', 'images:2', 'text:Three.', 'generation']));
+    const first = fold([{ type: 'image_start', index: 0, prompt: 'p', aspectRatio: '1:1' }, { type: 'delta', text: 'After the run.' }]);
+    check('text after a step stays after it', JSON.stringify(shape(turnBodyParts(first.record, first.text))) === JSON.stringify(['images:1', 'text:After the run.']));
+    const ranCode = { id: 'code-1', kind: 'code', language: 'python', code: 'a', startedAt: 1, textAt: 3 };
+    check('a code run never splits the body: it is a step in the rail', JSON.stringify(shape(turnBodyParts({ ...newTurnRecord(1000), steps: [ranCode] }, 'One.\n\nTwo.'))) === JSON.stringify(['text:One.\n\nTwo.']));
+    // The placement rules below are the same for every placed step; an image is the example.
+    const code = { id: 'image-1', kind: 'image', prompt: 'p', aspectRatio: '1:1', startedAt: 1 };
     const old = (step) => ({ ...newTurnRecord(1000), steps: [step] });
     check('an older card goes under its text: a proposal has always ended its turn', JSON.stringify(shape(turnBodyParts(old({ id: 'g', kind: 'generation', generationId: GEN, type: 'image', startedAt: 1 }), 'Words.'))) === JSON.stringify(['text:Words.', 'generation']));
-    check('an older run stays above the text, where nothing says otherwise', JSON.stringify(shape(turnBodyParts(old(code), 'Words.'))) === JSON.stringify(['code:1', 'text:Words.']));
+    check('an older step stays above the text, where nothing says otherwise', JSON.stringify(shape(turnBodyParts(old(code), 'Words.'))) === JSON.stringify(['images:1', 'text:Words.']));
     check('a reply with no steps is one run of text, whole', JSON.stringify(turnBodyParts(undefined, 'Just words.')) === JSON.stringify([{ kind: 'text', text: 'Just words.', start: 0, firstLine: 0 }]));
     const answer = 'Line one.\n\n```python\nprint(1)\n```\n\nLine six.';
     const cut = turnBodyParts(old({ ...code, textAt: answer.indexOf('print') }), answer);
-    check('a place inside a code block moves past it, so a fence is never cut', JSON.stringify(shape(cut)) === JSON.stringify(['text:' + answer.slice(0, answer.lastIndexOf('\n\n')).trim(), 'code:1', 'text:Line six.']));
+    check('a place inside a code block moves past it, so a fence is never cut', JSON.stringify(shape(cut)) === JSON.stringify(['text:' + answer.slice(0, answer.lastIndexOf('\n\n')).trim(), 'images:1', 'text:Line six.']));
     const edited = turnBodyParts(old({ ...code, textAt: 3 }), 'Long first paragraph.\n\nSecond.');
-    check('a place inside a paragraph moves to its end', JSON.stringify(shape(edited)) === JSON.stringify(['text:Long first paragraph.', 'code:1', 'text:Second.']));
-    check('a place past the end of edited text goes at the end', JSON.stringify(shape(turnBodyParts(old({ ...code, textAt: 500 }), 'Short.'))) === JSON.stringify(['text:Short.', 'code:1']));
+    check('a place inside a paragraph moves to its end', JSON.stringify(shape(edited)) === JSON.stringify(['text:Long first paragraph.', 'images:1', 'text:Second.']));
+    check('a place past the end of edited text goes at the end', JSON.stringify(shape(turnBodyParts(old({ ...code, textAt: 500 }), 'Short.'))) === JSON.stringify(['text:Short.', 'images:1']));
     const lines = turnBodyParts(old({ ...code, textAt: 'A.\n\nB.'.length }), 'A.\n\nB.\n\n```js\nx\n```');
     check('a run of text knows its first line, so a code block keeps the number its edit finds it by', lines[2].kind === 'text' && lines[2].firstLine === 2 && lines[2].text.startsWith('\n\n'));
     const streamed = '<think>plan</think>  Before the run, in full.\n\nAfter the run.';
     const moved = anchorTurnSteps(old({ ...code, textAt: streamed.indexOf('\n\nAfter') }), streamed, 'Before the run, in full.\n\nAfter the run.');
-    check('the place moves with the words when the finished answer differs from the stream', JSON.stringify(shape(turnBodyParts(moved, 'Before the run, in full.\n\nAfter the run.'))) === JSON.stringify(['text:Before the run, in full.', 'code:1', 'text:After the run.']));
+    check('the place moves with the words when the finished answer differs from the stream', JSON.stringify(shape(turnBodyParts(moved, 'Before the run, in full.\n\nAfter the run.'))) === JSON.stringify(['text:Before the run, in full.', 'images:1', 'text:After the run.']));
     const repeated = 'Same words.\n\nSame words.\n\nEnd.';
     const nearest = anchorTurnSteps(old({ ...code, textAt: '  Same words.'.length }), '  ' + repeated, repeated);
     check('words said twice resolve to the nearer place', nearest.steps[0].textAt === 'Same words.'.length);

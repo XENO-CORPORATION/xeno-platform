@@ -628,7 +628,6 @@ const stepPlace = (step: ChatTurnBodyStep | ChatTurnHandoffStep, length: number)
 export type TurnBodyPart =
   | { kind: 'text'; text: string; start: number; firstLine: number }
   | { kind: 'images'; steps: ChatTurnImageStep[] }
-  | { kind: 'code'; steps: ChatTurnCodeStep[] }
   | { kind: 'generation'; step: ChatTurnGenerationStep }
   | { kind: 'handoff'; step: ChatTurnHandoffStep };
 
@@ -640,7 +639,8 @@ export type TurnBodyPart =
  */
 export function turnBodyParts(turn: ChatTurnRecord | undefined, answer: string): TurnBodyPart[] {
   const placed = (turn?.steps ?? [])
-    .filter((step): step is ChatTurnBodyStep | ChatTurnHandoffStep => isPlacedStep(step) || step.kind === 'handoff')
+    // A code run is drawn in the turn's rail as a command step (XENO Agent's own), never in the body.
+    .filter((step): step is ChatTurnBodyStep | ChatTurnHandoffStep => (isPlacedStep(step) && step.kind !== 'code') || step.kind === 'handoff')
     .map((step) => ({ step, at: blockBoundary(answer, stepPlace(step, answer.length)) }));
   const parts: TurnBodyPart[] = [];
   const addText = (start: number, end: number) => {
@@ -655,7 +655,6 @@ export function turnBodyParts(turn: ChatTurnRecord | undefined, answer: string):
       if (place !== at) continue;
       const last = parts[parts.length - 1];
       if (step.kind === 'image') { if (last?.kind === 'images') last.steps.push(step); else parts.push({ kind: 'images', steps: [step] }); }
-      else if (step.kind === 'code') { if (last?.kind === 'code') last.steps.push(step); else parts.push({ kind: 'code', steps: [step] }); }
       else parts.push({ kind: step.kind, step } as TurnBodyPart);
     }
   }
@@ -737,17 +736,43 @@ const imageToolCall = (step: ChatTurnImageStep, turnLive: boolean): ToolCallInfo
 };
 
 /** A code step's one-line rail result: its exit and how many files it produced, or the error. */
+/**
+ * A run's output in the form the shared command step reads (`parseStructuredCommandContent`): stdout,
+ * then `[stderr]` and its lines, an `[error]` line for why it failed, and `exit: N`.
+ */
 const codeResultText = (step: ChatTurnCodeStep): string => {
-  if (step.error) return step.error;
-  const exit = typeof step.exitCode === 'number' ? `Exit ${step.exitCode}` : (step.status ?? 'done');
-  const files = step.files?.length ? ` · ${step.files.length} file${step.files.length === 1 ? '' : 's'}` : '';
-  return `${exit}${files}`;
+  const lines: string[] = [];
+  if (step.stdout) lines.push(step.stdout.replace(/\n+$/, ''));
+  if (step.stderr) lines.push('[stderr]', step.stderr.replace(/\n+$/, ''));
+  if (step.error) lines.push(`[error] ${step.error}`);
+  else if (step.status === 'timeout') lines.push('[error] Timed out');
+  else if (step.status === 'killed') lines.push('[error] Stopped');
+  if (typeof step.exitCode === 'number') lines.push(`exit: ${step.exitCode}`);
+  return lines.join('\n');
+};
+
+/** Each file a finished run produced, as the rail's own file step ("Created <name>"), opened by path. */
+const codeFileToolCalls = (step: ChatTurnCodeStep, turnLive: boolean): ToolCallInfo[] => {
+  const done = step.endedAt !== undefined || !turnLive;
+  if (!done || !step.files?.length) return [];
+  const at = step.endedAt ?? step.startedAt;
+  return step.files.map((file, index) => ({
+    id: `${step.id}:file:${index}`,
+    toolName: 'write',
+    params: { file_path: file.path },
+    status: 'done' as const,
+    success: true,
+    outcome: 'succeeded' as const,
+    startedAt: at,
+    endedAt: at,
+    category: 'other' as const,
+  }));
 };
 
 /**
- * A code step as the transcript's own `run_code` tool call — the canonical step model renders the row
- * ("Running code", then "Ran code"); the block itself (source, output, files) is drawn by the chat
- * under the transcript head. The row carries the language, the exit and, on failure, why.
+ * A code step as a COMMAND in the transcript's rail: the shared step model draws it as XENO Agent draws
+ * a terminal command (the code as its preview, the output, the exit and the duration when expanded).
+ * Before 2026-11-13 the chat drew its own card for it under the head, in a style of its own.
  */
 const codeToolCall = (step: ChatTurnCodeStep, turnLive: boolean): ToolCallInfo => {
   const done = step.endedAt !== undefined || !turnLive;
@@ -756,7 +781,7 @@ const codeToolCall = (step: ChatTurnCodeStep, turnLive: boolean): ToolCallInfo =
   return {
     id: step.id,
     toolName: 'run_code',
-    params: { language: step.language },
+    params: { command: step.code, language: step.language },
     status: done ? 'done' : 'running',
     success: done ? !failed : undefined,
     ...(done ? { outcome: failed ? ('failed' as const) : ('succeeded' as const) } : {}),
@@ -841,7 +866,9 @@ export function toTranscriptMessage(input: ChatTurnInput): TranscriptMessage {
   const turn = input.turn;
   const live = Boolean(input.streaming);
   const steps = turn?.steps ?? [];
-  const toolCalls = steps.filter(step => step.kind !== 'generation').map((step) => toToolCall(step, live));
+  const toolCalls = steps
+    .filter(step => step.kind !== 'generation')
+    .flatMap((step) => (isCodeStep(step) ? [toToolCall(step, live), ...codeFileToolCalls(step, live)] : [toToolCall(step, live)]));
   const segments: AssistantTurnSegment[] = toolCalls.map((toolCall, index) => ({
     id: `${input.id}:segment:${index}`,
     kind: 'tool_call',
