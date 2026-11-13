@@ -73,8 +73,8 @@ export function installationRoutes(spec) {
   router.get('/installations', requireBoundProof, async (req, res) => {
     try {
       const out = await installations.list(req.db, req.user.id, spec.surface);
-      // which of the caller's own are connected here, never anyone else's
-      res.json({ ...out, live: out.installations.map((i) => String(i.id)).filter((id) => relay.isLive(id)) });
+      // which of the caller's own are connected, on this replica or another, never anyone else's
+      res.json({ ...out, live: out.installations.filter((i) => relay.liveOrSeenRecently(i)).map((i) => String(i.id)) });
     }
     catch (e) { sendError(res, e); }
   });

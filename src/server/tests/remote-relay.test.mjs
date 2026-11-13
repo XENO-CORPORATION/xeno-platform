@@ -26,6 +26,7 @@ import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { authMiddleware } from '../middleware/auth.js';
 import browserRelayRoutes, { corpusRelayRoutes, remoteRelayRoutes } from '../routes/browserRelayRoutes.js';
+import { liveOrSeenRecently, LIVE_SEEN_WITHIN_MS } from '../services/browserRelay.js';
 import { handleRelayConnection, isRelayRequest } from '../services/browserRelaySocket.js';
 import * as relay from '../services/browserRelay.js';
 import { localBus, redisBus, setRemoteBus, MAX_FRAMES_PER_SECOND } from '../services/remoteRelay.js';
@@ -203,6 +204,16 @@ async function main() {
     const noScopeKey = keypair();
     const noScope = await connect(a.port, { ...laptop, key: noScopeKey, t: await token(alice, noScopeKey, 'openid profile email') });
     ok((await noScope.auth()).code === 4403, 'a token without remote:connect is refused');
+
+    // Both servers here share one process, so "connected to the other replica" is shown on the rule itself: a row this
+    // process holds no socket for, stamped by another replica's heartbeat.
+    const elsewhere = { id: '999999999', lastSeenAt: new Date(Date.now() - 30_000).toISOString() };
+    ok(liveOrSeenRecently(elsewhere) === true, '🔴 a device connected to another replica reads as connected');
+    ok(liveOrSeenRecently({ ...elsewhere, lastSeenAt: new Date(Date.now() - 2 * LIVE_SEEN_WITHIN_MS).toISOString() }) === false, 'one not heard from for two minutes does not');
+    ok(liveOrSeenRecently({ id: '999999999', lastSeenAt: null }) === false, 'nor one that never connected');
+    ok(liveOrSeenRecently({ id: host.id, lastSeenAt: null }) === true, 'and a socket held here counts at once, before any stamp');
+    const listed = await call(b.port, 'GET', '/api/v2/remote/installations', { t: host.t, key: host.key });
+    ok(listed.body.live.includes(host.id), 'the list marks the connected PC as on');
 
     const seen = await call(a.port, 'GET', '/api/v2/remote/installations', { t: host.t, key: host.key });
     ok(seen.body.installations.some((i) => i.remoteRole === 'host'), 'a person sees their own devices and each one\'s role');
