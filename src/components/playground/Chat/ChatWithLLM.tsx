@@ -101,6 +101,7 @@ import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment
 import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import { announceSidebarExpanded, onSidebarCollapseRequest } from '@/lib/sidebarExclusion';
 import ReactMarkdown from 'react-markdown';
+import { SmoothedReply, revealTailPlugins } from './SmoothedReply';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 // import SourcePreview from './SourcePreview'; // This line should be removed
@@ -17658,7 +17659,12 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               runs and generation cards where they came, live and after a reload
                                               (turnBodyParts). Keys follow the step, so a card is never remounted
                                               while text streams around it. */}
-                                          {turnBodyParts(message.turn, message.isError ? '' : message.parsedAnswer ?? '').map((part) => {
+                                          {/* Whole words at a time, the newest fading in: XENO Agent's own pacing (SmoothedReply). */}
+                                          <SmoothedReply text={message.isError ? '' : message.parsedAnswer ?? ''} streaming={Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder)}>{(smoothed) => {
+                                          const bodyParts = turnBodyParts(message.turn, smoothed.text);
+                                          let lastTextPart = -1;
+                                          bodyParts.forEach((p, i) => { if (p.kind === 'text') lastTextPart = i; });
+                                          return bodyParts.map((part, partIndex) => {
                                               const live = Boolean(message.isStreaming || message.isThinkingPlaceholder || message.isDotPlaceholder);
                                               if (part.kind === 'images') return (
                                                   <ChatGeneratedImages
@@ -17683,7 +17689,7 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                   <div key={`text:${part.start}`} className="prose prose-sm max-w-none prose-strong:font-bold prose-code:px-2 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-[15px] prose-code:font-normal prose-code:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:border prose-pre:border-[var(--chat-border)] prose-pre:p-4 prose-pre:font-mono prose-pre:text-[15px] prose-pre:overflow-x-auto">
                                                    <ReactMarkdown
   remarkPlugins={[remarkGfm, remarkCitations, remarkChatMath]}
-  rehypePlugins={[rehypeRaw, rehypeChatKatex]}
+  rehypePlugins={[rehypeRaw, rehypeChatKatex, ...(partIndex === lastTextPart ? revealTailPlugins(smoothed) : [])]}
   components={{
     pre: ({children}: any) => <>{children}</>,
     /* a `[n]` the model cited becomes the chip after the claim, the cited sources on hover — the
@@ -17731,7 +17737,8 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                                {/* Streaming caret removed to match the XENO model (no vertical caret). */}
                                                   </div>
                                               );
-                                          })}
+                                          });
+                                          }}</SmoothedReply>
                                           {(() => {
                                               // ask_user: the question this turn ended on, one line, once ANSWERED (the message after it).
                                               // While it waits, the panel above the composer is the question — showing both would say it twice.

@@ -392,3 +392,19 @@ html.xw-embed [data-overview-shell] { --xw-surface: color-mix(in srgb, var(--xen
 html.xw-embed .chat-themed { --chat-canvas: var(--xw-surface, #111111) !important; background-color: var(--xw-surface, #111111) !important; }
 /* The wordmark in the chat's header shows and hides the app's own taskbar. There is none here. */
 html.xw-embed [data-chat-wordmark] { display: none !important; }
+
+/* A streamed reply's newest words fade in once (rehypeRevealTail from @xenosystem/agent-conversation wraps them in
+   span.xa-w). Same 180 ms as XENO Agent, so both reveal a reply the same way. */
+@keyframes xa-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+span.xa-w {
+  animation: xa-reveal 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  span.xa-w {
+    animation: none;
+  }
+}
