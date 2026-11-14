@@ -24,6 +24,7 @@ import { setComputeBackend } from '../services/computeBackend.js';
 import { addGrant } from '../utils/creditLedgerV2.js';
 import { createTicket, handlePortConnection, isPortRequest, selectProtocol } from '../services/computePorts.js';
 import { openCloudAgent, cloudAgentStatus, KEY_FILE, HOST_KEY_FILE, RENEW_BELOW_MINUTES } from '../services/cloudAgent.js';
+import * as computeService from '../services/compute.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -39,10 +40,14 @@ await new Promise((r) => machine.on('listening', r));
 const machineUrl = `ws://127.0.0.1:${machine.address().port}`;
 const starts = [];
 const files = new Map(); // `${machine id}:${path}` -> Buffer
+// what the machine's busy check answers, and every command the platform ran on a machine
+let busyAnswer = '{"busy":false,"turns":0}'; let busyExit = 0; const ran = [];
+const execReply = (text, exitCode) => ({ body: (async function* () { yield Buffer.from(JSON.stringify({ stream: 'stdout', data: Buffer.from(text).toString('base64') }) + '\n' + JSON.stringify({ done: true, exitCode }) + '\n'); })() });
 setComputeBackend({ name: 'fake', create: async () => ({ ref: 'f' }), start: async (m) => { starts.push(m.id); return { state: 'running' }; },
   stop: async () => ({ state: 'stopped', saved: null, saveError: null }), remove: async () => {}, save: async () => ({ saved: { bytes: 1 } }),
   readFile: async (m, path) => { const f = files.get(`${m.id}:${path}`); if (!f) throw Object.assign(new Error('No such file'), { code: 'not_found', statusCode: 404 }); return f; },
   writeFile: async (m, path, buf) => { files.set(`${m.id}:${path}`, Buffer.from(buf)); return { path }; },
+  exec: async (m, req) => { ran.push({ id: m.id, argv: req.argv }); if (busyAnswer === 'throw') throw new Error('machine unreachable'); return execReply(busyAnswer + '\n', busyExit); },
   portSocket: (m, name, path) => ({ url: `${machineUrl}/v1/machines/${m.id}/ports/${name}${path}`, headers: { authorization: 'Bearer worker-token' } }) });
 
 const server = http.createServer((q, s) => { s.writeHead(404); s.end(); });
@@ -118,6 +123,29 @@ async function main() {
   // the switch off: no ticket
   delete process.env.SHELL_ENABLED;
   check(await code(() => createTicket(pool, ME, a1.machineId, 'agent', { workspace: a1.workspaceId })) === 'cloud_agent_not_enabled', 'with the switch off no ticket is given for the agent port');
+
+  // ── a turn somebody started and walked away from is allowed to finish
+  const idleSince = (minutes) => pool.query("UPDATE compute_machines SET state = 'running', last_active_at = now() - ($2 || ' minutes')::interval WHERE id = $1", [a1.machineId, String(minutes)]);
+  const stateOf = async () => (await pool.query('SELECT state FROM compute_machines WHERE id = $1', [a1.machineId])).rows[0].state;
+  const ensureRunning = async () => { if (await stateOf() !== 'running') await computeService.startMachine(pool, ME, a1.machineId); };
+  await ensureRunning(); await idleSince(45); ran.length = 0; busyAnswer = '{"busy":true,"turns":1}';
+  let pass = await computeService.meterRunningMachines(pool);
+  check(pass.working === 1 && pass.idle === 0 && await stateOf() === 'running', 'past its idle limit, a cloud machine whose agent is in the middle of a turn keeps running');
+  check(ran.length === 1 && ran[0].argv.join(' ') === 'node /machine/agenthost/busy.mjs', 'the platform asked the machine itself, with the one command');
+  const lastUse = (await pool.query("SELECT extract(epoch FROM now() - last_active_at)::int AS s FROM compute_machines WHERE id = $1", [a1.machineId])).rows[0].s;
+  check(lastUse >= 44 * 60, 'and asking did not count as use of the machine');
+  busyAnswer = '{"busy":false,"turns":0}';
+  pass = await computeService.meterRunningMachines(pool);
+  check(pass.idle === 1 && await stateOf() === 'stopped', 'when the turn is over the next pass stops it');
+  for (const [answer, exit, label] of [['{"busy":null,"reason":"x"}', 0, 'could not be told'], ['not json', 0, 'an answer that is not the one line'], ['{"busy":true}', 1, 'a check that failed'], ['throw', 0, 'a machine that cannot be reached']]) {
+    await ensureRunning(); await idleSince(45); busyAnswer = answer; busyExit = exit;
+    pass = await computeService.meterRunningMachines(pool);
+    check(pass.idle === 1 && pass.working === 0 && await stateOf() === 'stopped', `${label} stops it as before: only a clear "busy" keeps a machine awake`);
+  }
+  busyExit = 0; busyAnswer = '{"busy":true,"turns":1}';
+  await ensureRunning(); await idleSince(30 + computeService.UNATTENDED_MAX_MINUTES + 1); ran.length = 0;
+  pass = await computeService.meterRunningMachines(pool);
+  check(pass.idle === 1 && ran.length === 0 && await stateOf() === 'stopped', `after ${computeService.UNATTENDED_MAX_MINUTES / 60} hours with nobody connected it stops even if still busy`);
 
   console.log(`\ncloud-agent: ${passed} checks passed`);
 }

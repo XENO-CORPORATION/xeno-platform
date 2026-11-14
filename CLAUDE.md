@@ -422,7 +422,8 @@ Proofs: `npm run test:stock` (real Postgres, mutation-checked), `test:stock-ui`.
 - **The host's model key is the person's own session key**, written to `.xeno-cloud-agent/key.json` on the machine and to `.xeno-cloud-agent/.xeno/credentials.json`, which the machine tells its Agent host to read (the host runs there in its hosted account mode and takes no key from its environment; `~/.xeno/credentials.json` is emptied by the CLI when it starts), replaced when it has under two hours left, the old one revoked. Never give a machine the person's sign-in or an operator credential.
 - **Not end-to-end encrypted, and the page must keep saying so.** A person's own PC is sealed (decision 0006); XENO runs the cloud machine.
 - **The workspace hands the frame a 60-second, one-use port ticket**, and nothing longer-lived.
-Proofs: `npm run test:cloud-agent` (real Postgres, 18 checks), `test:agent-remote-ui` (browser, 27), xeno-compute `sh scripts/prove-agent-port.sh` (a real container, 16).
+- **A turn somebody walked away from is allowed to finish.** Before an idle stop the meter asks the machine (`BUSY_CHECKS` in `compute.js` → `machine/agenthost/busy.mjs`); only a clear `busy: true` keeps it awake, for at most `UNATTENDED_MAX_MINUTES` past its idle limit. The question is asked of the backend directly so it never counts as use. Another purpose gets this by adding its own check command there, never by raising its idle limit.
+Proofs: `npm run test:cloud-agent` (real Postgres, 27 checks), `test:agent-remote-ui` (browser, 27), xeno-compute `sh scripts/prove-agent-port.sh` (a real container, 16).
 
 ## 🖥️ XENO Corpus on a person's PC, through the relay (owner, 2026-10-31)
 

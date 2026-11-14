@@ -42,6 +42,29 @@ export const SURFACE = 'xeno_compute';
 export const SEGMENT_SECONDS = 3600;
 export const UNFUNDED_GRACE_SECONDS = 900;
 export const IDLE_DEFAULT_MINUTES = 30;
+/**
+ * A machine whose work can go on with nobody connected says so itself, and is asked before an idle stop. By purpose:
+ * the command on the machine that answers one JSON line, `{"busy": true | false | null}`. Only `true` keeps it awake:
+ * "could not be told" stops it as before, so a machine that cannot answer does not bill forever.
+ */
+export const BUSY_CHECKS = { 'cloud-agent': ['node', '/machine/agenthost/busy.mjs'] };
+/** How long past its idle limit a machine that keeps answering "busy" may run with nobody connected. */
+export const UNATTENDED_MAX_MINUTES = 720;
+const BUSY_CHECK_TIMEOUT_MS = 30_000;
+
+/** Whether the machine says its work is still going on. Never throws; anything but a clear yes is a no. */
+async function stillWorking(m, purpose) {
+  const argv = BUSY_CHECKS[purpose];
+  if (!argv) return false;
+  try {
+    // Asked of the machine directly, not through execMachine: this is the platform's own question, and it must not
+    // count as use of the machine (that is the very thing being decided).
+    const r = await readExec(await computeBackend().exec({ id: m.id, ref: m.backend_ref }, execRequest({ argv, timeoutMs: BUSY_CHECK_TIMEOUT_MS })));
+    if (r.exitCode !== 0) return false;
+    const line = r.stdout.trim().split('\n').pop() || '';
+    return JSON.parse(line).busy === true;
+  } catch { return false; }
+}
 function idleMinutes(v) {
   if (v === null || v === 'never' || v === 0) return null;
   const n = Number(v);
@@ -404,18 +427,24 @@ export async function deleteMachine(db, actor, machineId, { workspace } = {}) {
  */
 export async function meterRunningMachines(db, { now = Date.now() } = {}) {
   const open = (await db.query(`SELECT s.*, m.size, m.workspace_id, m.agent_user_id, m.backend_ref, m.unfunded_since, m.state,
-      m.idle_stop_minutes, m.last_active_at
+      m.idle_stop_minutes, m.last_active_at, m.purpose
       FROM compute_sessions s JOIN compute_machines m ON m.id = s.machine_id WHERE s.ended_at IS NULL AND m.state = 'running'`)).rows;
-  const out = { rolled: 0, unfunded: 0, stopped: 0, idle: 0 };
+  const out = { rolled: 0, unfunded: 0, stopped: 0, idle: 0, working: 0 };
   for (const s of open) {
     const m = { id: s.machine_id, size: s.size, workspace_id: s.workspace_id, agent_user_id: s.agent_user_id, backend_ref: s.backend_ref };
     const age = (now - new Date(s.segment_started_at).getTime()) / 1000;
     // Nobody used it for its idle limit: stop it, so a forgotten machine does not keep billing.
     const lastUse = new Date(s.last_active_at || s.started_at).getTime();
     if (s.idle_stop_minutes != null && now - lastUse >= s.idle_stop_minutes * 60_000) {
-      await stopRow(db, { ...m, workspace_id: s.workspace_id }, null, 'idle');
-      out.idle++;
-      continue;
+      // ...unless its own work is still going on: a turn somebody started and walked away from is allowed to finish,
+      // for a bounded time. It keeps being billed like any running machine, and stops on the pass after it finishes.
+      const mayRunOn = now - lastUse < (s.idle_stop_minutes + UNATTENDED_MAX_MINUTES) * 60_000;
+      if (mayRunOn && await stillWorking(m, s.purpose)) out.working++;
+      else {
+        await stopRow(db, { ...m, workspace_id: s.workspace_id }, null, 'idle');
+        out.idle++;
+        continue;
+      }
     }
     if (s.unfunded_since && (now - new Date(s.unfunded_since).getTime()) / 1000 >= UNFUNDED_GRACE_SECONDS) {
       await stopRow(db, { ...m, workspace_id: s.workspace_id }, null, 'unfunded');
@@ -623,7 +652,11 @@ export async function execMachineStream(db, actor, machineId, input = {}) {
 
 /** Run a command to completion: exit code plus stdout/stderr as text (each capped at 1 MB). */
 export async function execMachine(db, actor, machineId, input = {}) {
-  const res = await execMachineStream(db, actor, machineId, input);
+  return readExec(await execMachineStream(db, actor, machineId, input));
+}
+
+/** Read a machine's NDJSON command stream to its end. */
+async function readExec(res) {
   const out = { stdout: [], stderr: [] }; const size = { stdout: 0, stderr: 0 };
   let truncated = false; let done = null; let rest = '';
   const take = (line) => {
