@@ -8,7 +8,8 @@
  *
  * The chats are end-to-end encrypted, so the platform cannot read or list them. The page that can is
  * remote.xenosystem.ai, which holds the keys in its own origin. It is shown here in a frame: this page cannot read into
- * it, and the only thing it is told is which view is open (ids, never a name or a word of a chat). The address above is
+ * it, and the only thing it is told is which view is open (ids, never a name or a word of a chat). It asks this page for
+ * one thing: a sign-in code, so the person does not sign in twice (see signInTheFrame). The address above is
  * that view, so a reload, Back and a copied link land on the same chat.
  *
  * Like the chat's frame, this one is attached to the document once and laid over its slot, so the workspace redrawing
@@ -54,11 +55,30 @@
     frame.classList.add('on'); fit();
   }
 
-  // The frame says which view it shows. Only its own origin and its own window are listened to, and only a view of the
-  // known shape is taken: the address follows it, and nothing else is done with the message.
+  /**
+   * The frame asks for a sign-in code. The person is signed in here, so this page asks the sign-in server for a code for
+   * the FRAME'S OWN request and hands it back: no second sign-in. The code only works with a secret that never leaves
+   * the frame (PKCE), so this page cannot use it. Everything but the frame's own values is fixed here: the app it is
+   * for, where the code may be sent, and what it may do. A frame asking for anything else gets no code.
+   */
+  const B64 = /^[A-Za-z0-9_-]{16,128}$/;
+  const SCOPE = 'openid profile remote:connect';
+  async function signInTheFrame(d, reply) {
+    const none = () => reply({ type: 'xeno-remote:code', state: typeof d.state === 'string' ? d.state : '', code: null });
+    const P = window.XENO_PLATFORM;
+    if (!P || !P.served || d.clientId !== 'xeno-remote-web' || d.redirectUri !== `${ORIGIN()}/callback` || d.scope !== SCOPE
+      || ![d.state, d.nonce, d.codeChallenge].every((v) => typeof v === 'string' && B64.test(v))) return none();
+    const r = await P.api('POST', '/api/oauth2/authorize', { client_id: 'xeno-remote-web', redirect_uri: `${ORIGIN()}/callback`, scope: SCOPE, state: d.state, nonce: d.nonce, code_challenge: d.codeChallenge, code_challenge_method: 'S256' }).catch(() => null);
+    const code = r && r.ok && r.d && typeof r.d.code === 'string' ? r.d.code : null;
+    reply({ type: 'xeno-remote:code', state: d.state, code });
+  }
+
+  // The frame says which view it shows, or asks for its sign-in code. Only its own origin and its own window are
+  // listened to, and only messages of the known shapes are taken.
   addEventListener('message', (event) => {
     if (!frame || event.origin !== ORIGIN() || event.source !== frame.contentWindow) return;
     const d = event.data;
+    if (d && d.type === 'xeno-remote:authorize') { void signInTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (!d || d.type !== 'xeno-remote:view' || typeof d.path !== 'string') return;
     const was = signedIn; signedIn = d.signedIn === true;
     const view = viewOf(d.path);

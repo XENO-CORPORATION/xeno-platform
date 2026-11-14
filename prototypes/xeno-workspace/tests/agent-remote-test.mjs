@@ -11,6 +11,7 @@ const { createServer } = await import('vite'); const { xenoWorkspace } = await i
 const PORT = 5217, base = 'http://127.0.0.1:' + PORT;
 const USER = { id: 'u1', username: 'me', email: 'me@x.test', display_name: 'Me', avatar_url: null, email_verified: true };
 let failed = 0;
+const authorizeCalls = []; let signedOut = false;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 
 // the remote page, standing in: every address is the page, it tells its parent the view it shows, and it can be told to move
@@ -21,7 +22,8 @@ const remote = http.createServer((q, s) => {
   s.end(`<!doctype html><body style="margin:0;background:#123;color:#fff;font:14px sans-serif"><p id="where"></p><script>
     const say = () => { document.getElementById('where').textContent = 'REMOTE ' + location.pathname; parent.postMessage({ type: 'xeno-remote:view', path: location.pathname, signedIn: true }, '*') };
     window.move = (to) => { history.pushState(null, '', to); say() };
-    addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove) });
+    window.got = [];
+    addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove); if (e.data && e.data.testAsk) parent.postMessage(e.data.testAsk, '*'); if (e.data && e.data.type === 'xeno-remote:code') window.got.push(e.data) });
     say();
   </script>`);
 });
@@ -41,6 +43,7 @@ p.on('request', (q) => {
   if (!u.pathname.startsWith('/api/')) return q.continue();
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
+  if (u.pathname === '/api/oauth2/authorize' && q.method() === 'POST') { let b = {}; try { b = JSON.parse(q.postData() || '{}'); } catch {} authorizeCalls.push(b); return signedOut ? json(401, { error: 'unauthorized' }) : json(200, { code: 'CODE-' + b.state, redirect: 'x' }); }
   if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
   if (u.pathname === '/api/workspace/search') return json(200, { success: true, results: [], counts: {} });
   if (u.pathname === '/api/workspace/needs') return json(200, { success: true, items: [] });
@@ -107,6 +110,24 @@ try {
   await p.goBack(); await settle(900);
   f = await frameInfo();
   ok(where() === '/workspace/dev/apps/agent' + VIEW && f.shown && f.over && loads.length === loaded, 'Back returns to the chat with the same frame, still connected');
+
+  // the frame asks for its sign-in code: the workspace gets it one, for the frame's own request and nothing wider
+  const frameGot = async () => { const f = p.frames().find((x) => x.url().startsWith(REMOTE)); return f.evaluate(() => window.got.splice(0)); };
+  const ask = (m) => p.evaluate((m, origin) => document.getElementById('xw-agent-remote').contentWindow.postMessage({ testAsk: m }, origin), m, REMOTE);
+  const good = { type: 'xeno-remote:authorize', clientId: 'xeno-remote-web', redirectUri: REMOTE + '/callback', scope: 'openid profile remote:connect', state: 'S'.repeat(32), nonce: 'N'.repeat(32), codeChallenge: 'C'.repeat(43) };
+  await fresh('/workspace/dev/apps/agent'); authorizeCalls.length = 0; await frameGot();
+  await ask(good); await settle(900);
+  let got = await frameGot();
+  ok(authorizeCalls.length === 1 && authorizeCalls[0].client_id === 'xeno-remote-web' && authorizeCalls[0].redirect_uri === REMOTE + '/callback' && authorizeCalls[0].scope === 'openid profile remote:connect' && authorizeCalls[0].code_challenge === good.codeChallenge && authorizeCalls[0].code_challenge_method === 'S256', 'asked by the frame, the workspace asks the sign-in server for a code for the request the frame itself made');
+  ok(got.length === 1 && got[0].code === 'CODE-' + good.state && got[0].state === good.state, 'and hands the code to the frame');
+  authorizeCalls.length = 0;
+  for (const bad of [{ ...good, scope: 'openid profile inference:use' }, { ...good, clientId: 'xeno-agent-desktop' }, { ...good, redirectUri: 'https://evil.example/callback' }, { ...good, codeChallenge: 'x' }]) { await ask(bad); await settle(300); }
+  got = await frameGot();
+  ok(authorizeCalls.length === 0 && got.length === 4 && got.every((m) => m.code === null), `a request for another app, another address, more rights or a malformed challenge gets no code and reaches no server (${authorizeCalls.length} calls)`);
+  await p.evaluate((m) => window.postMessage(m, '*'), good); await settle(400);
+  ok(authorizeCalls.length === 0, 'a request that is not from the frame is not answered');
+  signedOut = true; await ask(good); await settle(700); got = await frameGot(); signedOut = false;
+  ok(got.length === 1 && got[0].code === null, 'signed out of the workspace, the frame is told there is no code, so it offers its own sign-in');
 
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); remote.close(); }

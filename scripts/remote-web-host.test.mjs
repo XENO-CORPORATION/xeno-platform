@@ -25,7 +25,7 @@ test('🔴 only our own scripts run, and the page can reach only the issuer', ()
   for (const policy of block.match(/Content-Security-Policy "[^"]+"/g)) {
     assert.match(policy, /default-src 'none'/);
     assert.match(policy, /script-src 'self';/);
-    assert.match(policy, /connect-src https:\/\/xenostudio\.ai wss:\/\/xenostudio\.ai;/);
+    assert.match(policy, /connect-src https:\/\/xenosystem\.ai wss:\/\/xenosystem\.ai;/);
     // the workspace shows the page in a frame (decision 0006, 2026-11-14): its two hosts and nothing else, never a wildcard
     assert.match(policy, /frame-ancestors https:\/\/xenosystem\.ai https:\/\/www\.xenosystem\.ai"$/);
   }

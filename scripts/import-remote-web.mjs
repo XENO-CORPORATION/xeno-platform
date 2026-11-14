@@ -19,7 +19,8 @@ if (!from || !existsSync(join(from, 'index.html'))) {
 // a test build points at a local issuer and would strand every phone, so it is refused here
 const scripts = readFileSync(join(from, 'index.html'), 'utf8').match(/assets\/index-[^"]+\.js/g) ?? [];
 const bundle = scripts.map((file) => readFileSync(join(from, file), 'utf8')).join('');
-if (!bundle.includes('https://xenostudio.ai') || /127\.0\.0\.1:\d+\/api/.test(bundle)) {
+// it signs in at xenosystem.ai (owner, 2026-11-14); a build that still names the old host as its issuer is refused too
+if (!bundle.includes('"https://xenosystem.ai"') || bundle.includes('"https://xenostudio.ai"') || /127\.0\.0\.1:\d+\/api/.test(bundle)) {
   console.error('That build does not sign in at the production issuer. Build it without VITE_XENO_ISSUER.');
   process.exit(1);
 }
