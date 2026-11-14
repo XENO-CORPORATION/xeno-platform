@@ -11854,6 +11854,27 @@
       "status": "planned",
       "class": "irreversible",
       "scope": "agents:write"
+    },
+    "route:spawnBackupRoutes.js:PUT /keys/account": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "reversible",
+      "scope": "none",
+      "because": "XENO Spawn's account wrap holds the account data key under a server key (KEK): a device's first unwrap needs a sign-in from the last 10 minutes and sends the person an email, so handing the key or its wrap to an agent tool would defeat the end-to-end encryption it exists to give"
+    },
+    "route:spawnBackupRoutes.js:GET /keys/account": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "safe",
+      "scope": "none",
+      "because": "XENO Spawn's account wrap holds the account data key under a server key (KEK): a device's first unwrap needs a sign-in from the last 10 minutes and sends the person an email, so handing the key or its wrap to an agent tool would defeat the end-to-end encryption it exists to give"
+    },
+    "route:spawnBackupRoutes.js:DELETE /keys/account": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "XENO Spawn's account wrap holds the account data key under a server key (KEK): a device's first unwrap needs a sign-in from the last 10 minutes and sends the person an email, so handing the key or its wrap to an agent tool would defeat the end-to-end encryption it exists to give"
     }
   }
 }
