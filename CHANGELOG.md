@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-14
 
+**A cloud turn you walk away from is allowed to finish.** A cloud machine used to stop 30 minutes after the last tab closed, even with the agent in the middle of a turn. Now the machine is asked first: while its agent is working it keeps running, and it stops on the first check after the turn is over. It is billed for that time like any running machine. With nobody connected it runs on for at most 12 hours past its idle limit, and a machine that cannot answer stops as before.
+
 **Chat replies appear in whole words.** While a reply is being written in Chat, it no longer appears a few letters at a time: each word shows up whole once it is complete, at a steady pace, and the newest words fade in. Code is drawn as it comes, without the fade. A reply that was already finished when you open the chat shows all at once, as before. It is the same reveal XENO Agent uses. If your system asks for reduced motion, there is no fade.
 
 **Replies in XENO Agent on the website are written smoothly.** In the Agent area (Cloud and your PCs) a reply now appears at a steady pace and in whole words, each new word fading in, instead of in whatever pieces the network delivered. This is the remote page from XENO Agent 0.3.47 (build `index-ytXzia-S.js`). The platform's own chat is not changed by this.
