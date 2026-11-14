@@ -1646,6 +1646,20 @@
       "scope": "none",
       "because": "a 60 s XENO Multiplayer join ticket after the platform checks access (services/liveTickets.js); an agent calls the same route with its own credential, so the ticket is transport, not an action"
     },
+    "route:computeRoutes.js:GET /cloud-agent": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "whether the Agent page offers Cloud to this person, and their Cloud Agent machine; reading it changes nothing"
+    },
+    "route:computeRoutes.js:POST /cloud-agent": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "opening a cloud Agent session starts the person's own machine and gives its host the person's own inference key; only the person opens it (services/cloudAgent.js), never an agent"
+    },
     "route:computeRoutes.js:GET /cloud-shell": {
       "status": "excluded",
       "category": "view-state",

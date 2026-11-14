@@ -17,6 +17,8 @@
  *   POST /machines/:id/port-tickets {port}       a one-use ticket to open wss …/machines/:id/ports/:port/ (services/computePorts.js)
  *   GET  /cloud-shell                            {enabled, machineId?} — whether Cloud Shell is open to me, and my shell machine
  *   POST /cloud-shell                            open Cloud Shell: the person's machine, started, and a ticket for its terminal
+ *   GET  /cloud-agent                            {enabled, machineId?} — whether a cloud Agent session is open to me, and my machine
+ *   POST /cloud-agent                            open one: the person's Cloud Agent machine, started, with a ticket for its Agent host
  */
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
@@ -25,6 +27,7 @@ import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../
 import * as compute from '../services/compute.js';
 import { createTicket } from '../services/computePorts.js';
 import { openCloudShell, shellStatus, CloudShellError } from '../services/cloudShell.js';
+import { openCloudAgent, cloudAgentStatus, CloudAgentError } from '../services/cloudAgent.js';
 
 const router = express.Router();
 async function loadActor(req, res, next) {
@@ -67,6 +70,14 @@ router.post('/cloud-shell', ...A, async (req, res) => {
   catch (e) {
     if (e instanceof CloudShellError || e instanceof compute.ComputeError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
     console.error('[compute] cloud shell', e); return res.status(500).json({ success: false, error: 'Cloud Shell could not start' });
+  }
+});
+router.get('/cloud-agent', ...A, run(async (req) => ({ agent: await cloudAgentStatus(req.db, req.actor) })));
+router.post('/cloud-agent', ...A, async (req, res) => {
+  try { res.json({ success: true, agent: await openCloudAgent(req.db, req.actor, { createTicket }) }); }
+  catch (e) {
+    if (e instanceof CloudAgentError || e instanceof compute.ComputeError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+    console.error('[compute] cloud agent', e); return res.status(500).json({ success: false, error: 'The cloud session could not start' });
   }
 });
 router.post('/machines/:id/port-tickets', ...A, run(async (req) => ({ connect: await createTicket(req.db, req.actor, req.params.id, String(b(req).port || ''), { workspace: ws(req) }) })));

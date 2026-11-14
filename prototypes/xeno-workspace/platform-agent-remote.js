@@ -1,7 +1,9 @@
 /* XENO_AGENT_REMOTE — XENO Agent in the workspace: the chats your PCs share, where you work on them.
  * Decision: xeno-agent-interface docs/decisions/0006-remote-control-end-to-end.md, amendment of 2026-11-14.
  *
- *   Your PCs        /workspace/<mode>/apps/agent                       every PC on your account, and Connect
+ *   Cloud           /workspace/<mode>/apps/agent                       your own cloud machine: somewhere to type at once
+ *   a cloud chat    /workspace/<mode>/apps/agent/cloud/c/<chat>
+ *   Your PCs        /workspace/<mode>/apps/agent/pcs                   every PC on your account, and Connect
  *   a PC            /workspace/<mode>/apps/agent/pc/<pc>               the chats it shares, and its projects
  *   a shared chat   /workspace/<mode>/apps/agent/pc/<pc>/c/<chat>
  *   in a project    /workspace/<mode>/apps/agent/pc/<pc>/w/<project>[/c/<chat>]
@@ -20,8 +22,8 @@
   /** Where the remote page is served. Only a test replaces it. */
   const ORIGIN = () => window.XENO_REMOTE_ORIGIN || 'https://remote.xenosystem.ai';
   const ID = '[A-Za-z0-9_-]{1,128}';
-  const VIEW = new RegExp(`^pc/${ID}(?:/c/${ID}|/w/${ID}(?:/c/${ID})?)?$`);
-  /** The view an address or a message names, or '' for the list of PCs. Anything else is not a view of ours. */
+  const VIEW = new RegExp(`^(?:pcs|cloud(?:/c/${ID})?|pc/${ID}(?:/c/${ID}|/w/${ID}(?:/c/${ID})?)?)$`);
+  /** The view an address or a message names, or '' for where the page opens (the person's cloud machine). Anything else is not a view of ours. */
   const viewOf = (text) => { const v = String(text || '').replace(/^\/+|\/+$/g, ''); return VIEW.test(v) ? v : ''; };
   const onAgent = () => { const s = X()?.S; return !!s && s.view === 'product' && s.product === 'agent'; };
   const here = () => (onAgent() ? viewOf(X().S.item) : '');
@@ -73,11 +75,30 @@
     reply({ type: 'xeno-remote:code', state: d.state, code });
   }
 
-  // The frame says which view it shows, or asks for its sign-in code. Only its own origin and its own window are
+  /**
+   * The frame asks for a cloud session. This page, where the person is signed in, asks the platform to start their
+   * Cloud Agent machine and to give a one-use ticket for its Agent host, and hands the frame that ticket. The ticket
+   * opens one socket to that one machine's one port, lives 60 seconds and is spent on use; nothing longer-lived leaves
+   * this page. A refusal goes back in the platform's own words (not open to this account, no credits, a cap).
+   */
+  async function openCloudForTheFrame(d, reply) {
+    const state = typeof d.state === 'string' && /^[0-9a-f]{36}$/.test(d.state) ? d.state : '';
+    const answer = (extra) => reply({ type: 'xeno-remote:cloud-session', state, ...extra });
+    const P = window.XENO_PLATFORM;
+    if (!state) return;
+    if (!P || !P.served) return answer({ session: null, error: 'A cloud session needs the XENO workspace.' });
+    const r = await P.api('POST', '/api/compute/cloud-agent', {}).catch(() => null);
+    const a = r && r.ok && r.d && r.d.agent;
+    if (!a || !a.connect) return answer({ session: null, error: (r && r.d && r.d.error) || 'The cloud session could not start.' });
+    answer({ session: { machineId: a.machineId, path: a.connect.path, protocols: a.connect.protocols } });
+  }
+
+  // The frame says which view it shows, or asks for its sign-in code or a cloud session. Only its own origin and its own window are
   // listened to, and only messages of the known shapes are taken.
   addEventListener('message', (event) => {
     if (!frame || event.origin !== ORIGIN() || event.source !== frame.contentWindow) return;
     const d = event.data;
+    if (d && d.type === 'xeno-remote:cloud') { void openCloudForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:authorize') { void signInTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (!d || d.type !== 'xeno-remote:view' || typeof d.path !== 'string') return;
     const was = signedIn; signedIn = d.signedIn === true;
@@ -89,13 +110,13 @@
   const page = () => `<div class="xar-host" data-xar-frame>Opening your PCs…</div>`;
 
   /** The breadcrumb for a view. The names of a PC and a chat are inside the encrypted page, so the trail says what kind of place it is. */
-  const trail = (item) => { const v = viewOf(item); if (!v) return ['Your PCs']; return /\/c\//.test(v) ? ['A PC', 'Chat'] : /\/w\//.test(v) ? ['A PC', 'Project'] : ['A PC']; };
+  const trail = (item) => { const v = viewOf(item); if (!v) return ['Cloud']; if (v === 'pcs') return ['Your PCs']; if (v.startsWith('cloud')) return ['Cloud', 'Chat']; return /\/c\//.test(v) ? ['A PC', 'Chat'] : /\/w\//.test(v) ? ['A PC', 'Project'] : ['A PC']; };
 
   const panel = () => {
     const ic = (k) => (X() ? X().ic(k) : '');
     const at = here();
-    return `<div class="views"><button class="row" aria-current="${at === ''}" data-item="" data-item-exact>${ic('bot')}<span class="t">Your PCs</span></button></div>
-      <div class="empty-note"><b>XENO Agent on your PCs</b><span>Connect a PC once, then work on it from here: open a chat you shared with /remote, or start a new one. What you type runs on that PC.${signedIn === false ? ' Sign in on the right to see your PCs.' : ''}</span></div>
+    return `<div class="views"><button class="row" aria-current="${at === '' || at.startsWith('cloud')}" data-item="" data-item-exact>${ic('bot')}<span class="t">Cloud</span></button><button class="row" aria-current="${at === 'pcs' || at.startsWith('pc/')}" data-item="pcs" data-item-exact>${ic('side')}<span class="t">Your PCs</span></button></div>
+      <div class="empty-note"><b>Where it runs</b><span>Cloud is your own XENO machine: it starts when you type, keeps working after you close the tab, and its time is paid from your credits. Your PCs run it on your own computer, end-to-end encrypted: connect one once, then open a chat you shared with /remote or start a new one.${signedIn === false ? ' Sign in on the right to see your PCs.' : ''}</span></div>
       <button class="act" data-xl-download="agent">${ic('download')}Get XENO Agent for your PC</button>`;
   };
 

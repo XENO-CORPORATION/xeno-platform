@@ -46,6 +46,8 @@ export const PORTS = Object.freeze({
   spawn: { audience: 'xeno-spawn', typ: 'xeno-spawn-assertion+jwt', discoveryHost: 'xenosystem.ai' },
   // Cloud Shell (services/cloudShell.js): behind SHELL_ENABLED, and each connection carries its own short-lived key.
   shell: { audience: 'xeno-shell', typ: 'xeno-shell-assertion+jwt', discoveryHost: 'xenosystem.ai', gated: true },
+  // XENO Agent in the cloud (services/cloudAgent.js): the machine's own Agent host, behind the same switch as Cloud Shell.
+  agent: { audience: 'xeno-agent-host', typ: 'xeno-agent-host-assertion+jwt', discoveryHost: 'xenosystem.ai', gated: true },
 });
 export const PORT_PATH = /^\/api\/compute\/machines\/(mch_[0-9a-f]{32})\/ports\/([a-z][a-z0-9-]{0,31})(\/[^?#]*)?$/;
 export const TICKET_SECONDS = 60;
@@ -73,7 +75,7 @@ export async function actorFor(db, userId) {
 export async function createTicket(db, actor, machineId, name, { workspace } = {}) {
   const spec = portSpec(name);
   const { ctx, m } = await compute.portAccess(db, actor, machineId, { workspace });
-  if (spec.gated && (ctx.agentId || !(await shellEnabledFor(db, ctx.userId)))) throw new compute.ComputeError('Cloud Shell is not open to your account yet', 'shell_not_enabled', 403);
+  if (spec.gated && (ctx.agentId || !(await shellEnabledFor(db, ctx.userId)))) throw new compute.ComputeError(name === 'agent' ? 'Cloud sessions are not open to your account yet' : 'Cloud Shell is not open to your account yet', name === 'agent' ? 'cloud_agent_not_enabled' : 'shell_not_enabled', 403);
   const ticket = crypto.randomBytes(32).toString('base64url');
   const expires = new Date(Date.now() + TICKET_SECONDS * 1000);
   await db.query(`INSERT INTO compute_port_tickets (ticket_hash, machine_id, port, user_id, workspace_id, expires_at)

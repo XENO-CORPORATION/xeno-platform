@@ -12,6 +12,7 @@ const PORT = 5217, base = 'http://127.0.0.1:' + PORT;
 const USER = { id: 'u1', username: 'me', email: 'me@x.test', display_name: 'Me', avatar_url: null, email_verified: true };
 let failed = 0;
 const authorizeCalls = []; let signedOut = false;
+const MACHINE = 'mch_' + 'a'.repeat(32); let cloudCalls = 0, cloudClosed = false;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 
 // the remote page, standing in: every address is the page, it tells its parent the view it shows, and it can be told to move
@@ -23,7 +24,7 @@ const remote = http.createServer((q, s) => {
     const say = () => { document.getElementById('where').textContent = 'REMOTE ' + location.pathname; parent.postMessage({ type: 'xeno-remote:view', path: location.pathname, signedIn: true }, '*') };
     window.move = (to) => { history.pushState(null, '', to); say() };
     window.got = [];
-    addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove); if (e.data && e.data.testAsk) parent.postMessage(e.data.testAsk, '*'); if (e.data && e.data.type === 'xeno-remote:code') window.got.push(e.data) });
+    addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove); if (e.data && e.data.testAsk) parent.postMessage(e.data.testAsk, '*'); if (e.data && (e.data.type === 'xeno-remote:code' || e.data.type === 'xeno-remote:cloud-session')) window.got.push(e.data) });
     say();
   </script>`);
 });
@@ -43,6 +44,7 @@ p.on('request', (q) => {
   if (!u.pathname.startsWith('/api/')) return q.continue();
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
+  if (u.pathname === '/api/compute/cloud-agent' && q.method() === 'POST') { cloudCalls += 1; return cloudClosed ? json(403, { success: false, error: 'Cloud sessions are not open to your account yet', code: 'cloud_agent_not_enabled' }) : json(200, { success: true, agent: { machineId: MACHINE, workspaceId: 'w1', name: 'Cloud', connect: { path: `/api/compute/machines/${MACHINE}/ports/agent/`, protocols: ['xeno-port.v1', 'xeno-ticket.' + 'T'.repeat(43)], expiresAt: 'x' } } }); }
   if (u.pathname === '/api/oauth2/authorize' && q.method() === 'POST') { let b = {}; try { b = JSON.parse(q.postData() || '{}'); } catch {} authorizeCalls.push(b); return signedOut ? json(401, { error: 'unauthorized' }) : json(200, { code: 'CODE-' + b.state, redirect: 'x' }); }
   if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
   if (u.pathname === '/api/workspace/search') return json(200, { success: true, results: [], counts: {} });
@@ -71,7 +73,7 @@ try {
   const main = await p.$eval('#main', (e) => e.innerText).catch(() => '');
   ok(!/Open in Hub|opens here when it is part of the workspace/.test(main), 'the placeholder that sent people to the desktop app is gone');
   const side = await p.$eval('#panel', (e) => e.innerText).catch(() => '');
-  ok(/Your PCs/.test(side) && /\/remote/.test(side) && !/Refactor auth gate|Fix flaky test|New session|Checkpoints/.test(side), 'the sidebar says how a chat gets here, with no sample sessions');
+  ok(/Cloud/.test(side) && /Your PCs/.test(side) && /\/remote/.test(side) && !/Refactor auth gate|Fix flaky test|New session|Checkpoints/.test(side), 'the sidebar says how a chat gets here, with no sample sessions');
 
   // the frame opens a chat: the address follows, and nothing is reloaded
   const before = loads.length;
@@ -128,6 +130,21 @@ try {
   ok(authorizeCalls.length === 0, 'a request that is not from the frame is not answered');
   signedOut = true; await ask(good); await settle(700); got = await frameGot(); signedOut = false;
   ok(got.length === 1 && got[0].code === null, 'signed out of the workspace, the frame is told there is no code, so it offers its own sign-in');
+
+  // the frame asks for a cloud session: the workspace starts the person's machine and hands over a one-use ticket
+  const cstate = 'c'.repeat(36);
+  cloudCalls = 0; await ask({ type: 'xeno-remote:cloud', state: cstate }); await settle(900); got = await frameGot();
+  ok(cloudCalls === 1 && got.length === 1 && got[0].state === cstate && got[0].session && got[0].session.machineId === MACHINE && got[0].session.path === `/api/compute/machines/${MACHINE}/ports/agent/` && got[0].session.protocols.length === 2 && Object.keys(got[0].session).sort().join() === 'machineId,path,protocols', 'asked by the frame, the workspace opens the cloud session and hands over the ticket and nothing else');
+  cloudClosed = true; await ask({ type: 'xeno-remote:cloud', state: cstate }); await settle(700); got = await frameGot(); cloudClosed = false;
+  ok(got.length === 1 && got[0].session === null && /not open to your account/.test(got[0].error), 'a refusal reaches the frame in the platform’s own words');
+  cloudCalls = 0; await p.evaluate((m) => window.postMessage(m, '*'), { type: 'xeno-remote:cloud', state: cstate }); await ask({ type: 'xeno-remote:cloud', state: 'not-a-state' }); await settle(500);
+  ok(cloudCalls === 0, 'a cloud request that is not from the frame, or has no proper state, starts nothing');
+  await tellFrame('/cloud/c/chat-7'); await settle(800);
+  ok(where() === '/workspace/dev/apps/agent/cloud/c/chat-7', `a cloud chat has its own workspace address (${where()})`);
+  const cloudCrumb = await p.$eval('.crumbs', (e) => e.innerText).catch(() => '');
+  ok(/Cloud/.test(cloudCrumb) && !/chat-7/.test(cloudCrumb), `and the breadcrumb says Cloud, never an id (${cloudCrumb.replace(/\s+/g, ' ')})`);
+  await tellFrame('/pcs'); await settle(600);
+  ok(where() === '/workspace/dev/apps/agent/pcs', 'the list of PCs has its own address too');
 
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); remote.close(); }
