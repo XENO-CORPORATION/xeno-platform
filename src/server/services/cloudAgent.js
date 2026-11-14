@@ -31,11 +31,12 @@ export const AGENT_PORT = 'agent';
 /** Where the machine's agent server reads the key (xeno-compute machine/agenthost/server.mjs). */
 export const KEY_FILE = '.xeno-cloud-agent/key.json';
 /**
- * Where the XENO Agent host itself looks for a person's own key (its bring-your-own path, `~/.xeno/credentials.json`).
- * The host never takes a model key from its environment, so without this file it reports every XENO model as blocked
- * (measured on a real machine, 2026-11-14). It rereads the file for each request, so a renewed key is picked up.
+ * Where the machine's XENO Agent host reads the person's key. The machine starts the host in its hosted account mode
+ * with this folder as its credential root (xeno-compute `machine/agenthost`), and the host rereads the file for each
+ * request, so a renewed key is picked up. NOT `~/.xeno/credentials.json`: the CLI empties that file into its own
+ * store when it starts, and the host then has no key (measured on a real machine, 2026-11-14).
  */
-export const HOST_KEY_FILE = '.xeno/credentials.json';
+export const HOST_KEY_FILE = '.xeno-cloud-agent/.xeno/credentials.json';
 /** A key with less than this left is replaced, so a host started now has hours of it. */
 export const RENEW_BELOW_MINUTES = 120;
 
