@@ -419,10 +419,10 @@ Proofs: `npm run test:stock` (real Postgres, mutation-checked), `test:stock-ui`.
 `services/cloudAgent.js` (routes `GET|POST /api/compute/cloud-agent`, the named port `agent` in `computePorts.js`), the workspace's `platform-agent-remote.js`, and xeno-compute's `machine/agenthost`. Decision: xeno-agent-interface `docs/decisions/0006`, cloud amendment.
 - **A cloud session is a Compute machine running the XENO Agent host**, reached as a PC is. Never build a second agent runtime, a second session store or a second chat screen for cloud: the page is `XenoAgentInterface` on another transport. `agentCloudRuns.js` (one agent on one task, on xeno-agents-api) is a different thing and stays.
 - **One Cloud Agent machine per person** (purpose `cloud-agent`), billed like every machine. Behind the same switch as Cloud Shell (`SHELL_ENABLED`), opened by a person, never an agent.
-- **The host's model key is the person's own session key**, written to `.xeno-cloud-agent/key.json` on the machine, replaced when it has under two hours left, the old one revoked. Never give a machine the person's sign-in or an operator credential.
+- **The host's model key is the person's own session key**, written to `.xeno-cloud-agent/key.json` on the machine and to `~/.xeno/credentials.json`, the one place the Agent host reads a person's own key (it takes none from its environment; without that file every XENO model reads as blocked), replaced when it has under two hours left, the old one revoked. Never give a machine the person's sign-in or an operator credential.
 - **Not end-to-end encrypted, and the page must keep saying so.** A person's own PC is sealed (decision 0006); XENO runs the cloud machine.
 - **The workspace hands the frame a 60-second, one-use port ticket**, and nothing longer-lived.
-Proofs: `npm run test:cloud-agent` (real Postgres, 16 checks), `test:agent-remote-ui` (browser, 27), xeno-compute `sh scripts/prove-agent-port.sh` (a real container, 16).
+Proofs: `npm run test:cloud-agent` (real Postgres, 18 checks), `test:agent-remote-ui` (browser, 27), xeno-compute `sh scripts/prove-agent-port.sh` (a real container, 16).
 
 ## 🖥️ XENO Corpus on a person's PC, through the relay (owner, 2026-10-31)
 
