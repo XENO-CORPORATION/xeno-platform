@@ -399,6 +399,7 @@
     "test:homepage-v21": "node --test scripts/homepage-v21.test.mjs",
     "test:auth-input-focus": "node --test scripts/auth-input-focus.test.mjs",
     "test:remote-web": "node --test scripts/remote-web-host.test.mjs",
+    "test:agent-remote-ui": "node prototypes/xeno-workspace/tests/agent-remote-test.mjs",
     "test:products-v2": "node --test scripts/products-v2.test.mjs",
     "test:v2-chrome": "node --test scripts/v2-chrome.test.mjs",
     "test:workspace-report": "node scripts/build-workspace-report.mjs && node --test scripts/workspace-report.browser.test.mjs scripts/workspace-report-contrast.browser.test.mjs",
