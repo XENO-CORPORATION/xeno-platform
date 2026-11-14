@@ -86,7 +86,7 @@ async function main() {
 
   const a2 = await openCloudAgent(pool, ME, { createTicket });
   const host1 = JSON.parse(files.get(`${a1.machineId}:${HOST_KEY_FILE}`).toString('utf8'));
-  check(host1.apiKey === held1.apiKey && host1.keyId === held1.keyId && Object.keys(host1).sort().join() === 'apiKey,keyId', 'the Agent host gets the same key where it looks for one (~/.xeno/credentials.json)');
+  check(host1.apiKey === held1.apiKey && host1.keyId === held1.keyId && Object.keys(host1).sort().join() === 'apiKey,keyId', 'the Agent host gets the same key in the folder the machine tells it to read');
   const held2 = JSON.parse(files.get(`${a2.machineId}:${KEY_FILE}`).toString('utf8'));
   check(a2.machineId === a1.machineId && (await pool.query("SELECT count(*)::int AS n FROM compute_machines WHERE created_by_user_id = $1 AND purpose = 'cloud-agent'", [me])).rows[0].n === 1, 'a second open reuses the same machine');
   check(held2.apiKey === held1.apiKey && await liveKeys(me) === 1, 'and mints no second key');
