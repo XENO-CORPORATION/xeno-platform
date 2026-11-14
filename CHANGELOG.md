@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-14
 
+**XENO Agent in the workspace no longer asks you to sign in again.** You are already signed in to the workspace, so the Agent area now opens on your PCs by itself. The page that shows your PCs also signs in at xenosystem.ai now, not xenostudio.ai, so opened on its own at remote.xenosystem.ai it uses the XENO session you already have. Connecting a browser to a PC with the six digits is unchanged.
+
 **XENO Agent in the workspace is the whole app.** The Agent area now shows the same interface as the desktop app, working on your PC: your sessions on the left, tabs, and the box to type in. You can start a new chat on your PC from the browser, not only open one you shared; it needs XENO Agent 0.3.46 on that PC. Signing in there is one click: a tab opens, signs you in and closes by itself. With one connected PC it opens straight away. On a narrow screen it stays one thing at a time. Cloud sessions and a repository picker are not there yet.
 
 **XENO Agent in the workspace shows the chats on your PCs.** The Agent area used to send you to the desktop app. It now lists your PCs and the chats you shared from them by typing `/remote` in XENO Agent. You open a chat, type, and it runs on that PC; what you type and what the agent does show in both places as it happens. The first time, you connect a browser to a PC with **Connect**: both screens show the same six digits and you allow it on the PC. No code is needed. The chats are end-to-end encrypted, so they are shown in a frame from remote.xenosystem.ai, which keeps their keys where the rest of the website cannot read them. Each PC and chat has its own address. Cloud sessions are not in this list yet.
