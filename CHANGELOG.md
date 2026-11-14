@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-14
 
+**XENO Agent in the workspace opens on Cloud.** The Agent area now starts with somewhere to type: your own cloud machine, running the same XENO Agent as your PC. It starts when you open the page, keeps working after you close the tab, and stops by itself when idle; its time is paid from your credits, like every machine. A switch at the top goes between Cloud and your PCs. A chat on your own PC is end-to-end encrypted; a cloud chat is not, because XENO runs that machine, and the page says which is which. Cloud sessions are open to the accounts Cloud Shell is open to. There is no repository picker yet: in a cloud chat, ask the agent to clone the repository.
+
 **XENO Agent in the workspace no longer asks you to sign in again.** You are already signed in to the workspace, so the Agent area now opens on your PCs by itself. The page that shows your PCs also signs in at xenosystem.ai now, not xenostudio.ai, so opened on its own at remote.xenosystem.ai it uses the XENO session you already have. Connecting a browser to a PC with the six digits is unchanged.
 
 **XENO Agent in the workspace is the whole app.** The Agent area now shows the same interface as the desktop app, working on your PC: your sessions on the left, tabs, and the box to type in. You can start a new chat on your PC from the browser, not only open one you shared; it needs XENO Agent 0.3.46 on that PC. Signing in there is one click: a tab opens, signs you in and closes by itself. With one connected PC it opens straight away. On a narrow screen it stays one thing at a time. Cloud sessions and a repository picker are not there yet.
