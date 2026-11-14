@@ -75,7 +75,7 @@
     const ic = (k) => (X() ? X().ic(k) : '');
     const at = here();
     return `<div class="views"><button class="row" aria-current="${at === ''}" data-item="" data-item-exact>${ic('bot')}<span class="t">Your PCs</span></button></div>
-      <div class="empty-note"><b>Chats from your PCs</b><span>In XENO Agent on a PC, type /remote in a chat. It then shows here, and what you type here runs on that PC.${signedIn === false ? ' Sign in on the right to see your PCs.' : ''}</span></div>
+      <div class="empty-note"><b>XENO Agent on your PCs</b><span>Connect a PC once, then work on it from here: open a chat you shared with /remote, or start a new one. What you type runs on that PC.${signedIn === false ? ' Sign in on the right to see your PCs.' : ''}</span></div>
       <button class="act" data-xl-download="agent">${ic('download')}Get XENO Agent for your PC</button>`;
   };
 
