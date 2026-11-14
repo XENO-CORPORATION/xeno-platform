@@ -479,7 +479,7 @@
     if (s.view === 'zone' && it) { const x = X(), z = x.zoneNow(), mk = z.of || x.zoneKey(), zid = z.of ? z.id.slice(z.of.length + 1) : z.id, L = (window.XENO_ZONE_LIVE || {})[mk + '.' + zid];
       if (L && L.items && L.page) return mod('area:' + window.XENO_ADDR.current().split('?')[0], () => L.page(z)); }
     if (s.view === 'zone') return it ? mod('zone:' + it, () => itemPage(it)) : mod('area:' + window.XENO_ADDR.current().split('?')[0], () => areaPage());
-    if (s.view === 'product') { if (PR[s.product]?.kind === 'chat' || (s.product === 'storage' && window.XENO_STORAGE) || (s.product === 'mcp' && window.XENO_MCP)) return null; /* Storage draws its own page on the real meter (platform-storage.js) */ return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
+    if (s.view === 'product') { if (PR[s.product]?.kind === 'chat' || (s.product === 'storage' && window.XENO_STORAGE) || (s.product === 'mcp' && window.XENO_MCP) || (s.product === 'agent' && window.XENO_AGENT_REMOTE)) return null; /* Storage draws its own page on the real meter (platform-storage.js) */ return it ? (window.XENO_PRODUCT_NAV[s.product]?.views?.includes(it) ? productView(it) : itemPage(it)) : productPage(); }
     return null;
   }
   // the page split into the main area's three containers: header actions · scrolling body · footer bar

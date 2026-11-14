@@ -3,6 +3,12 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-14
+
+**XENO Agent in the workspace shows the chats on your PCs.** The Agent area used to send you to the desktop app. It now lists your PCs and the chats you shared from them by typing `/remote` in XENO Agent. You open a chat, type, and it runs on that PC; what you type and what the agent does show in both places as it happens. The first time, you connect a browser to a PC with **Connect**: both screens show the same six digits and you allow it on the PC. No code is needed. The chats are end-to-end encrypted, so they are shown in a frame from remote.xenosystem.ai, which keeps their keys where the rest of the website cannot read them. Each PC and chat has its own address. Cloud sessions are not in this list yet.
+
+**The page at remote.xenosystem.ai lists what a PC shares**, including chats with no project folder, and it stays up to date when a turn is started on the PC.
+
 ## 2026-11-13
 
 **Your Spawn conversation backup works like iCloud.** A PC you sign in on can now open your conversation backup with no extra password and without another PC approving it: XENO keeps a copy of the backup's key, locked with a key of its own that is stored apart from your data. Your conversations are still encrypted on your PC before they are uploaded, so Storage only ever holds scrambled bytes. To keep a new PC from quietly opening it, its first time needs a sign-in in the last 10 minutes, and you get an email naming the device. Every time a device opens the backup it is logged where Spawn can show it. A private mode, where XENO keeps no copy of the key, will come later; turning it on deletes XENO's copy for real.
