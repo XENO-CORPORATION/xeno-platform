@@ -23,7 +23,7 @@ import * as compute from '../services/compute.js';
 import { setComputeBackend } from '../services/computeBackend.js';
 import { addGrant } from '../utils/creditLedgerV2.js';
 import { createTicket, handlePortConnection, isPortRequest, selectProtocol } from '../services/computePorts.js';
-import { openCloudAgent, cloudAgentStatus, KEY_FILE, RENEW_BELOW_MINUTES } from '../services/cloudAgent.js';
+import { openCloudAgent, cloudAgentStatus, KEY_FILE, HOST_KEY_FILE, RENEW_BELOW_MINUTES } from '../services/cloudAgent.js';
 
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -85,6 +85,8 @@ async function main() {
   check(!files.get(`${a1.machineId}:${KEY_FILE}`).toString('utf8').includes('password') && Object.keys(held1).sort().join() === 'apiKey,expiresAt,keyId', 'and nothing else is written there');
 
   const a2 = await openCloudAgent(pool, ME, { createTicket });
+  const host1 = JSON.parse(files.get(`${a1.machineId}:${HOST_KEY_FILE}`).toString('utf8'));
+  check(host1.apiKey === held1.apiKey && host1.keyId === held1.keyId && Object.keys(host1).sort().join() === 'apiKey,keyId', 'the Agent host gets the same key where it looks for one (~/.xeno/credentials.json)');
   const held2 = JSON.parse(files.get(`${a2.machineId}:${KEY_FILE}`).toString('utf8'));
   check(a2.machineId === a1.machineId && (await pool.query("SELECT count(*)::int AS n FROM compute_machines WHERE created_by_user_id = $1 AND purpose = 'cloud-agent'", [me])).rows[0].n === 1, 'a second open reuses the same machine');
   check(held2.apiKey === held1.apiKey && await liveKeys(me) === 1, 'and mints no second key');
@@ -97,6 +99,10 @@ async function main() {
   await openCloudAgent(pool, ME, { createTicket });
   const held3 = JSON.parse(files.get(`${a1.machineId}:${KEY_FILE}`).toString('utf8'));
   check(held3.apiKey !== held1.apiKey && (await keyRow(held3.apiKey)).is_active && (await keyRow(held1.apiKey)).is_active === false && await liveKeys(me) === 1, 'a key with little time left is replaced, and the old one is revoked');
+  files.delete(`${a1.machineId}:${HOST_KEY_FILE}`);
+  await openCloudAgent(pool, ME, { createTicket });
+  const held4 = JSON.parse(files.get(`${a1.machineId}:${KEY_FILE}`).toString('utf8'));
+  check(held4.apiKey !== held3.apiKey && JSON.parse(files.get(`${a1.machineId}:${HOST_KEY_FILE}`).toString('utf8')).apiKey === held4.apiKey && await liveKeys(me) === 1, 'a machine whose host has no copy of the key gets a new one, in both places');
 
   // connect
   const a4 = await openCloudAgent(pool, ME, { createTicket });

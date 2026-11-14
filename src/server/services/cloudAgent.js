@@ -30,6 +30,12 @@ const IDEMPOTENCY = 'xeno-cloud-agent';
 export const AGENT_PORT = 'agent';
 /** Where the machine's agent server reads the key (xeno-compute machine/agenthost/server.mjs). */
 export const KEY_FILE = '.xeno-cloud-agent/key.json';
+/**
+ * Where the XENO Agent host itself looks for a person's own key (its bring-your-own path, `~/.xeno/credentials.json`).
+ * The host never takes a model key from its environment, so without this file it reports every XENO model as blocked
+ * (measured on a real machine, 2026-11-14). It rereads the file for each request, so a renewed key is picked up.
+ */
+export const HOST_KEY_FILE = '.xeno/credentials.json';
 /** A key with less than this left is replaced, so a host started now has hours of it. */
 export const RENEW_BELOW_MINUTES = 120;
 
@@ -67,7 +73,11 @@ async function inTx(db, fn) {
 async function keyOnMachine(db, actor, machineId, workspace) {
   try {
     const held = JSON.parse((await compute.readMachineFile(db, actor, machineId, { path: KEY_FILE, workspace })).toString('utf8'));
-    return typeof held.keyId === 'string' && typeof held.expiresAt === 'string' ? { keyId: held.keyId, expiresAt: held.expiresAt } : null;
+    if (typeof held.keyId !== 'string' || typeof held.expiresAt !== 'string') return null;
+    // the host's own copy must be the same key, or the host cannot reach a model and the key is made again
+    let host = null;
+    try { host = JSON.parse((await compute.readMachineFile(db, actor, machineId, { path: HOST_KEY_FILE, workspace })).toString('utf8')); } catch { /* not there */ }
+    return { keyId: held.keyId, expiresAt: held.expiresAt, hostHasIt: !!host && host.keyId === held.keyId && typeof host.apiKey === 'string' };
   } catch { return null; }
 }
 
@@ -77,7 +87,7 @@ async function keyOnMachine(db, actor, machineId, workspace) {
  */
 export async function ensureModelKey(db, actor, machineId, workspace, { now = Date.now() } = {}) {
   const held = await keyOnMachine(db, actor, machineId, workspace);
-  if (held && Date.parse(held.expiresAt) - now > RENEW_BELOW_MINUTES * 60_000) return { minted: false };
+  if (held && held.hostHasIt && Date.parse(held.expiresAt) - now > RENEW_BELOW_MINUTES * 60_000) return { minted: false };
   const person = (await db.query('SELECT id, email FROM users WHERE id = $1', [actor.id])).rows[0];
   const key = await inTx(db, async (c) => {
     if (held) {
@@ -89,6 +99,7 @@ export async function ensureModelKey(db, actor, machineId, workspace, { now = Da
     return out.key;
   });
   await compute.writeMachineFile(db, actor, machineId, { path: KEY_FILE, workspace, content: JSON.stringify({ apiKey: key.token, keyId: key.id, expiresAt: key.expiresAt }) });
+  await compute.writeMachineFile(db, actor, machineId, { path: HOST_KEY_FILE, workspace, content: JSON.stringify({ apiKey: key.token, keyId: key.id }) });
   return { minted: true };
 }
 
