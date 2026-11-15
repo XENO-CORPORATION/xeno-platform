@@ -97,6 +97,13 @@ async function main() {
   check(held2.apiKey === held1.apiKey && await liveKeys(me) === 1, 'and mints no second key');
   const status = await cloudAgentStatus(pool, ME);
   check(status.enabled === true && status.machineId === a1.machineId, 'the page is told the person’s machine');
+  // the page draws itself before anything is started, so it asks how the machine stands; asking starts nothing and mints nothing
+  const usageRows = async () => (await pool.query("SELECT count(*)::int AS n FROM compute_usage_events WHERE machine_id = $1", [a1.machineId]).catch(() => ({ rows: [{ n: -1 }] }))).rows[0].n;
+  const before = { keys: await liveKeys(me), usage: await usageRows(), row: (await pool.query('SELECT state, last_active_at, updated_at FROM compute_machines WHERE id = $1', [a1.machineId])).rows[0] };
+  const standing = await cloudAgentStatus(pool, ME);
+  const after = { keys: await liveKeys(me), usage: await usageRows(), row: (await pool.query('SELECT state, last_active_at, updated_at FROM compute_machines WHERE id = $1', [a1.machineId])).rows[0] };
+  check(standing.state === before.row.state && typeof standing.lastActiveAt === 'string' && Date.parse(standing.lastActiveAt) === new Date(before.row.last_active_at).getTime(), `and how it stands: its state and when it was last used (${standing.state}, ${standing.lastActiveAt})`);
+  check(JSON.stringify(before) === JSON.stringify(after), 'asking how it stands starts nothing, mints no key and does not count as using the machine');
 
   // a key about to run out is replaced, and the old one revoked
   await pool.query(`UPDATE api_keys SET expires_at = (now() AT TIME ZONE 'UTC') + interval '30 minutes' WHERE id = $1::uuid`, [held1.keyId]);

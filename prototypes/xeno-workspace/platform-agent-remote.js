@@ -34,19 +34,40 @@
     + 'html.modal-open #xw-agent-remote,html.xw-splitting #xw-agent-remote{pointer-events:none}';
   document.head.appendChild(style);
 
-  let frame = null, slot = null, ro = null, shown = null, signedIn = null;
+  let frame = null, slot = null, ro = null, shown = null, signedIn = null, watched = null, settle = 0, side0 = 0;
 
+  /**
+   * The frame is the Agent area under the workspace's own headers: the body of the left panel and the main area's
+   * slot together, so the agent's own panel (New, the chats, the projects) sits in the left panel under the header
+   * the sidebar already has, and the conversation sits under the breadcrumb (owner, 2026-11-15: "it should be the
+   * agent left panel but under what already the sidebar has"). A panel the person has folded away has no width and
+   * takes none.
+   */
   function fit() {
     if (!slot || !frame) return;
-    const r = slot.getBoundingClientRect(), main = document.getElementById('main');
-    Object.assign(frame.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, r.width) + 'px', height: Math.max(0, r.height) + 'px' });
+    const m = slot.getBoundingClientRect(), body = document.querySelector('#panel .pbody'), side = document.getElementById('slot');
+    const b = body ? body.getBoundingClientRect() : null, s = side ? side.getBoundingClientRect() : null;
+    const withSide = !!b && !!s && s.width > 1 && b.height > 1 && s.right <= m.left + 24;
+    // one rectangle: it starts under the lower of the two headers, so neither is covered
+    const left = withSide ? s.left : m.left, top = withSide ? Math.max(b.top, m.top) : m.top;
+    const bottom = withSide ? Math.max(s.bottom, m.bottom) : m.bottom;
+    Object.assign(frame.style, { left: left + 'px', top: top + 'px', width: Math.max(0, m.right - left) + 'px', height: Math.max(0, bottom - top) + 'px' });
+    const main = document.getElementById('main');
     if (main) { const br = getComputedStyle(main).borderBottomLeftRadius; frame.style.borderRadius = `0 0 ${br} ${br}`; }
+    under(true);
+    // the agent's own panel takes the left panel's place, so it is told that panel's width and its edge lines up
+    side0 = withSide ? Math.round(m.left - left) : 0;
+    tellLayout();
   }
+  function tellLayout() { try { frame?.contentWindow?.postMessage({ type: 'xeno-remote:layout', side: side0 }, ORIGIN()); } catch {} }
+
+  /** What the frame covers cannot be seen, so it must not be reachable with the keyboard either. The panel's header stays the person's. */
+  function under(covered) { const el = document.querySelector('#panel .pbody'); if (el) el.toggleAttribute('inert', covered); }
 
   function place() {
     const el = document.querySelector('#main .xar-host[data-xar-frame]');
-    if (!el) { if (slot) { slot = null; ro?.disconnect(); } frame?.classList.remove('on'); return; }
-    if (el !== slot) { slot = el; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); const main = document.getElementById('main'); if (main) ro.observe(main); }
+    if (!el) { if (slot) { slot = null; watched = null; ro?.disconnect(); under(false); } clearTimeout(settle); frame?.classList.remove('on'); return; }
+    if (el !== slot) { slot = el; watched = null; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); for (const id of ['main', 'slot']) { const part = document.getElementById(id); if (part) ro.observe(part); } }
     const want = here();
     if (!frame) {
       frame = document.createElement('iframe'); frame.id = 'xw-agent-remote'; frame.title = 'XENO Agent on your PCs';
@@ -55,6 +76,11 @@
       document.body.appendChild(frame);
     } else if (want !== shown) { shown = want; frame.src = `${ORIGIN()}/${want}`; }   // the address changed here (Back, a link): the frame follows
     frame.classList.add('on'); fit();
+    // the panel is drawn anew with the page and may still be settling (its header animates in): the frame is laid
+    // again once it has, and whenever the panel's body changes size
+    const body = document.querySelector('#panel .pbody');
+    if (body && body !== watched) { watched = body; ro?.observe(body); }
+    clearTimeout(settle); settle = setTimeout(fit, 400);
   }
 
   /**
@@ -93,11 +119,29 @@
     answer({ session: { machineId: a.machineId, path: a.connect.path, protocols: a.connect.protocols } });
   }
 
+  /**
+   * The frame asks how the person's cloud machine stands: whether Cloud is open to them, and whether they have a
+   * machine and it is running. Nothing is started. The page draws itself at once from this and from what it
+   * remembers, and asks for a session (above) only when there is work for the machine.
+   */
+  async function cloudStandingForTheFrame(d, reply) {
+    const state = typeof d.state === 'string' && /^[0-9a-f]{36}$/.test(d.state) ? d.state : '';
+    if (!state) return;
+    const P = window.XENO_PLATFORM;
+    if (!P || !P.served) return reply({ type: 'xeno-remote:cloud-standing', state, status: null });
+    const r = await P.api('GET', '/api/compute/cloud-agent').catch(() => null);
+    const a = r && r.ok && r.d && r.d.agent;
+    reply({ type: 'xeno-remote:cloud-standing', state, status: a && typeof a.enabled === 'boolean'
+      ? { enabled: a.enabled, machineId: a.machineId || null, state: a.state || null, lastActiveAt: a.lastActiveAt || null } : null });
+  }
+
   // The frame says which view it shows, or asks for its sign-in code or a cloud session. Only its own origin and its own window are
   // listened to, and only messages of the known shapes are taken.
   addEventListener('message', (event) => {
     if (!frame || event.origin !== ORIGIN() || event.source !== frame.contentWindow) return;
     const d = event.data;
+    if (d && d.type === 'xeno-remote:layout-wanted') { tellLayout(); return; }
+    if (d && d.type === 'xeno-remote:cloud-status') { void cloudStandingForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:cloud') { void openCloudForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:authorize') { void signInTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (!d || d.type !== 'xeno-remote:view' || typeof d.path !== 'string') return;
@@ -107,23 +151,20 @@
     else if (was !== signedIn) { try { X()?.render?.(); } catch {} }
   });
 
-  const page = () => `<div class="xar-host" data-xar-frame>Opening your PCs…</div>`;
+  const page = () => `<div class="xar-host" data-xar-frame>Opening XENO Agent…</div>`;
 
   /** The breadcrumb for a view. The names of a PC and a chat are inside the encrypted page, so the trail says what kind of place it is. */
   const trail = (item) => { const v = viewOf(item); if (!v) return ['Cloud']; if (v === 'pcs') return ['Your PCs']; if (v.startsWith('cloud')) return ['Cloud', 'Chat']; return /\/c\//.test(v) ? ['A PC', 'Chat'] : /\/w\//.test(v) ? ['A PC', 'Project'] : ['A PC']; };
 
-  const panel = () => {
-    const ic = (k) => (X() ? X().ic(k) : '');
-    const at = here();
-    return `<div class="views"><button class="row" aria-current="${at === '' || at.startsWith('cloud')}" data-item="" data-item-exact>${ic('bot')}<span class="t">Cloud</span></button><button class="row" aria-current="${at === 'pcs' || at.startsWith('pc/')}" data-item="pcs" data-item-exact>${ic('side')}<span class="t">Your PCs</span></button></div>
-      <div class="empty-note"><b>Where it runs</b><span>Cloud is your own XENO machine: it starts when you type, keeps working after you close the tab, and its time is paid from your credits. Your PCs run it on your own computer, end-to-end encrypted: connect one once, then open a chat you shared with /remote or start a new one.${signedIn === false ? ' Sign in on the right to see your PCs.' : ''}</span></div>
-      <button class="act" data-xl-download="agent">${ic('download')}Get XENO Agent for your PC</button>`;
-  };
+  // The workspace's own left panel is under the frame here: the agent's panel is the left panel (see fit). It is left
+  // empty, so nothing that cannot be seen can be reached with the keyboard.
+  const panel = () => '<div class="xar-under" aria-hidden="true"></div>';
 
-  // The slot is drawn anew whenever the workspace redraws, at any depth, so the whole main area is watched; one look per frame is enough.
+  // The slot is drawn anew whenever the workspace redraws, at any depth, so the whole main area is watched, and the left panel
+  // too, since its body is part of what the frame lies over; one look per frame is enough.
   let due = false;
   const soon = () => { if (due) return; due = true; requestAnimationFrame(() => { due = false; place(); }); };
-  const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); new MutationObserver(soon).observe(main, { childList: true, subtree: true }); main.addEventListener('transitionend', fit); place(); };
+  const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); const seen = new MutationObserver(soon); seen.observe(main, { childList: true, subtree: true }); const side = document.getElementById('panel'); if (side) seen.observe(side, { childList: true }); main.addEventListener('transitionend', fit); place(); };
   addEventListener('resize', fit);
   watch();
 
