@@ -4,12 +4,12 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2088 actions · 248 agent capability · 1385 planned (debt) · 455 excluded · **coverage 15.2%** of the 1633 owed.
+**Total:** 2089 actions · 248 agent capability · 1386 planned (debt) · 455 excluded · **coverage 15.2%** of the 1634 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
 | workforce | 304 | 54 | 245 | 5 | 18.1% |
-| agents | 221 | 0 | 145 | 76 | 0% |
+| agents | 222 | 0 | 146 | 76 | 0% |
 | commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
 | workspace | 197 | 23 | 108 | 66 | 17.6% |
@@ -99,7 +99,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:settings.js:data-set=route`
 - `ui:settings.js:data-set=shortcuts`
 
-## agents — 145 planned
+## agents — 146 planned
 
 - `route:agentRoutes.js:DELETE /:handle`
 - `route:agentRoutes.js:GET /`
@@ -123,6 +123,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:platformAgentRoutes.js:GET /lends/inbox`
 - `route:platformAgentRoutes.js:GET /presence`
 - `route:platformAgentRoutes.js:GET /presence/stream`
+- `route:platformAgentRoutes.js:GET /runs`
 - `route:platformAgentRoutes.js:GET /transfers/:tid/review-subject`
 - `route:platformAgentRoutes.js:GET /transfers/inbox`
 - `route:platformAgentRoutes.js:PATCH /:id`

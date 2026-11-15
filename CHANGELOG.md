@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-15
 
+**All your agents' runs in one list.** `GET /api/agents/runs` lists every run of every agent you own, newest first, with the agent, the task and how it went, in the same shape as each agent's own run list (`GET /api/agents/:id/runs`), so the two always agree. It pages 1-100 at a time with a `next` cursor, and only runs still going are checked with the runner, so a long history stays one quick read. The Agent area's Runs list reads it.
+
 **XENO Agent in the workspace is there the moment you open it.** The Agent area no longer waits on "Starting your cloud machine…". The whole interface appears at once, with your chats and somewhere to type, and no machine is started to show it: your cloud machine starts when you send a message, so a visit in which you send nothing costs nothing. The agent's own panel (New, your chats, your projects) is now the left panel, under the header the sidebar already has, in place of the separate "Cloud / Your PCs" panel; the row at its foot says where it runs and goes to your PCs. A machine that is already running (a turn you left working) is joined straight away. Underneath: the page asks how the machine stands without starting it (`GET /api/compute/cloud-agent` now also says its state and when it was last used), and the frame covers the left panel's body as well as the main area.
 
 ## 2026-11-14

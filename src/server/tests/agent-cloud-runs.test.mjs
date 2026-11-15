@@ -200,6 +200,32 @@ async function main() {
     check_((await call('POST', `/api/agents/runs/${r2.id}/stop`, { token: B })).s === 404, "someone else cannot stop it");
     check_((await issue(ref2, r2.runId)).j.error.code === 'run_ended', 'a stopped run can never be issued a credential');
 
+    // every run of every agent of mine, in one list (the Agent area's Runs): GET /api/agents/runs
+    {
+      const ag2 = (await call('POST', '/api/agents', { token: A, body: { name: 'Second runner', instructions: 'Also small.' } })).j.agent;
+      await call('PUT', `/api/agents/${ag2.id}/projects/${proj}`, { token: A, body: {} });
+      const r3 = (await call('POST', `/api/agents/${ag2.id}/runs`, { token: A, body: { task: task.key } })).j.run;
+      const all = await call('GET', '/api/agents/runs', { token: A });
+      const ids = all.j.runs ? all.j.runs.map((x) => x.id) : [];
+      check_(all.s === 200 && ids[0] === r3.id && ids.includes(r2.id) && ids.includes(st.j.run.id) && all.j.next === null,
+        `my runs lists every agent's runs, newest first (${ids.length})`);
+      const first = all.j.runs[0];
+      check_(first.agent.id === ag2.id && first.agent.name === 'Second runner' && first.task === task.key && first.state === 'queued'
+        && 'budgetCredits' in first && 'admissionId' in first && 'createdAt' in first && 'endedAt' in first,
+        'each run carries its agent, task, state and the same fields as the agent page');
+      const perAgent = (await call('GET', `/api/agents/${ag.id}/runs`, { token: A })).j.runs;
+      const mine = all.j.runs.filter((x) => x.agent.id === ag.id);
+      check_(JSON.stringify(mine.map((x) => [x.id, x.state, x.task])) === JSON.stringify(perAgent.map((x) => [x.id, x.state, x.task])),
+        "an agent's rows in my runs are exactly its own list");
+      const p1 = (await call('GET', '/api/agents/runs?limit=1', { token: A })).j;
+      const p2 = (await call('GET', `/api/agents/runs?limit=1&before=${encodeURIComponent(p1.next)}`, { token: A })).j;
+      check_(p1.runs.length === 1 && p1.next && p2.runs.length === 1 && p2.runs[0].id === ids[1], 'it pages with next, without skipping or repeating');
+      check_((await call('GET', '/api/agents/runs', { token: B })).j.runs.length === 0, "someone else sees none of my runs");
+      check_((await call('GET', '/api/agents/runs?before=nonsense', { token: A })).s === 400
+        && (await call('GET', '/api/agents/runs?limit=500', { token: A })).s === 400, 'a bad cursor or limit is refused');
+      await call('POST', `/api/agents/runs/${r3.id}/stop`, { token: A });
+    }
+
     // RUN-03: revoking the ADMISSION (from anywhere: /run-admissions/revoke) ends the run end to end
     {
       const t = (await call('POST', '/api/tasks', { token: A, body: { title: 'Revoked', projectId: proj } })).j.task;
