@@ -23,8 +23,7 @@ const remote = http.createServer((q, s) => {
   s.end(`<!doctype html><body style="margin:0;background:#123;color:#fff;font:14px sans-serif"><p id="where"></p><script>
     const say = () => { document.getElementById('where').textContent = 'REMOTE ' + location.pathname; parent.postMessage({ type: 'xeno-remote:view', path: location.pathname, signedIn: true }, '*') };
     window.move = (to) => { history.pushState(null, '', to); say() };
-    window.got = []; window.layout = null;
-    addEventListener('message', (e) => { if (e.data && e.data.type === 'xeno-remote:layout') window.layout = e.data.side });
+    window.got = [];
     addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove); if (e.data && e.data.testAsk) parent.postMessage(e.data.testAsk, '*'); if (e.data && (e.data.type === 'xeno-remote:code' || e.data.type === 'xeno-remote:cloud-session' || e.data.type === 'xeno-remote:cloud-standing')) window.got.push(e.data) });
     say();
   </script>`);
@@ -57,17 +56,25 @@ const settle = (ms = 700) => new Promise((r) => setTimeout(r, ms));
 const fresh = async (url) => { await p.goto(base + url, { waitUntil: 'domcontentloaded' }); await settle(1800); };
 const where = () => new URL(p.url()).pathname;
 const frameInfo = () => p.evaluate(() => {
-  const f = document.getElementById('xw-agent-remote'), slot = document.querySelector('#main .xar-host[data-xar-frame]');
+  const f = document.getElementById('xw-agent-remote'), sf = document.getElementById('xw-agent-remote-side'), slot = document.querySelector('#main .xar-host[data-xar-frame]');
   if (!f) return null;
-  // the frame is the Agent area under the workspace's own headers: the left panel's body and the main area's slot together
-  const a = f.getBoundingClientRect(), m = slot ? slot.getBoundingClientRect() : document.getElementById('main').getBoundingClientRect(), s = document.getElementById('slot').getBoundingClientRect();
-  const body = document.querySelector('#panel .pbody').getBoundingClientRect(), head = document.querySelector('#panel .ph').getBoundingClientRect();
   const near = (x, y) => Math.abs(x - y) < 2;
+  const a = f.getBoundingClientRect(), m = slot ? slot.getBoundingClientRect() : null;
+  const panel = document.getElementById('panel').getBoundingClientRect(), body = document.querySelector('#panel .pbody')?.getBoundingClientRect(), head = document.querySelector('#panel .ph')?.getBoundingClientRect();
+  const b = sf ? sf.getBoundingClientRect() : null;
   return { src: f.getAttribute('src'), on: f.classList.contains('on'), shown: getComputedStyle(f).display !== 'none', hasSlot: !!slot,
-    over: near(a.left, s.left) && near(a.top, Math.max(body.top, m.top)) && near(a.right, m.right) && near(a.bottom, Math.max(s.bottom, m.bottom)),
-    headClear: a.top >= head.bottom - 1, headHeight: head.height, panelWidth: s.width, mainLeft: m.left, left: a.left, top: a.top, width: a.width, height: a.height };
+    // the conversation lies exactly over the main area's slot, under the breadcrumb
+    over: !!m && near(a.left, m.left) && near(a.top, m.top) && near(a.width, m.width) && near(a.height, m.height),
+    width: Math.round(a.width), height: Math.round(a.height),
+    side: sf ? { src: sf.getAttribute('src'), name: sf.name, shown: getComputedStyle(sf).display !== 'none',
+      // the sidebar's place lies over the left panel's body, edge to edge, under the panel's own header
+      over: !!body && near(b.left, panel.left) && near(b.width, panel.width) && near(b.top, body.top) && near(b.bottom, panel.bottom),
+      headClear: !!head && b.top >= head.bottom - 1, width: Math.round(b.width), height: Math.round(b.height),
+      // drawn on top of the panel, where a person sees and clicks it (the panel sits at z-index 20)
+      onTop: b.width > 0 && document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) === sf } : null };
 });
-const inFrame = async () => { const f = p.frames().find((x) => x.url().startsWith(REMOTE)); return f ? f.evaluate(() => document.getElementById('where').textContent) : null; };
+const mainFrame = () => p.frames().find((x) => x.url().startsWith(REMOTE) && !x.url().startsWith(REMOTE + '/side'));
+const inFrame = async () => { const f = mainFrame(); return f ? f.evaluate(() => document.getElementById('where').textContent) : null; };
 const tellFrame = (to) => p.evaluate((to, origin) => document.getElementById('xw-agent-remote').contentWindow.postMessage({ testMove: to }, origin), to, REMOTE);
 const VIEW = '/pc/pc-1/c/chat-9';
 
@@ -75,15 +82,23 @@ try {
   await fresh('/workspace/dev/apps/agent');
   let f = await frameInfo();
   ok(f && f.src === REMOTE + '/' && f.on && f.shown, `the Agent area shows the remote page in a frame (${JSON.stringify(f)})`);
-  ok(f && f.over && f.panelWidth > 100 && f.left < f.mainLeft - 100 && f.width > 900 && f.height > 300, `the frame is the Agent area with the left panel's body in it, so the agent's own panel is the left panel (${JSON.stringify(f)})`);
-  ok(f && f.headClear && f.headHeight > 20 && await p.$eval('#panel .ph [data-back]', (e) => { const r = e.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return top === e || e.contains(top); }), 'the header the sidebar already has stays above it, and its Back can be clicked');
+  ok(f && f.over && f.width > 600 && f.height > 300, `the conversation lies exactly over the main area, under its breadcrumb (${JSON.stringify(f)})`);
+  ok(f && f.side && f.side.src === REMOTE + '/side' && f.side.name === 'xeno-agent-side' && f.side.shown && f.side.over && f.side.headClear && f.side.onTop && f.side.width > 200, `the agent's sidebar has its own place over the left panel's body, under the header that panel already has (${JSON.stringify(f && f.side)})`);
+  ok(await p.$eval('#panel .ph [data-back]', (e) => { const r = e.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return top === e || e.contains(top); }), 'the header the panel already has stays above it, and its Back can be clicked');
   ok(await inFrame() === 'REMOTE /', 'and the page inside it is the remote page');
-  const told = await p.frames().find((x) => x.url().startsWith(REMOTE)).evaluate(() => window.layout);
-  ok(typeof told === 'number' && Math.abs(told - (f.mainLeft - f.left)) < 2 && told > 200, `the frame is told how wide the left panel is, so the agent's panel is exactly that wide (${told})`);
   const main = await p.$eval('#main', (e) => e.innerText).catch(() => '');
   ok(!/Open in Hub|opens here when it is part of the workspace/.test(main), 'the placeholder that sent people to the desktop app is gone');
   const side = await p.$eval('#panel', (e) => e.innerText).catch(() => '');
   ok(!/Refactor auth gate|Fix flaky test|New session|Checkpoints|Where it runs/.test(side) && await p.$eval('#panel', (e) => !e.hasAttribute('inert') && e.querySelector('.pbody').hasAttribute('inert') && e.querySelectorAll('.pbody button, .pbody a, .pbody input').length === 0), `the panel's body under the frame is empty and cannot be tabbed into (${JSON.stringify(side.slice(0, 60))})`);
+
+  // the panel folded away: the sidebar's place goes (the agent page then draws its sidebar beside the conversation), and comes back
+  await p.evaluate(() => { const b = document.querySelector('[data-collapse]'); if (b) b.click(); }); await settle(900);
+  f = await frameInfo();
+  const folded = f && f.side && f.side.width === 0 && f.on && f.over;
+  ok(folded, `with the left panel folded the sidebar's place has no width and the conversation still lies over the main area (${JSON.stringify(f && { side: f.side, over: f.over })})`);
+  await p.evaluate(() => { const b = [...document.querySelectorAll('[data-expand]')].find((x) => x.offsetParent !== null); if (b) b.click(); }); await settle(900);
+  f = await frameInfo();
+  ok(f && f.side && f.side.shown && f.side.over, `opened again, the sidebar's place is back over the panel (${JSON.stringify(f && f.side)})`);
 
   // the frame opens a chat: the address follows, and nothing is reloaded
   const before = loads.length;
@@ -125,7 +140,7 @@ try {
   ok(where() === '/workspace/dev/apps/agent' + VIEW && f.shown && f.over && loads.length === loaded, `Back returns to the chat with the same frame, still connected (${JSON.stringify(f)} ${where()} ${loads.length}/${loaded})`);
 
   // the frame asks for its sign-in code: the workspace gets it one, for the frame's own request and nothing wider
-  const frameGot = async () => { const f = p.frames().find((x) => x.url().startsWith(REMOTE)); return f.evaluate(() => window.got.splice(0)); };
+  const frameGot = async () => { const f = mainFrame(); return f.evaluate(() => window.got.splice(0)); };
   const ask = (m) => p.evaluate((m, origin) => document.getElementById('xw-agent-remote').contentWindow.postMessage({ testAsk: m }, origin), m, REMOTE);
   const good = { type: 'xeno-remote:authorize', clientId: 'xeno-remote-web', redirectUri: REMOTE + '/callback', scope: 'openid profile remote:connect', state: 'S'.repeat(32), nonce: 'N'.repeat(32), codeChallenge: 'C'.repeat(43) };
   await fresh('/workspace/dev/apps/agent'); authorizeCalls.length = 0; await frameGot();

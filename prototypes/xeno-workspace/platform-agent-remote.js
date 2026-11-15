@@ -30,43 +30,77 @@
 
   const style = document.createElement('style');
   style.textContent = '.xar-host{position:relative;height:100%;min-height:320px;display:grid;place-items:center;color:var(--dim);font-size:13px}'
-    + '#xw-agent-remote{position:fixed;z-index:3;border:0;background:var(--panel);display:none}#xw-agent-remote.on{display:block}'
-    + 'html.modal-open #xw-agent-remote,html.xw-splitting #xw-agent-remote{pointer-events:none}';
+    // the side frame lies over the left panel, which sits at z-index 20 (.slot), so it is drawn just above it
+    + '#xw-agent-remote,#xw-agent-remote-side{position:fixed;z-index:3;border:0;background:var(--panel);display:none}#xw-agent-remote-side{z-index:21}#xw-agent-remote.on,#xw-agent-remote-side.on{display:block}'
+    + 'html.modal-open #xw-agent-remote,html.xw-splitting #xw-agent-remote,html.modal-open #xw-agent-remote-side,html.xw-splitting #xw-agent-remote-side{pointer-events:none}';
   document.head.appendChild(style);
 
-  let frame = null, slot = null, ro = null, shown = null, signedIn = null, watched = null, settle = 0, side0 = 0;
+  let frame = null, side = null, slot = null, ro = null, shown = null, signedIn = null, watched = null, settle = 0;
 
   /**
-   * The frame is the Agent area under the workspace's own headers: the body of the left panel and the main area's
-   * slot together, so the agent's own panel (New, the chats, the projects) sits in the left panel under the header
-   * the sidebar already has, and the conversation sits under the breadcrumb (owner, 2026-11-15: "it should be the
-   * agent left panel but under what already the sidebar has"). A panel the person has folded away has no width and
-   * takes none.
+   * Two frames of the agent page (owner, 2026-11-15: "the right conversation panel is the only one we need to mount on
+   * the right side, and on the left side sidebar extension, we mount parts of the elements from the sidebar of agent
+   * interface"). The conversation lies over the main area's slot, under the breadcrumb. `/side` lies over the left
+   * panel's body, under the header that panel already has, and the agent page draws its own sidebar into it: both
+   * frames are its own site, so nothing of the chats passes through this page. A panel the person folded away has no
+   * width, and the agent page then draws its sidebar beside the conversation again.
    */
+  const over = (el, r) => Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: Math.max(0, r.width) + 'px', height: Math.max(0, r.height) + 'px' });
   function fit() {
     if (!slot || !frame) return;
-    const m = slot.getBoundingClientRect(), body = document.querySelector('#panel .pbody'), side = document.getElementById('slot');
-    const b = body ? body.getBoundingClientRect() : null, s = side ? side.getBoundingClientRect() : null;
-    const withSide = !!b && !!s && s.width > 1 && b.height > 1 && s.right <= m.left + 24;
-    // one rectangle: it starts under the lower of the two headers, so neither is covered
-    const left = withSide ? s.left : m.left, top = withSide ? Math.max(b.top, m.top) : m.top;
-    const bottom = withSide ? Math.max(s.bottom, m.bottom) : m.bottom;
-    Object.assign(frame.style, { left: left + 'px', top: top + 'px', width: Math.max(0, m.right - left) + 'px', height: Math.max(0, bottom - top) + 'px' });
+    over(frame, slot.getBoundingClientRect());
     const main = document.getElementById('main');
     if (main) { const br = getComputedStyle(main).borderBottomLeftRadius; frame.style.borderRadius = `0 0 ${br} ${br}`; }
-    under(true);
-    // the agent's own panel takes the left panel's place, so it is told that panel's width and its edge lines up
-    side0 = withSide ? Math.round(m.left - left) : 0;
-    tellLayout();
+    const body = document.querySelector('#panel .pbody'), b = body ? body.getBoundingClientRect() : null;
+    // folded, the workspace makes its panel inert and slides it away (its width stays): that is the sign it is closed
+    const panelEl = document.getElementById('panel');
+    const open = !!b && !!panelEl && !panelEl.inert && b.width > 120 && b.height > 1;
+    if (side) {
+      // folded, the side frame is given no width rather than hidden: the agent page inside it sees its width go to
+      // nothing, and draws its sidebar beside the conversation again (a hidden frame does not reliably tell it)
+      if (!open && b) over(side, { left: b.left, top: b.top, width: 0, height: b.height });
+      if (open) {
+        // the body's own padding is the panel's: the sidebar takes the whole width of the panel, edge to edge
+        const panel = document.getElementById('panel').getBoundingClientRect();
+        over(side, { left: panel.left, top: b.top, width: panel.width, height: panel.bottom - b.top });
+        const pr = getComputedStyle(document.getElementById('panel')).borderBottomLeftRadius;
+        side.style.borderRadius = `0 0 ${pr} ${pr}`;
+      }
+      side.classList.toggle('on', !!b);
+      side.style.pointerEvents = open ? '' : 'none';
+    }
+    if (open) under(true); else if (body) body.removeAttribute('inert');
   }
-  function tellLayout() { try { frame?.contentWindow?.postMessage({ type: 'xeno-remote:layout', side: side0 }, ORIGIN()); } catch {} }
+
+  /**
+   * The agent's sidebar in this panel is drawn in this panel's look (owner, 2026-11-15: "the design on the left sidebar
+   * should be in the design of the platform, not the app"). Its sizes are fixed on the agent page; its colours are this
+   * page's own, sent as resolved colours so they follow the person's theme and brightness. Sent when the side page asks,
+   * and again whenever they change. Colours only: nothing else of this page crosses.
+   */
+  const LOOK = { canvas: '--canvas', rail: '--rail', panel: '--panel', elevated: '--elevated', control: '--control', active: '--hover-strong', hover: '--hover', border: '--border', text: '--text', muted: '--muted', dim: '--dim' };
+  let lookSent = '';
+  function look() {
+    const probe = document.createElement('i'); probe.style.display = 'none'; document.body.appendChild(probe);
+    const out = {};
+    for (const [name, v] of Object.entries(LOOK)) { probe.style.color = `var(${v})`; out[name] = getComputedStyle(probe).color; }
+    probe.remove();
+    return out;
+  }
+  function sendLook(force) {
+    const now = look(), text = JSON.stringify(now);
+    if (!force && text === lookSent) return;
+    lookSent = text;
+    // both frames wear it: the sidebar in the panel, and the conversation in the main area
+    for (const f of [side, frame]) { try { f?.contentWindow?.postMessage({ type: 'xeno-remote:look', look: now }, ORIGIN()); } catch {} }
+  }
 
   /** What the frame covers cannot be seen, so it must not be reachable with the keyboard either. The panel's header stays the person's. */
   function under(covered) { const el = document.querySelector('#panel .pbody'); if (el) el.toggleAttribute('inert', covered); }
 
   function place() {
     const el = document.querySelector('#main .xar-host[data-xar-frame]');
-    if (!el) { if (slot) { slot = null; watched = null; ro?.disconnect(); under(false); } clearTimeout(settle); frame?.classList.remove('on'); return; }
+    if (!el) { if (slot) { slot = null; watched = null; ro?.disconnect(); under(false); } clearTimeout(settle); frame?.classList.remove('on'); side?.classList.remove('on'); return; }
     if (el !== slot) { slot = el; watched = null; ro?.disconnect(); ro = new ResizeObserver(fit); ro.observe(el); for (const id of ['main', 'slot']) { const part = document.getElementById(id); if (part) ro.observe(part); } }
     const want = here();
     if (!frame) {
@@ -74,6 +108,10 @@
       frame.setAttribute('allow', 'clipboard-read; clipboard-write');
       frame.src = `${ORIGIN()}/${want}`; shown = want;
       document.body.appendChild(frame);
+      // the place the agent page draws its sidebar into: its own site, found by the agent page among this page's frames
+      side = document.createElement('iframe'); side.id = 'xw-agent-remote-side'; side.title = 'XENO Agent: chats and projects';
+      side.name = 'xeno-agent-side'; side.src = `${ORIGIN()}/side`;
+      document.body.appendChild(side);
     } else if (want !== shown) { shown = want; frame.src = `${ORIGIN()}/${want}`; }   // the address changed here (Back, a link): the frame follows
     frame.classList.add('on'); fit();
     // the panel is drawn anew with the page and may still be settling (its header animates in): the frame is laid
@@ -138,9 +176,10 @@
   // The frame says which view it shows, or asks for its sign-in code or a cloud session. Only its own origin and its own window are
   // listened to, and only messages of the known shapes are taken.
   addEventListener('message', (event) => {
+    if (side && event.origin === ORIGIN() && event.source === side.contentWindow) { if (event.data && event.data.type === 'xeno-remote:look-wanted') sendLook(true); return; }
     if (!frame || event.origin !== ORIGIN() || event.source !== frame.contentWindow) return;
     const d = event.data;
-    if (d && d.type === 'xeno-remote:layout-wanted') { tellLayout(); return; }
+    if (d && d.type === 'xeno-remote:look-wanted') { sendLook(true); return; }
     if (d && d.type === 'xeno-remote:cloud-status') { void cloudStandingForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:cloud') { void openCloudForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:authorize') { void signInTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
@@ -164,8 +203,9 @@
   // too, since its body is part of what the frame lies over; one look per frame is enough.
   let due = false;
   const soon = () => { if (due) return; due = true; requestAnimationFrame(() => { due = false; place(); }); };
-  const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); const seen = new MutationObserver(soon); seen.observe(main, { childList: true, subtree: true }); const side = document.getElementById('panel'); if (side) seen.observe(side, { childList: true }); main.addEventListener('transitionend', fit); place(); };
+  const watch = () => { const main = document.getElementById('main'); if (!main) return setTimeout(watch, 50); const seen = new MutationObserver(soon); seen.observe(main, { childList: true, subtree: true }); const sidePanel = document.getElementById('panel'); if (sidePanel) seen.observe(sidePanel, { childList: true, attributes: true, attributeFilter: ['inert'] }); sidePanel?.addEventListener('transitionend', fit); main.addEventListener('transitionend', fit); place(); };
   addEventListener('resize', fit);
+  new MutationObserver(() => sendLook(false)).observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-mode'] });
   watch();
 
   window.XENO_AGENT_REMOTE = { page, trail, panel, viewOf };
