@@ -386,4 +386,35 @@ export async function listForAgent(db, owner, agentId, opts = {}) {
   return out;
 }
 
+/**
+ * Every run of every agent this person has run, newest first: the Agent area's "Runs" list. The same rows and the
+ * same view as `listForAgent`, so the two lists can never disagree. Only live rows ask the runner (refresh), so a
+ * long history costs one query. Paged by an opaque `before` cursor (the `next` of the previous page): the exact
+ * database time plus the row id, so rows sharing a timestamp are never skipped or repeated across pages.
+ */
+export async function listForOwner(db, owner, { limit, before, ...opts } = {}) {
+  const n = limit === undefined || limit === null || limit === '' ? 50 : Number(limit);
+  if (!Number.isSafeInteger(n) || n < 1 || n > 100) throw new AgentRunError('limit must be 1-100', 'bad_request');
+  let at = null, id = null;
+  if (before !== undefined && before !== null && before !== '') {
+    const m = /^(.+)\|([0-9a-f-]{36})$/i.exec(Buffer.from(String(before), 'base64url').toString('utf8'));
+    if (!m || Number.isNaN(Date.parse(m[1]))) throw new AgentRunError('before is not a cursor from this list', 'bad_request');
+    [, at, id] = m;
+  }
+  const rows = (await db.query(`SELECT r.*, r.created_at::text AS cursor_at, 'T-' || t.number AS task_key,
+        ai.public_id AS agent_public_id, COALESCE(u.display_name, u.username) AS agent_name
+      FROM agent_cloud_runs r JOIN tasks t ON t.id = r.task_id
+      JOIN agent_identities ai ON ai.user_id = r.agent_user_id JOIN users u ON u.id = r.agent_user_id
+     WHERE r.owner_user_id = $1 AND ($2::timestamptz IS NULL OR (r.created_at, r.id) < ($2::timestamptz, $3::uuid))
+     ORDER BY r.created_at DESC, r.id DESC LIMIT $4`, [owner.id, at, id, n + 1])).rows;
+  const page = rows.slice(0, n);
+  const runs = [];
+  for (const row of page) {
+    const fresh = LIVE.has(row.state) || row.state === 'uncertain' ? await refresh(db, owner, row, opts) : row;
+    runs.push(view({ ...fresh, task_key: row.task_key }, { id: row.agent_public_id, name: row.agent_name }));
+  }
+  const last = page[page.length - 1];
+  return { runs, next: rows.length > n ? Buffer.from(`${last.cursor_at}|${last.id}`, 'utf8').toString('base64url') : null };
+}
+
 export const _internals = { DEFAULT_BUDGET_CREDITS, MAX_BUDGET_CREDITS, MAX_RUN_HOURS, crypto };

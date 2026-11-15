@@ -7,6 +7,7 @@
  *   PATCH  /api/agents/:id                        { name?, description?, instructions? }  (instructions = a new version)
  *   GET    /api/agents/presence                   each agent: working | online | cloud | offline | new | paused, and canTakeWork
  *   GET    /api/agents/presence/stream            the same, live (Server-Sent Events): a snapshot, then each change
+ *   GET    /api/agents/runs[?limit=1-100&before=<next>]  every run of every agent of mine, newest first → { runs, next }
  *   GET    /api/agents/:id/activity               its log: task actions, XENO MCP calls (metadata only) and cloud runs, newest first
  *   GET    /api/agents/lends/inbox                offers to lend an agent into a workspace you administer
  *   POST   /api/agents/lends/:lendId/accept|decline|revoke
@@ -82,6 +83,8 @@ router.get('/:id/activity', handled(async (req, res) => {
 }));
 router.get('/', handled(async (req, res) => { res.json({ success: true, agents: await agents.list(req.db, req.me, { divisionId: req.query.division ? String(req.query.division) : null, workspaceId: req.query.workspace ? String(req.query.workspace) : null }) }); }));
 router.post('/', handled(async (req, res) => { res.status(201).json({ success: true, agent: await agents.create(req.db, req.me, req.body || {}) }); }));
+// every run of every agent of mine, newest first (must stand before /:id, which would read "runs" as an agent id)
+router.get('/runs', handled(async (req, res) => { res.json({ success: true, ...(await cloudRuns.listForOwner(req.db, req.me, { limit: req.query.limit, before: req.query.before })) }); }));
 router.get('/:id', handled(async (req, res) => { res.json({ success: true, agent: await agents.get(req.db, req.me, req.params.id) }); }));
 // cloud runs: run the agent on a task, in the cloud (agentCloudRuns.js)
 router.post('/runs/:runId/stop', handled(async (req, res) => { res.json({ success: true, run: await cloudRuns.stop(req.db, req.me, req.params.runId) }); }));

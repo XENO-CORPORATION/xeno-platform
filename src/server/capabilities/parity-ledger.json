@@ -3722,6 +3722,11 @@
       "class": "safe",
       "scope": "agents:read"
     },
+    "route:platformAgentRoutes.js:GET /runs": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "agents:read"
+    },
     "route:platformAgentRoutes.js:GET /transfers/:tid/review-subject": {
       "status": "planned",
       "class": "safe",
