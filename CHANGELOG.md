@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-15
+
+**XENO Agent in the workspace is there the moment you open it.** The Agent area no longer waits on "Starting your cloud machine…". The whole interface appears at once, with your chats and somewhere to type, and no machine is started to show it: your cloud machine starts when you send a message, so a visit in which you send nothing costs nothing. The agent's own panel (New, your chats, your projects) is now the left panel, under the header the sidebar already has, in place of the separate "Cloud / Your PCs" panel; the row at its foot says where it runs and goes to your PCs. A machine that is already running (a turn you left working) is joined straight away. Underneath: the page asks how the machine stands without starting it (`GET /api/compute/cloud-agent` now also says its state and when it was last used), and the frame covers the left panel's body as well as the main area.
+
 ## 2026-11-14
 
 **A cloud turn you walk away from is allowed to finish.** A cloud machine used to stop 30 minutes after the last tab closed, even with the agent in the middle of a turn. Now the machine is asked first: while its agent is working it keeps running, and it stops on the first check after the turn is over. It is billed for that time like any running machine. With nobody connected it runs on for at most 12 hours past its idle limit, and a machine that cannot answer stops as before.

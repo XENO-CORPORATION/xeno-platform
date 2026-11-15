@@ -12,7 +12,7 @@ const PORT = 5217, base = 'http://127.0.0.1:' + PORT;
 const USER = { id: 'u1', username: 'me', email: 'me@x.test', display_name: 'Me', avatar_url: null, email_verified: true };
 let failed = 0;
 const authorizeCalls = []; let signedOut = false;
-const MACHINE = 'mch_' + 'a'.repeat(32); let cloudCalls = 0, cloudClosed = false;
+const MACHINE = 'mch_' + 'a'.repeat(32); let cloudCalls = 0, cloudClosed = false, statusCalls = 0;
 const ok = (c, m) => { if (c) console.log('PASS', m); else { failed++; console.log('FAIL', m); } };
 
 // the remote page, standing in: every address is the page, it tells its parent the view it shows, and it can be told to move
@@ -23,8 +23,9 @@ const remote = http.createServer((q, s) => {
   s.end(`<!doctype html><body style="margin:0;background:#123;color:#fff;font:14px sans-serif"><p id="where"></p><script>
     const say = () => { document.getElementById('where').textContent = 'REMOTE ' + location.pathname; parent.postMessage({ type: 'xeno-remote:view', path: location.pathname, signedIn: true }, '*') };
     window.move = (to) => { history.pushState(null, '', to); say() };
-    window.got = [];
-    addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove); if (e.data && e.data.testAsk) parent.postMessage(e.data.testAsk, '*'); if (e.data && (e.data.type === 'xeno-remote:code' || e.data.type === 'xeno-remote:cloud-session')) window.got.push(e.data) });
+    window.got = []; window.layout = null;
+    addEventListener('message', (e) => { if (e.data && e.data.type === 'xeno-remote:layout') window.layout = e.data.side });
+    addEventListener('message', (e) => { if (e.data && e.data.testMove) window.move(e.data.testMove); if (e.data && e.data.testAsk) parent.postMessage(e.data.testAsk, '*'); if (e.data && (e.data.type === 'xeno-remote:code' || e.data.type === 'xeno-remote:cloud-session' || e.data.type === 'xeno-remote:cloud-standing')) window.got.push(e.data) });
     say();
   </script>`);
 });
@@ -44,6 +45,7 @@ p.on('request', (q) => {
   if (!u.pathname.startsWith('/api/')) return q.continue();
   const json = (s, body) => q.respond({ status: s, contentType: 'application/json', body: JSON.stringify(body) });
   if (u.pathname === '/api/auth/me') return json(200, { success: true, user: USER });
+  if (u.pathname === '/api/compute/cloud-agent' && q.method() === 'GET') { statusCalls += 1; return cloudClosed ? json(200, { success: true, agent: { enabled: false } }) : json(200, { success: true, agent: { enabled: true, machineId: MACHINE, state: 'stopped', lastActiveAt: '2026-11-15T10:00:00.000Z' } }); }
   if (u.pathname === '/api/compute/cloud-agent' && q.method() === 'POST') { cloudCalls += 1; return cloudClosed ? json(403, { success: false, error: 'Cloud sessions are not open to your account yet', code: 'cloud_agent_not_enabled' }) : json(200, { success: true, agent: { machineId: MACHINE, workspaceId: 'w1', name: 'Cloud', connect: { path: `/api/compute/machines/${MACHINE}/ports/agent/`, protocols: ['xeno-port.v1', 'xeno-ticket.' + 'T'.repeat(43)], expiresAt: 'x' } } }); }
   if (u.pathname === '/api/oauth2/authorize' && q.method() === 'POST') { let b = {}; try { b = JSON.parse(q.postData() || '{}'); } catch {} authorizeCalls.push(b); return signedOut ? json(401, { error: 'unauthorized' }) : json(200, { code: 'CODE-' + b.state, redirect: 'x' }); }
   if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
@@ -57,8 +59,13 @@ const where = () => new URL(p.url()).pathname;
 const frameInfo = () => p.evaluate(() => {
   const f = document.getElementById('xw-agent-remote'), slot = document.querySelector('#main .xar-host[data-xar-frame]');
   if (!f) return null;
-  const a = f.getBoundingClientRect(), b = slot ? slot.getBoundingClientRect() : null;
-  return { src: f.getAttribute('src'), on: f.classList.contains('on'), shown: getComputedStyle(f).display !== 'none', over: !!b && Math.abs(a.left - b.left) < 2 && Math.abs(a.top - b.top) < 2 && Math.abs(a.width - b.width) < 2 && Math.abs(a.height - b.height) < 2, width: a.width, height: a.height };
+  // the frame is the Agent area under the workspace's own headers: the left panel's body and the main area's slot together
+  const a = f.getBoundingClientRect(), m = slot ? slot.getBoundingClientRect() : document.getElementById('main').getBoundingClientRect(), s = document.getElementById('slot').getBoundingClientRect();
+  const body = document.querySelector('#panel .pbody').getBoundingClientRect(), head = document.querySelector('#panel .ph').getBoundingClientRect();
+  const near = (x, y) => Math.abs(x - y) < 2;
+  return { src: f.getAttribute('src'), on: f.classList.contains('on'), shown: getComputedStyle(f).display !== 'none', hasSlot: !!slot,
+    over: near(a.left, s.left) && near(a.top, Math.max(body.top, m.top)) && near(a.right, m.right) && near(a.bottom, Math.max(s.bottom, m.bottom)),
+    headClear: a.top >= head.bottom - 1, headHeight: head.height, panelWidth: s.width, mainLeft: m.left, left: a.left, top: a.top, width: a.width, height: a.height };
 });
 const inFrame = async () => { const f = p.frames().find((x) => x.url().startsWith(REMOTE)); return f ? f.evaluate(() => document.getElementById('where').textContent) : null; };
 const tellFrame = (to) => p.evaluate((to, origin) => document.getElementById('xw-agent-remote').contentWindow.postMessage({ testMove: to }, origin), to, REMOTE);
@@ -68,12 +75,15 @@ try {
   await fresh('/workspace/dev/apps/agent');
   let f = await frameInfo();
   ok(f && f.src === REMOTE + '/' && f.on && f.shown, `the Agent area shows the remote page in a frame (${JSON.stringify(f)})`);
-  ok(f && f.over && f.width > 600 && f.height > 300, 'the frame lies exactly over its place in the page');
+  ok(f && f.over && f.panelWidth > 100 && f.left < f.mainLeft - 100 && f.width > 900 && f.height > 300, `the frame is the Agent area with the left panel's body in it, so the agent's own panel is the left panel (${JSON.stringify(f)})`);
+  ok(f && f.headClear && f.headHeight > 20 && await p.$eval('#panel .ph [data-back]', (e) => { const r = e.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return top === e || e.contains(top); }), 'the header the sidebar already has stays above it, and its Back can be clicked');
   ok(await inFrame() === 'REMOTE /', 'and the page inside it is the remote page');
+  const told = await p.frames().find((x) => x.url().startsWith(REMOTE)).evaluate(() => window.layout);
+  ok(typeof told === 'number' && Math.abs(told - (f.mainLeft - f.left)) < 2 && told > 200, `the frame is told how wide the left panel is, so the agent's panel is exactly that wide (${told})`);
   const main = await p.$eval('#main', (e) => e.innerText).catch(() => '');
   ok(!/Open in Hub|opens here when it is part of the workspace/.test(main), 'the placeholder that sent people to the desktop app is gone');
   const side = await p.$eval('#panel', (e) => e.innerText).catch(() => '');
-  ok(/Cloud/.test(side) && /Your PCs/.test(side) && /\/remote/.test(side) && !/Refactor auth gate|Fix flaky test|New session|Checkpoints/.test(side), 'the sidebar says how a chat gets here, with no sample sessions');
+  ok(!/Refactor auth gate|Fix flaky test|New session|Checkpoints|Where it runs/.test(side) && await p.$eval('#panel', (e) => !e.hasAttribute('inert') && e.querySelector('.pbody').hasAttribute('inert') && e.querySelectorAll('.pbody button, .pbody a, .pbody input').length === 0), `the panel's body under the frame is empty and cannot be tabbed into (${JSON.stringify(side.slice(0, 60))})`);
 
   // the frame opens a chat: the address follows, and nothing is reloaded
   const before = loads.length;
@@ -109,9 +119,10 @@ try {
   await p.evaluate(() => window.XW.go('product', { product: 'mcp' })); await settle(700);
   f = await frameInfo();
   ok(f && !f.shown, 'on another product the frame is out of sight');
+  ok(await p.$eval('#panel', (e) => !e.querySelector('[inert]')), 'and the workspace panel is its own again');
   await p.goBack(); await settle(900);
   f = await frameInfo();
-  ok(where() === '/workspace/dev/apps/agent' + VIEW && f.shown && f.over && loads.length === loaded, 'Back returns to the chat with the same frame, still connected');
+  ok(where() === '/workspace/dev/apps/agent' + VIEW && f.shown && f.over && loads.length === loaded, `Back returns to the chat with the same frame, still connected (${JSON.stringify(f)} ${where()} ${loads.length}/${loaded})`);
 
   // the frame asks for its sign-in code: the workspace gets it one, for the frame's own request and nothing wider
   const frameGot = async () => { const f = p.frames().find((x) => x.url().startsWith(REMOTE)); return f.evaluate(() => window.got.splice(0)); };
@@ -139,6 +150,13 @@ try {
   ok(got.length === 1 && got[0].session === null && /not open to your account/.test(got[0].error), 'a refusal reaches the frame in the platform’s own words');
   cloudCalls = 0; await p.evaluate((m) => window.postMessage(m, '*'), { type: 'xeno-remote:cloud', state: cstate }); await ask({ type: 'xeno-remote:cloud', state: 'not-a-state' }); await settle(500);
   ok(cloudCalls === 0, 'a cloud request that is not from the frame, or has no proper state, starts nothing');
+  // the frame asks how the machine stands: it is told, and nothing is started
+  cloudCalls = 0; statusCalls = 0; await ask({ type: 'xeno-remote:cloud-status', state: cstate }); await settle(700); got = await frameGot();
+  ok(statusCalls === 1 && cloudCalls === 0 && got.length === 1 && got[0].type === 'xeno-remote:cloud-standing' && got[0].state === cstate && got[0].status.enabled === true && got[0].status.machineId === MACHINE && got[0].status.state === 'stopped' && got[0].status.lastActiveAt === '2026-11-15T10:00:00.000Z', `asked how the machine stands, the frame is told and no machine is started (${JSON.stringify(got).slice(0, 200)})`);
+  cloudClosed = true; await ask({ type: 'xeno-remote:cloud-status', state: cstate }); await settle(600); got = await frameGot(); cloudClosed = false;
+  ok(got.length === 1 && got[0].status.enabled === false && !got[0].status.machineId, 'an account Cloud is not open to is told so');
+  statusCalls = 0; await p.evaluate((m) => window.postMessage(m, '*'), { type: 'xeno-remote:cloud-status', state: cstate }); await ask({ type: 'xeno-remote:cloud-status', state: 'nope' }); await settle(400);
+  ok(statusCalls === 0, 'a standing request that is not from the frame, or has no proper state, asks nothing');
   await tellFrame('/cloud/c/chat-7'); await settle(800);
   ok(where() === '/workspace/dev/apps/agent/cloud/c/chat-7', `a cloud chat has its own workspace address (${where()})`);
   const cloudCrumb = await p.$eval('.crumbs', (e) => e.innerText).catch(() => '');

@@ -51,16 +51,21 @@ async function personOf(actor) {
 }
 
 const machineOf = async (db, personId, workspaceId) => (await db.query(
-  `SELECT id, state FROM compute_machines WHERE created_by_user_id = $1 AND purpose = 'cloud-agent' ${workspaceId ? 'AND workspace_id = $2' : ''}
+  `SELECT id, state, last_active_at FROM compute_machines WHERE created_by_user_id = $1 AND purpose = 'cloud-agent' ${workspaceId ? 'AND workspace_id = $2' : ''}
       AND state NOT IN ('deleted', 'failed') ORDER BY created_at LIMIT 1`, workspaceId ? [personId, workspaceId] : [personId])).rows[0];
 
-/** Whether a cloud session is open to the caller, and their machine if one exists (for the page's "where" picker). */
+/**
+ * Whether a cloud session is open to the caller, and how their machine stands if one exists. It starts nothing: the
+ * Agent page asks this when it opens, draws itself from what it remembers, and starts the machine only when a message
+ * is sent (owner, 2026-11-15). `lastActiveAt` lets the page tell that the machine was used since it last looked (another
+ * device, a turn left running), so it does not show what it remembers as if it were current.
+ */
 export async function cloudAgentStatus(db, actor) {
   if (!actor || !actor.id || actor.kind === 'agent' || actor.kind === 'service') return { enabled: false };
   const personId = String(actor.id);
   if (!(await shellEnabledFor(db, personId))) return { enabled: false };
   const m = await machineOf(db, personId, null);
-  return { enabled: true, ...(m ? { machineId: m.id, state: m.state } : {}) };
+  return { enabled: true, ...(m ? { machineId: m.id, state: m.state, lastActiveAt: m.last_active_at ? new Date(m.last_active_at).toISOString() : null } : {}) };
 }
 
 async function inTx(db, fn) {
