@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-18
 
+**A new session says where it will run.** An empty session in the Agent area shows a small card in the middle with the place it will run (your cloud machine or a PC) and how it stands right now. "Choose where it runs" opens the same list as the chip at the message box. The card goes away with the first message. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #255).
+
 **Choose where XENO Agent runs from the message box.** A chip at the bottom left of the Agent area's message box names where this session runs (Cloud, or your PC's name), with a small square for its state. It opens a list of places, one line each. The place in use is the brighter row marked "In use". Each place shows how it stands right now: your cloud machine asleep (it starts when you send), starting or running; each PC online or offline. Local leads to the desktop app download, a PC not connected to this browser yet shows "Connect", and Connect a PC is last. Type to search, use ↑ ↓ and Enter. If a chat is in progress, moving to another place asks first: the chat stays where it runs, and the other place opens in a new session. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #254); the cloud machine's state is read with the call the page already makes, which starts nothing.
 
 ## 2026-11-15
