@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-18
+
+**Choose where XENO Agent runs from the message box.** A chip at the bottom left of the Agent area's message box names where this session runs (Cloud, or your PC's name), with a small square for its state. It opens a list of places, one line each. The place in use is the brighter row marked "In use". Each place shows how it stands right now: your cloud machine asleep (it starts when you send), starting or running; each PC online or offline. Local leads to the desktop app download, a PC not connected to this browser yet shows "Connect", and Connect a PC is last. Type to search, use ↑ ↓ and Enter. If a chat is in progress, moving to another place asks first: the chat stays where it runs, and the other place opens in a new session. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #254); the cloud machine's state is read with the call the page already makes, which starts nothing.
+
 ## 2026-11-15
 
 **The Agent area is one place in the platform's design.** The agent's own sidebar now sits in the workspace's left panel, under the header the panel already has, and the conversation fills the main area. Both are drawn in the platform's colours and Inter, taken from your theme. The panel reads New session, Sessions, Runs, Checkpoints, then Mission control, Projects, Agents, Teams, Library, Tools, Scheduled and Main Chat with your chats; there is no account row, since the platform's account is the one in use. Sessions, Runs and Checkpoints open as pages in plain words. Fold the panel and the sidebar goes back beside the conversation. Underneath: the workspace shows the agent page twice (the conversation over its main slot, `/side` over its panel's body) and sends it its colours (`xeno-remote:look`); nothing of your chats passes through the workspace's page.
