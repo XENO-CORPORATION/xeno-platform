@@ -182,7 +182,8 @@
     "fontRoutes.js": "forms",
     "platform-fonts.js": "forms",
     "stockRoutes.js": "forms",
-    "platform-stock.js": "forms"
+    "platform-stock.js": "forms",
+    "githubRoutes.js": "account"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11880,6 +11881,62 @@
       "class": "irreversible",
       "scope": "none",
       "because": "XENO Spawn's account wrap holds the account data key under a server key (KEK): a device's first unwrap needs a sign-in from the last 10 minutes and sends the person an email, so handing the key or its wrap to an agent tool would defeat the end-to-end encryption it exists to give"
+    },
+    "route:computeRoutes.js:GET /cloud-agent/repositories": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "the Repo chip's list: the repositories on the person's Cloud Agent machine and the ones they allowed on GitHub; it starts nothing and changes nothing"
+    },
+    "route:computeRoutes.js:POST /cloud-agent/repositories": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "clones a repository onto the person's own Cloud Agent machine with a GitHub token minted for them for that repository; only the person opens one (services/cloudAgent.js), never an agent"
+    },
+    "route:githubRoutes.js:GET /status": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "which GitHub accounts the person connected to XENO; reading it changes nothing"
+    },
+    "route:githubRoutes.js:POST /connect": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "connecting the person's own GitHub account to XENO is the person's act (services/githubApp.js refuses an agent); it returns an install address only"
+    },
+    "route:githubRoutes.js:GET /repositories": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "the repositories the person allowed XENO to see, for the Repo chip; names only, never a token"
+    },
+    "route:githubRoutes.js:DELETE /installations/:id": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "disconnecting the person's own GitHub account from XENO is the person's act; reconnecting restores it"
+    },
+    "route:githubRoutes.js:GET /setup": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "safe",
+      "scope": "none",
+      "because": "GitHub's browser redirect after an install; it carries a signed state, not a XENO token, and only forwards to GitHub's sign-in"
+    },
+    "route:githubRoutes.js:GET /callback": {
+      "status": "excluded",
+      "category": "unauthenticated",
+      "class": "reversible",
+      "scope": "none",
+      "because": "GitHub's browser redirect after its sign-in; the signed state names the person, and only installations their own GitHub sign-in reaches are recorded"
     }
   }
 }

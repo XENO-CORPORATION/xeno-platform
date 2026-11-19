@@ -3,6 +3,10 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-19
+
+**Open your repositories in a cloud session.** A cloud session in the Agent area gets a Repo chip beside "where it runs". It lists the repositories already on your cloud machine and the ones you let XENO see on GitHub; you can also paste any repository's address. Picking one clones it on your machine once and makes it the session's folder. "Connect GitHub" installs the XENO GitHub app (XENOSYSTEM Agent) on your account, where you choose which repositories it may see. Underneath: `services/githubApp.js` and `/api/github` (connect, the list, disconnect) on the platform's one GitHub record (the FORGE-03 tables), and `GET|POST /api/compute/cloud-agent/repositories`. XENO keeps no GitHub token: for each repository it opens, it asks GitHub for a token that works on that repository alone and runs out within the hour, hands it to the machine's clone command, and keeps only its fingerprint. Proof: `npm run test:github-repositories` (real Postgres, 36 checks).
+
 ## 2026-11-18
 
 **A new session says where it will run.** An empty session in the Agent area shows a small card in the middle with the place it will run (your cloud machine or a PC) and how it stands right now. "Choose where it runs" opens the same list as the chip at the message box. The card goes away with the first message. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #255).

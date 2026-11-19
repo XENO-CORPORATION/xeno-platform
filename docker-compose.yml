@@ -271,6 +271,13 @@ services:
       - XENO_ISSUER_PER_HOST=${XENO_ISSUER_PER_HOST:-}
       # Cloud Shell (services/cloudShell.js): comma list of emails and @domains, or "all". Unset = closed (fail closed).
       - SHELL_ENABLED=${SHELL_ENABLED:-}
+      # The XENO GitHub App "XENOSYSTEM Agent" (services/githubApp.js). Unset = GitHub not configured (fail closed).
+      - XENO_GITHUB_APP_ID=${XENO_GITHUB_APP_ID:-}
+      - XENO_GITHUB_APP_SLUG=${XENO_GITHUB_APP_SLUG:-}
+      - XENO_GITHUB_APP_CLIENT_ID=${XENO_GITHUB_APP_CLIENT_ID:-}
+      - XENO_GITHUB_APP_CLIENT_SECRET=${XENO_GITHUB_APP_CLIENT_SECRET:-}
+      - XENO_GITHUB_APP_PRIVATE_KEY_B64=${XENO_GITHUB_APP_PRIVATE_KEY_B64:-}
+      - XENO_GITHUB_APP_CALLBACK_URL=${XENO_GITHUB_APP_CALLBACK_URL:-}
       - SALES_OPEN=${SALES_OPEN:-}
       - PROJECT_ITEM_PEOPLE=${PROJECT_ITEM_PEOPLE:-}
       - CHAT_AGENT_RUNTIME=${CHAT_AGENT_RUNTIME:-}

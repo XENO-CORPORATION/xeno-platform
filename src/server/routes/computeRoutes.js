@@ -19,6 +19,8 @@
  *   POST /cloud-shell                            open Cloud Shell: the person's machine, started, and a ticket for its terminal
  *   GET  /cloud-agent                            {enabled, machineId?} — whether a cloud Agent session is open to me, and my machine
  *   POST /cloud-agent                            open one: the person's Cloud Agent machine, started, with a ticket for its Agent host
+ *   GET  /cloud-agent/repositories               {machine, onMachine[], github, allowed[]} — the picker's list; starts nothing
+ *   POST /cloud-agent/repositories {repository}  clone it on the machine (once), with a token for that repository alone
  */
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
@@ -27,7 +29,8 @@ import { resolvePrincipal, assertPrincipalUsable, AgentIdentityError } from '../
 import * as compute from '../services/compute.js';
 import { createTicket } from '../services/computePorts.js';
 import { openCloudShell, shellStatus, CloudShellError } from '../services/cloudShell.js';
-import { openCloudAgent, cloudAgentStatus, CloudAgentError } from '../services/cloudAgent.js';
+import { openCloudAgent, cloudAgentStatus, cloudRepositories, openCloudRepository, CloudAgentError } from '../services/cloudAgent.js';
+import * as github from '../services/githubApp.js';
 
 const router = express.Router();
 async function loadActor(req, res, next) {
@@ -79,6 +82,16 @@ router.post('/cloud-agent', ...A, async (req, res) => {
     if (e instanceof CloudAgentError || e instanceof compute.ComputeError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
     console.error('[compute] cloud agent', e); return res.status(500).json({ success: false, error: 'The cloud session could not start' });
   }
+});
+const cloudAgentError = (res, e, what) => {
+  if (e instanceof CloudAgentError || e instanceof compute.ComputeError || e instanceof github.GitHubAppError) return res.status(e.statusCode).json({ success: false, error: e.message, code: e.code });
+  console.error(`[compute] cloud agent ${what}`, e.message); return res.status(500).json({ success: false, error: 'The cloud session could not do that right now' });
+};
+router.get('/cloud-agent/repositories', ...A, async (req, res) => {
+  try { res.json({ success: true, ...(await cloudRepositories(req.db, req.actor, { github })) }); } catch (e) { cloudAgentError(res, e, 'repositories'); }
+});
+router.post('/cloud-agent/repositories', ...A, async (req, res) => {
+  try { res.json({ success: true, ...(await openCloudRepository(req.db, req.actor, { repository: b(req).repository, github })) }); } catch (e) { cloudAgentError(res, e, 'open repository'); }
 });
 router.post('/machines/:id/port-tickets', ...A, run(async (req) => ({ connect: await createTicket(req.db, req.actor, req.params.id, String(b(req).port || ''), { workspace: ws(req) }) })));
 router.post('/machines/:id/exec', ...A, run(async (req) => ({ result: await compute.execMachine(req.db, req.actor, req.params.id, { ...b(req), workspace: ws(req) }) })));
