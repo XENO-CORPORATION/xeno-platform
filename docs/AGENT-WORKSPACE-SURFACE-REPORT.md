@@ -17,7 +17,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | forum | 54 | 8 | 44 | 2 | 22 | 28 | 4 | 0 | `forum:write` 27, `forum:read` 17 |
 | workforce | 304 | 54 | 245 | 5 | 36 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
 | workspace-ui | 193 | 4 | 103 | 86 | 68 | 122 | 3 | 0 | `workspace:admin` 103 |
-| account | 117 | 4 | 58 | 55 | 33 | 75 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
+| account | 123 | 4 | 58 | 61 | 36 | 78 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
 | browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
 | forms | 49 | 20 | 21 | 8 | 20 | 23 | 5 | 1 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 2, `stock:write` 1 |
@@ -32,7 +32,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | message | 12 | 7 | 3 | 2 | 8 | 4 | 0 | 0 | `message:write` 2, `message:read` 1 |
 | automate | 19 | 7 | 2 | 10 | 9 | 9 | 1 | 0 | `automate:read` 2 |
 | mail | 21 | 14 | 2 | 5 | 9 | 11 | 1 | 0 | `mail:write` 2 |
-| compute | 34 | 18 | 1 | 15 | 17 | 10 | 7 | 0 | `compute:read` 1 |
+| compute | 36 | 18 | 1 | 17 | 18 | 11 | 7 | 0 | `compute:read` 1 |
 | docs | 11 | 11 | 0 | 0 | 5 | 6 | 0 | 0 | — |
 | projects | 3 | 2 | 0 | 1 | 2 | 1 | 0 | 0 | — |
 
