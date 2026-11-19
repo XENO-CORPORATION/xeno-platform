@@ -173,6 +173,43 @@
       ? { enabled: a.enabled, machineId: a.machineId || null, state: a.state || null, lastActiveAt: a.lastActiveAt || null } : null });
   }
 
+  /**
+   * The Repo chip (owner, 2026-11-19): the frame asks for the repositories it can open on the cloud machine, asks to
+   * open one there, or asks for the address that connects GitHub. This page calls the platform as the person; the
+   * GitHub token for a repository goes from the platform to the machine and never through this page or the frame.
+   */
+  const REPO_STATE = /^[0-9a-f]{36}$/;
+  async function cloudReposForTheFrame(d, reply) {
+    const state = typeof d.state === 'string' && REPO_STATE.test(d.state) ? d.state : '';
+    if (!state) return;
+    const P = window.XENO_PLATFORM;
+    if (!P || !P.served) return reply({ type: 'xeno-remote:cloud-repos-list', state, list: null });
+    const r = await P.api('GET', '/api/compute/cloud-agent/repositories').catch(() => null);
+    const o = r && r.ok && r.d;
+    reply({ type: 'xeno-remote:cloud-repos-list', state, list: o ? { machine: o.machine, onMachine: o.onMachine || [], github: o.github || null, allowed: o.allowed || [] } : null,
+      ...(o ? {} : { error: (r && r.d && r.d.error) || 'The repositories could not be read.' }) });
+  }
+  async function openRepoForTheFrame(d, reply) {
+    const state = typeof d.state === 'string' && REPO_STATE.test(d.state) ? d.state : '';
+    if (!state) return;
+    const P = window.XENO_PLATFORM;
+    const repository = typeof d.repository === 'string' ? d.repository.slice(0, 400) : '';
+    if (!P || !P.served || !repository) return reply({ type: 'xeno-remote:cloud-repo-opened', state, repository: null, error: 'Opening a repository needs the XENO workspace.' });
+    const r = await P.api('POST', '/api/compute/cloud-agent/repositories', { repository }).catch(() => null);
+    const o = r && r.ok && r.d && r.d.repository;
+    reply({ type: 'xeno-remote:cloud-repo-opened', state, repository: o ? { path: o.path, fullName: o.fullName, existed: !!o.existed } : null,
+      ...(o ? {} : { error: (r && r.d && r.d.error) || 'The repository could not be opened.', code: (r && r.d && r.d.code) || '' }) });
+  }
+  async function githubConnectForTheFrame(d, reply) {
+    const state = typeof d.state === 'string' && REPO_STATE.test(d.state) ? d.state : '';
+    if (!state) return;
+    const P = window.XENO_PLATFORM;
+    if (!P || !P.served) return reply({ type: 'xeno-remote:github-connect-url', state, url: null });
+    const r = await P.api('POST', '/api/github/connect', {}).catch(() => null);
+    const url = r && r.ok && r.d && typeof r.d.url === 'string' && r.d.url.startsWith('https://github.com/') ? r.d.url : null;
+    reply({ type: 'xeno-remote:github-connect-url', state, url, ...(url ? {} : { error: (r && r.d && r.d.error) || 'GitHub could not be connected right now.' }) });
+  }
+
   // The frame says which view it shows, or asks for its sign-in code or a cloud session. Only its own origin and its own window are
   // listened to, and only messages of the known shapes are taken.
   addEventListener('message', (event) => {
@@ -182,6 +219,9 @@
     if (d && d.type === 'xeno-remote:look-wanted') { sendLook(true); return; }
     if (d && d.type === 'xeno-remote:cloud-status') { void cloudStandingForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:cloud') { void openCloudForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
+    if (d && d.type === 'xeno-remote:cloud-repos') { void cloudReposForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
+    if (d && d.type === 'xeno-remote:cloud-open-repo') { void openRepoForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
+    if (d && d.type === 'xeno-remote:github-connect') { void githubConnectForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:authorize') { void signInTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (!d || d.type !== 'xeno-remote:view' || typeof d.path !== 'string') return;
     const was = signedIn; signedIn = d.signedIn === true;

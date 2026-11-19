@@ -109,6 +109,60 @@ export async function ensureModelKey(db, actor, machineId, workspace, { now = Da
   return { minted: true };
 }
 
+/** The machine's repository commands (xeno-compute machine/agenthost/repo.mjs). */
+export const REPO_COMMAND = ['node', '/machine/agenthost/repo.mjs'];
+const CLONE_TIMEOUT_MS = 25 * 60_000;
+
+function parseAnswer(result) {
+  const line = String(result.stdout || '').trim().split(/\r?\n/).pop() || '';
+  try { const answer = JSON.parse(line); if (answer && typeof answer === 'object') return answer; } catch { /* said below */ }
+  throw new CloudAgentError('The machine did not answer about its repositories', 'repo_unreadable', 502);
+}
+
+/**
+ * The repositories on the person's Cloud machine, and the ones they allowed on GitHub. It starts nothing: a machine that
+ * is not running answers with GitHub's list alone (the picker is drawn before a session exists, owner 2026-11-15).
+ */
+export async function cloudRepositories(db, actor, { github = null } = {}) {
+  const personId = await personOf(actor);
+  if (!(await shellEnabledFor(db, personId))) throw new CloudAgentError('Cloud sessions are not open to your account yet', 'cloud_agent_not_enabled', 403);
+  const m = await machineOf(db, personId, null);
+  let onMachine = []; let machine = m ? m.state : 'none';
+  if (m && m.state === 'running') {
+    try {
+      const answer = parseAnswer(await compute.execMachine(db, actor, m.id, { argv: [...REPO_COMMAND, 'list'], timeoutMs: 30_000 }));
+      onMachine = answer.ok && Array.isArray(answer.repositories) ? answer.repositories.map((r) => ({ fullName: r.fullName, host: r.host, path: r.path, branch: r.branch, usedAt: r.usedAt })) : [];
+    } catch { machine = 'unreachable'; }
+  }
+  let allowed = []; let githubState = { configured: false, connected: false };
+  if (github) {
+    githubState = await github.githubStatus(db, actor);
+    if (githubState.connected) allowed = await github.listRepositories(db, actor);
+  }
+  return { machine, onMachine, github: { configured: githubState.configured, connected: githubState.connected, installations: githubState.installations || [] }, allowed };
+}
+
+/**
+ * Open a repository on the person's Cloud machine: clone it there once (or find it), and say where it is. A GitHub
+ * repository the person allowed is cloned with a token for that repository alone, which goes to git through the
+ * command's standard input and is gone when the command ends; anything else is cloned as the public would.
+ */
+export async function openCloudRepository(db, actor, { repository, github = null } = {}) {
+  const personId = await personOf(actor);
+  if (!(await shellEnabledFor(db, personId))) throw new CloudAgentError('Cloud sessions are not open to your account yet', 'cloud_agent_not_enabled', 403);
+  if (typeof repository !== 'string' || !repository.trim() || repository.length > 400) throw new CloudAgentError('Name a repository: owner/name or its address', 'invalid_repository');
+  const ws = String((await ensurePersonalWorkspace(db, personId)).id);
+  const existing = await machineOf(db, personId, ws);
+  const m = existing || await compute.createMachine(db, actor, { workspace: ws, name: 'Cloud Agent', size: 'small', purpose: 'cloud-agent', idempotencyKey: IDEMPOTENCY });
+  if ((existing ? existing.state : m.state) !== 'running') await compute.startMachine(db, actor, m.id, { workspace: ws });
+  const access = github ? await github.tokenForRepository(db, actor, repository) : null;
+  const result = await compute.execMachine(db, actor, m.id, { argv: [...REPO_COMMAND, 'open'], workspace: ws, timeoutMs: CLONE_TIMEOUT_MS,
+    stdin: JSON.stringify(access ? { repository, token: access.token } : { repository }) });
+  const answer = parseAnswer(result);
+  if (!answer.ok) throw new CloudAgentError(answer.message || 'The repository could not be opened', answer.code || 'clone_failed', answer.code === 'needs_access' ? 403 : 400);
+  return { machineId: m.id, repository: { fullName: answer.fullName, host: answer.host, path: answer.path, branch: answer.branch, existed: !!answer.existed, withAccess: !!access } };
+}
+
 /** Open a cloud session: find or create the person's machine, start it, give its host a model key, and hand back a one-use ticket for its `agent` port. */
 export async function openCloudAgent(db, actor, { createTicket } = {}) {
   const personId = await personOf(actor);
