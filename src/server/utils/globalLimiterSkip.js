@@ -10,6 +10,7 @@
  * The paths are FULL paths: the limiter is mounted on '/api/', where req.path has '/api' stripped, which is why
  * the health-check skip below never matched before.
  */
+import crypto from 'node:crypto';
 const SKIP = new Set([
   '/api/status', '/api/site-gate/check',
   // 🔴 OIDC (2026-10-27, measured by the CLI session): one busy client on a network spent the shared 200/min, and the
@@ -22,6 +23,26 @@ const SKIP = new Set([
   '/api/oauth2/.well-known/oauth-authorization-server',
   '/api/oauth2/token',
 ]);
+
+/**
+ * The service ledger (/api/v2/ledger/service, serviceLedgerRoutes.js) is called by the XENO API gateway with ONE
+ * service token, for every API user. The per-credential 300/min limiter therefore counted all of them as one person:
+ * on 2026-11-20 it refused 126 balance calls plus holds, settles and voids in 40 minutes, and a refused settle or void
+ * leaves a hold open. Per-account limits belong at the gateway, keyed by each user's API key.
+ *
+ * Only a call that presents the correct service token skips; anything else on the path still counts, so an
+ * unauthenticated client cannot use the path to bypass the limiter. Same constant-time compare as the router.
+ */
+export function isAuthenticatedLedgerServiceCall(req, expected = process.env.LEDGER_SERVICE_TOKEN) {
+  const fullPath = String(req?.baseUrl || '') + String(req?.path || '');
+  if (fullPath !== '/api/v2/ledger/service' && !fullPath.startsWith('/api/v2/ledger/service/')) return false;
+  if (!expected) return false;
+  const header = String(req?.headers?.authorization || '');
+  if (!header.startsWith('Bearer ')) return false;
+  const presented = Buffer.from(header.slice('Bearer '.length), 'utf8');
+  const wanted = Buffer.from(String(expected), 'utf8');
+  return presented.length === wanted.length && crypto.timingSafeEqual(presented, wanted);
+}
 
 export function globalLimiterSkips(fullPath) {
   return SKIP.has(String(fullPath || '').replace(/\/+$/, '')) || fullPath === '/health';

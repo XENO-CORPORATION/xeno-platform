@@ -228,7 +228,7 @@ import {
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
 import { rateLimitKey, requesterRateLimitKey } from './utils/clientIp.js';
-import { globalLimiterSkips, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
+import { globalLimiterSkips, isAuthenticatedLedgerServiceCall, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -394,7 +394,7 @@ const limiterBase = {
   validate: { ip: false }, // custom keys (CF-Connecting-IP) — skip the built-in req.ip validator
   message: { success: false, error: 'Too many requests, please try again later.' },
   // Mounted on '/api/', so req.path has '/api' stripped: compare the FULL path, or the skip never matches.
-  skip: (req) => globalLimiterSkips(req.baseUrl + req.path),
+  skip: (req) => globalLimiterSkips(req.baseUrl + req.path) || isAuthenticatedLedgerServiceCall(req),
 };
 const globalAddressCeiling = rateLimit({ ...limiterBase, max: 2000, keyGenerator: rateLimitKey });
 const globalLimiter = rateLimit({ ...limiterBase, max: 300, keyGenerator: requesterRateLimitKey });
