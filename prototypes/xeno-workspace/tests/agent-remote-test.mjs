@@ -179,6 +179,18 @@ try {
   await tellFrame('/pcs'); await settle(600);
   ok(where() === '/workspace/dev/apps/agent/pcs', 'the list of PCs has its own address too');
 
+  // the panel's Agents and Teams rows open the workspace's own screens (owner, 15 Nov 2026: "built based on the design of
+  // the XENO platform"); only those two fixed names, only from the agent's own frame
+  await fresh('/workspace/dev/apps/agent');
+  await p.evaluate((m) => window.postMessage(m, '*'), { type: 'xeno-remote:open-platform', screen: 'agents' }); await settle(400);
+  ok(where() === '/workspace/dev/apps/agent', `a request that is not from the frame opens nothing (${where()})`);
+  await ask({ type: 'xeno-remote:open-platform', screen: '../settings' }); await ask({ type: 'xeno-remote:open-platform', screen: 'Members' }); await settle(500);
+  ok(where() === '/workspace/dev/apps/agent', `a name that is not Agents or Teams opens nothing (${where()})`);
+  await ask({ type: 'xeno-remote:open-platform', screen: 'agents' }); await settle(800);
+  ok(/^\/workspace\/(?:[a-z]+\/)?workspace\/Agents$/.test(where()), `Agents opens the workspace's own Agents screen (${where()})`);
+  await fresh('/workspace/dev/apps/agent'); await ask({ type: 'xeno-remote:open-platform', screen: 'teams' }); await settle(800);
+  ok(/^\/workspace\/(?:[a-z]+\/)?workspace\/Teams$/.test(where()), `Teams opens the workspace's own Teams screen (${where()})`);
+
   ok(errs.length === 0, 'no page errors (' + JSON.stringify(errs.slice(0, 2)) + ')');
 } catch (e) { failed++; console.log('FAIL the suite threw:', e.message); } finally { await br.close(); await server.close(); remote.close(); }
 console.log(failed ? failed + ' check(s) failed' : 'ALL PASS'); process.exit(failed ? 1 : 0);

@@ -30,6 +30,9 @@
  *   --root <path>        Box repo path (default: /mnt/projects/xeno-platform).
  *   --allow-dirty        Skip the clean-worktree guard (NOT recommended).
  *   --rollback           Emergency: retag :rollback -> :latest and up -d (no build).
+ *   --build-here         Build the image on THIS machine from the same `git archive HEAD` bytes and ship the
+ *                        image; the box only loads, checks and swaps it (no compiler on production). The box
+ *                        refuses an image whose id differs from the one built here. Needs a local Docker.
  *
  * Examples:
  *   node scripts/deploy-platform.mjs backend                 # dry-run plan
@@ -50,6 +53,7 @@ import { dirname } from 'node:path';
 import { assertMainContained, readDirtyPaths } from './lib/deploy-source-guard.mjs';
 import { buildDeployRecord, prNumbersFromMerges, migrationsFromDiff } from './lib/deploy-record.mjs';
 import { collectNoteSources, ghPrText } from './lib/internal-note-sources.mjs';
+import { buildServiceImageHere } from './lib/local-image-build.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -88,6 +92,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--no-cache') opts.noCache = true;
   else if (a === '--allow-dirty') opts.allowDirty = true;
   else if (a === '--rollback') opts.rollback = true;
+  else if (a === '--build-here') opts.buildHere = true;
   else if (a === '--host') opts.host = argv[++i];
   else if (a === '--root') opts.root = argv[++i];
   else { console.error(`deploy: unknown arg: ${a}`); process.exit(2); }
@@ -134,7 +139,7 @@ const fullSha = git(['rev-parse', 'HEAD']);
 log(`${C.dim}────────────────────────────────────────────────────────${C.rst}`);
 log(`${C.cyn}xeno-platform deploy${C.rst}  services=${services.join('+')}  branch=${branch}  sha=${sha}`);
 log(`  host=${opts.host}  root=${opts.root}`);
-log(`  mode=${opts.rollback ? 'ROLLBACK' : opts.buildOnly ? 'build-only' : 'swap'}  ${opts.execute ? `${C.grn}EXECUTE${C.rst}` : `${C.yel}DRY-RUN${C.rst}`}${opts.noCache ? '  --no-cache' : ''}`);
+log(`  mode=${opts.rollback ? 'ROLLBACK' : opts.buildOnly ? 'build-only' : 'swap'}  ${opts.execute ? `${C.grn}EXECUTE${C.rst}` : `${C.yel}DRY-RUN${C.rst}`}${opts.noCache ? '  --no-cache' : ''}${opts.buildHere ? '  build-here' : ''}`);
 log(`${C.dim}────────────────────────────────────────────────────────${C.rst}`);
 
 // Emergency rollback path: no build, just flip images on the box.
@@ -225,13 +230,28 @@ try {
   run('scp', ['-q', remoteScript, `${opts.host}:${REMOTE_TMP}/remote-deploy.sh`]);
   ok('shipped');
 
+  // --build-here: production only loads and checks the image; nothing compiles on it.
+  const builtHere = new Map();
+  if (opts.buildHere) {
+    for (const s of services) {
+      step(`Building ${s} on this machine from ${sha}`);
+      const built = buildServiceImageHere({ stage, tarName: `deploy-${sha}.tar`, service: s, sha });
+      ok(`built xeno-platform-${s}:${sha} (${built.imageId.slice(0, 19)})`);
+      run('scp', ['-q', join(stage, built.imageFile), `${opts.host}:${REMOTE_TMP}/${built.imageFile}`]);
+      ok(`shipped ${built.imageFile}`);
+      builtHere.set(s, built);
+    }
+  }
+
   const mode = opts.buildOnly ? 'build-only' : 'swap';
   for (const s of services) {
     step(`Deploying ${s} (${mode})`);
+    const built = builtHere.get(s);
     const remoteCmd =
       `cd ${opts.root} && sudo bash ${REMOTE_TMP}/remote-deploy.sh ` +
       `--service ${s} --sha ${sha} --tar ${REMOTE_TMP}/deploy-${sha}.tar ` +
-      `--mode ${mode} --root ${opts.root}${opts.noCache ? ' --no-cache' : ''}`;
+      `--mode ${mode} --root ${opts.root}${opts.noCache ? ' --no-cache' : ''}` +
+      (built ? ` --image ${REMOTE_TMP}/${built.imageFile} --image-id ${built.imageId}` : '');
     const previousSha = mode === 'swap' ? lastRecordedSha(s) : null;
     const startedAt = Date.now();
     try {
@@ -255,7 +275,7 @@ try {
 } finally {
   if (remoteStageProvisioned) {
     const remoteTar = `${REMOTE_TMP}/deploy-${sha}.tar`;
-    const cleanup = spawnSync('ssh', [opts.host, `rm -f -- ${remoteTar}`], {
+    const cleanup = spawnSync('ssh', [opts.host, `rm -f -- ${remoteTar} ${REMOTE_TMP}/image-*-${sha}.tar`], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
       stdio: 'pipe',

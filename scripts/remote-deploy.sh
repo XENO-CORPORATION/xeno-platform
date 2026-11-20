@@ -34,6 +34,8 @@ TAR=""
 MODE="swap"
 ROOT="/mnt/projects/xeno-platform"
 NOCACHE=""
+IMAGE_TAR=""
+IMAGE_ID=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -43,6 +45,8 @@ while [ $# -gt 0 ]; do
     --mode)    MODE="$2"; shift 2 ;;
     --root)    ROOT="$2"; shift 2 ;;
     --no-cache) NOCACHE="--no-cache"; shift 1 ;;
+    --image)    IMAGE_TAR="$2"; shift 2 ;;
+    --image-id) IMAGE_ID="$2"; shift 2 ;;
     *) echo "remote-deploy: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -53,6 +57,10 @@ done
 case "$SERVICE" in backend|chat-workers|frontend) ;; *) echo "remote-deploy: --service must be backend|chat-workers|frontend" >&2; exit 2 ;; esac
 case "$MODE" in swap|build-only) ;; *) echo "remote-deploy: --mode must be swap|build-only" >&2; exit 2 ;; esac
 [ -f "$TAR" ] || { echo "remote-deploy: tar not found: $TAR" >&2; exit 2; }
+if [ -n "$IMAGE_TAR" ]; then
+  [ -f "$IMAGE_TAR" ] || { echo "remote-deploy: image not found: $IMAGE_TAR" >&2; exit 2; }
+  case "$IMAGE_ID" in sha256:[0-9a-f]*) ;; *) echo "remote-deploy: --image needs --image-id sha256:<id>" >&2; exit 2 ;; esac
+fi
 
 # --- 0. Preflight: the external network the backend joins -------------------
 # 🔴 The backend joins Web Context's own `frontend` network (docker-compose.yml) so chat
@@ -242,7 +250,21 @@ log "building $SERVICE ..."
 # measured 2026-09-09, xenostudio-backend carried no revision label and no
 # revision file, so "which commit is live" was unanswerable from the box — and
 # every post-deploy gate is a claim about a revision nobody can name.
-build_dc build $NOCACHE --build-arg "XENO_SOURCE_REVISION=$SHA" "$SERVICE"
+if [ -n "$IMAGE_TAR" ]; then
+  # Built on the release machine from the same archive (deploy-platform.mjs --build-here): this box only loads it.
+  # The content id must be the one built there, so a different image under the same name is refused.
+  docker load -i "$IMAGE_TAR" >/dev/null
+  LOADED_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:$SHA" 2>/dev/null || echo missing)"
+  if [ "$LOADED_ID" != "$IMAGE_ID" ]; then
+    log "loaded image $IMAGE:$SHA is $LOADED_ID, expected $IMAGE_ID — refusing"
+    if docker image inspect "$IMAGE:rollback" >/dev/null 2>&1; then docker tag "$IMAGE:rollback" "$IMAGE:latest"; fi
+    exit 1
+  fi
+  docker tag "$IMAGE:$SHA" "$IMAGE:latest"
+  log "loaded $IMAGE:$SHA built on the release machine ($LOADED_ID); nothing was compiled here"
+else
+  build_dc build $NOCACHE --build-arg "XENO_SOURCE_REVISION=$SHA" "$SERVICE"
+fi
 docker tag "$IMAGE:latest" "$IMAGE:$SHA" || true
 NEW_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE:latest" 2>/dev/null || echo unknown)"
 log "built $SERVICE -> $IMAGE:latest ($NEW_ID), also tagged :$SHA"
