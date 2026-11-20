@@ -69,9 +69,21 @@ export function buildServiceImageHere({ stage, tarName, service, sha }) {
   run('docker', ['compose', '--project-name', 'xeno-platform', '--env-file', 'build.env', '--project-directory', 'src', '-f', join('src', 'docker-compose.yml'),
     'build', '--build-arg', `XENO_SOURCE_REVISION=${sha}`, service], stage);
   const image = `xeno-platform-${service}`;
-  const imageId = execFileSync('docker', ['image', 'inspect', '--format', '{{.Id}}', `${image}:latest`], { encoding: 'utf8' }).trim();
   run('docker', ['tag', `${image}:latest`, `${image}:${sha}`], stage);
   const imageFile = `image-${service}-${sha}.tar`;
   run('docker', ['save', '-o', imageFile, `${image}:${sha}`], stage);
+  // The id the box will see after `docker load` is the image's CONFIG digest. Read it from the saved file itself:
+  // `docker image inspect .Id` on a containerd image store (Docker Desktop) is the manifest digest instead, so comparing
+  // that with the box's classic-store id refused a correct image on 2026-11-20 (the guard held; nothing was swapped).
+  const manifest = JSON.parse(execFileSync('tar', ['-xOf', imageFile, 'manifest.json'], { cwd: stage, encoding: 'utf8' }));
+  const imageId = configDigestOf(manifest);
   return { imageFile, imageId };
+}
+
+/** `sha256:<hex>` of the image config named in a `docker save` manifest.json (OCI `blobs/sha256/<hex>` or `<hex>.json`). */
+export function configDigestOf(manifest) {
+  const config = Array.isArray(manifest) && manifest.length === 1 ? String(manifest[0]?.Config ?? '') : '';
+  const hex = /(?:^|\/)([0-9a-f]{64})(?:\.json)?$/.exec(config)?.[1];
+  if (!hex) throw new Error(`cannot read the image config digest from the saved image (Config: ${config || 'missing'})`);
+  return `sha256:${hex}`;
 }
