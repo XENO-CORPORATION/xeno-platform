@@ -194,7 +194,7 @@ if (!opts.execute) {
     const gate = s === 'backend' ? '/api/ready'
       : s === 'chat-workers' ? 'internal /ready/semantic'
         : '/health';
-    log(`        -> tag :latest->:rollback, compose build ${s}, tag :${sha}${opts.buildOnly ? '' : `, up -d, gate on ${gate}, auto-rollback on fail`}`);
+    log(`        -> tag :latest->:rollback, ${opts.buildHere ? `load the image built here (refuse a different config digest)` : `compose build ${s}`}, tag :${sha}${opts.buildOnly ? '' : `, up -d, gate on ${gate}, auto-rollback on fail`}`);
   }
   warn('DRY-RUN — pass --execute to run it for real.');
   process.exit(0);
