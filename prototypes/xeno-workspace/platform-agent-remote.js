@@ -26,6 +26,8 @@
   /** The view an address or a message names, or '' for where the page opens (the person's cloud machine). Anything else is not a view of ours. */
   const viewOf = (text) => { const v = String(text || '').replace(/^\/+|\/+$/g, ''); return VIEW.test(v) ? v : ''; };
   const onAgent = () => { const s = X()?.S; return !!s && s.view === 'product' && s.product === 'agent'; };
+  /** The workspace screens the Agent panel may open, by the fixed name it sends: its own Agents and Teams pages. */
+  const PLATFORM_SCREENS = Object.freeze({ agents: 'Agents', teams: 'Teams' });
   const here = () => (onAgent() ? viewOf(X().S.item) : '');
 
   const style = document.createElement('style');
@@ -223,6 +225,9 @@
     if (d && d.type === 'xeno-remote:cloud-open-repo') { void openRepoForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:github-connect') { void githubConnectForTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
     if (d && d.type === 'xeno-remote:authorize') { void signInTheFrame(d, (m) => { try { frame.contentWindow.postMessage(m, ORIGIN()); } catch {} }); return; }
+    // The Agent panel's Agents and Teams rows open the workspace's own screens, in its own design (owner, 15 Nov 2026: "the
+    // interface for them needs to be built based on the design of the XENO platform"). Only a fixed name is accepted.
+    if (d && d.type === 'xeno-remote:open-platform') { const item = PLATFORM_SCREENS[d.screen]; if (item && onAgent()) X().go('global', { global: 'workspace', item }); return; }
     if (!d || d.type !== 'xeno-remote:view' || typeof d.path !== 'string') return;
     const was = signedIn; signedIn = d.signedIn === true;
     const view = viewOf(d.path);

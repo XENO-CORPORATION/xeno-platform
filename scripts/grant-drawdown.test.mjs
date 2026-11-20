@@ -16,8 +16,9 @@ function ledgerFixture(kinds, cost) {
     if (sql.startsWith("SELECT to_jsonb(a)->>'owner_kind'")) return { rows: [{ owner_kind: 'user' }] };
     if (sql.startsWith('SELECT to_regclass')) return { rows: [{ relation: null }] };
     if (sql.startsWith('SELECT grant_id')) return { rows: [] };
-    if (sql.includes('AS reserved')) return { rows: [{reserved:'0'}] };
+    // The lots query (SELECT g.id ...) also contains 'AS reserved' in its join since #1187, so it is matched first.
     if (sql.startsWith('SELECT g.id')) return { rows: lots.map(row=>({...row,available:row.remaining_micro})) };
+    if (sql.includes('AS reserved')) return { rows: [{reserved:'0'}] };
     if (sql.startsWith('UPDATE credit_grants SET remaining_micro=')) {
       const lot=lots.find(row=>row.id===params[1]);
       lot.remaining_micro=String(BigInt(lot.remaining_micro)-BigInt(params[0])); writes.push(lot.id);return {rows:[{id:lot.id}]};
