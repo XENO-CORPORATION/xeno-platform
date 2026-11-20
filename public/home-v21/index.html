@@ -358,9 +358,9 @@ input[type=range]{accent-color:#D9D9D9;}
               </div>
             </div>
             <sc-for list="{{ mfBeliefs }}" as="mb" hint-placeholder-count="3"><div data-mfb="{{ mb.i }}" style="position:{{ mfLP }};top:0;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:clamp(28px,4vw,72px);align-items:center;opacity:{{ mfOp0 }}">
-              <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+              <div style="display:flex;flex-direction:column;gap:20px;min-width:0;container-type:inline-size">
                 <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--acc)">{{ mb.n }} / 03</span>
-                <h3 aria-label="{{ mb.t }}" style="margin:0;display:flex;flex-wrap:wrap;font-family:var(--h-ff);font-weight:var(--h-fw);font-size:clamp(48px,6.6vw,120px);line-height:.92;letter-spacing:-.055em;color:var(--ged)"><sc-for list="{{ mb.words }}" as="bw" hint-placeholder-count="0"><span aria-hidden="true" style="display:inline-block;overflow:hidden;white-space:nowrap;padding-bottom:.1em;margin-right:.22em"><span data-bw="1" style="display:inline-block">{{ bw }}</span></span></sc-for></h3>
+                <h3 aria-label="{{ mb.t }}" style="margin:0;display:flex;flex-wrap:wrap;font-family:var(--h-ff);font-weight:var(--h-fw);font-size:min(clamp(48px,6.6vw,120px),17cqi);line-height:.92;letter-spacing:-.055em;color:var(--ged)"><sc-for list="{{ mb.words }}" as="bw" hint-placeholder-count="0"><span aria-hidden="true" style="display:inline-block;overflow:hidden;white-space:nowrap;padding-bottom:.1em;margin-right:.22em"><span data-bw="1" style="display:inline-block">{{ bw }}</span></span></sc-for></h3>
                 <p style="margin:0;max-width:460px;font-size:clamp(16px,1.35vw,20px);line-height:1.55;color:var(--gab);text-wrap:pretty">{{ mb.d }}</p>
               </div>
               <div style="display:flex;justify-content:center;min-width:0">
