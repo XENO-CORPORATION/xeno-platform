@@ -741,6 +741,9 @@ app.use('/api/site-gate', databaseMiddleware, siteGateRoutes);
 // MCP discovery (RFC 9728 protected-resource metadata; RFC 8414 authorization-server metadata) at the site root
 app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/api/tasks/mcp'], protectedResourceMetadata);
 app.get('/.well-known/oauth-authorization-server', (req, res) => res.json(oidcDiscovery(issuerForHost(req.headers.host))));
+// OIDC Discovery 1.0 §4 at the issuer's own root (nginx `location = /.well-known/openid-configuration`). Same document as
+// /api/oauth2/.well-known/openid-configuration; a verifier that discovers keys from `iss` (Lore) needs this one.
+app.get('/.well-known/openid-configuration', (req, res) => res.json(oidcDiscovery(issuerForHost(req.headers.host))));
 // The Tasks REST contract is public: a document with no data in it, so native clients can check their schemas
 // against it in CI without a credential.
 app.get('/api/tasks/openapi.json', (req, res) => { res.set('cache-control', 'public, max-age=300'); res.json(TASKS_OPENAPI); });

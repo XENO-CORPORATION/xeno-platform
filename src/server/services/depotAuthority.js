@@ -21,7 +21,10 @@
  * sign-in session takes effect on Depot's next request without anything having to propagate it.
  */
 import crypto from 'node:crypto';
-import { DEPOT_AUDIENCE, DEPOT_SCOPES, getClient, verifyDepotAccessToken } from '../utils/oidcProvider.js';
+import jwt from 'jsonwebtoken';
+import {
+  ACCESS_TOKEN_TYP, DEPOT_AUDIENCE, DEPOT_SCOPES, getClient, getSigningKey, verifyDepotAccessToken,
+} from '../utils/oidcProvider.js';
 import { rightsOf } from './agentAccess.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { isStaffPrincipal, loadProductPolicy, evaluateProductAccess } from './productAccess.js';
@@ -186,16 +189,129 @@ export async function revokeAgentCredential(db, me, credentialId) {
   return { id: String(row.id), revoked: true };
 }
 
+// ── RFC 8693 token exchange for Lore (decision 0001 §3, amended: Lore v0.14.0 verifies at+jwt itself) ───────────
+//
+// Lore's server checks our JWTs natively (jwt_issuer, jwt_audience ["xeno-depot"], jwt_typ "at+jwt") and enforces
+// per-repo grants carried IN the token (resource_claim "depot_resources", resource_id_template "depot-{id}"), so the
+// Lore protocol path needs no call back here. Its client exchanges per repository ("partition"):
+//   subject_token_type …:access_token  + resource=<DEPOT_ORIGIN>/repos/<repo id>  → a token for that ONE repo
+//   subject_token_type urn:lore:params:oauth:token-type:api-key (an xdp_ credential), no resource
+//                                                                                → the agent's own session token,
+//                                                                                  which is then exchanged per repo
+// The grants are read from relationship_tuples AT EXCHANGE TIME and the token lives at most 15 minutes, so a revoked
+// grant, a closed door or a suspension takes effect on the next exchange. Mapping (XO - DEPOT, from Lore's source):
+// read → [] (any entry implies read) · write, lock → write · merge → write, push-protected · review → none (Depot
+// REST only) · admin → write, push-protected, owner, admin, migrate, presign. `obliterate` (destroying history) is
+// never put in a token: it is irreversible and stays a deliberate operator act.
+export const LORE_API_KEY_TOKEN_TYPE = 'urn:lore:params:oauth:token-type:api-key';
+const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
+export const DEPOT_TOKEN_SECONDS = 900;
+const LORE_ACTIONS = Object.freeze({
+  read: [], write: ['write'], lock: ['write'], review: [], merge: ['write', 'push-protected'],
+  admin: ['write', 'push-protected', 'owner', 'admin', 'migrate', 'presign'],
+});
+export function loreActions(permissions) {
+  return [...new Set([...permissions].flatMap((p) => LORE_ACTIONS[p] || []))].sort();
+}
+export function depotOrigin(env = process.env) {
+  const o = String(env.XENO_DEPOT_ORIGIN || 'https://depot.xenosystem.ai').replace(/\/+$/, '');
+  try { const u = new URL(o); if (u.protocol === 'https:' && u.origin === o) return o; } catch { /* fall through */ }
+  throw new Error('XENO_DEPOT_ORIGIN must be an https origin');
+}
+const exchangeError = (error, description, statusCode = 400) => Object.assign(new Error(description), { oauthError: error, statusCode });
+
+/** Does this token-endpoint request belong to Depot? Decided before the platform's own (DPoP) exchange runs. */
+export function isDepotExchange(body = {}, env = process.env) {
+  if (body.subject_token_type === LORE_API_KEY_TOKEN_TYPE) return true;
+  if (typeof body.resource === 'string' && body.resource.startsWith(`${depotOrigin(env)}/`)) return true;
+  if (body.audience === DEPOT_AUDIENCE) return true;
+  try { const aud = jwt.decode(String(body.subject_token || ''))?.aud; return Array.isArray(aud) ? aud.includes(DEPOT_AUDIENCE) : aud === DEPOT_AUDIENCE; }
+  catch { return false; }
+}
+
+/** The actor behind an exchange subject: an xdp_ credential, a Depot sign-in, or an agent session token minted from an
+ *  xdp_ credential (whose credential is checked again). A token minted for ONE repo is never a subject. */
+async function actorForSubject(db, { subjectToken, subjectTokenType }) {
+  if (subjectTokenType === LORE_API_KEY_TOKEN_TYPE) {
+    const a = await actorForCredential(db, subjectToken);
+    if (!a) throw exchangeError('invalid_grant', 'the credential is unknown, revoked or expired');
+    return a;
+  }
+  if (subjectTokenType !== ACCESS_TOKEN_TYPE) throw exchangeError('invalid_request', 'unsupported subject_token_type');
+  let payload;
+  try { payload = await verifyDepotAccessToken(db, String(subjectToken || '')); } catch { payload = null; }
+  if (!payload) throw exchangeError('invalid_grant', 'the subject token is not a valid XENO Depot token');
+  if (payload.depot_resources !== undefined) throw exchangeError('invalid_grant', 'a token for one repo cannot be exchanged again');
+  if (payload.xdp_cred) {
+    const row = (await db.query(`SELECT agent_user_id, scopes FROM depot_agent_credentials
+      WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`, [String(payload.xdp_cred)])).rows[0];
+    if (!row || String(row.agent_user_id) !== String(payload.sub)) throw exchangeError('invalid_grant', 'the credential behind this token is no longer valid');
+    const principal = await resolvePrincipal(db, row.agent_user_id);
+    if (!principal || principal.kind !== 'agent') throw exchangeError('invalid_grant', 'the agent is gone');
+    return { principal, accountableId: String(principal.owner.id), via: 'agent', clientId: null,
+      scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)), expiresAt: Number(payload.exp) * 1000, credentialId: String(payload.xdp_cred) };
+  }
+  try { return await actorForToken(db, payload); } catch { throw exchangeError('invalid_grant', 'the subject token is not a valid XENO Depot token'); }
+}
+
+/**
+ * The exchange. Returns the RFC 8693 response. `iss` is the token endpoint's own issuer (oauth2Routes issuerForHost),
+ * which must equal Lore's configured jwt_issuer and serve discovery at <iss>/.well-known/openid-configuration.
+ */
+export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, resource, iss, env = process.env }) {
+  const origin = depotOrigin(env);
+  const actor = await actorForSubject(db, { subjectToken, subjectTokenType });
+  const door = await doorFor(db, actor);
+  if (!door.allowed) throw exchangeError('access_denied', door.message || 'XENO Depot is not open to this account', 403);
+  const claims = {};
+  let scope = actor.scopes;
+  if (resource !== undefined && resource !== null && resource !== '') {
+    const m = new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/repos/([^/?#]+)$`).exec(String(resource));
+    if (!m) throw exchangeError('invalid_target', `resource must be ${origin}/repos/<repo id>`);
+    let id;
+    try { id = repoIdOf(m[1]); } catch { throw exchangeError('invalid_target', 'not a Depot repo id'); }
+    const workspaceId = await repoWorkspace(db, id);
+    const perms = workspaceId ? await effectivePermissions(db, actor, id, workspaceId) : new Set();
+    if (!perms.has('read')) throw exchangeError('invalid_target', 'no access to that repo');   // never confirms the repo exists
+    claims.depot_resources = [{ resource_id: `depot-${id}`, permission: loreActions(perms) }];
+  } else if (subjectTokenType === LORE_API_KEY_TOKEN_TYPE) {
+    claims.xdp_cred = actor.credentialId;                       // the agent's session token; exchanged again per repo
+  } else {
+    throw exchangeError('invalid_target', `resource is required: ${origin}/repos/<repo id>`);
+  }
+  const p = actor.principal;
+  const now = Math.floor(Date.now() / 1000);
+  const subjectExp = actor.expiresAt ? Math.floor(actor.expiresAt / 1000) : now + DEPOT_TOKEN_SECONDS;
+  const expiresIn = Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);
+  if (expiresIn <= 0) throw exchangeError('invalid_grant', 'the subject has expired');
+  const sourcePayload = subjectTokenType === ACCESS_TOKEN_TYPE ? jwt.decode(String(subjectToken)) : null;
+  const key = await getSigningKey(db);
+  const token = jwt.sign({
+    iss, iat: now, sub: String(p.id), aud: [DEPOT_AUDIENCE],
+    // Lore records `identity` as creator and lock owner: the stable account id, never a display name (a rename must not
+    // orphan a lock). For an agent it is the agent's own account id; the person who answers for it is `act`.
+    identity: String(p.id),
+    ...(p.kind === 'agent' ? { act: { sub: actor.accountableId } } : {}),
+    root_domains: [new URL(origin).hostname],                   // Lore's anti-exfiltration check (fixed claim name)
+    scope: scope.join(' '), typ: ACCESS_TOKEN_TYP, jti: crypto.randomUUID(),
+    ...(actor.clientId ? { client_id: actor.clientId, azp: actor.clientId } : {}),
+    ...(sourcePayload?.sid ? { sid: sourcePayload.sid, auth_epoch: sourcePayload.auth_epoch, auth_time: sourcePayload.auth_time } : {}),
+    ...claims,
+  }, key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } });
+  return { access_token: token, issued_token_type: ACCESS_TOKEN_TYPE, token_type: 'Bearer', expires_in: expiresIn, scope: scope.join(' ') };
+}
+
 export async function verifyToken(db, token) {
   if (String(token || '').startsWith('xdp_')) {
     const actor = await actorForCredential(db, token);
     if (!actor) throw new DepotAuthorityError('invalid_token', 401);
     return actor;
   }
-  let payload;
-  try { payload = await verifyDepotAccessToken(db, String(token || '')); } catch { payload = null; }
-  if (!payload) throw new DepotAuthorityError('invalid_token', 401);
-  return actorForToken(db, payload);
+  // A JWT: a Depot sign-in, or an agent session token from an xdp_ exchange (its credential checked again). A token minted
+  // for ONE repo is Lore's, and is refused here as it is as an exchange subject.
+  try { return await actorForSubject(db, { subjectToken: token, subjectTokenType: ACCESS_TOKEN_TYPE }); } catch {
+    throw new DepotAuthorityError('invalid_token', 401);
+  }
 }
 
 /** The door: is this principal let into Depot at all (product_access_policy 'depot'). Fails closed on no row. */

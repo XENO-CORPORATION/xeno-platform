@@ -13,6 +13,13 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 Proof: `node tests/depot-authority.test.mjs` on real Postgres, with tokens from the real code exchange and the real client seed; 7 of 7 mutations caught (scope ceiling, staff door, unreadable repo, last admin, mixed scopes, seed audience, stale principal).
 
+**XENO Depot's Lore server checks our tokens itself, with no call back here.** Lore v0.14.0 verifies `at+jwt` tokens and reads each repository's grants from inside the token (Depot decision 0001 §3, amended; the claim format is XO - DEPOT's reading of Lore's source).
+- **The exchange.** The token endpoint does RFC 8693 for Depot: a Depot sign-in plus `resource=https://depot.xenosystem.ai/repos/<id>` becomes a token for that one repository (at most 15 minutes, `depot_resources` in Lore's format, `root_domains`, `identity` = the account id). An `xdp_` credential (`subject_token_type urn:lore:params:oauth:token-type:api-key`) becomes the agent's session token, which is then exchanged per repository the same way.
+- **Read at exchange time.** Grants come from the repo's grants when each token is made, so a revoked grant, a closed door, a suspension or a revoked credential takes effect at the next exchange.
+- **Never handed out.** A token for one repository can't be exchanged again or used at Depot's gate. `obliterate` (destroying history) is never put in a token.
+- **Separate from the platform's exchange.** Depot exchanges never reach the platform's DPoP-bound exchange, and the reverse.
+- **Discovery at the issuer.** OIDC discovery is now served at `https://xenostudio.ai/.well-known/openid-configuration`, where the standard says it lives (`<issuer>/.well-known/openid-configuration`). That path used to return the website's HTML, so no standard verifier could find our keys. Pinned by `scripts/oidc-discovery-root.test.mjs`, which fails without the nginx rule.
+
 **Headless agents can use XENO Depot with their own credential.** A build agent such as Runner has no browser to sign in with (Depot decisions 0001 §3, 0002 §2). Its person issues it an `xdp_` credential at `POST /api/depot/credentials` (and lists or revokes it there). The secret is shown once; the platform keeps only its fingerprint. With it the agent acts as itself: its own repo grants, capped by its owner's and by the credential's scopes (`depot:read` by default). Only a person who manages the agent can issue or revoke one, and an agent never can. Revoking or expiry takes effect on Depot's next request. Proof: the same suite on real Postgres, now 11 of 11 mutations caught (adding: secret not compared, revocation ignored, an agent issuing, scopes ignored).
 
 ## 2026-11-20

@@ -225,6 +225,64 @@ async function main() {
   await assert.rejects(pool.query(CREDENTIALS_DOWN), /live credentials exist/);                             // DOWN refuses while one is live
   await depot.revokeAgentCredential(pool, me, live.id);
 
+  // ── 7c. RFC 8693 exchange for Lore: a short at+jwt carrying ONE repo's grants, read at exchange time.
+  const ISS = (await import('../config/hosts.js')).issuer();   // the route passes issuerForHost(): a KNOWN issuer, or our own verifier refuses the token later
+  const AT = 'urn:ietf:params:oauth:token-type:access_token';
+  const KEYT = depot.LORE_API_KEY_TOKEN_TYPE;
+  const R = (id) => `https://depot.xenosystem.ai/repos/${id}`;
+  const exchange = (over) => depot.depotExchangeGrant(pool, { iss: ISS, subjectTokenType: AT, ...over });
+  const oauthRefusal = (p, code) => assert.rejects(p, (e) => { assert.equal(e.oauthError, code, `expected ${code}, got ${e.oauthError}: ${e.message}`); return true; });
+  const decode = (t) => { const [h, b] = t.split('.'); return { header: JSON.parse(Buffer.from(h, 'base64url')), claims: JSON.parse(Buffer.from(b, 'base64url')) }; };
+
+  const full = await exchange({ subjectToken: staffTok, resource: R('build') });
+  assert.deepEqual([full.token_type, full.issued_token_type], ['Bearer', AT]);
+  const fc = decode(full.access_token);
+  assert.equal(fc.header.typ, 'at+jwt'); assert.equal(fc.claims.typ, 'at+jwt');
+  assert.deepEqual([fc.claims.iss, fc.claims.aud, fc.claims.sub, fc.claims.identity], [ISS, ['xeno-depot'], u.staff, u.staff]);
+  assert.deepEqual(fc.claims.root_domains, ['depot.xenosystem.ai']);
+  assert.ok(fc.claims.exp - fc.claims.iat <= 900, 'at most 15 minutes');
+  assert.deepEqual(fc.claims.depot_resources, [{ resource_id: 'depot-build', permission: ['admin', 'migrate', 'owner', 'presign', 'push-protected', 'write'] }]);
+  assert.ok(!JSON.stringify(fc.claims).includes('obliterate'), 'destroying history is never in a token');
+  assert.ok(fc.claims.sid, 'tied to the sign-in session, so signing out ends it');
+  // the minted token is a valid Depot token by the platform's own verifier, yet the gate refuses it: it is Lore's
+  await refusal(depot.verifyToken(pool, full.access_token), 'invalid_token');
+  await oauthRefusal(exchange({ subjectToken: full.access_token, resource: R('build') }), 'invalid_grant');   // no chaining
+  // the scope ceiling travels into the token: a depot:read sign-in gets read only (an entry with no actions)
+  const ro = decode((await exchange({ subjectToken: (await signIn(u.staff, 'xeno-depot-cli', 'openid depot:read')), resource: R('build') })).access_token);
+  assert.deepEqual(ro.claims.depot_resources, [{ resource_id: 'depot-build', permission: [] }]);
+  await oauthRefusal(exchange({ subjectToken: staffTok }), 'invalid_target');                            // a Depot sign-in names its repo
+  await oauthRefusal(exchange({ subjectToken: staffTok, resource: 'https://evil.test/repos/build' }), 'invalid_target');
+  await oauthRefusal(exchange({ subjectToken: staffTok, resource: R('../x') }), 'invalid_target');
+  await oauthRefusal(exchange({ subjectToken: stranger === null ? '' : (await signIn(u.outsider, 'xeno-depot-cli', ALL)), resource: R('build') }), 'invalid_target');   // can't read: never confirmed
+  await oauthRefusal(exchange({ subjectToken: pixelTok, resource: R('build') }), 'invalid_grant');          // a platform token is not a subject
+  await oauthRefusal(exchange({ subjectToken: staffTok, subjectTokenType: 'urn:x', resource: R('build') }), 'invalid_request');
+
+  // xdp_: the credential becomes the agent's session token, which is exchanged per repo; revoking it ends both
+  const agentCred = await depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['depot:write'] });
+  const session = await exchange({ subjectToken: agentCred.token, subjectTokenType: KEYT });
+  const sc = decode(session.access_token).claims;
+  assert.deepEqual([sc.sub, sc.identity, sc.act, sc.xdp_cred, sc.depot_resources], [u.robot, u.robot, { sub: u.staff }, agentCred.id, undefined]);
+  const agentRepo = decode((await exchange({ subjectToken: session.access_token, resource: R('build') })).access_token).claims;
+  assert.deepEqual(agentRepo.depot_resources, [{ resource_id: 'depot-build', permission: ['push-protected', 'write'] }]);   // its own merge grant, under depot:write
+  assert.equal((await depot.verifyToken(pool, session.access_token)).credentialId, agentCred.id);          // the gate reads the session too
+  await depot.revokeAgentCredential(pool, me, agentCred.id);
+  await oauthRefusal(exchange({ subjectToken: session.access_token, resource: R('build') }), 'invalid_grant');
+  await oauthRefusal(exchange({ subjectToken: agentCred.token, subjectTokenType: KEYT }), 'invalid_grant');
+  await refusal(depot.verifyToken(pool, session.access_token), 'invalid_token');
+
+  // live: the door and a suspension are read at exchange time
+  await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [u.staff]);
+  await oauthRefusal(exchange({ subjectToken: staffTok, resource: R('build') }), 'access_denied');
+  await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [u.staff]);
+  assert.ok((await exchange({ subjectToken: staffTok, resource: R('build') })).access_token);
+
+  // dispatch: Depot's exchanges never fall into the platform's DPoP-bound one, and the platform's never into Depot's
+  assert.equal(depot.isDepotExchange({ subject_token_type: KEYT }), true);
+  assert.equal(depot.isDepotExchange({ subject_token: staffTok, subject_token_type: AT }), true);
+  assert.equal(depot.isDepotExchange({ resource: R('x') }), true);
+  assert.equal(depot.isDepotExchange({ subject_token: pixelTok, subject_token_type: AT, resource: 'https://api.xenostudio.ai' }), false);
+  assert.deepEqual(depot.loreActions(new Set(['read', 'review'])), []);
+
   // ── 8. The door policy is data: no row closes Depot; the DOWN refuses while another product uses 'staff'.
   await pool.query("INSERT INTO product_access_policy (product, access) VALUES ('other', 'staff')");
   await assert.rejects(pool.query(DOWN), /another product uses the staff access level/);

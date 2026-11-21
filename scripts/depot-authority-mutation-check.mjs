@@ -33,7 +33,21 @@ const MUTANTS = [
   ['an agent issues credentials', 'src/server/services/depotAuthority.js',
     "if (!me || me.kind !== 'human') throw new DepotAuthorityError('not_allowed', 403, 'only a person issues an agent credential');", ''],
   ['xdp_ scopes ignored', 'src/server/services/depotAuthority.js',
-    'scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)),', 'scopes: [...DEPOT_SCOPES],'],
+    'scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)), expiresAt: new Date(row.expires_at).getTime(), credentialId: String(row.id) };',
+    'scopes: [...DEPOT_SCOPES], expiresAt: new Date(row.expires_at).getTime(), credentialId: String(row.id) };'],
+  ['exchange: obliterate granted', 'src/server/services/depotAuthority.js',
+    "admin: ['write', 'push-protected', 'owner', 'admin', 'migrate', 'presign'],", "admin: ['write', 'push-protected', 'owner', 'admin', 'migrate', 'presign', 'obliterate'],"],
+  ['exchange: repo token re-exchanged', 'src/server/services/depotAuthority.js',
+    "if (payload.depot_resources !== undefined) throw exchangeError('invalid_grant', 'a token for one repo cannot be exchanged again');", ''],
+  ['exchange: door not checked', 'src/server/services/depotAuthority.js',
+    "if (!door.allowed) throw exchangeError('access_denied',", "if (false) throw exchangeError('access_denied',"],
+  ['exchange: revoked credential session accepted', 'src/server/services/depotAuthority.js',
+    'WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`, [String(payload.xdp_cred)])', 'WHERE id = $1`, [String(payload.xdp_cred)])'],
+  ['exchange: any resource host', 'src/server/services/depotAuthority.js',
+    "const m = new RegExp(`^${origin.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}/repos/([^/?#]+)$`).exec(String(resource));",
+    "const m = /\\/repos\\/([^/?#]+)$/.exec(String(resource));"],
+  ['exchange: lifetime not capped', 'src/server/services/depotAuthority.js',
+    'const expiresIn = Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);', 'const expiresIn = 3600;'],
 ];
 
 async function freshDb(name) {

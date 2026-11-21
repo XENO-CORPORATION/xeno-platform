@@ -10,6 +10,7 @@
  * recorded as an authorization_code row.
  */
 import { CONNECT_AUDIENCE, connectExchangeGrant } from '../services/connectAuthority.js';
+import { depotExchangeGrant, isDepotExchange } from '../services/depotAuthority.js';
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { issuer, issuerForHost } from '../config/hosts.js';
@@ -421,6 +422,13 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
   // The provider this token endpoint belongs to: the tokens it mints carry its issuer (config/hosts.js).
   const iss = issuerForHost(req.headers.host);
   try {
+    if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange' && isDepotExchange(b)) {
+      // XENO Depot (services/depotAuthority.js): Lore's client exchanges a Bearer Depot token, or an xdp_ credential,
+      // for a short token carrying one repo's grants. Its own rules; never the platform's DPoP-bound exchange below.
+      return res.json(await depotExchangeGrant(req.db, {
+        subjectToken: b.subject_token, subjectTokenType: b.subject_token_type, resource: b.resource, iss,
+      }));
+    }
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {
       const auth = /^DPoP\s+(.+)$/i.exec(String(req.headers.authorization || ''));
       if (!auth || auth[1] !== b.subject_token) {
