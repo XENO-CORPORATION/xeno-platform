@@ -16,12 +16,19 @@
  *   HEAD /workspaces/:wid/objects/:hash
  *   DELETE /workspaces/:wid/objects/:hash  Depot decided nothing references it; 200 removed · 404 nothing there
  *   POST /workspaces/:wid/objects/exists  { hashes: [...] } → { present: { hash: { size, meta } }, absent: [...] }
- *   GET  /workspaces/:wid/usage            { usedBytes, allowanceBytes, depotBytes, objects }
+ *   POST /workspaces/:wid/objects/urls     { hashes: [...], ttl?: ≤300 } → { urls: { hash: { url, size, sha256, meta } }, absent, expiresAt }
+ *                                          URLs on the objects host (objects.xenosystem.ai); 503 when DEPOT_OBJECT_URL_KEY is unset
+ *   POST /workspaces/:wid/objects/upload-urls  { objects: [{ hash, size, sha256, meta }] } → { urls, present, conflicts, expiresAt }
+ *                                          signed PUT URLs on the objects host: bytes go client → edge → R2, never through here
+ *   POST /workspaces/:wid/objects/commit   { objects: [{ hash, size, sha256, meta, receipt }] } → { committed, existing, conflicts }
+ *                                          records what the objects host stored (receipt verified), one room check per batch
+ *   GET  /workspaces/:wid/usage      { usedBytes, allowanceBytes, depotBytes, objects }
  */
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  putDepotObject, getDepotObject, headDepotObject, depotObjectsExist, depotUsage, deleteDepotObject,
+  putDepotObject, getDepotObject, headDepotObject, depotObjectsExist, depotUsage, deleteDepotObject, signDepotObjectUrls,
+  signDepotUploadUrls, commitDepotObjects, depotAllowance,
   assertWorkspaceId, MAX_DEPOT_OBJECT_BYTES,
 } from '../services/storageDepotObjects.js';
 import { workspaceUsedBytes, workspaceStorageAllowance, storageUsage } from '../services/storageAllowance.js';
@@ -126,17 +133,34 @@ export function createStorageDepotServiceRouter({ env = process.env, store } = {
     catch (error) { sendErr(res, error); }
   });
 
+  router.post('/workspaces/:wid/objects/urls', express.json({ limit: '256kb' }), async (req, res) => {
+    try { res.json(await signDepotObjectUrls(req.db, { workspaceId: req.params.wid, hashes: req.body?.hashes, ttlSeconds: req.body?.ttl ?? undefined }, { env })); }
+    catch (error) { sendErr(res, error); }
+  });
+
+  router.post('/workspaces/:wid/objects/upload-urls', express.json({ limit: '1mb' }), async (req, res) => {
+    try { res.json(await signDepotUploadUrls(req.db, { workspaceId: req.params.wid, objects: req.body?.objects, ttlSeconds: req.body?.ttl ?? undefined }, { env })); }
+    catch (error) { sendErr(res, error); }
+  });
+
+  router.post('/workspaces/:wid/objects/commit', express.json({ limit: '1mb' }), async (req, res) => {
+    try { res.json(await commitDepotObjects(req.db, { workspaceId: req.params.wid, objects: req.body?.objects }, { env, ...opts })); }
+    catch (error) { sendErr(res, error); }
+  });
+
+  // usedBytes/allowanceBytes: the plan pool. depotAllowanceBytes: the workspace's own Depot cap (null = Depot counts in the pool).
   router.get('/workspaces/:wid/usage', async (req, res) => {
     try {
       const workspaceId = req.params.wid;
       const scope = await ownerScopeOf(req.db, { workspaceId });
-      const depot = await depotUsage(req.db, workspaceId);
+      const [depot, depotAllowanceBytes] = await Promise.all([depotUsage(req.db, workspaceId), depotAllowance(req.db, workspaceId)]);
+      const depotFields = { depotBytes: depot.bytes, objects: depot.objects, depotAllowanceBytes };
       if (scope.personal) {
         const u = await storageUsage(req.db, scope.accountableUserId);
-        return res.json({ usedBytes: u.usedBytes, allowanceBytes: u.allowanceBytes, depotBytes: depot.bytes, objects: depot.objects });
+        return res.json({ usedBytes: u.usedBytes, allowanceBytes: u.allowanceBytes, ...depotFields });
       }
       const [usedBytes, allowanceBytes] = await Promise.all([workspaceUsedBytes(req.db, workspaceId), workspaceStorageAllowance(req.db, workspaceId)]);
-      res.json({ usedBytes, allowanceBytes, depotBytes: depot.bytes, objects: depot.objects });
+      res.json({ usedBytes, allowanceBytes, ...depotFields });
     } catch (error) { sendErr(res, error); }
   });
 

@@ -141,6 +141,9 @@ services:
       - DEPOT_SERVICE_TOKEN=${DEPOT_SERVICE_TOKEN:-}
       # XENO Depot's object store on XENO Storage (routes/storageDepotServiceRoutes.js). Bearer for Depot's server; unset = 401.
       - DEPOT_STORAGE_SERVICE_TOKEN=${DEPOT_STORAGE_SERVICE_TOKEN:-}
+      # Signed Depot read URLs on the objects host (xeno-storage workers/objects). Same key as that Worker's secret; unset = 503.
+      - DEPOT_OBJECT_URL_KEY=${DEPOT_OBJECT_URL_KEY:-}
+      - DEPOT_OBJECT_URL_BASE=${DEPOT_OBJECT_URL_BASE:-https://objects.xenosystem.ai}
       # XENO Depot's event feed (services/depotEvents.js): the HMAC secret(s) Depot signs /api/depot/events with,
       # comma-separated during a rotation. Unset = every delivery refused.
       - DEPOT_EVENTS_SECRET=${DEPOT_EVENTS_SECRET:-}

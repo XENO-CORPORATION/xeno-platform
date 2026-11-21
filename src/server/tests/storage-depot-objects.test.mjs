@@ -174,6 +174,102 @@ async function main() {
     assert.equal((await fetch(url(team, `/objects/${hd}`), { method: 'DELETE', headers: auth })).status, 404, 'idempotent');
     assert.equal((await put(team, hd, d)).status, 201, 'can be written again after delete');
 
+    // ── signed read URLs for the objects host ──
+    const URL_KEY = 'depot-url-key-' + tag;
+    const signedApp = express();
+    signedApp.use((req, _res, next) => { req.db = pool; next(); });
+    signedApp.use('/s', createStorageDepotServiceRouter({ env: { DEPOT_STORAGE_SERVICE_TOKEN: TOKEN, DEPOT_OBJECT_URL_KEY: URL_KEY, DEPOT_OBJECT_URL_BASE: 'https://objects.test' }, store }));
+    const signedServer = http.createServer(signedApp);
+    await new Promise((r) => signedServer.listen(0, '127.0.0.1', r));
+    try {
+      const sbase = `http://127.0.0.1:${signedServer.address().port}/s/workspaces/${team}`;
+      const asked = await fetch(`${sbase}/objects/urls`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [ha, missing], ttl: 120 }) });
+      assert.equal(asked.status, 200);
+      const signedUrls = await asked.json();
+      assert.deepEqual(signedUrls.absent, [missing], 'no URL for an object the workspace does not hold');
+      const u = new URL(signedUrls.urls[ha].url);
+      assert.equal(u.origin, 'https://objects.test');
+      assert.equal(u.pathname, `/d/${team}/${ha}`);
+      assert.equal(signedUrls.urls[ha].sha256, sha(a));
+      const expiry = Number(u.searchParams.get('e'));
+      assert.ok(expiry > Date.now() / 1000 + 100 && expiry <= Date.now() / 1000 + 121, 'expiry is the asked ttl');
+      // the Worker's own verifier accepts exactly this URL (same signed string, same key)
+      const expected = crypto.createHmac('sha256', URL_KEY).update(`depot:v1\n${team}\n${ha}\n${expiry}`).digest('hex');
+      assert.equal(u.searchParams.get('s'), expected);
+      const otherAsk = await fetch(`http://127.0.0.1:${signedServer.address().port}/s/workspaces/${other}/objects/urls`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [hc] }) });
+      assert.deepEqual((await otherAsk.json()).absent, [hc], 'another workspace\'s object gets no URL');
+      const tooLong = await fetch(`${sbase}/objects/urls`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [ha], ttl: 301 }) });
+      assert.equal(tooLong.status, 400, 'ttl cap');
+    } finally { signedServer.close(); }
+    const unset = await fetch(url(team, '/objects/urls'), { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [ha] }) });
+    assert.equal(unset.status, 503, 'no key: no URLs, never unsigned ones');
+
+    // ── uploads through the objects host: upload-urls → (Worker stores, signs a receipt) → commit ──
+    const upApp = express();
+    upApp.use((req, _res, next) => { req.db = pool; next(); });
+    upApp.use('/u', createStorageDepotServiceRouter({ env: { DEPOT_STORAGE_SERVICE_TOKEN: TOKEN, DEPOT_OBJECT_URL_KEY: URL_KEY, DEPOT_OBJECT_URL_BASE: 'https://objects.test' }, store }));
+    const upServer = http.createServer(upApp);
+    await new Promise((r) => upServer.listen(0, '127.0.0.1', r));
+    try {
+      const ubase = `http://127.0.0.1:${upServer.address().port}/u/workspaces`;
+      const post = (ws, p, body) => fetch(`${ubase}/${ws}${p}`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const objs = Array.from({ length: 3 }, (_, i) => { const bytes = crypto.randomBytes(4000 + i); return { hash: name(), size: bytes.length, sha256: sha(bytes), meta: `m${i}`, bytes }; });
+      const describeObj = ({ hash, size, sha256, meta }) => ({ hash, size, sha256, meta });
+      // the Worker's receipt, computed the way workers/objects/src/index.js does
+      const receipt = (ws, o) => crypto.createHmac('sha256', URL_KEY).update(`depot:v1:stored\n${ws}\n${o.hash}\n${o.sha256}\n${o.size}\n${o.meta}`).digest('hex');
+
+      let r = await post(team, '/objects/upload-urls', { objects: [...objs.map(describeObj), { hash: ha, size: a.length, sha256: sha(a), meta: '' }, { hash: hc, size: 1, sha256: sha(Buffer.from('x')), meta: '' }] });
+      assert.equal(r.status, 200);
+      const up = await r.json();
+      assert.deepEqual(Object.keys(up.urls).sort(), [...objs.map((o) => o.hash), hc].sort(), 'URLs only for objects not yet stored here (hc is stored in another workspace only)');
+      assert.deepEqual(up.present, [ha], 'an object already recorded with the same bytes needs no upload');
+      assert.deepEqual(up.conflicts, [], 'hc lives in another workspace, so it is new here, not a conflict');
+      const u0 = new URL(up.urls[objs[0].hash]);
+      const e0 = Number(u0.searchParams.get('e'));
+      assert.equal(u0.searchParams.get('s'), crypto.createHmac('sha256', URL_KEY).update(`depot:v1:put\n${team}\n${objs[0].hash}\n${objs[0].sha256}\n${objs[0].size}\n${e0}\nm0`).digest('hex'), 'PUT signature binds sha, size, expiry and meta (the Worker checks the same string)');
+
+      // the objects host would have stored them; in this test the fs store stands in for R2
+      for (const o of objs) await store.putNew(depotObjectKey(team, o.hash), o.bytes);
+      r = await post(team, '/objects/commit', { objects: objs.map((o) => ({ ...describeObj(o), receipt: 'f'.repeat(64) })) });
+      assert.equal(r.status, 400, 'a forged receipt records nothing');
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM storage_depot_objects WHERE workspace_id = $1 AND hash = ANY($2)', [team, objs.map((o) => o.hash)])).rows[0].n, 0);
+      r = await post(team, '/objects/commit', { objects: objs.map((o) => ({ ...describeObj(o), receipt: receipt(other, o) })) });
+      assert.equal(r.status, 400, 'a receipt for another workspace does not move');
+      const usedBefore = await workspaceUsedBytes(pool, team);
+      r = await post(team, '/objects/commit', { objects: objs.map((o) => ({ ...describeObj(o), receipt: receipt(team, o) })) });
+      assert.equal(r.status, 200);
+      const done = await r.json();
+      assert.deepEqual(done.committed.sort(), objs.map((o) => o.hash).sort());
+      assert.equal(await workspaceUsedBytes(pool, team), usedBefore + objs.reduce((n, o) => n + o.size, 0), 'committed objects are metered');
+      r = await fetch(url(team, `/objects/${objs[1].hash}`), { headers: auth });
+      assert.ok(Buffer.from(await r.arrayBuffer()).equals(objs[1].bytes), 'a committed object reads back through the platform');
+      assert.equal(r.headers.get('x-xeno-object-meta'), 'm1');
+      r = await post(team, '/objects/commit', { objects: objs.slice(0, 1).map((o) => ({ ...describeObj(o), receipt: receipt(team, o) })) });
+      assert.deepEqual((await r.json()).existing, [objs[0].hash], 'committing again is idempotent');
+      const clash = { hash: objs[2].hash, size: 10, sha256: sha(Buffer.alloc(10)), meta: '' };
+      r = await post(team, '/objects/commit', { objects: [{ ...clash, receipt: receipt(team, clash) }] });
+      assert.deepEqual((await r.json()).conflicts, [objs[2].hash], 'different bytes under a recorded name are a conflict');
+
+      // ── a workspace's own Depot allowance: its own cap, kept out of the plan pool ──
+      const capWs = (await pool.query(`INSERT INTO workspaces (owner_user_id, workspace_type, name, slug) VALUES ($1, 'team', 'Cap Co', $2) RETURNING id`, [free, `cap-co-${tag}`])).rows[0].id;
+      await pool.query(`INSERT INTO storage_depot_allowances (workspace_id, bytes, set_by, reason) VALUES ($1, 10000, 'test', 'test')`, [capWs]);
+      const small = crypto.randomBytes(6000);
+      assert.equal((await put(capWs, name(), small)).status, 201, 'fits the Depot cap');
+      assert.equal(await workspaceUsedBytes(pool, capWs), 0, 'Depot content under its own cap is not in the plan pool');
+      r = await fetch(url(capWs, '/usage'), { headers: auth });
+      const capUsage = await r.json();
+      assert.equal(capUsage.depotAllowanceBytes, 10000); assert.equal(capUsage.depotBytes, 6000); assert.equal(capUsage.usedBytes, 0);
+      r = await put(capWs, name(), crypto.randomBytes(6000));
+      assert.equal(r.status, 507, 'the Depot cap is enforced on a direct PUT');
+      const big2 = { hash: name(), size: 6000, sha256: sha(Buffer.alloc(6000)), meta: '' };
+      r = await post(capWs, '/objects/upload-urls', { objects: [big2] });
+      assert.equal(r.status, 507, 'and refused before any upload URL is signed');
+      r = await post(capWs, '/objects/commit', { objects: [{ ...big2, receipt: receipt(capWs, big2) }] });
+      assert.equal(r.status, 507, 'and at commit');
+      await pool.query('DELETE FROM storage_depot_objects WHERE workspace_id = $1', [capWs]);
+      await pool.query('DELETE FROM storage_depot_allowances WHERE workspace_id = $1', [capWs]);
+    } finally { upServer.close(); }
+
     // ── limiter skip only for the right token on the right path ──
     const call = (p, h) => ({ baseUrl: '/api', path: p, headers: h ? { authorization: h } : {} });
     assert.equal(isAuthenticatedDepotStorageCall(call('/storage/service/depot/v1/x', `Bearer ${TOKEN}`), TOKEN), true);
