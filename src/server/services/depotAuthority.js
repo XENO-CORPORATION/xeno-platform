@@ -455,6 +455,13 @@ export async function registerRepo(db, actor, { repoId, workspaceId }) {
       await tx.query(`INSERT INTO relationship_tuples (object_type, object_id, relation, subject_type, subject_id)
         VALUES ($1, $2, 'workspace', 'workspace', $3), ($1, $2, 'admin', 'user', $4) ON CONFLICT DO NOTHING`,
       [REPO_TYPE, id, String(workspaceId), actor.accountableId]);
+      // An agent acting as itself (an xdp_ credential) holds only its OWN grants, capped by its owner's. Without its own
+      // admin it would hold nothing on the repo it just created (XO - DEPOT's service agent, 2026-11-21). The cap still
+      // applies: its owner is the accountable admin above, and its credential's scopes cut what it may use.
+      if (actor.via === 'agent' && actor.principal?.kind === 'agent') {
+        await tx.query(`INSERT INTO relationship_tuples (object_type, object_id, relation, subject_type, subject_id)
+          VALUES ($1, $2, 'admin', 'user', $3) ON CONFLICT DO NOTHING`, [REPO_TYPE, id, String(actor.principal.id)]);
+      }
     }
     return { id, workspaceId: String(workspaceId), created: !existing };
   });

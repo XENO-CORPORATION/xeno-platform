@@ -46,6 +46,8 @@ const MUTANTS = [
   ['exchange: any resource host', 'src/server/services/depotAuthority.js',
     "const m = new RegExp(`^${origin.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}/repos/([^/?#]+)$`).exec(String(resource));",
     "const m = /\\/repos\\/([^/?#]+)$/.exec(String(resource));"],
+  ['creating agent gets no admin on its repo', 'src/server/services/depotAuthority.js',
+    "if (actor.via === 'agent' && actor.principal?.kind === 'agent') {", 'if (false) {'],
   ['login token: first mint lacks Lore claims', 'src/server/utils/oidcProvider.js',
     '      ...depotLoginClaims(aud, user.id),', ''],
   ['login token: refresh drops Lore claims', 'src/server/utils/oidcProvider.js',

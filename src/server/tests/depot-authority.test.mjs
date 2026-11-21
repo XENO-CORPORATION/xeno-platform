@@ -242,6 +242,16 @@ async function main() {
   await assert.rejects(pool.query(CREDENTIALS_DOWN), /live credentials exist/);                             // DOWN refuses while one is live
   await depot.revokeAgentCredential(pool, me, live.id);
 
+  // an agent that creates a repo holds it (XO - DEPOT's service agent): its own admin, capped by its owner's
+  const creatorCred = await depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['depot:read', 'depot:write', 'depot:admin'] });
+  const creator = await depot.verifyToken(pool, creatorCred.token);
+  assert.equal((await depot.registerRepo(pool, creator, { repoId: 'agentmade', workspaceId: u.ws })).created, true);
+  assert.deepEqual((await depot.authorityFor(pool, creator, { repoId: 'agentmade' })).repo.permissions,
+    ['read', 'write', 'review', 'merge', 'lock', 'admin'], 'the creating agent holds its repo');
+  const holders = (await depot.listGrants(pool, staff, { repoId: 'agentmade' })).grants.map((g) => `${g.permission}:${g.kind}`).sort();
+  assert.deepEqual(holders, ['admin:agent', 'admin:human'], 'the accountable owner is admin too');
+  await depot.revokeAgentCredential(pool, me, creatorCred.id);
+
   // ── 7c. RFC 8693 exchange for Lore: a short at+jwt carrying ONE repo's grants, read at exchange time.
   const ISS = (await import('../config/hosts.js')).issuer();   // the route passes issuerForHost(): a KNOWN issuer, or our own verifier refuses the token later
   const AT = 'urn:ietf:params:oauth:token-type:access_token';
