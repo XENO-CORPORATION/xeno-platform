@@ -42,6 +42,7 @@
  *   node scripts/deploy-platform.mjs both --execute          # backend then frontend
  *   node scripts/deploy-platform.mjs all --execute           # backend, workers, frontend
  *   node scripts/deploy-platform.mjs backend --rollback --execute     # emergency rollback
+ *   ... --depot-source <depot repo id>@<rev>                         # record the XENO Depot revision this build came from
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -95,6 +96,9 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--build-here') opts.buildHere = true;
   else if (a === '--host') opts.host = argv[++i];
   else if (a === '--root') opts.root = argv[++i];
+  // The XENO Depot revision this build came from (xeno-depot decision 0001 §7), recorded on the deploy row as its
+  // source. Stated, never guessed: without the flag a deploy records no source, which means "built from git".
+  else if (a === '--depot-source') opts.depotSource = parseDepotSource(argv[++i]);
   else { console.error(`deploy: unknown arg: ${a}`); process.exit(2); }
 }
 if (services.length === 0) {
@@ -317,9 +321,18 @@ function recordDeploy({ service, previousSha, mode, ok: passed, startedAt }) {
   let sources = null;
   try { sources = collectNoteSources({ git, prText: ghPrText(spawnSync), previousSha, sha: fullSha, prs: facts.prs, migrations: facts.migrations }); }
   catch (e) { warn(`internal note: could not collect PR text (${e.message}); the note is drafted from the deploy row alone`); }
-  const r = remoteRecord('', JSON.stringify({ ...row, ...(sources ? { sources } : {}) }));
+  const r = remoteRecord('', JSON.stringify({ ...row, ...(sources ? { sources } : {}), ...(opts.depotSource ? { source: opts.depotSource } : {}) }));
   if (r.status === 0) ok(`release record: ${String(r.stdout || '').trim()}`);
   else console.error(`${C.red}✗ RELEASE RECORD NOT WRITTEN for ${service}@${sha}: ${String(r.stderr || r.error || '').trim().slice(0, 300)}${C.rst}`);
+}
+
+/** `<depot repo id>@<rev>` → the release record's source, in the event's own spelling. The same shapes the Index
+ *  accepts (vendor/xeno-index/governance/releaseRecord.js parseSource), checked here so a typo stops the deploy
+ *  before anything runs rather than failing the record afterwards. */
+function parseDepotSource(v) {
+  const m = /^([A-Za-z0-9][A-Za-z0-9._:-]{0,63})@([A-Za-z0-9][A-Za-z0-9._:-]{0,127})$/.exec(String(v || ''));
+  if (!m) { console.error(`deploy: --depot-source must be <depot repo id>@<rev>, got: ${v}`); process.exit(2); }
+  return { depot_repo_id: m[1], rev: m[2] };
 }
 
 // POSIX single-quote shell-escape for the one place we interpolate into `sudo bash -c`.
