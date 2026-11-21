@@ -216,4 +216,19 @@ accountCorpusRouter.delete('/:id', mutateLimiter, async (req, res) => {
   } catch (e) { sendError(res, e); }
 });
 
+/**
+ * The names of the person's own PCs, for the workspace's breadcrumb: `/api/account/remote-pcs`, on the web session. A PC's
+ * name is the label it registered with, which the server already holds; nothing sealed is read or sent. The sealed page
+ * still tells the workspace only ids (decision 0006), so the workspace looks the name up here instead of asking it.
+ */
+export const accountRemotePcsRouter = express.Router();
+
+accountRemotePcsRouter.get('/', async (req, res) => {
+  if (!remoteRelayEnabled()) return res.status(404).json({ error: { code: 'not_found', message: 'Remote control is not available.' } });
+  try {
+    const { installations: rows } = await installations.list(req.db, req.user.id, 'remote');
+    res.json({ pcs: rows.filter((p) => p.remoteRole === 'host').map((p) => ({ id: p.id, installationId: p.installationId, name: p.label })) });
+  } catch (e) { sendError(res, e); }
+});
+
 export default router;
