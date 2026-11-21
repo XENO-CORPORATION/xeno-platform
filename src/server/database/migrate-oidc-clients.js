@@ -57,6 +57,9 @@ export const FIRST_PARTY_CLIENTS = [
   // CLI (device grant + loopback PKCE)
   { id: 'xeno-agent-cli', name: 'XENO Agent CLI', loopback: true },
   { id: 'xeno-anima', name: 'XENO Anima', loopback: true },
+  // XENO Depot CLI (xeno-depot/docs/decisions/0001-depot-foundation.md §2-3): device grant or loopback PKCE, and its
+  // tokens name Depot's audience, not 'xeno-api' — `audience` is written to access_audience by the upsert below.
+  { id: 'xeno-depot-cli', name: 'XENO Depot CLI', loopback: true, audience: 'xeno-depot' },
   // Standalone Agent (loopback PKCE; no client secret)
   { id: 'xeno-agent-interface', name: 'XENO Agent', loopback: true },
   // XENO Spawn — a local web UI served by its own loopback Node server. The SERVER
@@ -146,16 +149,19 @@ export async function migrateOidcClients(pool) {
     const scopes = scopesForClient(c.id);
     if (!scopes) throw new Error(`missing checked-in authority policy for ${c.id}`);
     await pool.query(
-      `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback)
-       VALUES ($1, NULL, $2, $3, $4, $5, true, $6)
+      // access_audience is the seed's too: a first-party client with no `audience` is a platform client ('xeno-api').
+      // Measured before this line was added (2026-11-21): no non-dynamic production client carried another value.
+      `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback, access_audience)
+       VALUES ($1, NULL, $2, $3, $4, $5, true, $6, $7)
        ON CONFLICT (client_id) DO UPDATE SET
          name = EXCLUDED.name,
          redirect_uris = EXCLUDED.redirect_uris,
          allowed_scopes = EXCLUDED.allowed_scopes,
          surface = EXCLUDED.surface,
          is_first_party = true,
-         loopback = EXCLUDED.loopback`,
-      [c.id, c.name, redirects, scopes, c.id, c.loopback],
+         loopback = EXCLUDED.loopback,
+         access_audience = EXCLUDED.access_audience`,
+      [c.id, c.name, redirects, scopes, c.id, c.loopback, c.audience || 'xeno-api'],
     );
   }
   // The API portal predates this migration and its exact production redirect

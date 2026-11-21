@@ -137,6 +137,8 @@ services:
       # comma-separated; owner-confirmed 2026-10-18). Empty = the exchange refuses. The service token gates /api/connect/authority; unset = 401.
       - XENO_CONNECT_ORIGINS=${XENO_CONNECT_ORIGINS:-https://connect.xenosystem.ai}
       - CONNECT_SERVICE_TOKEN=${CONNECT_SERVICE_TOKEN:-}
+      # XENO Depot (services/depotAuthority.js): the service token Depot's gate sends to /api/depot/authority; unset = 401.
+      - DEPOT_SERVICE_TOKEN=${DEPOT_SERVICE_TOKEN:-}
       # XENO Depot's object store on XENO Storage (routes/storageDepotServiceRoutes.js). Bearer for Depot's server; unset = 401.
       - DEPOT_STORAGE_SERVICE_TOKEN=${DEPOT_STORAGE_SERVICE_TOKEN:-}
       # Site gate (routes/siteGateRoutes.js): SITE_GATE=on shows pages only to admins and SITE_GATE_ALLOW

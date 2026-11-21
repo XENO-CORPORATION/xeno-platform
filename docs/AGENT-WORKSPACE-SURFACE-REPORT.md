@@ -18,8 +18,8 @@ Per division: how many actions a person can take, how many an agent can take tod
 | workforce | 304 | 54 | 245 | 5 | 36 | 254 | 14 | 0 | `agents:write` 236, `workspace:admin` 6, `agents:read` 3 |
 | workspace-ui | 193 | 4 | 103 | 86 | 68 | 122 | 3 | 0 | `workspace:admin` 103 |
 | account | 123 | 4 | 58 | 61 | 36 | 78 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
-| platform | 75 | 0 | 37 | 38 | 46 | 26 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
-| browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
+| platform | 82 | 0 | 37 | 45 | 46 | 33 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
+| browser-shell | 32 | 0 | 32 | 0 | 13 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 13 |
 | forms | 49 | 20 | 21 | 8 | 20 | 23 | 5 | 1 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 2, `stock:write` 1 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
