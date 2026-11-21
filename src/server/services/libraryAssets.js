@@ -15,6 +15,32 @@ const GRANT_SIGNATURE_VERSION = 'v2';
 const DEFAULT_LINK_TTL_SECONDS = 24 * 60 * 60;
 const MAX_LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+/**
+ * One streamed pass over a file: its SHA-256, size, first bytes and whether it holds a zero byte. Registration uses
+ * it instead of reading the whole file into memory, so a multi-gigabyte upload (XENO Storage upload sessions) costs
+ * a stream, not its size in RAM.
+ */
+export async function inspectFile(storagePath) {
+  const hash = crypto.createHash('sha256');
+  let size = 0, hasZero = false; const head = [];
+  let headLength = 0;
+  for await (const chunk of fs.createReadStream(storagePath, { highWaterMark: 4 * 1024 * 1024 })) {
+    hash.update(chunk); size += chunk.length;
+    if (!hasZero && chunk.includes(0)) hasZero = true;
+    if (headLength < 16) { head.push(chunk.subarray(0, 16 - headLength)); headLength += head[head.length - 1].length; }
+  }
+  return { sha256: hash.digest('hex'), size, head: Buffer.concat(head), hasZero };
+}
+
+/** sniffMime for a file inspected by `inspectFile` (the first bytes plus the zero-byte flag stand in for the whole). */
+export function sniffInspectedMime({ head, hasZero }, declaredMime) {
+  if (!hasZero && ['text/plain', 'text/markdown', 'text/csv', 'text/html', 'application/json'].includes(declaredMime)) {
+    const magic = sniffMime(head, null);
+    if (magic === 'application/octet-stream') return declaredMime;
+  }
+  return sniffMime(head.length ? Buffer.concat([head, Buffer.from([0])]) : head, declaredMime);
+}
+
 export function sniffMime(buffer, declaredMime) {
   if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
@@ -204,9 +230,11 @@ export async function registerManagedLibraryFile(db, {
   if (!isLibraryUuid(userId) || (workspaceId && !isLibraryUuid(workspaceId))) {
     throw new Error('Library owner ids must be UUIDs');
   }
-  const bytes = await fs.promises.readFile(storagePath);
-  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
-  const detectedMime = sniffMime(bytes, mimeType);
+  // streamed, so a multi-gigabyte upload is hashed without being held in memory
+  const inspected = await inspectFile(storagePath);
+  const bytes = { length: inspected.size };
+  const digest = inspected.sha256;
+  const detectedMime = sniffInspectedMime(inspected, mimeType);
   const semanticEnabled = CHAT_PROJECT_CONTRACTS.retrieval.semanticEnabledByDefault
     && process.env.CHAT_SEMANTIC_RETRIEVAL !== '0';
   if (Number(fileSize) !== bytes.length) throw new Error('Stored Library file size changed before registration');
