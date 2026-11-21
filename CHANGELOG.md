@@ -3,6 +3,15 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-21
+
+**The release record says which XENO Depot revision a release came from.** XENO Index (xeno-index PR #4) added a source to every release record: the Depot repo and revision a change or deploy was built from, both or neither. This platform hosts it:
+- The Index code is re-vendored byte-identical (`b439d5e`), with its schema file `20261121120000-release-depot-source.sql` as a migration. The vendor gate now checks all three schema files, not two.
+- **Depot's signed event feed:** `POST /api/depot/events`. It is signed the way XENO Tasks signs its webhooks (`X-Xeno-Signature: t=<unix>,v1=<HMAC-SHA256 of "t.body">`), within five minutes, with `DEPOT_EVENTS_SECRET`; a comma-separated list rotates without losing events, and unset refuses everything. The signature is checked over the exact bytes received, before anything is parsed. A push or a merged review becomes a change carrying its source, recorded once however often it arrives; other event types are acknowledged and ignored; an envelope version this build doesn't know answers 422.
+- **Deploys:** `deploy-platform.mjs --depot-source <repo>@<rev>` records the revision a deploy was built from. Without it, a deploy records no source, which means "built from git", as before.
+
+Proof: `node tests/depot-events.test.mjs` on real Postgres with the Index's three schema files (7 checks); `npm run test:depot-events-mutation` catches 6/6; release-record 57 and release-internal-notes 55 checks pass on the re-vendored code; deploy tests 29/0.
+
 ## 2026-11-20
 
 **Credit holds stay fast as open holds pile up: open holds are summed once per call.** The index from earlier today held only while there were few open holds. At 1,276 the planner went back to probing every open hold once per grant (2,067,120 probes, 5.2 s) inside the account lock, and holds queued to a 70 s median. The three funding queries in `utils/usageCreditFunding.js` now sum open holds once, in a grouped join: identical rows on production data (1,620 of 1,620, 0 differing), 5,981 ms to 8.4 ms, `FOR UPDATE OF g` unchanged. Proof: the money-path suites against Postgres 15.

@@ -42,6 +42,7 @@
     "downloadRoutes.js": "commerce",
     "drag.js": "workspace-ui",
     "emailRoutes.js": "platform",
+    "depotEventsRoutes.js": "platform",
     "emailWebhookRoutes.js": "platform",
     "faviconRoutes.js": "platform",
     "fileSystemRoutes.js": "storage",
@@ -2138,6 +2139,13 @@
       "status": "planned",
       "class": "external",
       "scope": "workspace:admin"
+    },
+    "route:depotEventsRoutes.js:POST /": {
+      "status": "excluded",
+      "category": "protocol",
+      "class": "reversible",
+      "scope": "none",
+      "because": "XENO Depot’s signed event feed; a protocol endpoint, not an action a person takes"
     },
     "route:emailWebhookRoutes.js:POST /resend": {
       "status": "excluded",

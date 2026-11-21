@@ -26,6 +26,7 @@ import { sweepDueReminders, deliverAgentEvents, sweepExpiredLeases } from './ser
 import workspaceAreaRoutes from './routes/workspaceAreaRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import automateRoutes, { hooksRouter as automateHooksRoutes } from './routes/automateRoutes.js';
+import depotEventsRoutes from './routes/depotEventsRoutes.js';
 import { startAutomateWorker } from './workers/automateWorker.js';
 import { startMentionWakeWorker } from './workers/mentionWakeWorker.js';
 import { startProjectChangeWorker } from './workers/projectChangeWorker.js';
@@ -577,6 +578,8 @@ console.log('💳 Billing webhook integrated: /api/billing/webhook (raw body, pr
 app.use('/api/email/webhooks', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => { req.db = pool; next(); }, emailWebhookRoutes);
 // Dev › Automate's signed webhook trigger (services/xenoWorkflow.js): the HMAC covers the raw body, so it is read before the JSON parser
 app.use('/api/automate/hooks', express.raw({ type: '*/*', limit: '256kb' }), (req, res, next) => { req.db = pool; next(); }, automateHooksRoutes);
+// XENO Depot's signed event feed (services/depotEvents.js, decision 0001 §7): raw bytes, HMAC-verified, before the JSON parser.
+app.use('/api/depot/events', express.raw({ type: '*/*', limit: '256kb' }), (req, res, next) => { req.db = pool; next(); }, depotEventsRoutes);
 // XENO Storage: an app's project files (services/projectFolders.js). Mounted BEFORE the global body parsers so a
 // project's .json or .txt arrives as its own bytes, not parsed into an object.
 app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploadsDir }));

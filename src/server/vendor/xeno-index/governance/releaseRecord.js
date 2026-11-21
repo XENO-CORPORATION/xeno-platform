@@ -58,11 +58,33 @@ const iso = (d) => (d ? new Date(d).toISOString() : null);
 export const SCOPES = ['none', 'all', 'plans', 'workspaces'];
 export const STATUSES = ['built', 'live', 'retired'];
 
+// ── source: the XENO Depot revision a release was built from ─────────────────────────────────────────────────────
+/**
+ * xeno-depot decision 0001 §7: the Index records the Depot `rev` each release came from. Additive: a release with no
+ * source was built from git, as every release before Depot was. A source is both fields or neither — half a source
+ * names nothing. Input accepts the event's own spelling (`depot_repo_id`) and ours (`depotRepoId`).
+ */
+const DEPOT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/; // fits release_changes.repo (80) as depot:<id>
+const DEPOT_REV = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export function parseSource(s) {
+  if (s == null) return null;
+  if (typeof s !== 'object') throw new ReleaseError('source must be { depotRepoId, rev }', 'invalid_source');
+  const repoId = s.depotRepoId ?? s.depot_repo_id;
+  const rev = s.rev;
+  if (repoId == null && rev == null) return null;
+  if (repoId == null || rev == null) throw new ReleaseError('source needs both depotRepoId and rev', 'invalid_source');
+  if (!DEPOT_ID.test(String(repoId))) throw new ReleaseError('source.depotRepoId is not a Depot repo id', 'invalid_source');
+  if (!DEPOT_REV.test(String(rev))) throw new ReleaseError('source.rev is not a Depot revision', 'invalid_source');
+  return { depotRepoId: String(repoId), rev: String(rev) };
+}
+const sourceShape = (r) => (r.source_rev ? { depotRepoId: r.source_depot_repo_id, rev: r.source_rev } : null);
+
 // ── deploys ───────────────────────────────────────────────────────────────────────────────────────────────────────
 const deployShape = (r) => ({
   id: r.id, repo: r.repo, service: r.service, sha: r.sha, previousSha: r.previous_sha, mode: r.mode, status: r.status,
   startedAt: iso(r.started_at), finishedAt: iso(r.finished_at), deployedBy: r.deployed_by, healthcheck: r.healthcheck,
   rollbackPoint: r.rollback_point, prs: r.prs || [], migrations: r.migrations || [], provenance: r.provenance, evidence: r.evidence,
+  source: sourceShape(r),
 });
 
 /**
@@ -89,26 +111,33 @@ export async function recordDeploy(db, d) {
   const key = `${service}|${sha}|${startedAt ? startedAt.toISOString() : 'unknown'}`;
   const prs = (Array.isArray(d.prs) ? d.prs : []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
   const migrations = (Array.isArray(d.migrations) ? d.migrations : []).map(String).filter(Boolean).slice(0, 500);
+  const source = parseSource(d.source);
+  // The first recorded source wins: re-recording a deploy never moves it to a different revision.
   const r = await db.query(
     `INSERT INTO release_deploys (natural_key, repo, service, sha, previous_sha, mode, status, started_at, finished_at, deployed_by,
-                                  healthcheck, rollback_point, prs, migrations, provenance, evidence)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                                  healthcheck, rollback_point, prs, migrations, provenance, evidence, source_depot_repo_id, source_rev)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      ON CONFLICT (natural_key) DO UPDATE SET status = EXCLUDED.status, finished_at = COALESCE(EXCLUDED.finished_at, release_deploys.finished_at),
        healthcheck = COALESCE(EXCLUDED.healthcheck, release_deploys.healthcheck), rollback_point = COALESCE(EXCLUDED.rollback_point, release_deploys.rollback_point),
        prs = CASE WHEN cardinality(EXCLUDED.prs) > 0 THEN EXCLUDED.prs ELSE release_deploys.prs END,
        migrations = CASE WHEN cardinality(EXCLUDED.migrations) > 0 THEN EXCLUDED.migrations ELSE release_deploys.migrations END,
-       deployed_by = COALESCE(EXCLUDED.deployed_by, release_deploys.deployed_by)
+       deployed_by = COALESCE(EXCLUDED.deployed_by, release_deploys.deployed_by),
+       source_depot_repo_id = CASE WHEN release_deploys.source_rev IS NULL THEN EXCLUDED.source_depot_repo_id ELSE release_deploys.source_depot_repo_id END,
+       source_rev = CASE WHEN release_deploys.source_rev IS NULL THEN EXCLUDED.source_rev ELSE release_deploys.source_rev END
      RETURNING *, (xmax = 0) AS inserted`,
     [key, d.repo || 'xeno-platform', service, sha, previous, mode, status, startedAt, d.finishedAt ? new Date(d.finishedAt) : null,
-      d.deployedBy || null, d.healthcheck || null, d.rollbackPoint || null, prs, migrations, provenance, d.evidence || null]);
+      d.deployedBy || null, d.healthcheck || null, d.rollbackPoint || null, prs, migrations, provenance, d.evidence || null,
+      source?.depotRepoId ?? null, source?.rev ?? null]);
   return { deploy: deployShape(r.rows[0]), inserted: r.rows[0].inserted };
 }
 
-export async function listDeploys(db, actor, { service, status, limit, before, beforeId } = {}) {
+export async function listDeploys(db, actor, { service, status, limit, before, beforeId, source } = {}) {
   needRead(actor);
   const where = [], p = [];
   if (service) { p.push(service); where.push(`service = $${p.length}`); }
   if (status) { p.push(status); where.push(`status = $${p.length}`); }
+  const from = parseSource(source); // "which deploys came from this Depot revision?"
+  if (from) { p.push(from.depotRepoId, from.rev); where.push(`source_depot_repo_id = $${p.length - 1} AND source_rev = $${p.length}`); }
   if (beforeId) {
     if(!UUID.test(String(beforeId)))throw new ReleaseError('Invalid deploy cursor','invalid_cursor');
     const cursor=(await db.query('SELECT started_at::text AS started_at FROM release_deploys WHERE id=$1',[beforeId])).rows[0];
@@ -169,9 +198,9 @@ export async function getFeature(db, actor, idOrSlug) {
   needRead(actor);
   const row = await featureRow(db, idOrSlug);
   if (!row) throw notFound();
-  const changes = await db.query('SELECT kind, external_id, title, url, author, sha, at FROM release_changes WHERE feature_id = $1 ORDER BY at DESC NULLS LAST LIMIT 500', [row.id]);
+  const changes = await db.query('SELECT kind, external_id, title, url, author, sha, at, source_depot_repo_id, source_rev FROM release_changes WHERE feature_id = $1 ORDER BY at DESC NULLS LAST LIMIT 500', [row.id]);
   const notes = await db.query('SELECT * FROM release_notes WHERE feature_id = $1 ORDER BY created_at DESC', [row.id]);
-  return { ...featureShape(row), changes: changes.rows.map((c) => ({ kind: c.kind, id: c.external_id, title: c.title, url: c.url, author: c.author, sha: c.sha, at: iso(c.at) })), notes: notes.rows.map(noteShape) };
+  return { ...featureShape(row), changes: changes.rows.map((c) => ({ kind: c.kind, id: c.external_id, title: c.title, url: c.url, author: c.author, sha: c.sha, at: iso(c.at), source: sourceShape(c) })), notes: notes.rows.map(noteShape) };
 }
 
 /** Create or update a feature by slug (the import and staff). A person on staff only — an agent cannot enable anything. */
@@ -224,18 +253,57 @@ export async function updateFeature(db, actor, idOrSlug, patch = {}) {
 export async function recordChange(db, c) {
   const kind = ['pr', 'release', 'tag', 'commit'].includes(c.kind) ? c.kind : null;
   if (!kind) throw new ReleaseError('kind must be pr, release, tag or commit', 'invalid_kind');
+  const source = parseSource(c.source);
   let featureId = null;
   if (c.featureSlug) featureId = (await db.query('SELECT id FROM release_features WHERE slug = $1', [c.featureSlug])).rows[0]?.id || null;
   const r = await db.query(
-    `INSERT INTO release_changes (repo, kind, external_id, title, url, author, sha, at, labels, feature_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `INSERT INTO release_changes (repo, kind, external_id, title, url, author, sha, at, labels, feature_id, source_depot_repo_id, source_rev)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (repo, kind, external_id) DO UPDATE SET title = EXCLUDED.title, url = COALESCE(EXCLUDED.url, release_changes.url),
        sha = COALESCE(EXCLUDED.sha, release_changes.sha), at = COALESCE(EXCLUDED.at, release_changes.at), labels = EXCLUDED.labels,
-       feature_id = COALESCE(release_changes.feature_id, EXCLUDED.feature_id)
+       feature_id = COALESCE(release_changes.feature_id, EXCLUDED.feature_id),
+       source_depot_repo_id = CASE WHEN release_changes.source_rev IS NULL THEN EXCLUDED.source_depot_repo_id ELSE release_changes.source_depot_repo_id END,
+       source_rev = CASE WHEN release_changes.source_rev IS NULL THEN EXCLUDED.source_rev ELSE release_changes.source_rev END
      RETURNING (xmax = 0) AS inserted`,
     [text(c.repo, 'repo', 80), kind, text(c.externalId, 'externalId', 200), String(c.title || '').slice(0, 500), c.url || null,
-      c.author || null, c.sha || null, c.at ? new Date(c.at) : null, (c.labels || []).map(String).slice(0, 30), featureId]);
+      c.author || null, c.sha || null, c.at ? new Date(c.at) : null, (c.labels || []).map(String).slice(0, 30), featureId,
+      source?.depotRepoId ?? null, source?.rev ?? null]);
   return { inserted: r.rows[0].inserted };
+}
+
+// ── XENO Depot events (xeno-depot decision 0001 §7) ──────────────────────────────────────────────────────────────
+/**
+ * Record a Depot event as a change. The HOST verifies the webhook signature (or reads the pull feed) before calling
+ * this; this function trusts nothing in the envelope beyond its shape. Only the two events that put code into a
+ * release matter here:
+ *   depot.push           → a `commit` change; its rev is the source
+ *   depot.review.merged  → a `pr` change; the merged rev (data.rev, or data.merged_rev) is the source
+ * Every other v1 type is acknowledged and ignored, so Depot may add types without breaking the Index. An envelope
+ * version this build does not know is REFUSED, never guessed at (§7: a breaking change ships as v: 2 beside v: 1).
+ * The change's repo is `depot:<repo_id>`, so a Depot repo can never collide with a GitHub repo of the same name.
+ */
+export const DEPOT_EVENT_TYPES = ['depot.push', 'depot.review.merged'];
+export async function recordDepotEvent(db, evt) {
+  if (!evt || typeof evt !== 'object') throw new ReleaseError('a Depot event is an object', 'invalid_event');
+  if (evt.v !== 1) throw new ReleaseError(`Depot event version ${evt.v} is not supported`, 'unsupported_event_version', 422);
+  const type = text(evt.type, 'type', 80);
+  if (!type.startsWith('depot.')) throw new ReleaseError('not a Depot event', 'invalid_event');
+  if (!DEPOT_EVENT_TYPES.includes(type)) return { ignored: true, type };
+  const data = evt.data && typeof evt.data === 'object' ? evt.data : {};
+  const rev = type === 'depot.push' ? data.rev : (data.rev ?? data.merged_rev);
+  const source = parseSource({ depotRepoId: evt.repo_id, rev });
+  const at = evt.at ? new Date(evt.at) : null;
+  if (at && Number.isNaN(at.getTime())) throw new ReleaseError('at is not a date', 'invalid_date');
+  const actor = evt.actor && typeof evt.actor === 'object' ? evt.actor : {};
+  const author = actor.id ? `${['human', 'agent', 'service'].includes(actor.kind) ? actor.kind : 'human'}:${actor.id}` : null;
+  const isReview = type === 'depot.review.merged';
+  const reviewId = isReview ? text(data.review_id ?? data.id, 'review_id', 200) : null;
+  const { inserted } = await recordChange(db, {
+    repo: `depot:${source.depotRepoId}`, kind: isReview ? 'pr' : 'commit', externalId: isReview ? reviewId : source.rev,
+    title: String(data.title ?? data.message ?? '').slice(0, 500), url: data.url || null, author, sha: source.rev, at,
+    labels: [], featureSlug: data.feature || null, source,
+  });
+  return { ignored: false, type, inserted, source };
 }
 
 // ── notes ─────────────────────────────────────────────────────────────────────────────────────────────────────────

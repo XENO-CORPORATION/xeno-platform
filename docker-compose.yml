@@ -137,6 +137,9 @@ services:
       # comma-separated; owner-confirmed 2026-10-18). Empty = the exchange refuses. The service token gates /api/connect/authority; unset = 401.
       - XENO_CONNECT_ORIGINS=${XENO_CONNECT_ORIGINS:-https://connect.xenosystem.ai}
       - CONNECT_SERVICE_TOKEN=${CONNECT_SERVICE_TOKEN:-}
+      # XENO Depot's event feed (services/depotEvents.js): the HMAC secret(s) Depot signs /api/depot/events with,
+      # comma-separated during a rotation. Unset = every delivery refused.
+      - DEPOT_EVENTS_SECRET=${DEPOT_EVENTS_SECRET:-}
       # Site gate (routes/siteGateRoutes.js): SITE_GATE=on shows pages only to admins and SITE_GATE_ALLOW
       # (comma list: emails and/or @domains) OR to whoever types SITE_GATE_CODE on /coming-soon.html; everyone
       # else gets /coming-soon.html. Unset = open. SITE_GATE_CODE empty = the code form refuses (accounts only);
