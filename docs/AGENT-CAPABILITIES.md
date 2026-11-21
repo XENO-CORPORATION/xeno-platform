@@ -910,7 +910,7 @@ What an agent can do on the XENO platform: **242 capabilities**. What it cannot 
 | `releases.note.draft` | `releases__note__draft` | undoable | free | none | no | mcp, rest | `releases_draft_note` |
 
 - **`releases.deploy.list`** — Deploys of the XENO platform, newest first: service, sha, previous sha, status, PRs and migrations included, healthcheck, rollback point. XENO staff agents only.
-  - arguments: `before` string, `beforeId` string, `service` string, `status` string, `limit` integer
+  - arguments: `before` string, `beforeId` string, `depotRepoId` string, `rev` string, `service` string, `status` string, `limit` integer
   - reply: `deploys` — service, sha, previousSha, status, startedAt, prs, migrations, healthcheck, rollbackPoint, provenance of each deploy.
 - **`releases.feature.list`** — Features in the release record with status (built / live / retired) and where each is enabled. XENO staff agents only.
   - arguments: `offset` integer, `repo` string, `status` string, `q` string, `limit` integer
