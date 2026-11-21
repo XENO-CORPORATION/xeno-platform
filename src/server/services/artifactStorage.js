@@ -34,9 +34,11 @@ const SANDBOX_KEY_PATTERN = /^chat-sandboxes\/[0-9a-fA-F-]{36}\/[A-Za-z0-9._\- /
 const FILE_KEY_PATTERN = /^files\/[0-9a-f]{2}\/[0-9a-f]{64}$/;
 // The ledger's outside anchor (services/ledgerChainAnchor.js), under a retention-locked prefix.
 const ANCHOR_KEY_PATTERN = /^ledger-anchors\/(checkpoints\/\d{12}\.json|keys\/[0-9a-f]{16}\.json)$/;
+// XENO Depot's content-addressed objects, one namespace per workspace (services/storageDepotObjects.js).
+const DEPOT_KEY_PATTERN = /^depot\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{2}\/[0-9a-f]{64}$/;
 
 function assertKey(key) {
-  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key) || FILE_KEY_PATTERN.test(key) || ANCHOR_KEY_PATTERN.test(key));
+  const inNamespace = typeof key === 'string' && (KEY_PATTERN.test(key) || SANDBOX_KEY_PATTERN.test(key) || FILE_KEY_PATTERN.test(key) || ANCHOR_KEY_PATTERN.test(key) || DEPOT_KEY_PATTERN.test(key));
   if (!inNamespace || key.includes('..') || key.includes('//')) {
     throw new Error(`Refusing storage key outside the allowed namespaces: ${key}`);
   }
@@ -61,6 +63,30 @@ function fsBackend(root) {
       const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
       await fs.writeFile(tmp, bytes);
       await fs.rename(tmp, file);
+    },
+    /** Write only if the key is empty (a hard link refuses to replace). Returns false when something is there. */
+    async putNew(key, bytes) {
+      const file = target(key);
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+      await fs.writeFile(tmp, bytes);
+      try { await fs.link(tmp, file); return true; }
+      catch (error) { if (error.code === 'EEXIST') return false; throw error; }
+      finally { await fs.unlink(tmp).catch(() => {}); }
+    },
+    /** Bytes `start`..`end` inclusive (clamped to the object), or null when the object is absent. */
+    async getRange(key, start, end) {
+      let handle;
+      try { handle = await fs.open(target(key), 'r'); }
+      catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+      try {
+        const size = (await handle.stat()).size;
+        const last = Math.min(end, size - 1);
+        if (start > last) return Buffer.alloc(0);
+        const buffer = Buffer.alloc(last - start + 1);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
+        return buffer.subarray(0, bytesRead);
+      } finally { await handle.close(); }
     },
     async get(key) {
       try {
@@ -162,6 +188,15 @@ function r2Backend({ accountId, accessKeyId, secretAccessKey, bucket, fetchImpl 
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`R2 GET ${key} failed: ${response.status}`);
       return Buffer.from(await response.arrayBuffer());
+    },
+    /** Bytes `start`..`end` inclusive, or null when the object is absent. A 200 (the store ignored the range) is sliced. */
+    async getRange(key, start, end) {
+      const response = await request('GET', key, undefined, { range: `bytes=${start}-${end}` });
+      if (response.status === 404) return null;
+      if (response.status === 416) return Buffer.alloc(0);
+      if (!response.ok) throw new Error(`R2 GET ${key} (range) failed: ${response.status}`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      return response.status === 206 ? bytes : bytes.subarray(start, end + 1);
     },
     async head(key) {
       const response = await request('HEAD', key);

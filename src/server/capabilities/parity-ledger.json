@@ -185,7 +185,8 @@
     "platform-fonts.js": "forms",
     "stockRoutes.js": "forms",
     "platform-stock.js": "forms",
-    "githubRoutes.js": "account"
+    "githubRoutes.js": "account",
+    "storageDepotServiceRoutes.js": "storage"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -11619,6 +11620,11 @@
       "class": "irreversible",
       "scope": "fonts:write"
     },
+    "route:browserRelayRoutes.js:GET / (accountRemotePcsRouter)": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "workspace:read"
+    },
     "route:browserRelayRoutes.js:GET / (accountCorpusRouter)": {
       "status": "planned",
       "class": "safe",
@@ -12009,6 +12015,41 @@
       "class": "reversible",
       "scope": "none",
       "because": "GitHub's browser redirect after its sign-in; the signed state names the person, and only installations their own GitHub sign-in reaches are recorded"
+    },
+    "route:storageDepotServiceRoutes.js:PUT /workspaces/:wid/objects/:hash": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
+    },
+    "route:storageDepotServiceRoutes.js:GET /workspaces/:wid/objects/:hash": {
+      "status": "excluded",
+      "category": "service",
+      "class": "safe",
+      "scope": "none",
+      "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
+    },
+    "route:storageDepotServiceRoutes.js:DELETE /workspaces/:wid/objects/:hash": {
+      "status": "excluded",
+      "category": "service",
+      "class": "irreversible",
+      "scope": "none",
+      "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
+    },
+    "route:storageDepotServiceRoutes.js:POST /workspaces/:wid/objects/exists": {
+      "status": "excluded",
+      "category": "service",
+      "class": "safe",
+      "scope": "none",
+      "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
+    },
+    "route:storageDepotServiceRoutes.js:GET /workspaces/:wid/usage": {
+      "status": "excluded",
+      "category": "service",
+      "class": "safe",
+      "scope": "none",
+      "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
     }
   }
 }

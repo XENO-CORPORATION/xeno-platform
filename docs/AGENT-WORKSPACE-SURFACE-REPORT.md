@@ -6,7 +6,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 
 | division | actions | capability | planned | excluded | safe | reversible | irreversible | external | planned by scope |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| storage | 93 | 5 | 85 | 3 | 34 | 48 | 11 | 0 | `storage:write` 52, `storage:read` 30, `library:write` 2, `share:create` 1 |
+| storage | 98 | 5 | 85 | 8 | 37 | 49 | 12 | 0 | `storage:write` 52, `storage:read` 30, `library:write` 2, `share:create` 1 |
 | studio | 122 | 4 | 118 | 0 | 54 | 55 | 13 | 0 | `library:write` 67, `library:read` 51 |
 | tasks | 107 | 13 | 86 | 8 | 16 | 81 | 10 | 0 | `tasks:write` 79, `tasks:read` 7 |
 | chat | 104 | 0 | 102 | 2 | 33 | 54 | 17 | 0 | `chat:write` 70, `chat:read` 32 |
@@ -19,7 +19,7 @@ Per division: how many actions a person can take, how many an agent can take tod
 | workspace-ui | 193 | 4 | 103 | 86 | 68 | 122 | 3 | 0 | `workspace:admin` 103 |
 | account | 123 | 4 | 58 | 61 | 36 | 78 | 9 | 0 | `workspace:admin` 40, `workspace:read` 18 |
 | platform | 85 | 0 | 37 | 48 | 46 | 36 | 2 | 1 | `workspace:read` 24, `workspace:admin` 13 |
-| browser-shell | 31 | 0 | 31 | 0 | 12 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 12 |
+| browser-shell | 32 | 0 | 32 | 0 | 13 | 16 | 3 | 0 | `workspace:admin` 19, `workspace:read` 13 |
 | forms | 49 | 20 | 21 | 8 | 20 | 23 | 5 | 1 | `brand:write` 8, `forms:write` 5, `fonts:write` 3, `brand:read` 2, `fonts:read` 2, `stock:write` 1 |
 | inference | 18 | 0 | 12 | 6 | 5 | 10 | 3 | 0 | `chat:write` 7, `chat:read` 5 |
 | scheduling | 22 | 4 | 12 | 6 | 9 | 11 | 2 | 0 | `scheduling:write` 10, `scheduling:read` 2 |
