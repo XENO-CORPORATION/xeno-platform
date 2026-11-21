@@ -18,7 +18,7 @@ import pg from 'pg';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { migrateOidcClients } from '../database/migrate-oidc-clients.js';
 import {
-  createAuthorizationCode, exchangeAuthorizationCode, registerDynamicClient, verifyAccessToken, DEPOT_AUDIENCE,
+  createAuthorizationCode, exchangeAuthorizationCode, refreshTokenGrant, registerDynamicClient, verifyAccessToken, DEPOT_AUDIENCE,
 } from '../utils/oidcProvider.js';
 import * as depot from '../services/depotAuthority.js';
 import { createDepotAuthorityRouter } from '../routes/depotAuthorityRoutes.js';
@@ -98,6 +98,23 @@ async function main() {
   const pixelTok = await signIn(u.staff, 'xeno-pixel', 'openid profile');
   await refusal(depot.verifyToken(pool, pixelTok), 'invalid_token');                           // Depot refuses xeno-api
   await refusal(depot.verifyToken(pool, 'not-a-jwt'), 'invalid_token');
+  // Lore's LOGIN token (XO - DEPOT, measured): the device-grant / refresh token itself goes to Lore for `repository
+  // create` and `list`, so it carries root_domains and identity, and no depot_resources (it reaches no repository).
+  const claimsOf = (t) => JSON.parse(Buffer.from(t.split('.')[1], 'base64url'));
+  const login = claimsOf(staffTok);
+  assert.deepEqual([login.root_domains, login.identity, login.depot_resources], [['depot.xenosystem.ai'], u.staff, undefined]);
+  const pixelClaims = claimsOf(pixelTok);
+  assert.equal(pixelClaims.root_domains, undefined, 'a platform token never names Depot');
+  assert.equal(pixelClaims.identity, undefined);
+  {
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const code = await createAuthorizationCode(pool, { clientId: 'xeno-depot-cli', userId: u.staff, redirectUri: CB, scope: ALL,
+      codeChallenge: crypto.createHash('sha256').update(verifier).digest('base64url') });
+    const set = await exchangeAuthorizationCode(pool, { code, clientId: 'xeno-depot-cli', redirectUri: CB, codeVerifier: verifier });
+    assert.ok(set.refresh_token, 'the Depot CLI gets a refresh token');
+    const refreshed = claimsOf((await refreshTokenGrant(pool, { refreshToken: set.refresh_token, clientId: 'xeno-depot-cli' })).access_token);
+    assert.deepEqual([refreshed.aud, refreshed.root_domains, refreshed.identity], ['xeno-depot', ['depot.xenosystem.ai'], u.staff]);   // a refresh keeps them
+  }
 
   // ── 2. Self-registration: depot:* alone is a Depot client; mixed with another area is refused.
   const reg = await registerDynamicClient(pool, { client_name: 'Claude Code', redirect_uris: [CB], scope: 'depot:read depot:write' });
