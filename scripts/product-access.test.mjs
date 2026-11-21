@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'product-access-test';
 
-const { evaluateProductAccess, productAccessFor, loadProductPolicy, ACCESS_LEVELS } =
+const { evaluateProductAccess, productAccessFor, loadProductPolicy, ACCESS_LEVELS, isStaffPrincipal } =
   await import('../src/server/services/productAccess.js');
 const { entitlementsFor } = await import('../src/server/services/billingService.js');
 const { productForOidcClient, evaluateTokenClient, invalidatePolicyCache } =
@@ -84,9 +84,31 @@ test('🔴 a policy value this code does not know is NOT permission', () => {
   assert.equal(v.reason, 'unknown_policy');
 });
 
-test('the vocabulary in code and in the CHECK constraint are the same two words', () => {
-  assert.deepEqual([...ACCESS_LEVELS].sort(), ['account', 'paid-plan']);
+// The vocabulary grew by one word for XENO Depot (staff-only until counsel clears its name). The newest migration
+// that sets the CHECK is the authority on it; the original keeps its two words, which is what it applied.
+const staffDoor = read('src/server/database/migrations/20261205093000-depot-staff-door.sql');
+test('the vocabulary in code and in the CHECK constraint are the same three words', () => {
+  assert.deepEqual([...ACCESS_LEVELS].sort(), ['account', 'paid-plan', 'staff']);
   assert.match(migration, /CHECK \(access IN \('account', 'paid-plan'\)\)/);
+  assert.match(staffDoor.split(/^-- DOWN$/m)[0], /CHECK \(access IN \('account', 'paid-plan', 'staff'\)\)/);
+  assert.match(staffDoor, /VALUES \('depot', 'staff'[^;]*ON CONFLICT \(product\) DO NOTHING/s, 'the Depot seed must never overwrite an operator decision');
+});
+
+test('staff: XENO staff and their agents in; everyone else, services and the unusable out', () => {
+  const staffPolicy = { access: 'staff', message: 'Staff only.' };
+  assert.equal(evaluateProductAccess({ product: 'depot', policy: staffPolicy, entitlements: E('internal'), staff: true }).allowed, true);
+  const no = evaluateProductAccess({ product: 'depot', policy: staffPolicy, entitlements: E('internal') });
+  assert.deepEqual([no.allowed, no.reason, no.message], [false, 'staff_only', 'Staff only.']);
+  // a paid plan is not staff
+  assert.equal(evaluateProductAccess({ product: 'depot', policy: staffPolicy, entitlements: E('internal'), staff: 'yes' }).allowed, false);
+  assert.equal(isStaffPrincipal({ kind: 'human', role: 'admin', usable: true }), true);
+  assert.equal(isStaffPrincipal({ kind: 'human', role: 'moderator', usable: true }), true);
+  assert.equal(isStaffPrincipal({ kind: 'human', role: 'user', usable: true }), false);
+  assert.equal(isStaffPrincipal({ kind: 'human', role: 'admin', usable: false }), false);
+  assert.equal(isStaffPrincipal({ kind: 'agent', role: 'user', usable: true, owner: { role: 'admin' } }), true);
+  assert.equal(isStaffPrincipal({ kind: 'agent', role: 'admin', usable: true, owner: { role: 'user' } }), false);
+  assert.equal(isStaffPrincipal({ kind: 'service', role: 'admin', usable: true }), false);
+  assert.equal(isStaffPrincipal(null), false);
 });
 
 test('Canvas is seeded paid-plan, and the seed never overwrites an operator decision', () => {

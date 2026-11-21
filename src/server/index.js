@@ -146,6 +146,7 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
 import connectAuthorityRoutes from './routes/connectAuthorityRoutes.js';
+import depotAuthorityRoutes from './routes/depotAuthorityRoutes.js';
 import webConnectRoutes from './routes/webConnectRoutes.js';
 import siteGateRoutes from './routes/siteGateRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
@@ -161,7 +162,7 @@ import spawnCanvasRoutes from './routes/spawnCanvasRoutes.js';
 import v2AuthzRoutes from './routes/v2AuthzRoutes.js';
 import v2InferenceRoutes from './routes/v2InferenceRoutes.js';
 import inferenceSessionKeyRoutes from './routes/inferenceSessionKeyRoutes.js';
-import browserRelayRoutes, { accountBrowserRouter, corpusRelayRoutes, remoteRelayRoutes, accountCorpusRouter } from './routes/browserRelayRoutes.js';
+import browserRelayRoutes, { accountBrowserRouter, corpusRelayRoutes, remoteRelayRoutes, accountCorpusRouter, accountRemotePcsRouter } from './routes/browserRelayRoutes.js';
 import { sweepForgottenCalls } from './services/browserRelay.js';
 import { handleRelayConnection, isRelayRequest } from './services/browserRelaySocket.js';
 import { handlePortConnection, isPortRequest, selectProtocol, authenticateUpgrade as authenticatePortUpgrade } from './services/computePorts.js';
@@ -229,7 +230,8 @@ import {
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
 import { rateLimitKey, requesterRateLimitKey } from './utils/clientIp.js';
-import { globalLimiterSkips, isAuthenticatedLedgerServiceCall, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
+import { globalLimiterSkips, isAuthenticatedLedgerServiceCall, isAuthenticatedDepotStorageCall, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
+import storageDepotServiceRoutes from './routes/storageDepotServiceRoutes.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -395,7 +397,7 @@ const limiterBase = {
   validate: { ip: false }, // custom keys (CF-Connecting-IP) — skip the built-in req.ip validator
   message: { success: false, error: 'Too many requests, please try again later.' },
   // Mounted on '/api/', so req.path has '/api' stripped: compare the FULL path, or the skip never matches.
-  skip: (req) => globalLimiterSkips(req.baseUrl + req.path) || isAuthenticatedLedgerServiceCall(req),
+  skip: (req) => globalLimiterSkips(req.baseUrl + req.path) || isAuthenticatedLedgerServiceCall(req) || isAuthenticatedDepotStorageCall(req),
 };
 const globalAddressCeiling = rateLimit({ ...limiterBase, max: 2000, keyGenerator: rateLimitKey });
 const globalLimiter = rateLimit({ ...limiterBase, max: 300, keyGenerator: requesterRateLimitKey });
@@ -583,6 +585,10 @@ app.use('/api/depot/events', express.raw({ type: '*/*', limit: '256kb' }), (req,
 // XENO Storage: an app's project files (services/projectFolders.js). Mounted BEFORE the global body parsers so a
 // project's .json or .txt arrives as its own bytes, not parsed into an object.
 app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploadsDir }));
+// XENO Storage: XENO Depot's content-addressed objects, for Depot's server only (service token, no user session).
+// BEFORE the global body parsers: the 100 MB express.raw below would otherwise read the body first and this
+// namespace's 1 MiB object cap would never apply.
+app.use('/api/storage/service/depot/v1', databaseMiddleware, storageDepotServiceRoutes);
 
 // ULTRA HIGH LIMITS for base64 image data processing
 // Bound evidence requests before the general 100 MB parser allocates their body.
@@ -729,6 +735,8 @@ app.use('/api/workspace-analytics', databaseMiddleware, authMiddleware, requireA
 app.use('/api/workspace-docs', databaseMiddleware, authMiddleware, requireActivated, workspaceDocsRoutes);   // Office › Write and Notes: documents that are Storage files (services/workspaceDocs.js)   // Corpo › Analytics: a workspace's own dashboards (services/analytics.js)   // XENO Publish = XENO Post, server-to-server (services/xenoPost.js)
 // XENO Connect's host adapter asks here what a token or person may do right now (CONNECT_SERVICE_TOKEN; fails closed).
 app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);
+// XENO Depot's gate asks here what a xeno-depot token may do on a repo (DEPOT_SERVICE_TOKEN; fails closed). Decision 0001 §3.
+app.use('/api/depot/authority', databaseMiddleware, depotAuthorityRoutes);
 // Website Storage → XENO Connect (Connected clouds). Website cookie sessions only; tokens stay in this process.
 app.use('/api/storage/connect', databaseMiddleware, authMiddleware, webConnectRoutes);
 // The site gate: nginx asks before serving any page (SITE_GATE=on). Fails closed. See routes/siteGateRoutes.js.
@@ -838,6 +846,7 @@ if (process.env.OIDC_ENABLED === 'true') {
   app.use('/api/v2/corpus', databaseMiddleware, authMiddleware, corpusRelayRoutes);
   app.use('/api/v2/remote', databaseMiddleware, authMiddleware, remoteRelayRoutes);
   app.use('/api/account/corpus-pcs', databaseMiddleware, authMiddleware, accountCorpusRouter);
+  app.use('/api/account/remote-pcs', databaseMiddleware, authMiddleware, accountRemotePcsRouter);
   app.use('/api/v2/inference', databaseMiddleware, oidcAuth, v2InferenceRoutes);
   // XENO handle registry (handle = login = identity = @xenostudio.ai address)
   app.use('/api/v2/handles', databaseMiddleware, oidcAuth, handleRoutes);

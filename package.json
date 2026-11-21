@@ -97,6 +97,7 @@
     "test:xeno-workflow-e2e": "node src/server/tests/xeno-workflow-e2e.test.mjs",
     "test:automate-ui": "node prototypes/xeno-workspace/tests/automate-test.mjs",
     "test:automate-mutation": "node scripts/automate-mutation-check.mjs",
+    "test:depot-authority-mutation": "node scripts/depot-authority-mutation-check.mjs",
     "test:depot-events-mutation": "node scripts/depot-events-mutation-check.mjs",
     "test:workspace-mail": "node src/server/tests/workspace-mail.test.mjs",
     "test:mail-ui": "node prototypes/xeno-workspace/tests/mail-test.mjs",

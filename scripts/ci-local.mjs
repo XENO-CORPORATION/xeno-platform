@@ -64,11 +64,11 @@ const SERVER = join(ROOT, 'src', 'server');
 const WF = join(ROOT, '.github', 'workflows');
 
 const CORE_DB_SUITES = [
-  'authz-v2', 'oidc-v2', 'depot-events', 'erasure', 'account-recovery',
+  'authz-v2', 'oidc-v2', 'depot-authority', 'depot-events', 'erasure', 'account-recovery',
   'auth-token-confusion', 'api-key-auth', 'browser-bff-session', 'corpus-relay', 'remote-relay', 'stock', 'marketplace-agents',
   'inference-routing-live', 'chat-stream-own-key', 'chat-area', 'library-area', 'workspace-area', 'forum-tickets', 'forum-report-evidence', 'forum-moderation-actions', 'forum-writeback', 'xeno-tasks', 'canvases', 'live-tickets', 'canvas-workforce-cards', 'project-item-people', 'chat-handoff', 'task-folders', 'workspace-foundation', 'tasks-mcp-oauth', 'xeno-mcp', 'agents-divisions', 'agent-cloud-runs', 'agent-company-ownership', 'agent-media-tools', 'dpop-token-exchange', 'readonly-preview-lifecycle',
   'leader-election', 'fresh-db-boot', 'password-change-atomicity', 'oidc-refresh-recovery',
-  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'project-folders', 'chat-project-folders', 'account-security', 'inference-session-keys', 'browser-relay', 'spawn-backup-account-wrap', 'github-repositories', 'global-limiter-ledger-service',
+  'byok-lifecycle-audit', 'gateway-catalogue-sync', 'email-delivery-events', 'suspension-gate', 'chat-branches', 'artifacts', 'library-organise', 'storage-allowance', 'storage-depot-objects', 'project-folders', 'chat-project-folders', 'account-security', 'inference-session-keys', 'browser-relay', 'spawn-backup-account-wrap', 'github-repositories', 'global-limiter-ledger-service',
 ];
 const CORE_NODB_SUITES = ['ai-tools-passthrough', 'entitlement-gate', 'upstream'];
 const MONEY_SUITES = [
