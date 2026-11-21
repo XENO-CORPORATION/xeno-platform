@@ -1205,6 +1205,51 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div>${stTop ? (stTop.left ? `<span class="pg-top-sep" aria-hidden="true"></span>${stTop.left}` : '') : ''}${window.XENO_GENERATIONS?.route?.() ? '' : isChat && window.XENO_CHAT && window.XENO_CHAT.served ? `<button class="tb-mid" data-chat-transcript aria-live="polite" data-tip="Copy the whole conversation, with its diagnostics">${ic('copy')}<span>Copy transcript</span></button>` : ''}<div class="sp"></div>${stTop ? stTop.right : ''}${window.XENO_GENERATIONS?.route?.() ? window.XENO_GENERATIONS.viewSwitch() : isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
+  // ---- PRODUCT HOST (address.js PRODUCT; owner, 2026-11-21: Tasks "full viewport, alone, with a header, fast"): one
+  // product fills the window under its own 44px header, the one XENO Tools and XENO Workshop have: the mark and the
+  // product's name, its views in the middle, then the workspace, Search · Ctrl K, New and the account. The rail and the
+  // sidebar are not drawn. The page below is the workspace's own page for that product: one Tasks, not a second copy.
+  const PRODUCT = window.XENO_ADDR.product;
+  const PRODUCT_INFO = { tasks: { name: 'Tasks', views: [['', 'Board'], ['My tasks', 'My tasks'], ['Needs triage', 'Triage'], ['In review', 'In review']], newLabel: 'New task', workspacePath: '/workspace/tasks' } };
+  const XENO_MARK = '<svg width="18" height="18" viewBox="0 0 1082 1082" aria-hidden="true"><path fill="currentColor" d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z"/><path fill="currentColor" d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z"/><path fill="currentColor" d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z"/><path fill="currentColor" d="M220.763 592.907L40.7063 758.55L31.4588 980.358C29.3761 1030.31 68.5709 1042.46 88.4287 1042.28L311.735 1051.59L656.756 734.191L538.986 606.174L284.514 840.277C247.462 874.363 241.155 859.988 242.633 848.54L251.881 626.733L220.763 592.907Z"/></svg>';
+  function productHeaderHTML() {
+    const info = PRODUCT_INFO[PRODUCT]; if (!info) return '';
+    const it = S.view === 'global' && S.global === PRODUCT ? (S.item || '') : null;
+    const isView = info.views.some(([k]) => k === it);
+    const ws = window.XENO_SCOPE?.served ? window.XENO_SCOPE.current?.() : null;
+    const u = window.XENO_PLATFORM?.user, nm = u ? String(u.display_name || u.username || u.email || '?') : '';
+    const origin = window.XENO_ADDR.workspaceOrigin;
+    return `<a class="ph-hb ph-home" href="/" data-ph-go="" title="XENO ${esc(info.name)} home">${XENO_MARK}<b>${esc(info.name)}</b></a>`
+      + (it && !isView ? `<span class="ph-crumb" aria-hidden="true">/</span><span class="ph-crumb-name">${esc(String(it).split('/')[0])}</span>` : '')
+      + `<div class="ph-sp"></div><div class="ph-tabs" role="tablist" aria-label="${esc(info.name)}">${info.views.map(([k, l]) => `<button type="button" role="tab" class="ph-tab" aria-selected="${isView && it === k}" data-ph-go="${esc(k)}">${esc(l)}</button>`).join('')}</div><div class="ph-sp"></div>`
+      + (ws ? `<button type="button" class="ph-ws" data-ph-ws aria-haspopup="menu" title="Workspace">${esc(ws.name)}${ic('chev')}</button>` : '')
+      + `<button type="button" class="ph-search" data-ph-search title="Search · Ctrl K">${ic('search')}<span class="ph-wide">Search</span><kbd>Ctrl K</kbd></button>`
+      + (u ? `<button type="button" class="ph-new" data-ph-new title="${esc(info.newLabel)} · C">${ic('plus')}<span class="ph-wide">${esc(info.newLabel)}</span></button>` : '')
+      + `<a class="ph-hb ph-hi" href="${esc(origin + info.workspacePath)}" title="Open in the workspace" aria-label="Open in the workspace">${ic('open')}</a>`
+      + (u ? `<a class="ph-avatar" href="${esc(origin + '/workspace/settings')}" title="${esc(nm)}" aria-label="Account: ${esc(nm)}">${esc(nm.trim().charAt(0).toUpperCase() || '?')}</a>` : `<a class="ph-signin" href="/login">Sign in</a>`);
+  }
+  function renderProductHeader() {
+    if (!PRODUCT) return;
+    let ph = document.getElementById('ph');
+    if (!ph) {
+      ph = document.createElement('header'); ph.id = 'ph'; ph.className = 'ph'; ph.setAttribute('data-product-header', PRODUCT);
+      document.body.prepend(ph);
+      ph.addEventListener('click', (e) => {
+        const go = e.target.closest('[data-ph-go]');
+        if (go) { e.preventDefault(); const k = go.dataset.phGo; window.XENO_ADDR.go('#/overview/g/' + PRODUCT + (k ? '/' + encodeURIComponent(k) : '')); return; }
+        if (e.target.closest('[data-ph-new]')) return void window.XENO_TASKS?.newTask?.();
+        if (e.target.closest('[data-ph-search]')) return void window.XW.search();
+        const wb = e.target.closest('[data-ph-ws]');
+        if (wb && window.XENO_SCOPE?.served) {
+          const cur = window.XENO_SCOPE.current?.() || {}, r = wb.getBoundingClientRect();
+          window.XCM?.show([window.XENO_SCOPE.list().map((w) => ({ label: w.name, checked: w.id === cur.id, run: () => window.XA?.switchWorkspace?.(w.id) }))], { x: r.left, y: r.bottom + 4, opener: wb, label: 'Workspace' });
+        }
+      });
+    }
+    const html = productHeaderHTML();
+    if (ph.__html !== html) { ph.innerHTML = html; ph.__html = html; }
+  }
+
   window.XW = { get S() { return S; }, go, setFold, reloadData: (key) => { try { if (DS[key]) DS[key].err = null; load(key); } catch {} }, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const html = panelHTML(); if (pv && pv.__html === html) return markItems(pv); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${html}</div>`).__html = html; const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
@@ -1231,6 +1276,7 @@
     if (mv && !first && !samePlace) { mv.classList.add('swap-out'); setTimeout(() => { main.innerHTML = mainHTML(); }, 90); }
     else if (mv && samePlace && window.XENO_PAGES?.repaint && main.querySelector('.mview.pg-mview') && window.XENO_PAGES.framed?.() != null) { window.XENO_PAGES.repaint(); const c = main.querySelector('.topbar .crumbs'); if (c) { const h = crumbs(); if (c.innerHTML !== h) c.innerHTML = h; } }
     else main.innerHTML = mainHTML();
+    renderProductHeader();
     first = false;
   }
   // replace the panel's content node only — never the switcher layer that may sit above it

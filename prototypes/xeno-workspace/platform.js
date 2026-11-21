@@ -9,7 +9,10 @@
  * window.XENO_PLATFORM = { served, user, ready, first }   ready resolves to the user, or null when the page is leaving.
  *   first(promise) registers a first load the page waits for before it is shown. */
 (() => {
-  const served = /^https?:$/.test(location.protocol) && /^\/workspace(\/|$)/.test(location.pathname);
+  // served under /workspace, or anywhere on a product's own host (address.js PRODUCT: tasks.xenosystem.ai), whose
+  // /login is that host's own sign-in (nginx) and whose returnUrl comes back to the same address
+  const product = !!(window.XENO_ADDR && window.XENO_ADDR.product);
+  const served = /^https?:$/.test(location.protocol) && (product || /^\/workspace(\/|$)/.test(location.pathname));
   const P = window.XENO_PLATFORM = { served, user: null, ready: Promise.resolve(null), first: () => {} };
   if (!served) return;
   const FIRST_PAINT_MS = 6000, firsts = [];
@@ -159,7 +162,7 @@
     // An account that has not confirmed its email is refused by every platform route (account_not_activated), so
     // the workspace would open looking empty and say nothing (found live, 2026-10-23). Send it to the page that
     // explains and resends the code. Only an explicit `activated: false` does this: the server stays the gate.
-    if (await notActivated()) { location.replace('/auth/activate'); return null; }
+    if (await notActivated()) { location.replace((product ? window.XENO_ADDR.workspaceOrigin : '') + '/auth/activate'); return null; }
     return adopt(d.user);
   }
   const start = () => { opening(); P.ready = check(); };

@@ -112,6 +112,7 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-motion-web': IDENTITY,
   // XENO Creator in the browser: the same host sign-in as motion., identity only.
   'xeno-creator-web': IDENTITY,
+  'xeno-tasks-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],

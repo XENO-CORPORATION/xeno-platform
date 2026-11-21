@@ -22,6 +22,25 @@ export function stampAssets(html, hashOf) {
   return { html: out, count };
 }
 
+// A PRODUCT HOST's page (address.js PRODUCT; owner, 2026-11-21: Tasks "full viewport, alone, fast"): the workspace
+// page itself, keeping only the scripts that product needs. One source: index.html; this derives the product's page
+// from it, in development (the dev server) and in the build (dist/workspace/<product>.html, served by nginx on the
+// product's host). A script missing here is a page error on that host, and the product's browser test fails on it.
+export const PRODUCT_SCRIPTS = Object.freeze({
+  tasks: ['address.js', 'theme-palette.js', 'theme.js', 'mark-loader.js', 'report-client.js', 'report-capture.js', 'report-view.js', 'platform.js', 'keys.js', 'net.js',
+    'history-core.js', 'history.js', 'select-core.js', 'select.js', 'drag.js', 'mode-marks.js', 'data.js', 'nav.js', 'xeno-icons.js', 'ctx-menu.js', 'custom-modes.js',
+    'pages-data.js', 'platform-work.js', 'pages.js', 'modals.js', 'actions.js', 'visibility.js', 'search.js', 'platform-canvas.js', 'platform-tasks.js', 'app.js', 'panel-sel.js'],
+});
+/** index.html → the page for one product: the same markup and styles, only that product's scripts */
+export function productPage(html, product) {
+  const keep = new Set(PRODUCT_SCRIPTS[product] || []);
+  if (!keep.size) throw new Error('xeno-workspace: no script list for product ' + product);
+  let kept = 0, dropped = 0;
+  const out = html.replace(/<script src="([^"?#]+)(\?[^"]*)?"><\/script>\n?/g, (whole, name) => { if (keep.has(name)) { kept++; return whole; } dropped++; return ''; });
+  if (kept !== keep.size) throw new Error(`xeno-workspace: ${product} lists ${keep.size} scripts but index.html has ${kept} of them`);
+  return { html: out.replace('<html lang="en">', `<html lang="en" data-product="${product}">`), kept, dropped };
+}
+
 function walk(dir, base = dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const abs = path.join(dir, e.name);
@@ -44,6 +63,13 @@ export function xenoWorkspace(rootDir) {
       server.middlewares.use((req, res, next) => {
         const u = new URL(req.url || '/', 'http://local');
         if (u.pathname === '/workspace') { res.statusCode = 301; res.setHeader('Location', '/workspace/' + u.search); return res.end(); }
+        // a product host (address.js PRODUCT: tasks.localhost here, tasks.xenosystem.ai behind nginx): its own
+        // addresses (/, /T-4, /My tasks) are the workspace page, which shows that product alone
+        const productHost = /^tasks\.localhost(:\d+)?$/i.test(String(req.headers.host || ''));
+        if (productHost && !u.pathname.startsWith('/workspace/') && !u.pathname.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(u.pathname)) {
+          const page = productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), 'tasks').html;
+          res.setHeader('Content-Type', TYPES['.html']); res.setHeader('Cache-Control', 'no-cache'); return res.end(page);
+        }
         if (!u.pathname.startsWith('/workspace/')) return next();
         let rel; try { rel = decodeURIComponent(u.pathname.slice('/workspace/'.length)) || 'index.html'; } catch { rel = ''; }
         // an app address (no file extension: /workspace/studio/tasks/T-4) is the workspace itself; a missing FILE stays a 404
@@ -64,6 +90,12 @@ export function xenoWorkspace(rootDir) {
       const stamped = stampAssets(fs.readFileSync(page, 'utf8'), (name) => { const p = path.join(dest, name); return files.includes(name.split('/').join(path.sep)) && fs.existsSync(p) ? crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').slice(0, 12) : null; });
       if (stamped.count === 0) throw new Error('xeno-workspace: no script or stylesheet address was stamped, so index.html was not recognised');
       fs.writeFileSync(page + '.tmp', stamped.html, 'utf8'); fs.renameSync(page + '.tmp', page);
+      // each product host's page, from the stamped page, so its scripts keep their ?v=<hash> addresses
+      for (const product of Object.keys(PRODUCT_SCRIPTS)) {
+        const pp = productPage(stamped.html, product), to = path.join(dest, product + '.html');
+        fs.writeFileSync(to + '.tmp', pp.html, 'utf8'); fs.renameSync(to + '.tmp', to);
+        console.log(`xeno-workspace: ${product}.html keeps ${pp.kept} scripts, drops ${pp.dropped}`);
+      }
       if (!fs.existsSync(path.join(dest, 'index.html')) || !fs.existsSync(path.join(dest, 'platform.js'))) throw new Error('xeno-workspace: the copy is missing index.html or platform.js');
       console.log(`xeno-workspace: ${files.length} files -> ${path.relative(rootDir, dest)}, ${stamped.count} addresses stamped`);
     },

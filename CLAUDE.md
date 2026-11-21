@@ -243,6 +243,21 @@ Rules that are easy to break:
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
 
+## ✅ XENO Tasks on its own host: tasks.xenosystem.ai (owner, 2026-11-21)
+
+The owner: *"a full viewport render for the tasks alone, with a header, fast"* (typos corrected). It is the WORKSPACE's
+own Tasks on a product host, never a second Tasks UI:
+- `address.js` reads the host (`tasks.` on xenosystem.ai / xenostudio.ai / localhost) as the product: `/` is
+  `#/overview/g/tasks`, `/<item>` its item; any other place is the workspace's, opened on the main site (`location.assign`).
+- `app.js` `renderProductHeader()` draws the 44px product header (`PRODUCT_INFO`); `index.html` hides the rail and
+  the sidebar under `html[data-product]`. `platform.js` counts the host as served.
+- The page is `index.html` with only `PRODUCT_SCRIPTS.tasks` (`scripts/vite-workspace.mjs` `productPage`), served by
+  the dev server on tasks.localhost and shipped as `dist/workspace/tasks.html`. **A script Tasks starts to need must be
+  added to that list:** `npm run test:tasks-host-ui` fails with a page error otherwise.
+- nginx `server_name tasks.xenosystem.ai` (+ `task.` forwarding), host sign-in client `xeno-tasks-web`; stamped
+  `/workspace/*?v=` files kept a year there (`$tasks_asset_cache`).
+Proofs: `test:tasks-host-ui`, `test:tasks-host-mutation`, `scripts/oidc-tasks-web-client.test.mjs`; `measure:tasks-open`.
+
 ## 🧰 XENO Tools (tools.xenosystem.ai) is its OWN product, served from HERE (owner, 2026-10-28)
 
 `src/toolHost/` (`Picker.tsx`, `chrome.tsx`, `main.tsx`, `tools.css`, served by `tool-host.html`) over
