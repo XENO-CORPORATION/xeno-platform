@@ -40,7 +40,7 @@ try {
     assert.equal(p?.access, 'paid-plan');
   });
   await check('no other product is seeded — every other door is unchanged', async () => {
-    // depot is a NEW product (no door before), seeded staff-only by 20261205090000-depot-staff-door.sql; it changes
+    // depot is a NEW product (no door before), seeded staff-only by 20261205093000-depot-staff-door.sql; it changes
     // no existing product's door, which is what this check guards.
     const r = await pool.query('SELECT product, access FROM product_access_policy ORDER BY product');
     assert.deepEqual(r.rows.map((x) => `${x.product}:${x.access}`), ['canvas:paid-plan', 'depot:staff']);

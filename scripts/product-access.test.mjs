@@ -86,7 +86,7 @@ test('🔴 a policy value this code does not know is NOT permission', () => {
 
 // The vocabulary grew by one word for XENO Depot (staff-only until counsel clears its name). The newest migration
 // that sets the CHECK is the authority on it; the original keeps its two words, which is what it applied.
-const staffDoor = read('src/server/database/migrations/20261205090000-depot-staff-door.sql');
+const staffDoor = read('src/server/database/migrations/20261205093000-depot-staff-door.sql');
 test('the vocabulary in code and in the CHECK constraint are the same three words', () => {
   assert.deepEqual([...ACCESS_LEVELS].sort(), ['account', 'paid-plan', 'staff']);
   assert.match(migration, /CHECK \(access IN \('account', 'paid-plan'\)\)/);

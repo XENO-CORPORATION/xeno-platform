@@ -24,7 +24,7 @@ import * as depot from '../services/depotAuthority.js';
 import { createDepotAuthorityRouter } from '../routes/depotAuthorityRoutes.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATION = fs.readFileSync(path.join(here, '../database/migrations/20261205090000-depot-staff-door.sql'), 'utf8');
+const MIGRATION = fs.readFileSync(path.join(here, '../database/migrations/20261205093000-depot-staff-door.sql'), 'utf8');
 const [UP, DOWN] = MIGRATION.split(/^-- DOWN$/m);
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const CB = 'http://127.0.0.1/callback';
