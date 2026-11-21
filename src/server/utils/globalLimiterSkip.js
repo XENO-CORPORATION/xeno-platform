@@ -34,8 +34,21 @@ const SKIP = new Set([
  * unauthenticated client cannot use the path to bypass the limiter. Same constant-time compare as the router.
  */
 export function isAuthenticatedLedgerServiceCall(req, expected = process.env.LEDGER_SERVICE_TOKEN) {
+  return isAuthenticatedServiceCall(req, '/api/v2/ledger/service', expected);
+}
+
+/**
+ * XENO Depot's object store (/api/storage/service/depot/v1, storageDepotServiceRoutes.js): Depot's server pushes and
+ * fetches thousands of 256 KiB objects per clone or push, for every Depot user, with ONE service token. Same rule as
+ * the ledger: only a call that presents the correct token skips.
+ */
+export function isAuthenticatedDepotStorageCall(req, expected = process.env.DEPOT_STORAGE_SERVICE_TOKEN) {
+  return isAuthenticatedServiceCall(req, '/api/storage/service/depot', expected);
+}
+
+function isAuthenticatedServiceCall(req, prefix, expected) {
   const fullPath = String(req?.baseUrl || '') + String(req?.path || '');
-  if (fullPath !== '/api/v2/ledger/service' && !fullPath.startsWith('/api/v2/ledger/service/')) return false;
+  if (fullPath !== prefix && !fullPath.startsWith(prefix + '/')) return false;
   if (!expected) return false;
   const header = String(req?.headers?.authorization || '');
   if (!header.startsWith('Bearer ')) return false;

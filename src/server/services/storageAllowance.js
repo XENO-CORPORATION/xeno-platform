@@ -49,14 +49,26 @@ async function machineBytes(db, scope, args) {
 }
 const PERSONAL_MACHINES = PERSONAL.replace('f.workspace_id', 'm.workspace_id');
 
+/**
+ * XENO Depot's objects in a scope (`storage_depot_objects`, services/storageDepotObjects.js): `{ bytes, objects }`.
+ * `scope` is SQL over `d`. They are the workspace's version-control content, so they count in its pool.
+ */
+async function depotBytes(db, scope, args) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(SUM(d.size_bytes), 0)::bigint AS bytes, COUNT(*)::int AS objects FROM storage_depot_objects d WHERE ${scope}`, args);
+  return { bytes: Number(rows[0].bytes), objects: rows[0].objects };
+}
+const PERSONAL_DEPOT = PERSONAL.replace('f.workspace_id', 'd.workspace_id');
+
 async function personalBytes(db, userId) {
-  const [{ rows }, machines] = await Promise.all([db.query(
+  const [{ rows }, machines, depot] = await Promise.all([db.query(
     `SELECT COALESCE(SUM(f.file_size), 0)::bigint AS bytes, COUNT(*)::int AS files,
             COALESCE(SUM(f.file_size) FILTER (WHERE f.deleted_at IS NOT NULL), 0)::bigint AS trash_bytes
-       FROM user_files f WHERE ${PERSONAL} AND ${HELD}`, [userId]), machineBytes(db, PERSONAL_MACHINES, [userId])]);
+       FROM user_files f WHERE ${PERSONAL} AND ${HELD}`, [userId]), machineBytes(db, PERSONAL_MACHINES, [userId]),
+    depotBytes(db, PERSONAL_DEPOT, [userId])]);
   return {
-    bytes: Number(rows[0].bytes) + machines.bytes, files: rows[0].files, trashBytes: Number(rows[0].trash_bytes),
-    machineBytes: machines.bytes, machines: machines.machines,
+    bytes: Number(rows[0].bytes) + machines.bytes + depot.bytes, files: rows[0].files, trashBytes: Number(rows[0].trash_bytes),
+    machineBytes: machines.bytes, machines: machines.machines, depotBytes: depot.bytes, depotObjects: depot.objects,
   };
 }
 
@@ -92,6 +104,7 @@ export async function storageUsage(db, userId) {
     byKind: [
       ...kinds.rows.map(r => ({ kind: r.kind, bytes: Number(r.bytes), files: r.files })),
       ...(mine.machineBytes > 0 ? [{ kind: 'machine', bytes: mine.machineBytes, files: mine.machines }] : []),
+      ...(mine.depotBytes > 0 ? [{ kind: 'depot', bytes: mine.depotBytes, files: mine.depotObjects }] : []),
     ].sort((a, b) => b.bytes - a.bytes),
     // files this person put in workspaces: they count toward those workspaces, shown for information
     workspaces: shared.rows.map(r => ({ id: r.id, bytes: Number(r.bytes), files: r.files })),
@@ -142,12 +155,19 @@ export async function workspaceMachineKind(db, workspaceId) {
   return m.bytes > 0 ? { kind: 'machine', bytes: m.bytes, files: m.machines } : null;
 }
 
+/** A shared workspace's Depot objects, as a `byKind` row (`null` when there are none). */
+export async function workspaceDepotKind(db, workspaceId) {
+  const d = await depotBytes(db, 'd.workspace_id = $1', [workspaceId]);
+  return d.bytes > 0 ? { kind: 'depot', bytes: d.bytes, files: d.objects } : null;
+}
+
 export async function workspaceUsedBytes(db, workspaceId) {
-  const [files, machines] = await Promise.all([
+  const [files, machines, depot] = await Promise.all([
     db.query(`SELECT COALESCE(SUM(f.file_size), 0)::bigint AS bytes FROM user_files f WHERE f.workspace_id = $1 AND ${HELD}`, [workspaceId]),
     machineBytes(db, 'm.workspace_id = $1', [workspaceId]),
+    depotBytes(db, 'd.workspace_id = $1', [workspaceId]),
   ]);
-  return Number(files.rows[0].bytes) + machines.bytes;
+  return Number(files.rows[0].bytes) + machines.bytes + depot.bytes;
 }
 
 async function assertWorkspaceRoom(tx, workspaceId, bytes) {

@@ -47,6 +47,7 @@ p.on('request', (q) => {
   if (u.pathname === '/api/compute/cloud-agent' && q.method() === 'GET') { statusCalls += 1; return cloudClosed ? json(200, { success: true, agent: { enabled: false } }) : json(200, { success: true, agent: { enabled: true, machineId: MACHINE, state: 'stopped', lastActiveAt: '2026-11-15T10:00:00.000Z' } }); }
   if (u.pathname === '/api/compute/cloud-agent' && q.method() === 'POST') { cloudCalls += 1; return cloudClosed ? json(403, { success: false, error: 'Cloud sessions are not open to your account yet', code: 'cloud_agent_not_enabled' }) : json(200, { success: true, agent: { machineId: MACHINE, workspaceId: 'w1', name: 'Cloud', connect: { path: `/api/compute/machines/${MACHINE}/ports/agent/`, protocols: ['xeno-port.v1', 'xeno-ticket.' + 'T'.repeat(43)], expiresAt: 'x' } } }); }
   if (u.pathname === '/api/oauth2/authorize' && q.method() === 'POST') { let b = {}; try { b = JSON.parse(q.postData() || '{}'); } catch {} authorizeCalls.push(b); return signedOut ? json(401, { error: 'unauthorized' }) : json(200, { code: 'CODE-' + b.state, redirect: 'x' }); }
+  if (u.pathname === '/api/account/remote-pcs' && q.method() === 'GET') return json(200, { pcs: [{ id: 'row-1', installationId: 'pc-1', name: 'bnkr' }] });
   if (u.pathname === '/api/notifications') return json(200, { success: true, unread: 0, items: [] });
   if (u.pathname === '/api/workspace/search') return json(200, { success: true, results: [], counts: {} });
   if (u.pathname === '/api/workspace/needs') return json(200, { success: true, items: [] });
@@ -107,6 +108,7 @@ try {
   ok(loads.length === before && await inFrame() === 'REMOTE ' + VIEW, 'and the frame was not reloaded to do it');
   const crumb = await p.$eval('.crumbs', (e) => e.innerText).catch(() => '');
   ok(/Agent/.test(crumb) && /Chat/.test(crumb) && !/pc-1|chat-9/.test(crumb), `the breadcrumb says what kind of place it is, never an id (${crumb.replace(/\s+/g, ' ')})`);
+  ok(/bnkr/.test(crumb) && !/A PC/.test(crumb), `and it names the PC by the name the server holds for it (${crumb.replace(/\s+/g, ' ')})`);
 
   // the workspace redraws (the sidebar closes and opens): the same frame stays
   await p.evaluate(() => { window.XW.render(); window.XW.render(); }); await settle(500);

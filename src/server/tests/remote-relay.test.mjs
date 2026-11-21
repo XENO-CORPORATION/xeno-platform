@@ -25,7 +25,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { runAllMigrations } from '../services/migrationRunner.js';
 import { migrateAccountV2 } from '../database/migrate-account-v2.js';
 import { authMiddleware } from '../middleware/auth.js';
-import browserRelayRoutes, { corpusRelayRoutes, remoteRelayRoutes } from '../routes/browserRelayRoutes.js';
+import browserRelayRoutes, { corpusRelayRoutes, remoteRelayRoutes, accountRemotePcsRouter } from '../routes/browserRelayRoutes.js';
 import { liveOrSeenRecently, LIVE_SEEN_WITHIN_MS } from '../services/browserRelay.js';
 import { handleRelayConnection, isRelayRequest } from '../services/browserRelaySocket.js';
 import * as relay from '../services/browserRelay.js';
@@ -89,6 +89,7 @@ async function serve(knobs = {}) {
   app.use('/api/v2/browser', authMiddleware, browserRelayRoutes);
   app.use('/api/v2/corpus', authMiddleware, corpusRelayRoutes);
   app.use('/api/v2/remote', authMiddleware, remoteRelayRoutes);
+  app.use('/api/account/remote-pcs', authMiddleware, accountRemotePcsRouter);
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
   wss.on('connection', (ws, req) => { if (isRelayRequest(req)) handleRelayConnection(ws, req, pool, knobs); });
@@ -231,6 +232,15 @@ async function main() {
     const seen = await call(a.port, 'GET', '/api/v2/remote/installations', { t: host.t, key: host.key });
     ok(seen.body.installations.some((i) => i.remoteRole === 'host'), 'a person sees their own devices and each one\'s role');
     ok(!seen.body.installations.some((i) => String(i.id) === stranger.id), 'and no one else\'s');
+
+    // The workspace's breadcrumb asks for the person's PC names on the web session, never the sealed page.
+    const webOf = (u) => jwt.sign({ userId: u.id, email: `${tag}${u === alice ? 'alice' : 'bob'}@example.test` }, process.env.JWT_SECRET || 'xenostudio-super-secret-jwt-key-change-in-production', { expiresIn: '1h' });
+    const names = await fetch(`http://127.0.0.1:${a.port}/api/account/remote-pcs`, { headers: { authorization: `Bearer ${webOf(alice)}` } }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    ok(names.status === 200 && names.body.pcs.length === 1 && names.body.pcs[0].name === 'Desk PC' && names.body.pcs[0].id === host.id && names.body.pcs[0].installationId === host.installationId,
+      `the web session lists the person's PCs by name and id, and no remote devices (${JSON.stringify(names.body)})`);
+    const bobsNames = await fetch(`http://127.0.0.1:${a.port}/api/account/remote-pcs`, { headers: { authorization: `Bearer ${webOf(bob)}` } }).then((r) => r.json());
+    ok(Array.isArray(bobsNames.pcs) && !bobsNames.pcs.some((p) => p.id === host.id), 'and someone else sees none of them');
+    ok((await fetch(`http://127.0.0.1:${a.port}/api/account/remote-pcs`)).status === 401, 'and nobody signed out sees anything');
     const bad = await call(a.port, 'POST', '/api/v2/remote/installations', { t: host.t, key: host.key, body: { installationId: crypto.randomUUID(), label: 'No role' } });
     ok(bad.status === 400 && bad.body.error.code === 'invalid_role', 'a device must say what it is');
     const rows = await pool.query(`SELECT count(*)::int AS n FROM browser_installations WHERE surface = 'remote' AND user_id = $1 AND remote_role IS NULL`, [alice.id]);
