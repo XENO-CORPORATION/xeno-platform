@@ -3,6 +3,12 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-21
+
+**The Agent area's breadcrumb names your PC.** A session open on a PC read "Agent / A PC / Chat"; it now reads "Agent / bnkr / Chat", with the PC's own name. The name is the one the PC registered with, which the server already holds: the workspace reads it from `GET /api/account/remote-pcs` (your own PCs, on your web session) by the id in the address. The sealed page still tells the workspace only ids, and chat and project names stay sealed. Proof: `remote-relay.test.mjs` (41, real Postgres) and `npm run test:agent-remote-ui` (mutation-checked).
+
+**The site's image records the commit it was built from.** The frontend image now carries `XENO_SOURCE_REVISION` as a label and in `/etc/xeno-revision`, as the backend image already did, so "which site build is live" is read from the container rather than guessed. It is kept out of the served folder. Proof: `node --test scripts/deploy-platform.test.mjs` (mutation-checked).
+
 ## 2026-11-20
 
 **Credit holds stay fast as open holds pile up: open holds are summed once per call.** The index from earlier today held only while there were few open holds. At 1,276 the planner went back to probing every open hold once per grant (2,067,120 probes, 5.2 s) inside the account lock, and holds queued to a 70 s median. The three funding queries in `utils/usageCreditFunding.js` now sum open holds once, in a grouped join: identical rows on production data (1,620 of 1,620, 0 differing), 5,981 ms to 8.4 ms, `FOR UPDATE OF g` unchanged. Proof: the money-path suites against Postgres 15.

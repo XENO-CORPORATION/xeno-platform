@@ -237,8 +237,29 @@
 
   const page = () => `<div class="xar-host" data-xar-frame>Opening XENO Agent…</div>`;
 
-  /** The breadcrumb for a view. The names of a PC and a chat are inside the encrypted page, so the trail says what kind of place it is. */
-  const trail = (item) => { const v = viewOf(item); if (!v) return ['Cloud']; if (v === 'pcs') return ['Your PCs']; if (v.startsWith('cloud')) return ['Cloud', 'Chat']; return /\/c\//.test(v) ? ['A PC', 'Chat'] : /\/w\//.test(v) ? ['A PC', 'Project'] : ['A PC']; };
+  /** PC names by id, from the label each PC registered with (`/api/account/remote-pcs`). The server already holds these;
+   *  the sealed page is never asked, so it still tells this page only ids. Chat and project names stay sealed. */
+  let pcNames = null, pcNamesAsked = false;
+  const pcNameOf = (id) => {
+    if (!pcNames && !pcNamesAsked) {
+      pcNamesAsked = true;
+      const P = window.XENO_PLATFORM;
+      if (P && P.served) void P.api('GET', '/api/account/remote-pcs').then((r) => {
+        const rows = r && r.ok && r.d && Array.isArray(r.d.pcs) ? r.d.pcs : [];
+        pcNames = new Map();
+        for (const p of rows) if (p && typeof p.name === 'string') { if (p.id) pcNames.set(String(p.id), p.name); if (p.installationId) pcNames.set(String(p.installationId), p.name); }
+        if (rows.length && onAgent()) { try { X()?.render?.(); } catch {} }
+      }).catch(() => { pcNamesAsked = false; });
+    }
+    return (pcNames && pcNames.get(id)) || 'PC';
+  };
+
+  /** The breadcrumb for a view: the PC by its name, then what kind of place it is (a chat's or project's name is sealed). */
+  const trail = (item) => {
+    const v = viewOf(item); if (!v) return ['Cloud']; if (v === 'pcs') return ['Your PCs']; if (v.startsWith('cloud')) return ['Cloud', 'Chat'];
+    const pc = pcNameOf(v.split('/')[1]);
+    return /\/c\//.test(v) ? [pc, 'Chat'] : /\/w\//.test(v) ? [pc, 'Project'] : [pc];
+  };
 
   // The workspace's own left panel is under the frame here: the agent's panel is the left panel (see fit). It is left
   // empty, so nothing that cannot be seen can be reached with the keyboard.

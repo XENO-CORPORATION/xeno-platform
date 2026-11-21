@@ -256,6 +256,20 @@ test('the deploy bakes its SHA into the image, not just into a tag', () => {
     'the revision layer must come after the dependency install, not before it');
 });
 
+// The frontend image carried no revision until 2026-11-21, so "which site build is live" was a guess from the asset
+// hash. The build-here deploy already passes the SHA to every service; the frontend Dockerfile ignored it.
+test('the frontend image carries its SHA too, and does not publish it', () => {
+  const dockerfile = readFileSync(new URL('../Dockerfile.frontend', import.meta.url), 'utf8');
+  const builder = readFileSync(new URL('./lib/local-image-build.mjs', import.meta.url), 'utf8');
+  assert.match(builder, /'--build-arg', `XENO_SOURCE_REVISION=\$\{sha\}`/, 'the build-here deploy passes the SHA');
+  const finalStage = dockerfile.slice(dockerfile.lastIndexOf('\nFROM '));
+  assert.match(finalStage, /^ARG XENO_SOURCE_REVISION=/m, 'the served stage accepts a revision (an ARG in the builder stage would not reach it)');
+  assert.match(finalStage, /LABEL org\.opencontainers\.image\.revision=\$XENO_SOURCE_REVISION/, 'the standard label carries it');
+  assert.match(finalStage, /> \/etc\/xeno-revision/, 'the running filesystem carries it');
+  assert.doesNotMatch(finalStage, /usr\/share\/nginx\/html[^\n]*xeno-revision/, 'but not inside the served folder');
+  assert.ok(finalStage.indexOf('ARG XENO_SOURCE_REVISION') > finalStage.indexOf('COPY --from=builder'), 'baked after the site is copied in');
+});
+
 test('the deploy archive ships committed bytes, whatever the workstation autocrlf says', (t) => {
   // 🔴 The deploy used to run plain `git archive`, which APPLIES core.autocrlf on
   // export. From a Windows workstation it shipped CRLF copies of every file not
