@@ -40,7 +40,11 @@ export function localBus() {
       return 1;
     },
     async subscribe(installationId, handler) { handlers.set(String(installationId), handler); },
-    async unsubscribe(installationId) { handlers.delete(String(installationId)); },
+    async unsubscribe(installationId, handler) {
+      const key = String(installationId);
+      if (handler && handlers.get(key) !== handler) return;
+      handlers.delete(key);
+    },
   };
 }
 
@@ -58,9 +62,12 @@ export function redisBus(url) {
       handlers.set(channel(installationId), handler);
       await subscriber.subscribe(channel(installationId));
     },
-    async unsubscribe(installationId) {
-      handlers.delete(channel(installationId));
-      await subscriber.unsubscribe(channel(installationId));
+    async unsubscribe(installationId, handler) {
+      const name = channel(installationId);
+      // A newer socket for the same installation owns the channel now: leave it subscribed.
+      if (handler && handlers.get(name) !== handler) return;
+      handlers.delete(name);
+      await subscriber.unsubscribe(name);
     },
     async close() { publisher.disconnect(); subscriber.disconnect(); },
   };
@@ -93,9 +100,10 @@ export function openRemoteSession({ db, installationId, userId, role, deliver, o
   let windowStart = 0;
   let frames = 0;
   let bytes = 0;
-  const open = Promise.resolve(currentBus().subscribe(installationId, (message) => {
+  const handler = (message) => {
     try { deliver(JSON.parse(message)); } catch { /* a frame that will not parse was never ours */ }
-  }));
+  };
+  const open = Promise.resolve(currentBus().subscribe(installationId, handler));
 
   const mayReach = async (to) => {
     const known = peers.get(to);
@@ -118,6 +126,8 @@ export function openRemoteSession({ db, installationId, userId, role, deliver, o
       const received = await currentBus().publish(to, JSON.stringify({ from: installationId, data }));
       return received > 0 ? 'delivered' : 'away';
     },
-    async close() { await currentBus().unsubscribe(installationId); },
+    // Only our own subscription. A reconnecting PC's new socket subscribes before the replaced one closes, and the
+    // same installation id names both: removing by id alone cut the live socket off (2026-11-21).
+    async close() { await currentBus().unsubscribe(installationId, handler); },
   };
 }
