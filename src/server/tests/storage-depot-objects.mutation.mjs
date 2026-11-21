@@ -8,14 +8,13 @@ import { spawnSync } from 'node:child_process';
 const file = new URL('../services/storageDepotObjects.js', import.meta.url);
 const original = readFileSync(file, 'utf8');
 const mutations = [
-  ['no pool check', [
-    ['await assertStorageRoom(tx, { workspaceId, bytes: bytes.length });   // takes', '/* M */ // takes'],
-    ['await inTransaction(db, (tx) => assertStorageRoom(tx,', 'await inTransaction(db, (tx) => null && assertStorageRoom(tx,'],
-  ]],
+  ['no pool check', [['if (cap === null) return assertStorageRoom(tx, { workspaceId, bytes });', 'if (cap === null) return;']]],
   ['different bytes accepted', [['if (existing.payload_sha256 !== actual) throw', 'if (false) throw']]],
   ['stranger bytes adopted', [['if (!there || sha256Hex(there) !== actual) throw', 'if (false) throw']]],
   ['wire check skipped', [["if (actual !== sha256) throw", 'if (false) throw']]],
-  ['workspace not in the key', [['`depot/${workspaceId}/${hash.slice(0, 2)}/${hash}`', '`depot/00000000-0000-4000-8000-000000000000/${hash.slice(0, 2)}/${hash}`']]],
+  ['receipt not verified', [['if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) throw', 'if (false) throw']]],
+  ['Depot cap not enforced', [['if (used + Number(bytes) > cap) throw', 'if (false) throw']]],
+  ['workspace not in the key',[['`depot/${workspaceId}/${hash.slice(0, 2)}/${hash}`', '`depot/00000000-0000-4000-8000-000000000000/${hash.slice(0, 2)}/${hash}`']]],
 ];
 let failures = 0;
 try {

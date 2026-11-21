@@ -53,9 +53,12 @@ const PERSONAL_MACHINES = PERSONAL.replace('f.workspace_id', 'm.workspace_id');
  * XENO Depot's objects in a scope (`storage_depot_objects`, services/storageDepotObjects.js): `{ bytes, objects }`.
  * `scope` is SQL over `d`. They are the workspace's version-control content, so they count in its pool.
  */
+// A workspace with its own Depot allowance (storage_depot_allowances, owner 2026-11-21) keeps its Depot content against
+// that cap, so it is NOT in the plan pool; storageDepotObjects.js `assertDepotRoom` enforces it.
 async function depotBytes(db, scope, args) {
   const { rows } = await db.query(
-    `SELECT COALESCE(SUM(d.size_bytes), 0)::bigint AS bytes, COUNT(*)::int AS objects FROM storage_depot_objects d WHERE ${scope}`, args);
+    `SELECT COALESCE(SUM(d.size_bytes), 0)::bigint AS bytes, COUNT(*)::int AS objects FROM storage_depot_objects d
+      WHERE ${scope} AND NOT EXISTS (SELECT 1 FROM storage_depot_allowances a WHERE a.workspace_id = d.workspace_id)`, args);
   return { bytes: Number(rows[0].bytes), objects: rows[0].objects };
 }
 const PERSONAL_DEPOT = PERSONAL.replace('f.workspace_id', 'd.workspace_id');

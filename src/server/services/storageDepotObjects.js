@@ -22,7 +22,7 @@
  */
 import crypto from 'node:crypto';
 import { fileStorage } from './artifactStorage.js';
-import { assertStorageRoom } from './storageAllowance.js';
+import { assertStorageRoom, StorageFullError } from './storageAllowance.js';
 
 export const MAX_DEPOT_OBJECT_BYTES = 1024 * 1024;   // Lore's fragment cap is 256 KiB; the margin is for framing
 export const MAX_META_LENGTH = 1024;
@@ -54,6 +54,24 @@ async function inTransaction(db, work, { commit = true } = {}) {
     return result;
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
   finally { client.release(); }
+}
+
+/** The workspace's own Depot allowance in bytes, or null when its Depot content counts in the plan pool. */
+export async function depotAllowance(db, workspaceId) {
+  const row = (await db.query('SELECT bytes FROM storage_depot_allowances WHERE workspace_id = $1', [workspaceId])).rows[0];
+  return row ? Number(row.bytes) : null;
+}
+
+/**
+ * Refuse `bytes` more Depot content that would not fit. Call INSIDE a transaction. A workspace with its own Depot
+ * allowance is checked against it under its own lock; otherwise against the plan pool (assertStorageRoom).
+ */
+export async function assertDepotRoom(tx, workspaceId, bytes) {
+  const cap = await depotAllowance(tx, workspaceId);
+  if (cap === null) return assertStorageRoom(tx, { workspaceId, bytes });
+  await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`storage:depot:${workspaceId}`]);
+  const used = Number((await tx.query('SELECT COALESCE(SUM(size_bytes), 0)::bigint AS b FROM storage_depot_objects WHERE workspace_id = $1', [workspaceId])).rows[0].b);
+  if (used + Number(bytes) > cap) throw new StorageFullError(used, cap, Number(bytes));
 }
 
 async function workspaceExists(db, workspaceId) {
@@ -91,7 +109,7 @@ export async function putDepotObject(db, { workspaceId, hash, bytes, sha256, met
   if (!(await workspaceExists(db, workspaceId))) throw fail('no_workspace', 'no such workspace', 404);
 
   // Cheap refusal before any bytes leave this process; the binding check is the locked one below.
-  await inTransaction(db, (tx) => assertStorageRoom(tx, { workspaceId, bytes: bytes.length }), { commit: false });
+  await inTransaction(db, (tx) => assertDepotRoom(tx, workspaceId, bytes.length), { commit: false });
 
   // The object first (outside any lock, so a workspace's pushes do not queue behind one R2 call), then its row.
   // A row is never written for bytes that are not in the store; an object refused for room afterwards stays
@@ -107,7 +125,7 @@ export async function putDepotObject(db, { workspaceId, hash, bytes, sha256, met
   if (!head || head.sizeBytes !== bytes.length) throw fail('verify_failed', 'object store did not return the object at its size', 502);
 
   const inserted = await inTransaction(db, async (tx) => {
-    await assertStorageRoom(tx, { workspaceId, bytes: bytes.length });   // takes the pool's lock
+    await assertDepotRoom(tx, workspaceId, bytes.length);   // takes the pool's (or the Depot allowance's) lock
     return tx.query(
       `INSERT INTO storage_depot_objects (workspace_id, hash, payload_sha256, size_bytes, meta, object_key, backend)
        VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (workspace_id, hash) DO NOTHING RETURNING hash`,
@@ -209,6 +227,112 @@ export async function signDepotObjectUrls(db, { workspaceId, hashes, ttlSeconds 
     urls[hash] = { url: `${base}/d/${workspaceId}/${hash}?e=${expiry}&s=${sig}`, size: info.size, sha256: shaOf[hash], meta: info.meta };
   }
   return { urls, absent, expiresAt: new Date(expiry * 1000).toISOString() };
+}
+
+// ── uploads through the objects host: bytes go client → edge → R2, never through this backend ──
+// Measured 2026-11-21: through the backend, PUT was flat at ~1.5 MB/s whatever the concurrency, because the box's office
+// uplink (2.8–3.4 MB/s) carried every byte twice; the locked allowance section was 4.5 ms p50, not the limit.
+export const MAX_UPLOAD_BATCH = 1000;
+export const depotPutSignedString = (workspaceId, hash, sha256, size, expiry, meta) =>
+  `depot:v1:put\n${workspaceId}\n${hash}\n${sha256}\n${size}\n${expiry}\n${meta}`;
+export const depotReceiptString = (workspaceId, hash, sha256, size, meta) => `depot:v1:stored\n${workspaceId}\n${hash}\n${sha256}\n${size}\n${meta}`;
+
+function urlKey(env) {
+  const key = (env.DEPOT_OBJECT_URL_KEY || '').trim();
+  if (!key) throw fail('not_configured', 'signed object URLs are not configured on this server', 503);
+  return key;
+}
+
+/** Validate a batch of `{ hash, size, sha256, meta }` descriptions; returns them normalised. */
+function uploadBatch(objects) {
+  if (!Array.isArray(objects) || !objects.length) throw fail('bad_body', '`objects` must be a non-empty array', 400);
+  if (objects.length > MAX_UPLOAD_BATCH) throw fail('too_many', `at most ${MAX_UPLOAD_BATCH} objects per call`, 400);
+  const seen = new Set();
+  return objects.map((o) => {
+    assertHash(o?.hash);
+    if (seen.has(o.hash)) throw fail('bad_body', `hash ${o.hash} appears twice`, 400);
+    seen.add(o.hash);
+    const size = Number(o.size), sha256 = String(o.sha256 || '').toLowerCase(), meta = o.meta ?? '';
+    if (!Number.isInteger(size) || size < 0 || size > MAX_DEPOT_OBJECT_BYTES) throw fail('too_large', `size is 0..${MAX_DEPOT_OBJECT_BYTES}`, 400);
+    if (!HEX64.test(sha256)) throw fail('bad_digest', 'sha256 (64 lowercase hex) is required', 400);
+    if (typeof meta !== 'string' || meta.length > MAX_META_LENGTH || !META.test(meta)) throw fail('bad_meta', `meta is printable ASCII, at most ${MAX_META_LENGTH} characters`, 400);
+    return { hash: o.hash, size, sha256, meta, receipt: o.receipt };
+  });
+}
+
+async function existingShas(db, workspaceId, hashes) {
+  const { rows } = await db.query('SELECT hash, payload_sha256 FROM storage_depot_objects WHERE workspace_id = $1 AND hash = ANY($2::text[])', [workspaceId, hashes]);
+  return new Map(rows.map((r) => [r.hash, r.payload_sha256]));
+}
+
+/**
+ * Signed PUT URLs for a batch. Objects already recorded with the same bytes need no upload (`present`); a name already
+ * holding different bytes is a `conflict`. The room check covers the batch's new bytes (no reservation: the binding
+ * check is at commit). Returns `{ urls: { <hash>: url }, present, conflicts, expiresAt }`.
+ */
+export async function signDepotUploadUrls(db, { workspaceId, objects, ttlSeconds = MAX_URL_TTL_SECONDS }, { env = process.env, now = Date.now() } = {}) {
+  assertWorkspaceId(workspaceId);
+  const key = urlKey(env);
+  const ttl = Number(ttlSeconds);
+  if (!Number.isInteger(ttl) || ttl < 1 || ttl > MAX_URL_TTL_SECONDS) throw fail('bad_ttl', `ttl is 1..${MAX_URL_TTL_SECONDS} seconds`, 400);
+  const batch = uploadBatch(objects);
+  if (!(await workspaceExists(db, workspaceId))) throw fail('no_workspace', 'no such workspace', 404);
+  const known = await existingShas(db, workspaceId, batch.map((o) => o.hash));
+  const present = [], conflicts = [], wanted = [];
+  for (const o of batch) {
+    const sha = known.get(o.hash);
+    if (sha === undefined) wanted.push(o); else if (sha === o.sha256) present.push(o.hash); else conflicts.push(o.hash);
+  }
+  const newBytes = wanted.reduce((n, o) => n + o.size, 0);
+  if (newBytes) await inTransaction(db, (tx) => assertDepotRoom(tx, workspaceId, newBytes), { commit: false });
+  const base = (env.DEPOT_OBJECT_URL_BASE || 'https://objects.xenosystem.ai').replace(/\/+$/, '');
+  const expiry = Math.floor(now / 1000) + ttl;
+  const urls = {};
+  for (const o of wanted) {
+    const sig = crypto.createHmac('sha256', key).update(depotPutSignedString(workspaceId, o.hash, o.sha256, o.size, expiry, o.meta)).digest('hex');
+    urls[o.hash] = `${base}/d/${workspaceId}/${o.hash}?e=${expiry}&sha=${o.sha256}&n=${o.size}&m=${encodeURIComponent(o.meta)}&s=${sig}`;
+  }
+  return { urls, present, conflicts, expiresAt: new Date(expiry * 1000).toISOString() };
+}
+
+/**
+ * Record a batch the objects host stored. Each object carries the Worker's receipt (HMAC over workspace, hash, sha256,
+ * size, meta), so a row is only ever written for bytes the edge verified, without this backend touching R2. One locked
+ * room check for the batch, one insert. Returns `{ committed, existing, conflicts }`; throws `bad_receipt` (400) and
+ * `storage_full` (507) for the whole batch.
+ */
+export async function commitDepotObjects(db, { workspaceId, objects }, { env = process.env, store = fileStorage() } = {}) {
+  assertWorkspaceId(workspaceId);
+  const key = urlKey(env);
+  const batch = uploadBatch(objects);
+  for (const o of batch) {
+    const expected = crypto.createHmac('sha256', key).update(depotReceiptString(workspaceId, o.hash, o.sha256, o.size, o.meta)).digest();
+    const given = /^[0-9a-f]{64}$/.test(String(o.receipt || '')) ? Buffer.from(o.receipt, 'hex') : Buffer.alloc(0);
+    if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) throw fail('bad_receipt', `object ${o.hash} has no valid receipt from the objects host`, 400);
+  }
+  if (!(await workspaceExists(db, workspaceId))) throw fail('no_workspace', 'no such workspace', 404);
+  const known = await existingShas(db, workspaceId, batch.map((o) => o.hash));
+  const fresh = batch.filter((o) => !known.has(o.hash));
+  const inserted = new Set();
+  if (fresh.length) {
+    await inTransaction(db, async (tx) => {
+      await assertDepotRoom(tx, workspaceId, fresh.reduce((n, o) => n + o.size, 0));   // takes the pool's lock
+      const { rows } = await tx.query(
+        `INSERT INTO storage_depot_objects (workspace_id, hash, payload_sha256, size_bytes, meta, object_key, backend)
+         SELECT $1::uuid, x.hash, x.sha, x.size, NULLIF(x.meta, ''), 'depot/' || $1::text || '/' || substr(x.hash, 1, 2) || '/' || x.hash, $2
+           FROM unnest($3::text[], $4::text[], $5::bigint[], $6::text[]) AS x(hash, sha, size, meta)
+         ON CONFLICT (workspace_id, hash) DO NOTHING RETURNING hash`,
+        [workspaceId, store.kind, fresh.map((o) => o.hash), fresh.map((o) => o.sha256), fresh.map((o) => o.size), fresh.map((o) => o.meta)]);
+      rows.forEach((r) => inserted.add(r.hash));
+    });
+  }
+  const after = await existingShas(db, workspaceId, batch.filter((o) => !inserted.has(o.hash)).map((o) => o.hash));
+  const committed = [...inserted], existing = [], conflicts = [];
+  for (const o of batch) {
+    if (inserted.has(o.hash)) continue;
+    if (after.get(o.hash) === o.sha256) existing.push(o.hash); else conflicts.push(o.hash);
+  }
+  return { committed, existing, conflicts };
 }
 
 /** What Depot holds in a workspace: `{ bytes, objects }`. */
