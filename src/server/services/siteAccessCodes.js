@@ -142,6 +142,16 @@ export async function codeIsLive(db, id) {
   return rows.length > 0;
 }
 
+/** Has this account ever browsed under a code that is STILL live (not revoked, not expired)? The gate admits such an
+ *  account for as long as the code lives (routes/siteGateRoutes.js), with the same "live" test as codeIsLive. */
+export async function accountHasLiveCode(db, userId) {
+  const { rows } = await db.query(
+    `SELECT 1 FROM site_access_code_events e JOIN site_access_codes c ON c.id = e.code_id
+      WHERE e.event = 'used_by_account' AND e.actor_id = $1 AND c.revoked_at IS NULL AND c.expires_at > now() LIMIT 1`,
+    [userId]);
+  return rows.length > 0;
+}
+
 /** Record once which signed-in account is browsing under a code. */
 export async function noteAccount(db, id, userId) {
   await db.query(

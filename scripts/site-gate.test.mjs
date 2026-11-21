@@ -21,7 +21,8 @@ async function harness(env, { userId, row, throws, attempt } = {}) {
   const app = express();
   app.use(express.json());
   app.use((req, _r, n) => { req.browserSession = userId ? { userId } : undefined;
-    req.db = { query: async () => { if (throws) throw new Error('db down'); return { rows: row ? [row] : [] }; } }; n(); });
+    // Answers the users lookup only: any other query (e.g. the code link) finds nothing, as on a database with no codes.
+    req.db = { query: async (sql) => { if (throws) throw new Error('db down'); return { rows: row && /FROM users/.test(sql) ? [row] : [] }; } }; n(); });
   app.use('/api/site-gate', createSiteGateRouter({ env, attempt }));
   const s = await new Promise((r) => { const x = app.listen(0, '127.0.0.1', () => r(x)); });
   const base = `http://127.0.0.1:${s.address().port}/api/site-gate`;
@@ -233,6 +234,36 @@ test('a personal code: cookie names the code, revoking it refuses the cookie, ac
     assert.equal((await fetch(base + '/codes')).status, 403);
   } finally { s.close(); }
 });
+// Owner, 2026-11-21 ("fix them"): an invited person was bounced to Coming soon once their 7-day cookie ran out, though their
+// code was still valid. A signed-in account that once browsed under a code keeps the site while THAT code lives.
+test('an account that used a live code keeps the site without its cookie; revoking the code, or suspension, shuts it', async () => {
+  const U = '33333333-3333-4333-8333-333333333333';
+  let linkedLive = true;
+  const codes = { countryOf: () => null, codeIsLive: async () => false, noteAccount: async () => {},
+    accountHasLiveCode: async (_db, id) => id === U && linkedLive };
+  const env = { SITE_GATE: 'on', SITE_GATE_SECRET: 'sec', SITE_GATE_ALLOW: '@xenosystem.ai', NODE_ENV: 'test' };
+  let row = { email: 'invited@gmail.com', role: 'user', is_active: true, status: 'active' };
+  let userId = U;
+  const app = express();
+  app.use((req, _r, n) => { req.browserSession = userId ? { userId } : undefined; req.db = { query: async () => ({ rows: [row] }) }; n(); });
+  app.use('/g', createSiteGateRouter({ env, codes, staffGuard: [(_q, r) => r.status(403).end()] }));
+  const s = await new Promise((r) => { const x = app.listen(0, '127.0.0.1', () => r(x)); });
+  const check = () => fetch(`http://127.0.0.1:${s.address().port}/g/check`).then((r) => r.status);
+  try {
+    assert.equal(await check(), 204, 'signed in, no cookie, a live linked code: let in');
+    linkedLive = false;
+    assert.equal(await check(), 401, 'the code revoked or expired: shut');
+    linkedLive = true;
+    row = { ...row, status: 'suspended' };
+    assert.equal(await check(), 401, 'a suspended account is never let in by a code');
+    row = { ...row, status: 'active' };
+    userId = '44444444-4444-4444-8444-444444444444';
+    assert.equal(await check(), 401, 'an account that never used a code: still Coming soon');
+    userId = null;
+    assert.equal(await check(), 401, 'signed out: still Coming soon');
+  } finally { s.close(); }
+});
+
 test('the console routes sit behind authMiddleware + requireAdmin by default', () => {
   const src = readFileSync(new URL('../src/server/routes/siteGateRoutes.js', import.meta.url), 'utf8');
   assert.match(src, /staffGuard = \[authMiddleware, requireAdmin\]/);
