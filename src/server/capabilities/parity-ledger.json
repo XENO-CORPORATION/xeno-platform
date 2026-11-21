@@ -32,6 +32,7 @@
     "computeRoutes.js": "compute",
     "connectAuthorityRoutes.js": "storage",
     "depotAuthorityRoutes.js": "platform",
+    "depotRoutes.js": "platform",
     "containerRoutes.js": "platform",
     "liveRoutes.js": "platform",
     "conversionRoutes.js": "studio",
@@ -1765,6 +1766,27 @@
       "class": "reversible",
       "scope": "none",
       "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotRoutes.js:DELETE /credentials/:id": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "issuing or revoking an agent’s Depot credential is a person’s act; agents never manage agents (the XENO Tasks rule)"
+    },
+    "route:depotRoutes.js:GET /credentials": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "issuing or revoking an agent’s Depot credential is a person’s act; agents never manage agents (the XENO Tasks rule)"
+    },
+    "route:depotRoutes.js:POST /credentials": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "reversible",
+      "scope": "none",
+      "because": "issuing or revoking an agent’s Depot credential is a person’s act; agents never manage agents (the XENO Tasks rule)"
     },
     "route:containerRoutes.js:DELETE /:id": {
       "status": "planned",

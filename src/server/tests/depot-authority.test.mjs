@@ -26,6 +26,8 @@ import { createDepotAuthorityRouter } from '../routes/depotAuthorityRoutes.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATION = fs.readFileSync(path.join(here, '../database/migrations/20261205093000-depot-staff-door.sql'), 'utf8');
 const [UP, DOWN] = MIGRATION.split(/^-- DOWN$/m);
+const CREDENTIALS = fs.readFileSync(path.join(here, '../database/migrations/20261205100000-depot-agent-credentials.sql'), 'utf8');
+const [CREDENTIALS_UP, CREDENTIALS_DOWN] = CREDENTIALS.split(/^-- DOWN$/m);
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const CB = 'http://127.0.0.1/callback';
 
@@ -37,9 +39,11 @@ async function setup() {
     display_name text, avatar_url text, email_verified boolean DEFAULT true, is_active boolean DEFAULT true,
     role text DEFAULT 'user', status text DEFAULT 'active')`);
   await pool.query(`CREATE TABLE IF NOT EXISTS agent_identities (user_id uuid PRIMARY KEY, owner_user_id uuid, agent_role text,
-    agent_origin text, status text DEFAULT 'active', created_at timestamptz DEFAULT now())`);
+    agent_origin text, status text DEFAULT 'active', created_at timestamptz DEFAULT now(), public_id text, workforce_resource_id uuid)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS workspaces (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), owner_user_id uuid NOT NULL,
-    name text NOT NULL DEFAULT 'w', status text NOT NULL DEFAULT 'active')`);
+    name text NOT NULL DEFAULT 'w', status text NOT NULL DEFAULT 'active', workspace_type text NOT NULL DEFAULT 'team')`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS workforce_resources (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), owner_workspace_id uuid, owner_user_id uuid)`);
+  await pool.query(CREDENTIALS_UP);
   await pool.query(`CREATE TABLE IF NOT EXISTS mcp_client_agent_bindings (owner_user_id uuid NOT NULL, client_id text NOT NULL,
     agent_user_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (owner_user_id, client_id))`);
@@ -183,6 +187,43 @@ async function main() {
     assert.equal((await post('/a/repos/citadel/delete', { token: staffTok })).status, 200);
     assert.equal((await depot.authorityFor(pool, staff, { repoId: 'citadel' })).repo.registered, false);
   } finally { server.close(); }
+
+  // ── 7b. Headless agents: an xdp_ credential acts as the AGENT, with its own grants, under its own scopes.
+  const me = await (await import('../services/agentIdentity.js')).resolvePrincipal(pool, u.staff);
+  await depot.registerRepo(pool, staff, { repoId: 'build', workspaceId: u.ws });
+  await refusal(depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['tasks:read'] }), 'invalid_scope');
+  const robotMe = await (await import('../services/agentIdentity.js')).resolvePrincipal(pool, u.robot);
+  await refusal(depot.issueAgentCredential(pool, robotMe, { agentId: u.robot }), 'not_allowed');           // an agent never issues one
+  const outsiderMe = await (await import('../services/agentIdentity.js')).resolvePrincipal(pool, u.outsider);
+  await refusal(depot.issueAgentCredential(pool, outsiderMe, { agentId: u.robot }), 'agent_not_found');    // not their agent
+  const cred = await depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['depot:read'], label: 'Runner' });
+  assert.match(cred.token, /^xdp_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$/);
+  const stored = (await pool.query('SELECT token_hash, token_prefix FROM depot_agent_credentials WHERE id = $1', [cred.id])).rows[0];
+  assert.notEqual(stored.token_hash, cred.token); assert.ok(!JSON.stringify(stored).includes(cred.token.split('_')[2]));   // the secret is never stored
+  const listed = await depot.listAgentCredentials(pool, me);
+  assert.deepEqual(listed.credentials.map((c) => [c.id, c.hint]), [[cred.id, `xdp_${stored.token_prefix}_…`]]);
+  assert.ok(!JSON.stringify(listed).includes(cred.token));
+  const runner = await depot.verifyToken(pool, cred.token);
+  assert.deepEqual([runner.via, runner.principal.id, runner.accountableId], ['agent', u.robot, u.staff]);
+  assert.deepEqual((await depot.authorityFor(pool, runner, { repoId: 'build' })).repo.permissions, []);    // no grant yet: nothing
+  await depot.grant(pool, staff, { repoId: 'build', userId: u.robot, permission: 'merge' });
+  assert.deepEqual((await depot.authorityFor(pool, runner, { repoId: 'build' })).repo.permissions, ['read']);   // its scope caps merge to read
+  const writerCred = await depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['depot:write'] });
+  const writer = await depot.verifyToken(pool, writerCred.token);
+  assert.deepEqual((await depot.authorityFor(pool, writer, { repoId: 'build' })).repo.permissions, ['read', 'write', 'review', 'merge', 'lock']);
+  await refusal(depot.verifyToken(pool, `${cred.token.slice(0, -1)}${cred.token.endsWith('A') ? 'B' : 'A'}`), 'invalid_token');   // tampered
+  await refusal(depot.verifyToken(pool, 'xdp_short'), 'invalid_token');
+  assert.equal((await depot.revokeAgentCredential(pool, me, cred.id)).revoked, true);
+  await refusal(depot.verifyToken(pool, cred.token), 'invalid_token');                                       // revoked → refused at once
+  await refusal(depot.revokeAgentCredential(pool, outsiderMe, writer.credentialId), 'credential_not_found');
+  await pool.query("UPDATE depot_agent_credentials SET expires_at = now() - interval '1 second' WHERE id = $1", [writer.credentialId]);
+  await refusal(depot.verifyToken(pool, writerCred.token), 'invalid_token');                                // expired → refused
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM depot_agent_credentials WHERE revoked_at IS NULL AND expires_at > now()')).rows[0].n, 0);
+  await assert.rejects(pool.query(`INSERT INTO depot_agent_credentials (token_prefix, token_hash, agent_user_id, owner_user_id, scopes, expires_at)
+    VALUES ('abcdefghijkl', repeat('a', 64), $1, $2, ARRAY['tasks:read'], now() + interval '1 day')`, [u.robot, u.staff]), /check constraint/);
+  const live = await depot.issueAgentCredential(pool, me, { agentId: u.robot });
+  await assert.rejects(pool.query(CREDENTIALS_DOWN), /live credentials exist/);                             // DOWN refuses while one is live
+  await depot.revokeAgentCredential(pool, me, live.id);
 
   // ── 8. The door policy is data: no row closes Depot; the DOWN refuses while another product uses 'staff'.
   await pool.query("INSERT INTO product_access_policy (product, access) VALUES ('other', 'staff')");

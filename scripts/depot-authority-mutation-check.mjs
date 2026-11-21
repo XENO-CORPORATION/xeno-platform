@@ -26,6 +26,14 @@ const MUTANTS = [
     "c.audience || 'xeno-api'],", "'xeno-api'],"],
   ['stale principal at the door', 'src/server/services/depotAuthority.js',
     'const p = actor.principal ? await resolvePrincipal(db, actor.principal.id) : null;', 'const p = actor.principal;'],
+  ['xdp_ secret not compared', 'src/server/services/depotAuthority.js',
+    'if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;', ''],
+  ['xdp_ revocation ignored', 'src/server/services/depotAuthority.js',
+    'if (!row || row.revoked_at || new Date(row.expires_at) <= new Date()) return null;', 'if (!row) return null;'],
+  ['an agent issues credentials', 'src/server/services/depotAuthority.js',
+    "if (!me || me.kind !== 'human') throw new DepotAuthorityError('not_allowed', 403, 'only a person issues an agent credential');", ''],
+  ['xdp_ scopes ignored', 'src/server/services/depotAuthority.js',
+    'scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)),', 'scopes: [...DEPOT_SCOPES],'],
 ];
 
 async function freshDb(name) {

@@ -146,6 +146,7 @@ import v2LedgerRoutes from './routes/v2LedgerRoutes.js';
 import serviceLedgerRoutes from './routes/serviceLedgerRoutes.js';
 import connectAuthorityRoutes from './routes/connectAuthorityRoutes.js';
 import depotAuthorityRoutes from './routes/depotAuthorityRoutes.js';
+import depotRoutes from './routes/depotRoutes.js';
 import webConnectRoutes from './routes/webConnectRoutes.js';
 import siteGateRoutes from './routes/siteGateRoutes.js';
 import oauth2Routes from './routes/oauth2Routes.js';
@@ -729,6 +730,8 @@ app.use('/api/workspace-docs', databaseMiddleware, authMiddleware, requireActiva
 app.use('/api/connect/authority', databaseMiddleware, connectAuthorityRoutes);
 // XENO Depot's gate asks here what a xeno-depot token may do on a repo (DEPOT_SERVICE_TOKEN; fails closed). Decision 0001 §3.
 app.use('/api/depot/authority', databaseMiddleware, depotAuthorityRoutes);
+// A signed-in person's side of XENO Depot: credentials for their headless agents (services/depotAuthority.js).
+app.use('/api/depot', databaseMiddleware, authMiddleware, requireActivated, depotRoutes);
 // Website Storage → XENO Connect (Connected clouds). Website cookie sessions only; tokens stay in this process.
 app.use('/api/storage/connect', databaseMiddleware, authMiddleware, webConnectRoutes);
 // The site gate: nginx asks before serving any page (SITE_GATE=on). Fails closed. See routes/siteGateRoutes.js.

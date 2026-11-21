@@ -20,7 +20,9 @@
  * Everything is derived at read time on every call: a suspension, a removed membership, a revoked grant or an ended
  * sign-in session takes effect on Depot's next request without anything having to propagate it.
  */
+import crypto from 'node:crypto';
 import { DEPOT_AUDIENCE, DEPOT_SCOPES, getClient, verifyDepotAccessToken } from '../utils/oidcProvider.js';
+import { rightsOf } from './agentAccess.js';
 import { resolvePrincipal } from './agentIdentity.js';
 import { isStaffPrincipal, loadProductPolicy, evaluateProductAccess } from './productAccess.js';
 import { getActingEntitlements } from './effectivePlan.js';
@@ -114,7 +116,82 @@ export async function actorForSession(db, userId) {
   return { principal, accountableId: accountable, via: principal.kind === 'agent' ? 'agent' : 'person', clientId: null, scopes: [...DEPOT_SCOPES], expiresAt: null };
 }
 
+// ── Headless agents: xdp_ credentials (decision 0001 §3, 0002 §2) ──────────────────────────────────────────────
+
+const XDP_RE = /^xdp_([a-z0-9]{12})_([A-Za-z0-9_-]{43})$/;
+const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+
+/** A live xdp_ credential → the agent acting as ITSELF: its own grants, cut to its owner's, under the credential's scopes. */
+async function actorForCredential(db, raw) {
+  const m = XDP_RE.exec(String(raw || ''));
+  if (!m) return null;
+  const row = (await db.query(`SELECT id, token_hash, agent_user_id, scopes, expires_at, revoked_at
+    FROM depot_agent_credentials WHERE token_prefix = $1`, [m[1]])).rows[0];
+  if (!row || row.revoked_at || new Date(row.expires_at) <= new Date()) return null;
+  const a = Buffer.from(row.token_hash, 'hex'); const b = Buffer.from(sha256(raw), 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  const principal = await resolvePrincipal(db, row.agent_user_id);
+  if (!principal || principal.kind !== 'agent') return null;
+  db.query('UPDATE depot_agent_credentials SET last_used_at = now() WHERE id = $1', [row.id]).catch(() => {});
+  return { principal, accountableId: String(principal.owner.id), via: 'agent', clientId: null,
+    scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)), expiresAt: new Date(row.expires_at).getTime(), credentialId: String(row.id) };
+}
+
+async function manageableAgent(db, me, agentId) {
+  if (!me || me.kind !== 'human') throw new DepotAuthorityError('not_allowed', 403, 'only a person issues an agent credential');
+  if (!UUID_RE.test(String(agentId || ''))) throw new DepotAuthorityError('agent_not_found', 404);
+  const p = await resolvePrincipal(db, agentId);
+  if (!p || p.kind !== 'agent' || !(await rightsOf(db, me.id, agentId)).manage) throw new DepotAuthorityError('agent_not_found', 404);
+  return p;
+}
+
+/** Issue an xdp_ credential for one of the caller's agents. The secret is returned ONCE and never stored. Needs the right
+ *  to manage the agent (its owner, or an admin of the workspace a company agent belongs to). */
+export async function issueAgentCredential(db, me, { agentId, scopes, label, days } = {}) {
+  const agent = await manageableAgent(db, me, agentId);
+  const sc = [...new Set(Array.isArray(scopes) && scopes.length ? scopes.map(String) : ['depot:read'])];
+  if (sc.some((s) => !DEPOT_SCOPES.includes(s))) throw new DepotAuthorityError('invalid_scope', 400, `scopes are ${DEPOT_SCOPES.join(', ')}`);
+  const d = Math.min(Math.max(parseInt(days, 10) || 90, 1), 365);
+  const prefix = crypto.randomBytes(9).toString('base64').replace(/[^a-z0-9]/gi, '').toLowerCase().padEnd(12, '0').slice(0, 12);
+  const token = `xdp_${prefix}_${crypto.randomBytes(32).toString('base64url')}`;
+  const row = (await db.query(`INSERT INTO depot_agent_credentials (token_prefix, token_hash, agent_user_id, owner_user_id, scopes, label, expires_at)
+    VALUES ($1, $2, $3, $4, $5, $6, now() + ($7 || ' days')::interval) RETURNING id, expires_at, created_at`,
+  [prefix, sha256(token), agent.id, me.id, sc, String(label || '').replace(/[\u0000-\u001f]/g, '').slice(0, 80), String(d)])).rows[0];
+  return { id: String(row.id), token, hint: `xdp_${prefix}_…`, agent: { id: String(agent.id), handle: agent.handle }, scopes: sc, expiresAt: row.expires_at };
+}
+
+/** The caller's live credentials (never the secrets): those they issued, and those on agents they manage. */
+export async function listAgentCredentials(db, me) {
+  if (!me || me.kind !== 'human') return { credentials: [] };
+  const rows = (await db.query(`SELECT c.id, c.token_prefix, c.agent_user_id, c.owner_user_id, c.scopes, c.label, c.expires_at, c.last_used_at, c.created_at,
+      u.username FROM depot_agent_credentials c JOIN users u ON u.id = c.agent_user_id
+    WHERE c.revoked_at IS NULL AND c.expires_at > now() ORDER BY c.created_at DESC`)).rows;
+  const out = [];
+  for (const r of rows) {
+    if (String(r.owner_user_id) !== String(me.id) && !(await rightsOf(db, me.id, r.agent_user_id)).manage) continue;
+    out.push({ id: String(r.id), hint: `xdp_${r.token_prefix}_…`, agent: { id: String(r.agent_user_id), handle: r.username },
+      scopes: r.scopes, label: r.label, expiresAt: r.expires_at, lastUsedAt: r.last_used_at, createdAt: r.created_at });
+  }
+  return { credentials: out };
+}
+
+/** Revoke one credential: its issuer, or anyone who manages its agent. Takes effect on Depot's next request. */
+export async function revokeAgentCredential(db, me, credentialId) {
+  if (!me || me.kind !== 'human' || !UUID_RE.test(String(credentialId || ''))) throw new DepotAuthorityError('credential_not_found', 404);
+  const row = (await db.query('SELECT id, agent_user_id, owner_user_id FROM depot_agent_credentials WHERE id = $1 AND revoked_at IS NULL', [credentialId])).rows[0];
+  if (!row || (String(row.owner_user_id) !== String(me.id) && !(await rightsOf(db, me.id, row.agent_user_id)).manage)) {
+    throw new DepotAuthorityError('credential_not_found', 404);
+  }
+  await db.query('UPDATE depot_agent_credentials SET revoked_at = now() WHERE id = $1', [row.id]);
+  return { id: String(row.id), revoked: true };
+}
+
 export async function verifyToken(db, token) {
+  if (String(token || '').startsWith('xdp_')) {
+    const actor = await actorForCredential(db, token);
+    if (!actor) throw new DepotAuthorityError('invalid_token', 401);
+    return actor;
+  }
   let payload;
   try { payload = await verifyDepotAccessToken(db, String(token || '')); } catch { payload = null; }
   if (!payload) throw new DepotAuthorityError('invalid_token', 401);
