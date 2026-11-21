@@ -195,7 +195,8 @@
     const s = document.createElement('style'); s.id = 'xsu-style';
     s.textContent = '.xsu{position:fixed;right:20px;bottom:20px;z-index:60;width:380px;max-width:calc(100vw - 32px);border:1px solid var(--border,#2a2a2a);border-radius:12px;background:var(--panel,#141414);color:var(--text,#eee);box-shadow:0 18px 50px rgba(0,0,0,.45);font-size:13px;overflow:hidden}'
       + '.xsu-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border,#2a2a2a)}.xsu-h b{flex:1;font-weight:500;font-size:13.5px}.xsu-h small{color:var(--muted,#999)}'
-      + '.xsu button{background:none;border:0;color:var(--muted,#aaa);cursor:pointer;padding:4px 6px;border-radius:6px;font:inherit}.xsu button:hover{color:var(--text,#fff);background:rgba(255,255,255,.06)}'
+      + '.xsu button{background:none;border:0;color:var(--muted,#aaa);cursor:pointer;padding:4px 7px;border-radius:6px;font-family:inherit;font-size:12.5px;font-weight:500;line-height:18px}.xsu button:hover{color:var(--text,#fff);background:rgba(255,255,255,.06)}'
+      + '.xsu button.ic{width:26px;height:26px;padding:0;font-size:15px;line-height:26px;text-align:center}'
       + '.xsu-all{height:2px;background:rgba(255,255,255,.08)}.xsu-all i{display:block;height:100%;background:var(--text,#eee);transition:width .2s}'
       + '.xsu-list{max-height:min(46vh,360px);overflow:auto}.xsu-r{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05)}'
       + '.xsu-r .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.xsu-r .s{grid-column:1;color:var(--muted,#999);font-size:12px}.xsu-r .s.bad{color:#e88}.xsu-r .a{grid-row:1/3;grid-column:2;align-self:center}'
@@ -221,7 +222,7 @@
     const rate = act.reduce((s, j) => s + (j.state === 'uploading' ? j.rate || 0 : 0), 0);
     host.classList.toggle('min', !open);
     host.innerHTML = `<div class="xsu-h"><b role="status" aria-live="polite">${esc(title)}</b>${act.length && rate > 0 ? `<small>${esc(left((totalSize - totalSent) / rate))}</small>` : ''}`
-      + `${act.length ? '<button type="button" data-xsu="cancel-all" title="Cancel all">Cancel</button>' : ''}<button type="button" data-xsu="toggle" aria-expanded="${open}" title="${open ? 'Minimise' : 'Show'}">${open ? '–' : '+'}</button>${act.length ? '' : '<button type="button" data-xsu="clear" title="Close">×</button>'}</div>`
+      + `${act.length ? '<button type="button" data-xsu="cancel-all" title="Cancel all">Cancel</button>' : ''}<button type="button" class="ic" data-xsu="toggle" aria-expanded="${open}" aria-label="${open ? 'Minimise uploads' : 'Show uploads'}" title="${open ? 'Minimise' : 'Show'}">${open ? '–' : '+'}</button>${act.length ? '' : '<button type="button" class="ic" data-xsu="clear" aria-label="Close uploads" title="Close">×</button>'}</div>`
       + `${act.length ? `<div class="xsu-all"><i style="width:${totalSize ? (100 * totalSent / totalSize).toFixed(1) : 0}%"></i></div>` : ''}`
       + `<div class="xsu-list">${jobs.slice().reverse().map((j) => `<div class="xsu-r" data-job="${j.id}"><span class="n" title="${esc(j.name)}">${esc(j.name)}</span>`
         + `<span class="a">${['queued', 'starting', 'uploading'].includes(j.state) ? `<button type="button" data-xsu="cancel" data-id="${j.id}" aria-label="Cancel ${esc(j.name)}">Cancel</button>` : j.state === 'failed' || j.state === 'canceled' ? `<button type="button" data-xsu="retry" data-id="${j.id}" aria-label="Retry ${esc(j.name)}">Retry</button>` : j.state === 'done' ? '<span aria-hidden="true">✓</span>' : ''}</span>`
