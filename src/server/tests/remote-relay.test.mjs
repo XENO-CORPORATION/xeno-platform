@@ -141,7 +141,7 @@ async function main() {
     const laptop = await enrol(alice, 'device', 'Laptop');
     const stranger = await enrol(bob, 'device', 'Not yours');
 
-    const pc = await connect(a.port, host);
+    let pc = await connect(a.port, host);
     ok((await pc.auth()).type === 'ready', 'a host connects to one replica');
     const mobile = await connect(b.port, phone);
     ok((await mobile.auth()).type === 'ready', 'a device connects to the other replica');
@@ -158,6 +158,19 @@ async function main() {
     ok((await notebook.waitFor('sealed')).from === host.id, 'one host serves several devices');
     await sleep(60);
     ok(!mobile.frames.some((f) => f.type === 'sealed'), 'a frame reaches only the device it names');
+
+    // 🔴 2026-11-21, live: a PC that reconnected kept its socket and its heartbeat but lost its subscription, because the
+    // replaced socket closed AFTER the new one subscribed and unsubscribed the installation by its id alone. Every
+    // frame to the PC then came back "away" while it was online.
+    const again = await connect(a.port, host);
+    ok((await again.auth()).type === 'ready', 'a PC that reconnects to the same replica is let back in');
+    ok((await pc.waitFor('close')).code === 4409, 'and its old socket is replaced');
+    await sleep(80);
+    mobile.send({ type: 'sealed', to: host.id, data: sealed('after the reconnect') });
+    const after = await again.waitFor('sealed', 'close');
+    ok(after.type === 'sealed' && Buffer.from(after.data, 'base64').toString() === 'after the reconnect', '🔴 the replaced socket closing does not cut the new one off');
+    ok(!mobile.frames.some((f) => f.type === 'undelivered'), 'and the PC is not reported away');
+    pc = again;
 
     mobile.send({ type: 'sealed', to: laptop.id, data: sealed('sideways') });
     ok((await mobile.waitFor('undelivered')).reason === 'refused', 'two remotes cannot talk to each other');
