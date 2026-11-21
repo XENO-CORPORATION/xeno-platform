@@ -109,6 +109,8 @@ async function main() {
       const okRes = await send(signDepotEvent(SECRET, body));
       assert.equal(okRes.status, 200);
       assert.equal((await okRes.json()).consumers.index.inserted, true);
+      const lockEvt = JSON.stringify(envelope({ type: 'depot.lock.released', data: { path: 'Maps/L3.umap' } }));
+      assert.equal((await send(signDepotEvent(SECRET, lockEvt), lockEvt)).status, 202);   // Depot 0002 §1: ignored types answer 202
       const v2 = JSON.stringify(envelope({ v: 2 }));
       assert.equal((await send(signDepotEvent(SECRET, v2), v2)).status, 422);
       // the same JSON re-serialised with other spacing is NOT the signed bytes
