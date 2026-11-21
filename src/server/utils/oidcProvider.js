@@ -53,6 +53,19 @@ export const WORKSPACE_AUDIENCE = 'xeno-workspace';
 export const DEPOT_AUDIENCE = 'xeno-depot';
 export const DEPOT_SCOPES = Object.freeze(['depot:read', 'depot:write', 'depot:admin']);
 export const DYNAMIC_SCOPES = Object.freeze([...new Set([...TASKS_SCOPES, ...WORKSPACE_SCOPES, ...DEPOT_SCOPES])]);
+/**
+ * What Lore needs on a Depot LOGIN token (the one the device grant or a refresh mints, before any repo exists): Lore's
+ * client sends it for `repository create` and `repository list`, and refuses to send a token whose `root_domains` do not
+ * name the server it talks to (its anti-exfiltration check; XO - DEPOT measured 2026-11-21: without it, create fails
+ * "authorization header required"). `identity` is the stable account id Lore records as creator. No `depot_resources`:
+ * a login token reaches no repository, and a token WITH that claim is a one-repo token (services/depotAuthority.js).
+ */
+export function depotLoginClaims(aud, sub, env = process.env) {
+  if (aud !== DEPOT_AUDIENCE) return {};
+  let host = 'depot.xenosystem.ai';
+  try { host = new URL(String(env.XENO_DEPOT_ORIGIN || 'https://depot.xenosystem.ai')).hostname; } catch { /* keep the default */ }
+  return { root_domains: [host], identity: String(sub) };
+}
 // XENO MCP (/api/mcp, SURFACES spec §7) accepts these same tokens: Tasks is its only service today, so a client
 // signed in to /api/tasks/mcp works on /api/mcp with nothing to re-authorize. The audience stays one the rest of
 // the API refuses.
@@ -313,6 +326,7 @@ async function mintTokens(db, { user, clientId, scope, sid, nonce, authTime = ne
   };
   const accessToken = jwt.sign(
     { ...base, sub: user.id, aud, client_id: clientId, azp: clientId, scope, typ: ACCESS_TOKEN_TYP,
+      ...depotLoginClaims(aud, user.id),
       ...(dpopJkt ? { cnf: { jkt: dpopJkt } } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
@@ -509,10 +523,11 @@ async function rotatedTokenSet(tx, { row, session, clientId, iss = issuer() }) {
   const key = await getSigningKey(tx);
   const now = Math.floor(Date.now() / 1000);
   const authTime = Math.floor(new Date(session.auth_time).getTime() / 1000);
+  const aud = await audienceForClient(tx, clientId);
   const access = jwt.sign(
-    { iss, iat: now, sub: user.id, aud: await audienceForClient(tx, clientId), client_id: clientId, azp: clientId,
+    { iss, iat: now, sub: user.id, aud, client_id: clientId, azp: clientId,
       scope: row.scope, sid: row.sid, auth_epoch: Number(session.auth_epoch), auth_time: authTime,
-      typ: ACCESS_TOKEN_TYP, ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
+      typ: ACCESS_TOKEN_TYP, ...depotLoginClaims(aud, user.id), ...(session.dpop_jkt ? { cnf: { jkt: session.dpop_jkt } } : {}) },
     key.privatePem,
     { algorithm: key.alg, keyid: key.kid, expiresIn: ACCESS_TTL_SEC, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } },
   );

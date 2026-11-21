@@ -30,7 +30,7 @@ const VENDOR = join(ROOT, 'src/server/vendor/xeno-index/governance');
 const MANIFEST = join(VENDOR, 'SOURCE.json');
 const MIGRATIONS = join(ROOT, 'src/server/database/migrations');
 const CODE = ['index.js', 'releaseRecord.js', 'releaseInternalNotes.js', 'releaseInternalNoteTemplate.js', 'releasesMcp.js'];
-const SCHEMA = ['20261023100000-release-record.sql', '20261026090000-release-internal-notes.sql'];
+const SCHEMA = ['20261023100000-release-record.sql', '20261026090000-release-internal-notes.sql', '20261121120000-release-depot-source.sql'];
 
 export const hashText = (s) => createHash('sha256').update(String(s).replace(/\r\n/g, '\n')).digest('hex');
 const hashFile = (p) => hashText(readFileSync(p, 'utf8'));

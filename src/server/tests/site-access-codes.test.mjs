@@ -107,6 +107,36 @@ async function main() {
     await pool.query(`UPDATE site_access_codes SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = $1`, [pagesOnly.accessCode.id]);
     check(await checkPages(pc) === 401, 'an expired code refuses the cookie it already issued');
 
+    // ── an account that used a live code keeps the site without its cookie (owner, 2026-11-21: "fix them") ──
+    {
+      const invited = await mk('sac-invited'), stranger = await mk('sac-stranger');
+      const code = await (await req('POST', '/g/codes', { body: { label: 'Invited', days: 30 }, as: admin })).json();
+      const gapp = express(); gapp.use(express.json());
+      gapp.use((rq, _r, n) => { rq.db = pool; const sid = rq.headers['x-test-session']; if (sid) rq.browserSession = { userId: sid }; n(); });
+      gapp.use('/g', createSiteGateRouter({ env, staffGuard: [(_q, r) => r.status(403).end()] }));
+      const gs = await new Promise((r) => { const x = gapp.listen(0, '127.0.0.1', () => r(x)); });
+      const gbase = `http://127.0.0.1:${gs.address().port}/g`;
+      const gcheck = (session, cookie) => fetch(`${gbase}/check`, { headers: { ...(session ? { 'x-test-session': session } : {}), ...(cookie ? { cookie } : {}) } }).then((r) => r.status);
+      try {
+        const unlocked = await fetch(`${gbase}/unlock`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: code.code }) });
+        const ck = unlocked.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+        check(await gcheck(invited, ck) === 204, 'signed in with the code cookie: let in, and the account is linked to the code');
+        check(await gcheck(invited) === 204, 'the same account WITHOUT the cookie (it ran out): still let in, while the code lives');
+        check(await gcheck(stranger) === 401, 'an account that never used a code: Coming soon');
+        check(await gcheck(null) === 401, 'signed out, no cookie: Coming soon');
+        await pool.query(`UPDATE users SET is_active = false WHERE id = $1`, [invited]);
+        check(await gcheck(invited) === 401, 'a suspended account is not let in by its code');
+        await pool.query(`UPDATE users SET is_active = true WHERE id = $1`, [invited]);
+        check((await req('POST', `/g/codes/${code.accessCode.id}/revoke`, { as: admin })).status < 300, 'staff revoke the code');
+        check(await gcheck(invited) === 401, 'the code revoked: the account is shut out at once');
+        const again = await (await req('POST', '/g/codes', { body: { label: 'Invited again', days: 30 }, as: admin })).json();
+        const u2 = await fetch(`${gbase}/unlock`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: again.code }) });
+        await gcheck(invited, u2.headers.getSetCookie().map((c) => c.split(';')[0]).join('; '));
+        await pool.query(`UPDATE site_access_codes SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = $1`, [again.accessCode.id]);
+        check(await gcheck(invited) === 401, 'the code expired: the account is shut out');
+      } finally { gs.close(); }
+    }
+
     // ── audit ──
     const ev = await (await req('GET', `/g/codes/${made.accessCode.id}/events`, { as: admin })).json();
     const kinds = ev.events.map((e) => e.event);

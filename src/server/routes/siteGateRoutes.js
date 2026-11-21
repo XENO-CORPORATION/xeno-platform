@@ -36,9 +36,14 @@ export function parseAllow(value = '') {
   return String(value).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
+/** An account that may be let in at all: it exists, is active, and is not suspended. */
+export function isUsableAccount(user) {
+  return Boolean(user) && user.is_active !== false && String(user.status || '').toLowerCase() !== 'suspended';
+}
+
 /** Pure decision, so the rules are testable without a database. */
 export function hasSiteAccess(user, allow) {
-  if (!user || user.is_active === false || String(user.status || '').toLowerCase() === 'suspended') return false;
+  if (!isUsableAccount(user)) return false;
   if (String(user.role || '').toLowerCase() === 'admin') return true;
   const email = String(user.email || '').toLowerCase();
   if (!email.includes('@')) return false;
@@ -98,7 +103,12 @@ export function createSiteGateRouter({ env = process.env, attempt = createAttemp
       }
       if (!userId) return false;
       const { rows } = await req.db.query('SELECT email, role, is_active, status FROM users WHERE id = $1', [userId]);
-      return hasSiteAccess(rows[0], parseAllow(env.SITE_GATE_ALLOW));
+      if (hasSiteAccess(rows[0], parseAllow(env.SITE_GATE_ALLOW))) return true;
+      // An account that once browsed under a personal code keeps the site for as long as THAT code lives (owner,
+      // 2026-11-21: invited people were bounced to Coming soon when their 7-day cookie ran out while their code was still
+      // valid). Read every time, so revoking or expiring the code shuts it; a suspended account is never let in this way.
+      if (!isUsableAccount(rows[0])) return false;
+      return codes.accountHasLiveCode ? await codes.accountHasLiveCode(req.db, userId) : false;
     } catch (e) {
       console.error('[site-gate]', e.message);
       return false;
