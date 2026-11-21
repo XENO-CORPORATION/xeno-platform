@@ -55,7 +55,7 @@ const MUTANTS = [
   ['run token: a person mints one', 'src/server/services/depotAuthority.js',
     "if (subjectTokenType !== LORE_API_KEY_TOKEN_TYPE) throw exchangeError('invalid_request', 'a run token", "if (false) throw exchangeError('invalid_request', 'a run token"],
   ['exchange: lifetime not capped', 'src/server/services/depotAuthority.js',
-    'const expiresIn = Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);', 'const expiresIn = 3600;'],
+    ': Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);', ': 3600;'],
 ];
 
 async function freshDb(name) {
@@ -74,7 +74,9 @@ let caught = 0;
 const control = runSuite(await freshDb('mut_control'));
 console.log(`control (no mutation): ${control ? 'PASS' : 'FAIL'}`);
 if (!control) process.exit(2);
-for (const [label, file, from, to] of MUTANTS) {
+// MUT_ONLY=<part of a label> runs just the matching mutants (the full run is still the record).
+const only = process.env.MUT_ONLY || '';
+for (const [label, file, from, to] of MUTANTS.filter(([l]) => !only || l.includes(only))) {
   const original = fs.readFileSync(file, 'utf8');
   if (!original.includes(from)) { console.log(`MISSING  ${label}: anchor not found`); process.exitCode = 1; continue; }
   fs.writeFileSync(file, original.replace(from, to));
@@ -84,4 +86,5 @@ for (const [label, file, from, to] of MUTANTS) {
     if (!passed) caught += 1; else process.exitCode = 1;
   } finally { fs.writeFileSync(file, original); }
 }
-console.log(`${caught}/${MUTANTS.length} mutations caught`);
+const ran = MUTANTS.filter(([l]) => !only || l.includes(only)).length;
+console.log(`${caught}/${ran} mutations caught${only ? ` (only "${only}"; ${MUTANTS.length} in all)` : ''}`);
