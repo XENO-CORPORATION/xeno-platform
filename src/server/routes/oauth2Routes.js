@@ -425,8 +425,10 @@ router.post('/token', requireSupportedTokenClient, async (req, res) => {
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange' && isDepotExchange(b)) {
       // XENO Depot (services/depotAuthority.js): Lore's client exchanges a Bearer Depot token, or an xdp_ credential,
       // for a short token carrying one repo's grants. Its own rules; never the platform's DPoP-bound exchange below.
+      // depot_run_id + depot_run_deadline (unix seconds): a CI run's read-only, run-scoped archive token (XO - RUNNER).
+      const run = b.depot_run_id !== undefined ? { id: b.depot_run_id, deadline: b.depot_run_deadline } : null;
       return res.json(await depotExchangeGrant(req.db, {
-        subjectToken: b.subject_token, subjectTokenType: b.subject_token_type, resource: b.resource, iss,
+        subjectToken: b.subject_token, subjectTokenType: b.subject_token_type, resource: b.resource, scope: b.scope, run, iss,
       }));
     }
     if (b.grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {

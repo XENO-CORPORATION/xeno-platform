@@ -206,6 +206,8 @@ export async function revokeAgentCredential(db, me, credentialId) {
 export const LORE_API_KEY_TOKEN_TYPE = 'urn:lore:params:oauth:token-type:api-key';
 const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
 export const DEPOT_TOKEN_SECONDS = 900;
+export const RUN_TOKEN_MAX_SECONDS = 7200;   // a CI run's archive token: the run's deadline, never more than 2 hours
+const RUN_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 const LORE_ACTIONS = Object.freeze({
   read: [], write: ['write'], lock: ['write'], review: [], merge: ['write', 'push-protected'],
   admin: ['write', 'push-protected', 'owner', 'admin', 'migrate', 'presign'],
@@ -258,13 +260,27 @@ async function actorForSubject(db, { subjectToken, subjectTokenType }) {
  * The exchange. Returns the RFC 8693 response. `iss` is the token endpoint's own issuer (oauth2Routes issuerForHost),
  * which must equal Lore's configured jwt_issuer and serve discovery at <iss>/.well-known/openid-configuration.
  */
-export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, resource, iss, env = process.env }) {
+export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, resource, iss, scope: requestedScope, run = null, env = process.env }) {
   const origin = depotOrigin(env);
+  // A RUN token (orchestrator ruling for XO - RUNNER, 2026-11-21): a CI machine fetches one repo's archive itself. Asked
+  // by Runner's own agent with its xdp_ credential, never by a person's sign-in; read on exactly one repo, nothing else;
+  // carries the run id; lives until the run's deadline, at most RUN_TOKEN_MAX_SECONDS. A broader request is refused, not
+  // narrowed, so a caller can never believe it holds more than it does.
+  let runDeadline = null;
+  if (run) {
+    if (subjectTokenType !== LORE_API_KEY_TOKEN_TYPE) throw exchangeError('invalid_request', 'a run token is asked for with an agent credential (xdp_)');
+    if (!resource) throw exchangeError('invalid_target', `a run token names its repo: resource=${origin}/repos/<repo id>`);
+    if (!RUN_ID_RE.test(String(run.id || ''))) throw exchangeError('invalid_request', 'depot_run_id must be 1-80 letters, digits, - or _');
+    runDeadline = Number(run.deadline);
+    if (!Number.isInteger(runDeadline) || runDeadline <= Math.floor(Date.now() / 1000)) throw exchangeError('invalid_request', 'depot_run_deadline must be a future unix time');
+    const asked = String(requestedScope || 'depot:read').split(/\s+/).filter(Boolean);
+    if (asked.some((s) => s !== 'depot:read')) throw exchangeError('invalid_scope', 'a run token is read-only: scope may only be depot:read');
+  }
   const actor = await actorForSubject(db, { subjectToken, subjectTokenType });
   const door = await doorFor(db, actor);
   if (!door.allowed) throw exchangeError('access_denied', door.message || 'XENO Depot is not open to this account', 403);
   const claims = {};
-  let scope = actor.scopes;
+  let scope = run ? ['depot:read'] : actor.scopes;
   if (resource !== undefined && resource !== null && resource !== '') {
     const m = new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/repos/([^/?#]+)$`).exec(String(resource));
     if (!m) throw exchangeError('invalid_target', `resource must be ${origin}/repos/<repo id>`);
@@ -273,7 +289,8 @@ export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, r
     const workspaceId = await repoWorkspace(db, id);
     const perms = workspaceId ? await effectivePermissions(db, actor, id, workspaceId) : new Set();
     if (!perms.has('read')) throw exchangeError('invalid_target', 'no access to that repo');   // never confirms the repo exists
-    claims.depot_resources = [{ resource_id: `depot-${id}`, permission: loreActions(perms) }];
+    claims.depot_resources = [{ resource_id: `depot-${id}`, permission: run ? [] : loreActions(perms) }];   // [] = read in Lore
+    if (run) claims.depot_run = { id: String(run.id) };
   } else if (subjectTokenType === LORE_API_KEY_TOKEN_TYPE) {
     claims.xdp_cred = actor.credentialId;                       // the agent's session token; exchanged again per repo
   } else {
@@ -282,7 +299,9 @@ export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, r
   const p = actor.principal;
   const now = Math.floor(Date.now() / 1000);
   const subjectExp = actor.expiresAt ? Math.floor(actor.expiresAt / 1000) : now + DEPOT_TOKEN_SECONDS;
-  const expiresIn = Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);
+  const expiresIn = run
+    ? Math.min(RUN_TOKEN_MAX_SECONDS, runDeadline - now, subjectExp - now)
+    : Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);
   if (expiresIn <= 0) throw exchangeError('invalid_grant', 'the subject has expired');
   const sourcePayload = subjectTokenType === ACCESS_TOKEN_TYPE ? jwt.decode(String(subjectToken)) : null;
   const key = await getSigningKey(db);

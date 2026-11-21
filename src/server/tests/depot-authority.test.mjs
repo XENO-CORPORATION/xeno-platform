@@ -270,6 +270,27 @@ async function main() {
   await oauthRefusal(exchange({ subjectToken: agentCred.token, subjectTokenType: KEYT }), 'invalid_grant');
   await refusal(depot.verifyToken(pool, session.access_token), 'invalid_token');
 
+  // a CI run's token (XO - RUNNER): Runner's agent, read on ONE repo, the run id, the run's deadline capped at 2 hours
+  const runnerCred = await depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['depot:write'] });
+  const nowS = () => Math.floor(Date.now() / 1000);
+  const runAsk = (over = {}) => exchange({ subjectToken: runnerCred.token, subjectTokenType: KEYT, resource: R('build'),
+    run: { id: 'cichk_0123456789abcdef', deadline: nowS() + 600 }, ...over });
+  const runTok = decode((await runAsk()).access_token).claims;
+  assert.deepEqual(runTok.depot_resources, [{ resource_id: 'depot-build', permission: [] }], 'read only, though the agent holds merge');
+  assert.deepEqual([runTok.depot_run, runTok.scope, runTok.sub], [{ id: 'cichk_0123456789abcdef' }, 'depot:read', u.robot]);
+  assert.ok(runTok.exp - runTok.iat <= 600 && runTok.exp - runTok.iat >= 590, 'lives until the run deadline');
+  const longRun = decode((await runAsk({ run: { id: 'r1', deadline: nowS() + 5 * 3600 } })).access_token).claims;
+  assert.ok(longRun.exp - longRun.iat <= 7200, 'never more than 2 hours');
+  await oauthRefusal(runAsk({ scope: 'depot:read depot:write' }), 'invalid_scope');                       // broader → refused, not narrowed
+  await oauthRefusal(runAsk({ scope: 'depot:admin' }), 'invalid_scope');
+  await oauthRefusal(runAsk({ subjectToken: staffTok, subjectTokenType: AT }), 'invalid_request');          // a person's sign-in never mints one
+  await oauthRefusal(runAsk({ run: { id: 'r1', deadline: nowS() - 1 } }), 'invalid_request');
+  await oauthRefusal(runAsk({ run: { id: 'bad id!', deadline: nowS() + 60 } }), 'invalid_request');
+  await oauthRefusal(runAsk({ resource: undefined }), 'invalid_target');
+  await oauthRefusal(runAsk({ resource: R('nope') }), 'invalid_target');                                    // a repo it cannot read
+  await oauthRefusal(exchange({ subjectToken: (await runAsk()).access_token, resource: R('build') }), 'invalid_grant');
+  await depot.revokeAgentCredential(pool, me, runnerCred.id);
+
   // live: the door and a suspension are read at exchange time
   await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [u.staff]);
   await oauthRefusal(exchange({ subjectToken: staffTok, resource: R('build') }), 'access_denied');
