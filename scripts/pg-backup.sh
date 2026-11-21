@@ -79,9 +79,18 @@ log "=== backup start: db=$PG_DB -> $DEST keep=$BACKUP_KEEP (encrypted in the pi
 # Every stage's exit status is checked (PIPESTATUS), so a dump cut short can never upload as if whole.
 # The `cat >/dev/null` is load-bearing: pg_restore --list reads only the table of contents at the head of the stream
 # and exits, and without a reader tee meets a closed pipe and pg_dump dies of SIGPIPE (exit 141, measured 2026-11-21).
-trap 'rc=$?; rm -rf "$WORK"; rm -f "$INFLIGHT"; [ "$rc" -eq 0 ] || log "ERROR: backup aborted (exit $rc)"' EXIT
+# 🔴 A dump that fails must not keep running. pg_dump runs INSIDE the container, and when the host side of `docker exec`
+# dies the process in the container does not: on 2026-11-21 two failed runs left two full pg_dumps reading production
+# for 30 minutes, each holding an open snapshot (which holds back VACUUM and blocks a migration's DDL), writing to
+# nobody. So each run names its database session (PGAPPNAME) and, on any exit, ends whatever session still has that name.
+APP="xeno-backup-${NAME%.dump.gpg}"
+stop_dump() {
+  $DOCKER exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -Atc \
+    "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE application_name = '$APP'" 2>/dev/null || true
+}
+trap 'rc=$?; n=$(stop_dump); [ "${n:-0}" = 0 ] || log "stopped $n leftover pg_dump session(s) named $APP"; rm -rf "$WORK"; rm -f "$INFLIGHT"; [ "$rc" -eq 0 ] || log "ERROR: backup aborted (exit $rc)"' EXIT
 set +e
-$DOCKER exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -Fc "$PG_DB" 2>>"$LOGFILE" \
+$DOCKER exec -e PGAPPNAME="$APP" "$PG_CONTAINER" pg_dump -U "$PG_USER" -Fc "$PG_DB" 2>>"$LOGFILE" \
   | tee >($DOCKER exec -i "$PG_CONTAINER" pg_restore --list >/dev/null 2>>"$LOGFILE"; echo $? >"$WORK/list.rc"; cat >/dev/null) \
   | gpg --batch --yes --trust-model always --recipient "$BACKUP_GPG_RECIPIENT" --encrypt --output "$INFLIGHT" 2>>"$LOGFILE"
 STATUS=("${PIPESTATUS[@]}")
