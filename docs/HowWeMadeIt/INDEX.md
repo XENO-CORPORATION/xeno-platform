@@ -4,6 +4,22 @@ One entry per step, newest first: what changed, the owner's words that decided i
 numbers that proved it. Started 2026-11-21 (global rule of 2026-11-18: the platform is recorded like the Volumes).
 Earlier steps are in `CHANGELOG.md` and XENO Index's release record (`/workspace/releases`).
 
+## 2026-11-21 — Depot credentials for headless agents (`xdp_`)
+
+**What changed:** a person can issue one of their agents an `xdp_` credential for Depot, which Runner needs to read
+the repos it builds (Depot decision 0002 §2). The agent acts as itself: its own grants, capped by its owner's and by
+the credential's scopes.
+
+**Decided by:** the same owner's go as the entry below; the shape is Depot decision 0001 §3 ("an `xdp_` credential bound to
+a platform agent, owner-capped like every agent").
+
+**How the leaders do it, and what we took:** GitHub fine-grained personal access tokens and GitHub App installation
+tokens (scoped, expiring, shown once, stored as a hash); the XENO Tasks `xtk_` credential's exact shape (prefix to
+find the row, SHA-256 of the whole token to prove it), so the ecosystem has one credential pattern, not two.
+
+**Proof:** the Depot authority suite with a new credential section, and `npm run test:depot-authority-mutation`:
+11/11 mutations caught, the four new ones being secret not compared, revocation ignored, an agent issuing, scopes ignored.
+
 ## 2026-11-21 — XENO Depot's identity and per-repo permissions
 
 **What changed:** Depot, XENO's own version control for large game projects, got its sign-in audience
