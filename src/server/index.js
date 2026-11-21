@@ -228,7 +228,8 @@ import {
   loginFailureLimiter, loginAddressCeiling, registerLimiter, recoveryMailLimiter, tokenRedeemLimiter,
 } from './middleware/rateLimiter.js';
 import { rateLimitKey, requesterRateLimitKey } from './utils/clientIp.js';
-import { globalLimiterSkips, isAuthenticatedLedgerServiceCall, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
+import { globalLimiterSkips, isAuthenticatedLedgerServiceCall, isAuthenticatedDepotStorageCall, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
+import storageDepotServiceRoutes from './routes/storageDepotServiceRoutes.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -394,7 +395,7 @@ const limiterBase = {
   validate: { ip: false }, // custom keys (CF-Connecting-IP) — skip the built-in req.ip validator
   message: { success: false, error: 'Too many requests, please try again later.' },
   // Mounted on '/api/', so req.path has '/api' stripped: compare the FULL path, or the skip never matches.
-  skip: (req) => globalLimiterSkips(req.baseUrl + req.path) || isAuthenticatedLedgerServiceCall(req),
+  skip: (req) => globalLimiterSkips(req.baseUrl + req.path) || isAuthenticatedLedgerServiceCall(req) || isAuthenticatedDepotStorageCall(req),
 };
 const globalAddressCeiling = rateLimit({ ...limiterBase, max: 2000, keyGenerator: rateLimitKey });
 const globalLimiter = rateLimit({ ...limiterBase, max: 300, keyGenerator: requesterRateLimitKey });
@@ -580,6 +581,10 @@ app.use('/api/automate/hooks', express.raw({ type: '*/*', limit: '256kb' }), (re
 // XENO Storage: an app's project files (services/projectFolders.js). Mounted BEFORE the global body parsers so a
 // project's .json or .txt arrives as its own bytes, not parsed into an object.
 app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploadsDir }));
+// XENO Storage: XENO Depot's content-addressed objects, for Depot's server only (service token, no user session).
+// BEFORE the global body parsers: the 100 MB express.raw below would otherwise read the body first and this
+// namespace's 1 MiB object cap would never apply.
+app.use('/api/storage/service/depot/v1', databaseMiddleware, storageDepotServiceRoutes);
 
 // ULTRA HIGH LIMITS for base64 image data processing
 // Bound evidence requests before the general 100 MB parser allocates their body.
