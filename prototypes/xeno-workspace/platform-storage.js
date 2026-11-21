@@ -81,6 +81,7 @@
       + '.xst-mini{display:flex;align-items:center;gap:9px;margin:0;white-space:nowrap;font-size:12.5px;color:var(--muted);border:0;background:none;padding:0;cursor:pointer;font:inherit;font-size:12.5px}.xst-mini .bar{width:160px;height:5px;border-radius:3px;background:var(--control);overflow:hidden}.xst-mini .bar i{display:block;height:100%;background:var(--text);border-radius:3px}.xst-mini:hover{color:var(--text)}'
       + '.xst-note{margin:12px 0 0;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text);background:var(--panel)}'
       + '.xst-list{margin-top:14px;border:1px solid var(--border);border-radius:12px;background:var(--panel);overflow:hidden}.xst-list[data-drop]{border-color:rgba(255,255,255,.4)}'
+      + '.xst[data-drop]{position:relative}.xst[data-drop]::after{content:"Drop to upload";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border:1.5px dashed rgba(255,255,255,.45);border-radius:12px;background:rgba(10,10,10,.72);color:var(--text);font-size:15px;pointer-events:none;z-index:5}'
       + '.xst-hd,.xst-r{display:grid;grid-template-columns:34px minmax(0,1fr) 110px 96px 150px;gap:10px;align-items:center;padding:0 14px}.xst-hd{height:34px;font-size:11.5px;color:var(--dim);border-bottom:1px solid var(--border)}'
       + '.xst-r{height:44px;border-top:1px solid var(--border);font-size:13.5px;cursor:default;user-select:none}.xst-r:first-of-type{border-top:0}.xst-r:hover,.xst-r[data-over]{background:var(--hover)}.xst-r[data-over]{box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}'
       + '.xst-r .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.xst-r small{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}.xst-r .ic{width:26px;height:26px;border-radius:6px;background:var(--control);display:grid;place-items:center;font-size:8.5px;font-weight:600;letter-spacing:.02em;color:var(--muted)}.xst-r .ic.fd{background:var(--text);color:var(--canvas)}'
@@ -141,7 +142,7 @@
     const teamName = S.scope ? ((S.teams || []).find((t) => t.id === S.scope)?.name || 'Team') : null;
     const title = at.kind === 'folder' ? [S.guest ? { id: 'v:Shared', name: 'Shared' } : { id: null, name: 'My files' }, ...(S.scope ? [{ id: `t:${S.scope}`, name: teamName }] : []), ...S.path] : [{ id: null, name: at.kind[0].toUpperCase() + at.kind.slice(1) }];
     const path = title.map((p, i) => `${i ? '<i>/</i>' : ''}<button type="button" data-xst="crumb" data-id="${p.id || ''}"${at.kind === 'folder' ? ' data-xst-crumb' : ''}>${esc(p.name)}</button>`).join('');
-    const tools = at.kind === 'usage' ? '' : `<input class="xst-find" type="search" placeholder="Search your storage" value="${esc(S.q)}" data-xst-find aria-label="Search your storage">${at.kind === 'folder' && !S.guest ? '<button type="button" class="xst-btn" data-xst="new">New folder</button><button type="button" class="xst-btn xst-go" data-xst="upload">Upload</button><input type="file" multiple hidden data-xst-files>' : ''}`;
+    const tools = at.kind === 'usage' ? '' : `<input class="xst-find" type="search" placeholder="Search your storage" value="${esc(S.q)}" data-xst-find aria-label="Search your storage">${at.kind === 'folder' && !S.guest ? '<button type="button" class="xst-btn" data-xst="new">New folder</button><button type="button" class="xst-btn" data-xst="upload-folder">Upload folder</button><input type="file" webkitdirectory multiple hidden data-xst-dir><button type="button" class="xst-btn xst-go" data-xst="upload">Upload</button><input type="file" multiple hidden data-xst-files>' : ''}`;
     const body = S.status === 'missing' ? '<div class="xst-list"><div class="xst-empty"><b>This folder is gone</b>It may have been deleted. <button type="button" class="xst-btn" data-xst="crumb" data-id="">Back to My files</button></div></div>'
       : S.status === 'error' ? '<div class="xst-list"><div class="xst-empty"><b>Your storage could not be read just now</b><button type="button" class="xst-btn" data-xst="retry">Try again</button></div></div>'
       : at.kind === 'usage' ? usage()
@@ -209,18 +210,19 @@
     if (ref.kind === 'folder') { if (ref.id === folderId) return; return done(await api('PATCH', `/api/library/folders/${ref.id}`, { parent: folderId }), 'The folder wasn’t moved.'); }
     return done(await api('PUT', `/api/library/assets/${ref.source}/${ref.id}/folder`, { folder: folderId }), 'The file wasn’t moved.');
   }
-  async function upload(files) {
-    const at = here(); let added = 0; S.busy += 1; say(`Uploading ${files.length} ${files.length === 1 ? 'file' : 'files'}`);
-    for (const file of files) {
-      const body = new FormData(); if (S.scope) body.append('workspace', S.scope); body.append('image', file, file.name);
-      const headers = { 'x-xeno-surface': 'xeno-web' }; const t = P.csrf?.(); if (t) headers['x-xeno-csrf'] = t; const area = P.area?.(); if (area) headers['x-xeno-area'] = area;
-      let r, d = null; try { r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin', headers, body }); d = await r.json().catch(() => null); } catch { say('XENO could not be reached.'); break; }
-      if (!r.ok || !d || d.success === false) { say(`“${file.name}” wasn’t added: ${(d && d.error) || 'XENO refused it'}.`); break; }
-      added += 1;
-      if (at.kind === 'folder' && at.id && d.file && d.file.id) await api('PUT', `/api/library/assets/file/${d.file.id}/folder`, { folder: at.id });
-    }
-    S.busy -= 1; if (added === files.length) say(`${added} ${added === 1 ? 'file' : 'files'} added`); await reload();
+  // Uploads go through platform-storage-uploads.js: upload sessions (no 100 MB wall), per-file progress, a queue, cancel,
+  // retry, folders, resume after a reload. Where they land: the open folder; from any other view, the top of My files.
+  const U = () => window.XENO_STORAGE_UPLOADS;
+  const uploadTarget = () => { const at = here(); return at.kind === 'folder' ? { folder: at.id || null, workspace: S.scope || null } : { folder: null, workspace: null }; };
+  function upload(files) {
+    if (!U()) return say('Uploads are not available on this page.');
+    if (S.guest) return say('You can’t add files to a folder someone shared with you.');
+    if (here().kind !== 'folder') say('Added to My files.');
+    U().add([...files], uploadTarget());
   }
+  window.XENO_STORAGE = { say };
+  let refreshSoon = 0;
+  U()?.setOnDone(() => { clearTimeout(refreshSoon); refreshSoon = setTimeout(() => { reload(); }, 300); });
   async function commitName(input) {
     const edit = S.edit, name = input.value.trim(); S.edit = null;
     if (!edit) return; if (!name) return paint();
@@ -252,6 +254,7 @@
     if (act === 'crumb') { const at = here(); if (at.kind !== 'folder') return; const id = b.dataset.id; return go(!id ? null : id.startsWith('v:') ? id.slice(2) : id.startsWith('t:') ? `t/${id.slice(2)}` : `f/${id}`); }
     if (act === 'new') { S.edit = { kind: 'new' }; paint(); return focusName(); }
     if (act === 'upload') return document.querySelector('.xst [data-xst-files]')?.click();
+    if (act === 'upload-folder') return document.querySelector('.xst [data-xst-dir]')?.click();
     if (act === 'movecancel') { S.moving = null; return paint(); }
     if (act === 'moveto') { const m = S.moving; S.moving = null; if (m.kind === 'many') { for (const i of m.items) await api('PUT', `/api/library/assets/${i.source}/${i.source_id}/folder`, { folder: b.dataset.id || null }); S.sel.clear(); return reload(); } return moveTo(m, b.dataset.id || null); }
     if (act === 'pv-close') return setView(null);
@@ -313,21 +316,42 @@
     S.versions.id = d.file.id; say('New version added. It is being checked and will open in a moment.'); loadVersions();
   });
   document.addEventListener('change', (e) => { const input = e.target.closest?.('.xst [data-xst-files]'); if (input && input.files.length) { const files = [...input.files]; input.value = ''; upload(files); } });
+  document.addEventListener('change', (e) => {
+    const input = e.target.closest?.('.xst [data-xst-dir]'); if (!input || !input.files.length) return;
+    const files = [...input.files]; input.value = '';
+    if (S.guest) return say('You can’t add files to a folder someone shared with you.');
+    U()?.addPicked(files, uploadTarget());
+  });
   // drag: a row onto a folder or a breadcrumb moves it; files from the computer onto the list upload
   let held = null;
   document.addEventListener('dragstart', (e) => { const row = e.target.closest?.('.xst .xst-r[draggable="true"]'); if (!row) return; held = refOf(row); e.dataTransfer.effectAllowed = 'all'; e.dataTransfer.setData('text/plain', held?.row?.name || ''); });
   document.addEventListener('dragend', () => { held = null; document.querySelectorAll('.xst [data-over],.xst [data-drop]').forEach((n) => { n.removeAttribute('data-over'); n.removeAttribute('data-drop'); }); });
   const target = (e) => e.target.closest?.('.xst [data-xst-folder], .xst [data-xst-crumb]');
+  // files from the computer: anywhere over Storage, in any view (a folder takes them; another view sends them to My
+  // files). While Storage is open, a drop elsewhere on the page is swallowed so the browser never opens the file.
+  const fromDiskDrag = (e) => !held && [...(e.dataTransfer?.types || [])].includes('Files');
+  const clearDrop = () => document.querySelectorAll('.xst[data-drop],.xst [data-drop]').forEach((n) => n.removeAttribute('data-drop'));
+  document.addEventListener('dragleave', (e) => { if (fromDiskDrag(e) && !e.relatedTarget?.closest?.('.xst')) clearDrop(); });
   document.addEventListener('dragover', (e) => {
-    const list = e.target.closest?.('.xst [data-xst-list]'), fromDisk = !held && [...(e.dataTransfer?.types || [])].includes('Files');
-    if (fromDisk && list && here().kind === 'folder') { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; list.setAttribute('data-drop', ''); return; }
+    const zone = e.target.closest?.('.xst');
+    if (fromDiskDrag(e) && document.querySelector('.xst')) {
+      e.preventDefault();
+      if (zone && !S.guest) { e.dataTransfer.dropEffect = 'copy'; zone.setAttribute('data-drop', ''); } else { e.dataTransfer.dropEffect = 'none'; clearDrop(); }
+      return;
+    }
     const t = held && target(e); if (!t || (held.kind === 'folder' && t.dataset.xstFolder === held.id)) return;
     e.preventDefault(); e.dataTransfer.dropEffect = 'move'; document.querySelectorAll('.xst [data-over]').forEach((n) => n.removeAttribute('data-over')); t.setAttribute('data-over', '');
   });
   document.addEventListener('dragenter', (e) => { if (held && target(e)) e.preventDefault(); });
   document.addEventListener('drop', (e) => {
-    const list = e.target.closest?.('.xst [data-xst-list]');
-    if (!held && list && e.dataTransfer?.files?.length && here().kind === 'folder') { e.preventDefault(); list.removeAttribute('data-drop'); return void upload([...e.dataTransfer.files]); }
+    if (fromDiskDrag(e) && document.querySelector('.xst')) {
+      e.preventDefault(); clearDrop();
+      if (!e.target.closest?.('.xst')) return;
+      if (S.guest) return say('You can’t add files to a folder someone shared with you.');
+      if (!U()) return say('Uploads are not available on this page.');
+      if (here().kind !== 'folder') say('Added to My files.');
+      return void U().addDrop(e.dataTransfer, uploadTarget());
+    }
     const t = held && target(e); if (!t) return; e.preventDefault(); const ref = held; held = null;
     moveTo(ref, t.dataset.xstFolder || t.dataset.id || null);
   });
