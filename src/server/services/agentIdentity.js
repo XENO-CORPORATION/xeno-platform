@@ -171,7 +171,9 @@ export async function resolvePrincipal(db, userId) {
     agentRole: isAgent ? row.agent_role : null,
     agentOrigin: isAgent ? row.agent_origin : null,
     owner: isAgent
-      ? { id: row.owner_user_id, handle: row.owner_handle, displayName: row.owner_display_name }
+      // role: the OWNER's own role, so a check that admits a staff member's agents (productAccess 'staff') can ask
+      // whose agent this is without a second query. Never an authority for the agent itself: that is `role` above.
+      ? { id: row.owner_user_id, handle: row.owner_handle, displayName: row.owner_display_name, role: row.owner_role }
       : null,
   };
 }

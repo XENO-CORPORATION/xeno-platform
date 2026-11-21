@@ -23,6 +23,9 @@ export const OIDC_SCOPES = Object.freeze([
   // XENO Agent desktop: hold the socket remote control runs over (decision 0006). Its own scope: reaching a person's PC
   // is a different authority from spending their credits, and the app asks for it only when the person turns this on.
   'remote:connect',
+  // XENO Depot (decision 0001 §3): its own resource server and audience ('xeno-depot'). A ceiling on the token; what a
+  // person may do on ONE repo is that repo's grants (services/depotAuthority.js). Mirrors oidcProvider DEPOT_SCOPES.
+  'depot:read', 'depot:write', 'depot:admin',
   // XENO workspace agent surface (WORKSPACE AGENT SURFACE SPEC P2, approved 2026-10-20): the per-area scopes a
   // self-registered client may hold on the 'xeno-workspace' audience (capabilities/scopes.js, minus the two Tasks ones above)
   ...WORKSPACE_SCOPES.filter((s) => s !== 'tasks:read' && s !== 'tasks:write'),
@@ -79,6 +82,10 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-remote-web': [...IDENTITY, 'remote:connect'],
   'xeno-rt': ['openid', 'profile', 'inference:run', 'ledger:read', 'ledger:spend'],
   'xeno-agent-cli': AGENT_PRODUCT,
+  // XENO Depot CLI (`xeno depot`, gh-grade; decision 0001 §2-3): device grant on a headless terminal, loopback PKCE on a
+  // desktop. Identity plus Depot's own scopes and nothing else: its tokens name 'xeno-depot' (migrate-oidc-clients
+  // `audience`), which every platform API refuses, so it can never spend credits or read files here.
+  'xeno-depot-cli': [...IDENTITY, 'depot:read', 'depot:write', 'depot:admin'],
   // XENO Spawn: identity, read the credits balance, and run inference through the XENO
   // gateway on the user's behalf (which spends credits). Nothing more: no projects/sync,
   // no workforce, no billing, team or broker authority. Widen by a reviewed change only.

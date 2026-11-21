@@ -44,7 +44,15 @@ export const TASKS_SCOPES = Object.freeze(['tasks:read', 'tasks:write']);
 // and /api/v1 accept — every other API (authMiddleware, 'xeno-api') and /api/tasks itself refuse it by construction.
 // A client that asks for Tasks scopes only keeps the 'xeno-tasks' audience it always had (expand/contract).
 export const WORKSPACE_AUDIENCE = 'xeno-workspace';
-export const DYNAMIC_SCOPES = Object.freeze([...new Set([...TASKS_SCOPES, ...WORKSPACE_SCOPES])]);
+// XENO Depot (xeno-depot/docs/decisions/0001-depot-foundation.md §3): a separate resource server, like Connect. Its
+// tokens name 'xeno-depot', so every platform API refuses them and Depot refuses every other audience. A client gets
+// this audience when it asks for Depot scopes and nothing else; Depot scopes never share a token with another area.
+//   depot:read   clone, sync, view, diff, list    depot:write  push, lock, review, comment, merge (as repo grants allow)
+//   depot:admin  create and delete repos, manage who may do what
+// A scope is a CEILING on the token; what the person may do on one repo is its grants (services/depotAuthority.js).
+export const DEPOT_AUDIENCE = 'xeno-depot';
+export const DEPOT_SCOPES = Object.freeze(['depot:read', 'depot:write', 'depot:admin']);
+export const DYNAMIC_SCOPES = Object.freeze([...new Set([...TASKS_SCOPES, ...WORKSPACE_SCOPES, ...DEPOT_SCOPES])]);
 // XENO MCP (/api/mcp, SURFACES spec §7) accepts these same tokens: Tasks is its only service today, so a client
 // signed in to /api/tasks/mcp works on /api/mcp with nothing to re-authorize. The audience stays one the rest of
 // the API refuses.
@@ -1146,8 +1154,13 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
   const requested = String(meta.scope || 'tasks:read tasks:write').split(/\s+/).filter(Boolean);
   const scopes = [...new Set(requested.filter((s) => DYNAMIC_SCOPES.includes(s)))];
   if (!scopes.length) throw Object.assign(new Error('scope'), { oauthError: 'invalid_client_metadata', description: `this server registers clients for these scopes only: ${DYNAMIC_SCOPES.join(' ')}`, statusCode: 400 });
+  // Depot is its own resource server: Depot scopes register a Depot client, alone. Mixing them with another area would
+  // mint one token two servers accept, which is the confusion separate audiences exist to prevent.
+  const depot = scopes.filter((s) => DEPOT_SCOPES.includes(s));
+  if (depot.length && depot.length !== scopes.length) throw bad('Depot scopes (depot:*) register a client of their own; ask for them without other scopes');
   // Tasks-only stays on the Tasks audience; any other area makes it a workspace client (WORKSPACE AGENT SURFACE P2)
-  const audience = scopes.every((s) => TASKS_SCOPES.includes(s)) ? TASKS_AUDIENCE : WORKSPACE_AUDIENCE;
+  const audience = depot.length ? DEPOT_AUDIENCE
+    : scopes.every((s) => TASKS_SCOPES.includes(s)) ? TASKS_AUDIENCE : WORKSPACE_AUDIENCE;
   if (from) {
     const recent = (await db.query(`SELECT count(*)::int AS n FROM oauth_clients WHERE dynamic AND registered_from = $1 AND created_at > now() - interval '1 hour'`, [from])).rows[0].n;
     if (recent >= DYNAMIC_REGISTRATION_LIMIT.perAddressPerHour) throw Object.assign(new Error('rate'), { oauthError: 'invalid_client_metadata', description: 'too many registrations from this address; try again later', statusCode: 429 });
@@ -1157,7 +1170,8 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
   await db.query(
     `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback, dynamic, access_audience, registered_from)
      VALUES ($1, NULL, $2, $3, $4, $7, false, false, true, $5, $6)`,
-    [clientId, name, uris, allowed, audience, from, audience === TASKS_AUDIENCE ? 'xeno_tasks_mcp' : 'xeno_workspace_mcp']);
+    [clientId, name, uris, allowed, audience, from,
+      audience === TASKS_AUDIENCE ? 'xeno_tasks_mcp' : audience === DEPOT_AUDIENCE ? 'xeno_depot_mcp' : 'xeno_workspace_mcp']);
   return {
     client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), client_name: name, redirect_uris: uris,
     token_endpoint_auth_method: 'none', grant_types: grants, response_types: ['code'], scope: scopes.join(' '),
@@ -1182,3 +1196,6 @@ async function verifyDynamicAccessToken(db, token, audience) {
 export const verifyTasksAccessToken = (db, token) => verifyDynamicAccessToken(db, token, TASKS_AUDIENCE);
 /** A workspace-audience access token. Accepted ONLY by /api/mcp and /api/v1 (routes/workspaceAuth.js). */
 export const verifyWorkspaceAccessToken = (db, token) => verifyDynamicAccessToken(db, token, WORKSPACE_AUDIENCE);
+/** A Depot-audience access token: the Depot CLI (first-party, device grant or loopback PKCE) or a self-registered agent
+ *  CLI that asked for depot:* only. Accepted ONLY by Depot's authority seam (services/depotAuthority.js). */
+export const verifyDepotAccessToken = (db, token) => verifyDynamicAccessToken(db, token, DEPOT_AUDIENCE);

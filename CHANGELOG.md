@@ -3,6 +3,16 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-21
+
+**XENO Depot can sign people in and ask who may do what on a repo (staff only).** Depot is a separate service, the way XENO Connect is: it checks tokens, never issues them, and asks the platform what the holder may do on one repo right now (`xeno-depot/docs/decisions/0001-depot-foundation.md` §3). New here:
+- **The `xeno-depot` sign-in.** The Depot CLI (`xeno-depot-cli`, device grant on a terminal or loopback PKCE on a desktop) gets tokens only Depot accepts; every platform API refuses them, so a Depot sign-in can never spend credits or read files here. An agent CLI (Claude Code, Codex) can register itself for Depot scopes (`depot:read`, `depot:write`, `depot:admin`) and acts as the person's own agent for that app, with the person's access, the XENO Tasks rule. Depot scopes never share a token with another area.
+- **Per-repo permissions:** `read`, `write`, `review`, `merge`, `lock`, `admin`, kept as grants in the platform's permission store. Workspace owners and admins administer every repo of their workspace; members write, lock and review; merging is an explicit grant. A token's scopes cap what its grants allow, and a repo is never confirmed to someone who cannot read it.
+- **Staff only until counsel clears the name:** the product door gains a third level, `staff` (XENO staff and their own agents), and Depot's door is set to it. Opening it later is one row, no release.
+- `/api/depot/authority`, called by Depot's gate with its service token (`DEPOT_SERVICE_TOKEN`; unset refuses everything).
+
+Proof: `node tests/depot-authority.test.mjs` on real Postgres, with tokens from the real code exchange and the real client seed; 7 of 7 mutations caught (scope ceiling, staff door, unreadable repo, last admin, mixed scopes, seed audience, stale principal).
+
 ## 2026-11-20
 
 **Credit holds stay fast as open holds pile up: open holds are summed once per call.** The index from earlier today held only while there were few open holds. At 1,276 the planner went back to probing every open hold once per grant (2,067,120 probes, 5.2 s) inside the account lock, and holds queued to a 70 s median. The three funding queries in `utils/usageCreditFunding.js` now sum open holds once, in a grouped join: identical rows on production data (1,620 of 1,620, 0 differing), 5,981 ms to 8.4 ms, `FOR UPDATE OF g` unchanged. Proof: the money-path suites against Postgres 15.

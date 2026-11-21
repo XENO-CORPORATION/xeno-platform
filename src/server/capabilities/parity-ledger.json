@@ -31,6 +31,7 @@
     "company.js": "workspace",
     "computeRoutes.js": "compute",
     "connectAuthorityRoutes.js": "storage",
+    "depotAuthorityRoutes.js": "platform",
     "containerRoutes.js": "platform",
     "liveRoutes.js": "platform",
     "conversionRoutes.js": "studio",
@@ -1715,6 +1716,55 @@
       "class": "reversible",
       "scope": "none",
       "because": "called by another XENO service with a service credential"
+    },
+    "route:depotAuthorityRoutes.js:POST /repos": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotAuthorityRoutes.js:POST /repos/:repoId/delete": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotAuthorityRoutes.js:POST /repos/:repoId/grants": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotAuthorityRoutes.js:POST /repos/:repoId/grants/list": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotAuthorityRoutes.js:POST /repos/:repoId/grants/revoke": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotAuthorityRoutes.js:POST /token": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
+    },
+    "route:depotAuthorityRoutes.js:POST /workspaces/:workspaceId/repos": {
+      "status": "excluded",
+      "category": "service",
+      "class": "reversible",
+      "scope": "none",
+      "because": "called by XENO Depot’s gate with a service credential; the person acts through Depot’s CLI and MCP"
     },
     "route:containerRoutes.js:DELETE /:id": {
       "status": "planned",
