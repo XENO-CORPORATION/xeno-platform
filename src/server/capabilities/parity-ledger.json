@@ -11973,6 +11973,13 @@
       "class": "safe",
       "scope": "none",
       "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
+    },
+    "route:storageDepotServiceRoutes.js:POST /workspaces/:wid/objects/urls": {
+      "status": "excluded",
+      "category": "service",
+      "class": "safe",
+      "scope": "none",
+      "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
     }
   }
 }

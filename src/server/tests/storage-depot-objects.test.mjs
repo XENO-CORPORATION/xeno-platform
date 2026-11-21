@@ -174,6 +174,36 @@ async function main() {
     assert.equal((await fetch(url(team, `/objects/${hd}`), { method: 'DELETE', headers: auth })).status, 404, 'idempotent');
     assert.equal((await put(team, hd, d)).status, 201, 'can be written again after delete');
 
+    // ── signed read URLs for the objects host ──
+    const URL_KEY = 'depot-url-key-' + tag;
+    const signedApp = express();
+    signedApp.use((req, _res, next) => { req.db = pool; next(); });
+    signedApp.use('/s', createStorageDepotServiceRouter({ env: { DEPOT_STORAGE_SERVICE_TOKEN: TOKEN, DEPOT_OBJECT_URL_KEY: URL_KEY, DEPOT_OBJECT_URL_BASE: 'https://objects.test' }, store }));
+    const signedServer = http.createServer(signedApp);
+    await new Promise((r) => signedServer.listen(0, '127.0.0.1', r));
+    try {
+      const sbase = `http://127.0.0.1:${signedServer.address().port}/s/workspaces/${team}`;
+      const asked = await fetch(`${sbase}/objects/urls`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [ha, missing], ttl: 120 }) });
+      assert.equal(asked.status, 200);
+      const signedUrls = await asked.json();
+      assert.deepEqual(signedUrls.absent, [missing], 'no URL for an object the workspace does not hold');
+      const u = new URL(signedUrls.urls[ha].url);
+      assert.equal(u.origin, 'https://objects.test');
+      assert.equal(u.pathname, `/d/${team}/${ha}`);
+      assert.equal(signedUrls.urls[ha].sha256, sha(a));
+      const expiry = Number(u.searchParams.get('e'));
+      assert.ok(expiry > Date.now() / 1000 + 100 && expiry <= Date.now() / 1000 + 121, 'expiry is the asked ttl');
+      // the Worker's own verifier accepts exactly this URL (same signed string, same key)
+      const expected = crypto.createHmac('sha256', URL_KEY).update(`depot:v1\n${team}\n${ha}\n${expiry}`).digest('hex');
+      assert.equal(u.searchParams.get('s'), expected);
+      const otherAsk = await fetch(`http://127.0.0.1:${signedServer.address().port}/s/workspaces/${other}/objects/urls`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [hc] }) });
+      assert.deepEqual((await otherAsk.json()).absent, [hc], 'another workspace\'s object gets no URL');
+      const tooLong = await fetch(`${sbase}/objects/urls`, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [ha], ttl: 301 }) });
+      assert.equal(tooLong.status, 400, 'ttl cap');
+    } finally { signedServer.close(); }
+    const unset = await fetch(url(team, '/objects/urls'), { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ hashes: [ha] }) });
+    assert.equal(unset.status, 503, 'no key: no URLs, never unsigned ones');
+
     // ── limiter skip only for the right token on the right path ──
     const call = (p, h) => ({ baseUrl: '/api', path: p, headers: h ? { authorization: h } : {} });
     assert.equal(isAuthenticatedDepotStorageCall(call('/storage/service/depot/v1/x', `Bearer ${TOKEN}`), TOKEN), true);

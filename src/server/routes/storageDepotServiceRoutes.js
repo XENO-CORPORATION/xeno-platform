@@ -16,12 +16,14 @@
  *   HEAD /workspaces/:wid/objects/:hash
  *   DELETE /workspaces/:wid/objects/:hash  Depot decided nothing references it; 200 removed · 404 nothing there
  *   POST /workspaces/:wid/objects/exists  { hashes: [...] } → { present: { hash: { size, meta } }, absent: [...] }
- *   GET  /workspaces/:wid/usage            { usedBytes, allowanceBytes, depotBytes, objects }
+ *   POST /workspaces/:wid/objects/urls     { hashes: [...], ttl?: ≤300 } → { urls: { hash: { url, size, sha256, meta } }, absent, expiresAt }
+ *                                          URLs on the objects host (objects.xenosystem.ai); 503 when DEPOT_OBJECT_URL_KEY is unset
+ *   GET  /workspaces/:wid/usage         { usedBytes, allowanceBytes, depotBytes, objects }
  */
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  putDepotObject, getDepotObject, headDepotObject, depotObjectsExist, depotUsage, deleteDepotObject,
+  putDepotObject, getDepotObject, headDepotObject, depotObjectsExist, depotUsage, deleteDepotObject, signDepotObjectUrls,
   assertWorkspaceId, MAX_DEPOT_OBJECT_BYTES,
 } from '../services/storageDepotObjects.js';
 import { workspaceUsedBytes, workspaceStorageAllowance, storageUsage } from '../services/storageAllowance.js';
@@ -123,6 +125,11 @@ export function createStorageDepotServiceRouter({ env = process.env, store } = {
 
   router.post('/workspaces/:wid/objects/exists', express.json({ limit: '256kb' }), async (req, res) => {
     try { res.json(await depotObjectsExist(req.db, { workspaceId: req.params.wid, hashes: req.body?.hashes })); }
+    catch (error) { sendErr(res, error); }
+  });
+
+  router.post('/workspaces/:wid/objects/urls', express.json({ limit: '256kb' }), async (req, res) => {
+    try { res.json(await signDepotObjectUrls(req.db, { workspaceId: req.params.wid, hashes: req.body?.hashes, ttlSeconds: req.body?.ttl ?? undefined }, { env })); }
     catch (error) { sendErr(res, error); }
   });
 

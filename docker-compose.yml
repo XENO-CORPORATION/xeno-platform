@@ -139,6 +139,9 @@ services:
       - CONNECT_SERVICE_TOKEN=${CONNECT_SERVICE_TOKEN:-}
       # XENO Depot's object store on XENO Storage (routes/storageDepotServiceRoutes.js). Bearer for Depot's server; unset = 401.
       - DEPOT_STORAGE_SERVICE_TOKEN=${DEPOT_STORAGE_SERVICE_TOKEN:-}
+      # Signed Depot read URLs on the objects host (xeno-storage workers/objects). Same key as that Worker's secret; unset = 503.
+      - DEPOT_OBJECT_URL_KEY=${DEPOT_OBJECT_URL_KEY:-}
+      - DEPOT_OBJECT_URL_BASE=${DEPOT_OBJECT_URL_BASE:-https://objects.xenosystem.ai}
       # Site gate (routes/siteGateRoutes.js): SITE_GATE=on shows pages only to admins and SITE_GATE_ALLOW
       # (comma list: emails and/or @domains) OR to whoever types SITE_GATE_CODE on /coming-soon.html; everyone
       # else gets /coming-soon.html. Unset = open. SITE_GATE_CODE empty = the code form refuses (accounts only);

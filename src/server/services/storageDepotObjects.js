@@ -181,6 +181,36 @@ export async function deleteDepotObject(db, { workspaceId, hash }, { store = fil
   return true;
 }
 
+export const MAX_URL_TTL_SECONDS = 300;
+export const depotUrlSignedString = (workspaceId, hash, expiry) => `depot:v1\n${workspaceId}\n${hash}\n${expiry}`;
+
+/**
+ * Short-lived read URLs on the objects host (xeno-storage `workers/objects`, objects.xenosystem.ai), so a clone
+ * reads straight from R2 at the edge instead of through this backend. Only an object recorded in THIS workspace
+ * gets a URL; the signature binds workspace, hash and expiry (HMAC-SHA256, key DEPOT_OBJECT_URL_KEY, the same
+ * value the Worker holds). Returns `{ urls: { <hash>: { url, size, sha256, meta } }, absent, expiresAt }`.
+ * Throws `not_configured` (503) when no key is set, so a missing secret never yields unsigned URLs.
+ */
+export async function signDepotObjectUrls(db, { workspaceId, hashes, ttlSeconds = MAX_URL_TTL_SECONDS }, { env = process.env, now = Date.now() } = {}) {
+  assertWorkspaceId(workspaceId);
+  const key = (env.DEPOT_OBJECT_URL_KEY || '').trim();
+  if (!key) throw fail('not_configured', 'signed object URLs are not configured on this server', 503);
+  const ttl = Number(ttlSeconds);
+  if (!Number.isInteger(ttl) || ttl < 1 || ttl > MAX_URL_TTL_SECONDS) throw fail('bad_ttl', `ttl is 1..${MAX_URL_TTL_SECONDS} seconds`, 400);
+  const base = (env.DEPOT_OBJECT_URL_BASE || 'https://objects.xenosystem.ai').replace(/\/+$/, '');
+  const { present, absent } = await depotObjectsExist(db, { workspaceId, hashes });
+  const rows = Object.keys(present).length ? (await db.query(
+    'SELECT hash, payload_sha256 FROM storage_depot_objects WHERE workspace_id = $1 AND hash = ANY($2::text[])', [workspaceId, Object.keys(present)])).rows : [];
+  const shaOf = Object.fromEntries(rows.map((r) => [r.hash, r.payload_sha256]));
+  const expiry = Math.floor(now / 1000) + ttl;
+  const urls = {};
+  for (const [hash, info] of Object.entries(present)) {
+    const sig = crypto.createHmac('sha256', key).update(depotUrlSignedString(workspaceId, hash, expiry)).digest('hex');
+    urls[hash] = { url: `${base}/d/${workspaceId}/${hash}?e=${expiry}&s=${sig}`, size: info.size, sha256: shaOf[hash], meta: info.meta };
+  }
+  return { urls, absent, expiresAt: new Date(expiry * 1000).toISOString() };
+}
+
 /** What Depot holds in a workspace: `{ bytes, objects }`. */
 export async function depotUsage(db, workspaceId) {
   assertWorkspaceId(workspaceId);
