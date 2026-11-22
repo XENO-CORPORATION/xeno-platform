@@ -49,14 +49,24 @@ AF="$($DOCKER exec xenostudio-postgres psql -U postgres -tAc 'SELECT failed_coun
 [ -n "${AF:-}" ] && [ "$AF" != "0" ] && add "Postgres archiver reports ${AF} FAILED archive attempts — WAL is not reaching the archive."
 
 # 3/4. Backup freshness. An old backup is a silent backup.
+# Since 2026-11-21 pg-backup.sh streams straight to R2 and keeps no dump here; it writes backups/.last-backup-ok only
+# after the object is stored and verified, so that stamp's age IS the age of the newest good offsite backup. A local
+# *.dump is read only while no stamp exists yet (the switch-over).
+OK_STAMP="$BASE/backups/.last-backup-ok"
 NEWEST_DUMP="$(ls -t "$BASE"/backups/*.dump 2>/dev/null | head -1)"
-if [ -n "${NEWEST_DUMP:-}" ]; then
+if [ -f "$OK_STAMP" ]; then
+  AGE_H=$(( ( $(date +%s) - $(stat -c %Y "$OK_STAMP") ) / 3600 ))
+  [ "$AGE_H" -ge "$DUMP_MAX_H" ] && add "Newest verified offsite backup is ${AGE_H}h old (limit ${DUMP_MAX_H}h) — see backups/backup.log."
+elif [ -n "${NEWEST_DUMP:-}" ]; then
   AGE_H=$(( ( $(date +%s) - $(stat -c %Y "$NEWEST_DUMP") ) / 3600 ))
   [ "$AGE_H" -ge "$DUMP_MAX_H" ] && add "Newest nightly dump is ${AGE_H}h old (limit ${DUMP_MAX_H}h)."
 else
-  add "No nightly dump found at all in $BASE/backups."
+  add "No nightly backup found: no backups/.last-backup-ok and no local dump."
 fi
-NEWEST_BASE="$(ls -t "$BASE"/backups/base/base-*.tar.gz 2>/dev/null | head -1)"
+# the base backup keeps no local copy (pg-basebackup.sh, 2026-11-22): its success stamp says when one last reached R2;
+# an older local tar from before then still counts until the stamp exists
+NEWEST_BASE="$BASE/backups/.last-base-ok"
+[ -f "$NEWEST_BASE" ] || NEWEST_BASE="$(ls -t "$BASE"/backups/base/base-*.tar.gz 2>/dev/null | head -1)"
 if [ -n "${NEWEST_BASE:-}" ]; then
   AGE_D=$(( ( $(date +%s) - $(stat -c %Y "$NEWEST_BASE") ) / 86400 ))
   [ "$AGE_D" -ge "$BASE_MAX_D" ] && add "Newest PHYSICAL base backup is ${AGE_D}d old (limit ${BASE_MAX_D}d) — PITR has nothing recent to replay onto."

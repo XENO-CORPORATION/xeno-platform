@@ -15,8 +15,12 @@ cleanup() {
   ssh $HOST 'sudo docker rm -f -v dr-restore-proof dr-pitr-proof >/dev/null 2>&1; sudo rm -rf /mnt/projects/xeno-platform/backups/.proof.dump /mnt/projects/xeno-platform/backups/.proof-base.tar.gz /mnt/projects/xeno-platform/backups/.proof-pitr' || true
 }
 trap cleanup EXIT
+# 🔴 ROOM, measured (2026-11-22): the drill restores a whole copy of the cluster on the box Postgres runs on. The
+# backups are streamed straight into each restore (no file on the box) and the two restores run one after the other,
+# so the peak is one restored cluster. It needs that much plus 10 GB, from the live size, or it refuses.
+DB_GB=$(ssh $HOST "sudo docker exec xenostudio-postgres psql -U postgres -d postgres -Atc 'SELECT ceil(sum(pg_database_size(datname))/1073741824.0) FROM pg_database'")
 FREE_GB=$(ssh $HOST "df -BG --output=avail / | tail -1 | tr -dc 0-9")
-[ "$FREE_GB" -ge 15 ] || { echo "only ${FREE_GB} GB free on the box, the drill needs 15"; exit 1; }
+[ "$FREE_GB" -ge $(( DB_GB + 10 )) ] || { echo "only ${FREE_GB} GB free on the box; a restored ${DB_GB} GB cluster needs $(( DB_GB + 10 ))"; exit 1; }
 grep -m1 '^XENO_DB_BACKUP_GPG_PRIVATE_B64=' "$HOME/.xeno-secrets" | cut -d= -f2- | base64 -d | gpg --batch --quiet --import 2>/dev/null
 
 DUMP=$(rclone lsf "$B" --files-only --max-depth 1 --include 'xenostudio-*.dump.gpg' | sort | tail -1)
@@ -27,30 +31,31 @@ echo "R2 newest: dump=$DUMP base=$BASE wal=$WAL"
 echo "--- WAL segment decrypts"
 rclone cat "$B/wal/$WAL" | gpg --batch --quiet --decrypt 2>/dev/null | wc -c
 
-echo "--- base backup: R2 copy against the local one"
-PLAIN_BASE="/mnt/projects/xeno-platform/backups/base/${BASE%.gpg}"
-rclone cat "$B/base/$BASE" | gpg --batch --quiet --decrypt 2>/dev/null | ssh $HOST "sudo tee /mnt/projects/xeno-platform/backups/.proof-base.tar.gz >/dev/null"
-ssh $HOST "sudo sha256sum /mnt/projects/xeno-platform/backups/.proof-base.tar.gz '$PLAIN_BASE' | awk '{print \$1}' | uniq | wc -l" | { read n; [ "$n" = 1 ] && echo "base byte-identical" || { echo "BASE DIFFERS"; exit 1; }; }
-
-echo "--- dump: R2 copy against the local one"
-PLAIN="/mnt/projects/xeno-platform/backups/${DUMP%.gpg}"
-rclone cat "$B/$DUMP" | gpg --batch --quiet --decrypt 2>/dev/null | ssh $HOST "sudo tee /mnt/projects/xeno-platform/backups/.proof.dump >/dev/null"
-ssh $HOST "sudo sha256sum /mnt/projects/xeno-platform/backups/.proof.dump '$PLAIN' | awk '{print \$1}' | uniq | wc -l" | { read n; [ "$n" = 1 ] && echo "dump byte-identical" || { echo "DUMP DIFFERS"; exit 1; }; }
-
-echo "--- full restore into a throwaway, offline database"
+# The box keeps no copy of either backup (2026-11-22: both are encrypted in the pipe and nothing is kept locally), so
+# there is no local file to compare with. The proof is stronger: each R2 object is decrypted here and streamed straight
+# into a restore on the box; a truncated or altered object fails the restore, and the restored rows are compared with
+# production's.
+# SKIP_DUMP=1 runs only the point-in-time half (to repeat it after the dump half has passed); a full drill runs both
+if [ "${SKIP_DUMP:-}" = 1 ]; then echo "--- dump restore SKIPPED (SKIP_DUMP=1)"; else
+echo "--- full restore of the newest dump into a throwaway, offline database (streamed from R2, no file on the box)"
 ssh $HOST 'bash -s' <<'REMOTE'
 set -eu
-F=/mnt/projects/xeno-platform/backups/.proof.dump
 IMG=$(sudo docker inspect xenostudio-postgres --format '{{.Config.Image}}')
 sudo docker run -d --name dr-restore-proof --network none --cpus 2 --memory 4g -e POSTGRES_PASSWORD=x -e POSTGRES_DB=restoretest "$IMG" >/dev/null
 for i in $(seq 1 60); do sudo docker exec dr-restore-proof pg_isready -U postgres -d restoretest -q && break; sleep 2; done
-sudo docker cp "$F" dr-restore-proof:/tmp/d.dump
-START=$(date +%s)
+REMOTE
+START_S=$(date +%s)
 set +e
-sudo docker exec dr-restore-proof pg_restore -U postgres -d restoretest --no-owner --no-privileges /tmp/d.dump 2>/tmp/dr-restore.err
-RC=$?
+rclone cat "$B/$DUMP" | gpg --batch --quiet --decrypt 2>/dev/null \
+  | ssh $HOST "sudo docker exec -i dr-restore-proof pg_restore -U postgres -d restoretest --no-owner --no-privileges 2>/tmp/dr-restore.err"
+ST=("${PIPESTATUS[@]}")
 set -e
-echo "pg_restore exit=$RC errors=$(grep -c 'error:' /tmp/dr-restore.err || true) seconds=$(( $(date +%s)-START ))"
+# every stage counts: a download or decryption cut short must fail the drill, not pass as a smaller restore
+RC=$(( ST[0] != 0 ? 90 : ST[1] != 0 ? 91 : ST[2] ))
+echo "stream: rclone=${ST[0]} gpg=${ST[1]} restore=${ST[2]}"
+ssh $HOST "RC='$RC' START_S='$START_S' bash -s" <<'REMOTE'
+set -eu
+echo "pg_restore exit=$RC errors=$(grep -c 'error:' /tmp/dr-restore.err || true) seconds=$(( $(date +%s)-START_S ))"
 head -5 /tmp/dr-restore.err | cut -c1-200
 Q="select 'tables',count(*) from information_schema.tables where table_schema='public' union all select 'users',count(*) from users union all select 'credit_transactions',count(*) from credit_transactions union all select 'credit_accounts',count(*) from credit_accounts"
 echo "restored:"; sudo docker exec dr-restore-proof psql -U postgres -d restoretest -Atc "$Q"
@@ -58,16 +63,29 @@ echo "production now:"; sudo docker exec xenostudio-postgres psql -U postgres -d
 rm -f /tmp/dr-restore.err
 [ "$RC" = 0 ]
 REMOTE
+fi
 
 echo "--- point-in-time recovery: that base plus WAL from R2, stopped at a chosen second"
-ssh $HOST 'sudo docker rm -f -v dr-restore-proof >/dev/null 2>&1; sudo rm -f /mnt/projects/xeno-platform/backups/.proof.dump'
+ssh $HOST 'sudo docker rm -f -v dr-restore-proof >/dev/null 2>&1'   # the dump's restored copy goes first: one at a time
 P=/mnt/projects/xeno-platform/backups/.proof-pitr
-START=$(ssh $HOST "sudo tar xzOf /mnt/projects/xeno-platform/backups/.proof-base.tar.gz backup_label" | sed -n 's/^START WAL LOCATION.*(file \([0-9A-F]*\)).*/\1/p')
+# the base backup, decrypted here and unpacked straight into the recovery directory on the box (no tar file there)
+ssh $HOST "sudo rm -rf $P && sudo mkdir -p $P/wal $P/data"
+set +e
+rclone cat "$B/base/$BASE" | gpg --batch --quiet --decrypt 2>/dev/null | ssh $HOST "sudo tar xzf - -C $P/data"
+BST=("${PIPESTATUS[@]}")
+set -e
+[ "${BST[0]}" = 0 ] && [ "${BST[1]}" = 0 ] && [ "${BST[2]}" = 0 ] || { echo "base backup stream failed: rclone=${BST[0]} gpg=${BST[1]} tar=${BST[2]}"; exit 1; }
+echo "base backup $BASE unpacked"
+START=$(ssh $HOST "sudo cat $P/data/backup_label" | sed -n 's/^START WAL LOCATION.*(file \([0-9A-F]*\)).*/\1/p')
 [ -n "$START" ] || { echo "no start segment in the base backup"; exit 1; }
-mapfile -t SEGS < <(rclone lsjson "$B/wal" --files-only --use-server-modtime --no-mimetype | node -e '
-  const rows = JSON.parse(require("fs").readFileSync(0, "utf8"));
+# The listing goes to a FILE, then node reads it: node reading a multi-megabyte stdin pipe on Windows closed the pipe early
+# (2026-11-22: "write /dev/stdout: The pipe is being closed", 21k segments, an empty list), so the drill saw no WAL.
+rclone lsjson "$B/wal" --files-only --use-server-modtime --no-mimetype > "$WORK/wal.json"
+mapfile -t SEGS < <(node -e '
+  const rows = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   for (const r of rows) if (/^[0-9A-F]{24}\.gpg$/.test(r.Name)) console.log(r.Name + "|" + Math.floor(Date.parse(r.ModTime) / 1000));
-' | sort | awk -F'|' -v s="$START" '$1 >= s')
+' "$WORK/wal.json" | sort | awk -F'|' -v s="$START" '$1 >= s')
+echo "WAL listed: $(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).length)' "$WORK/wal.json") objects, ${#SEGS[@]} since the base"
 # Stop at about 60 segments so a late-in-the-week drill doesn't fetch 30 GB. The 7 after it hold a commit past the target.
 N=${#SEGS[@]}
 [ "$N" -ge 20 ] || { echo "only $N WAL segments since the base backup"; exit 1; }
@@ -89,8 +107,6 @@ PITR_Q() { sudo docker exec dr-pitr-proof psql -U postgres -d xenostudio -Atc "$
 PROD_Q() { sudo docker exec xenostudio-postgres psql -U postgres -d xenostudio -Atc "$1"; }
 BAD=$(sudo find "$P/wal" -type f ! -size 16777216c | wc -l)
 [ "$BAD" = 0 ] || { echo "$BAD WAL segments have the wrong size"; exit 1; }
-sudo tar xzf /mnt/projects/xeno-platform/backups/.proof-base.tar.gz -C "$P/data"
-sudo rm -f /mnt/projects/xeno-platform/backups/.proof-base.tar.gz
 sudo touch "$P/data/recovery.signal"
 sudo chown -R 999:999 "$P/data" "$P/wal"; sudo chmod 700 "$P/data"
 IMG=$(sudo docker inspect xenostudio-postgres --format '{{.Config.Image}}')
@@ -126,5 +142,6 @@ MISSING=$(( PROD_BEFORE - BEFORE ))
 echo "last restored ledger row matches production"
 REMOTE
 
+if [ "${SKIP_DUMP:-}" = 1 ]; then echo "POINT-IN-TIME HALF PASSED (no stamp: the dump half was skipped, so this is not a full drill)"; exit 0; fi
 ssh $HOST "sudo touch /mnt/projects/xeno-platform/backups/.last-restore-proof"
 echo "PROOF PASSED"
