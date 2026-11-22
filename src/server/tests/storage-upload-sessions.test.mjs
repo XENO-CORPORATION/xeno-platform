@@ -143,6 +143,49 @@ async function main() {
     assert.equal(zr.state, 'done');
     assert.equal((await pool.query('SELECT content_sha256 FROM user_files WHERE id = $1', [zr.result.id])).rows[0].content_sha256, sha(zb));
 
+    // ── same-name uploads: a decision, never a silent duplicate (Replace = new version, Box's way; Keep both = name (1)) ──
+    const whole = async (json, bytes, who = me) => {
+      const o = await req('POST', '', { json: { size: bytes.length, type: 'text/plain', ...json }, who });
+      if (o.status !== 201) return o;
+      for (const [i, chunk] of partsOf(bytes, PART_SIZE).entries()) assert.equal((await putPart(o.d.session.id, i + 1, chunk, who)).status, 200);
+      await req('POST', `/${o.d.session.id}/complete`, { who });
+      const s = await until(async () => { const g = await req('GET', `/${o.d.session.id}`, { who }); return g.d.session.state !== 'processing' && g.d.session; });
+      return { status: 201, session: s };
+    };
+    const v1 = Buffer.from('first version'), v2 = Buffer.from('second version, longer');
+    let w = await whole({ name: 'plan.txt' }, v1);
+    assert.equal(w.session.state, 'done');
+    const firstId = w.session.file.id;
+    r = await req('POST', '', { json: { name: 'plan.txt', size: v2.length, type: 'text/plain' } });
+    assert.equal(r.status, 409, 'the same name in the same place asks first');
+    assert.equal(r.d.code, 'name_conflict'); assert.equal(r.d.existing.id, firstId);
+    r = await req('POST', '', { json: { name: 'PLAN.TXT', size: v2.length, type: 'text/plain' } });
+    assert.equal(r.status, 409, 'case-insensitive: the drive mounts on Windows');
+    w = await whole({ name: 'plan.txt', onConflict: 'keep-both' }, v2);
+    assert.equal(w.session.file.name, 'plan (1).txt', 'keep both names the upload name (1)');
+    w = await whole({ name: 'plan.txt', onConflict: 'version' }, v2);
+    assert.equal(w.session.state, 'done');
+    const newest = (await pool.query('SELECT replaces_asset_id, content_sha256 FROM user_files WHERE id = $1', [w.session.file.id])).rows[0];
+    assert.equal(newest.replaces_asset_id, firstId, 'replace makes it the newest version of the existing file');
+    assert.equal(newest.content_sha256, sha(v2));
+    const currentPlans = await pool.query(`SELECT count(*)::int AS n FROM user_files f WHERE lower(f.original_name) = 'plan.txt' AND f.created_by_user_id = $1 AND f.deleted_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM user_files x WHERE x.replaces_asset_id = f.id)`, [me]);
+    assert.equal(currentPlans.rows[0].n, 1, 'one current plan.txt, its older bytes kept as a version');
+    r = await req('POST', '', { json: { name: 'plan.txt', size: 3, type: 'text/plain', onConflict: 'whatever' } });
+    assert.equal(r.d.code, 'bad_conflict_choice');
+
+    // ── a folder: the server places the file, and a name only conflicts within its own place ──
+    const myFolder = (await pool.query(`INSERT INTO storage_folders (owner_user_id, name) VALUES ($1, 'Specs') RETURNING id`, [me])).rows[0].id;
+    w = await whole({ name: 'plan.txt', folder: myFolder }, v1);
+    assert.equal(w.session.state, 'done', 'the same name in another folder is no conflict');
+    const placed = (await pool.query(`SELECT folder_id FROM storage_item_folders WHERE source = 'file' AND source_id = $1`, [w.session.file.id])).rows[0];
+    assert.equal(placed?.folder_id, myFolder, 'the server put it in the folder it was dropped on');
+    r = await req('POST', '', { json: { name: 'plan.txt', size: 3, type: 'text/plain', folder: myFolder } });
+    assert.equal(r.status, 409, 'and inside that folder it conflicts');
+    const theirFolder = (await pool.query(`INSERT INTO storage_folders (owner_user_id, name) VALUES ($1, 'Private') RETURNING id`, [other])).rows[0].id;
+    r = await req('POST', '', { json: { name: 'x.txt', size: 3, type: 'text/plain', folder: theirFolder } });
+    assert.equal(r.status, 404, 'not into someone else’s folder');
+
     // ── the streamed inspection sniffs exactly as the whole-buffer sniff ──
     const samples = [
       [Buffer.from('89504e470d0a1a0a0000', 'hex'), 'image/png'], [Buffer.from([0xff, 0xd8, 0xff, 1, 2]), 'image/jpeg'],

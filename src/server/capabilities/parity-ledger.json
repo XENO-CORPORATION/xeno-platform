@@ -12144,6 +12144,14 @@
       "class": "reversible",
       "scope": "storage:write",
       "because": "resumes the same session from the parts that arrived"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=resolve": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:storageUploadRoutes.js:POST /",
+      "class": "reversible",
+      "scope": "storage:write",
+      "because": "the choice is the onConflict field of opening an upload session (version, keep-both) or not uploading (skip)"
     }
   }
 }

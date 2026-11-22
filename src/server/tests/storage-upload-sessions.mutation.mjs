@@ -16,6 +16,9 @@ const mutations = [
   ['missing parts not checked', [['if (missing.length) throw', 'if (false) throw']]],
   ['assembled size not checked', [["if (!got || got.size !== Number(row.size_bytes)) throw", 'if (!got) throw']]],
   ['other personal workspace allowed', [["if (String(ws.owner_user_id) !== String(userId)) throw", 'if (false) throw']]],
+  ['same name never asked', [["if (onConflict === 'ask') throw", "if (false) throw"]]],
+  ['name match case-sensitive', [['lower(f.original_name) = lower($1)', 'f.original_name = $1']]],
+  ['folder access not checked', [["await folderAccess(db, userId, folderId, 'edit')", "(await db.query('SELECT * FROM storage_folders WHERE id = $1', [folderId])).rows[0]"]]],
 ];
 let failures = 0;
 try {

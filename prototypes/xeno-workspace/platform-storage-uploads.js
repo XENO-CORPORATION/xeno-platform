@@ -20,8 +20,9 @@
   const left = (s) => (!Number.isFinite(s) || s <= 0 ? '' : s < 60 ? `${Math.ceil(s)} s left` : s < 3600 ? `${Math.ceil(s / 60)} min left` : `${Math.floor(s / 3600)} h ${Math.ceil((s % 3600) / 60)} min left`);
   const PARTS_AT_ONCE = 3, FILES_AT_ONCE = 2, TRIES = 3;
   const RESUME_KEY = 'xeno.storage.uploads.v1';
-  const jobs = [];                 // { id, file, name, size, folder, workspace, state, sent, error, session, xhrs, rate }
+  const jobs = [];                 // { id, file, name, size, folder, workspace, state, sent, error, session, xhrs, rate, existing, onConflict }
   let seq = 0, onDone = () => {}, open = true;
+  let batchChoice = null;          // "Do this for all": the answer to every name conflict that follows in this batch
 
   // ── resume across reloads: the session id for a file seen before (name, size, last modified) ──
   const fingerprint = (f) => `${f.name}|${f.size}|${f.lastModified}`;
@@ -57,9 +58,14 @@
     const prev = resumeMap()[fingerprint(job.file)];
     if (prev) { const r = await api('GET', `/api/library/uploads/${prev.id}?t=${Date.now()}`); if (r.ok && r.d?.session?.state === 'uploading' && r.d.session.size === job.size) session = r.d.session; }
     if (!session) {
-      const r = await api('POST', '/api/library/uploads', { name: job.name, size: job.size, type: job.file.type || 'application/octet-stream', ...(job.workspace ? { workspace: job.workspace } : {}) });
+      const choice = job.onConflict || batchChoice || 'ask';
+      if (choice === 'skip') { job.state = 'skipped'; draw(); onDone(job); return; }
+      const r = await api('POST', '/api/library/uploads', { name: job.name, size: job.size, type: job.file.type || 'application/octet-stream', onConflict: choice, ...(job.folder ? { folder: job.folder } : {}), ...(job.workspace ? { workspace: job.workspace } : {}) });
+      // a file with this name is already here: ask (Replace keeps the old one as a version, like Box; Keep both renames)
+      if (r.status === 409 && r.d?.code === 'name_conflict') { job.state = 'conflict'; job.existing = r.d.existing; draw(); return; }
       if (!r.ok || !r.d?.session) return fail(job, reason(r, r.status === 507 ? 'Your storage is full' : 'XENO couldn’t start this upload'));
       session = r.d.session;
+      if (session.name !== job.name) job.name = session.name;   // "keep both" named it `name (1).ext`
     }
     job.session = session.id; remember(job.file, session.id);
     if (job.state === 'canceled') return abort(job);
@@ -106,8 +112,7 @@
       if (s && s.state === 'failed') { remember(job.file, null); return fail(job, s.error || 'The file couldn’t be added'); }
       if (job.state === 'canceled') return;
     }
-    // 4) into the folder it was dropped on (the session files it in My files / the workspace, as /api/upload did)
-    if (job.folder && job.fileId) await api('PUT', `/api/library/assets/file/${job.fileId}/folder`, { folder: job.folder });
+    // 4) the server placed it in its folder (or made it the new version) when it registered it
     remember(job.file, null);
     job.state = 'done'; job.finished = performance.now(); draw(); onDone(job);
   }
@@ -134,6 +139,7 @@
     for (const j of jobs) { if (running + jobs.filter((x) => x.state === 'starting').length >= FILES_AT_ONCE) break; if (j.state === 'queued') { j.state = 'starting'; run(j).finally(() => pump()); } }
   }
   function add(files, { folder = null, workspace = null } = {}) {
+    if (!jobs.some((j) => ['queued', 'starting', 'uploading', 'checking', 'conflict'].includes(j.state))) batchChoice = null;   // a new batch asks again
     for (const f of files) jobs.push({ id: ++seq, file: f, name: f.name, size: f.size, folder, workspace, state: 'queued', sent: 0, xhrs: new Set() });
     open = true; draw(); pump();
   }
@@ -201,7 +207,9 @@
       + '.xsu-list{max-height:min(46vh,360px);overflow:auto}.xsu-r{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05)}'
       + '.xsu-r .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.xsu-r .s{grid-column:1;color:var(--muted,#999);font-size:12px}.xsu-r .s.bad{color:#e88}.xsu-r .a{grid-row:1/3;grid-column:2;align-self:center}'
       + '.xsu-bar{grid-column:1/3;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:4px}.xsu-bar i{display:block;height:100%;background:var(--text,#eee);transition:width .2s}.xsu-bar.chk i{animation:xsu-p 1.2s ease-in-out infinite alternate;opacity:.6}'
-      + '@keyframes xsu-p{from{opacity:.25}to{opacity:.8}}.xsu.min .xsu-list,.xsu.min .xsu-all{display:none}';
+      + '@keyframes xsu-p{from{opacity:.25}to{opacity:.8}}.xsu.min .xsu-list,.xsu.min .xsu-all{display:none}'
+      + '.xsu-ask{grid-column:1/3;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}.xsu-ask button{border:1px solid var(--border,#333)}.xsu-ask button.pri{background:var(--text,#eee);color:var(--bg,#111);border-color:transparent}'
+      + '.xsu-ask label{display:flex;align-items:center;gap:6px;color:var(--muted,#999);font-size:12px;margin-left:4px}';
     document.head.appendChild(s);
   }
   function rowStatus(j) {
@@ -210,6 +218,8 @@
     if (j.state === 'checking') return 'Checking the file…';
     if (j.state === 'done') return `Added · ${size(j.size)}`;
     if (j.state === 'canceled') return 'Canceled';
+    if (j.state === 'conflict') return `A file named “${j.existing?.name || j.name}” is already here`;
+    if (j.state === 'skipped') return 'Skipped, the file already there was kept';
     return j.error || 'Failed';
   }
   function draw() {
@@ -217,8 +227,9 @@
     style();
     if (!host) { host = document.createElement('section'); host.className = 'xsu'; host.setAttribute('aria-label', 'Uploads'); host.setAttribute('role', 'region'); document.body.appendChild(host); host.addEventListener('click', onClick); }
     const act = active(), failed = jobs.filter((j) => j.state === 'failed').length, doneN = jobs.filter((j) => j.state === 'done').length;
+    const asking = jobs.filter((j) => j.state === 'conflict');
     const totalSize = act.reduce((s, j) => s + j.size, 0), totalSent = act.reduce((s, j) => s + Math.min(j.sent, j.size), 0);
-    const title = act.length ? `Uploading ${act.length} ${act.length === 1 ? 'item' : 'items'}` : failed ? `${failed} ${failed === 1 ? 'upload' : 'uploads'} didn’t finish` : `${doneN} ${doneN === 1 ? 'upload' : 'uploads'} complete`;
+    const title = asking.length && !act.length ? `${asking.length} ${asking.length === 1 ? 'file needs' : 'files need'} your choice` : act.length ? `Uploading ${act.length} ${act.length === 1 ? 'item' : 'items'}` : failed ? `${failed} ${failed === 1 ? 'upload' : 'uploads'} didn’t finish` : `${doneN} ${doneN === 1 ? 'upload' : 'uploads'} complete`;
     const rate = act.reduce((s, j) => s + (j.state === 'uploading' ? j.rate || 0 : 0), 0);
     host.classList.toggle('min', !open);
     host.innerHTML = `<div class="xsu-h"><b role="status" aria-live="polite">${esc(title)}</b>${act.length && rate > 0 ? `<small>${esc(left((totalSize - totalSent) / rate))}</small>` : ''}`
@@ -227,7 +238,12 @@
       + `<div class="xsu-list">${jobs.slice().reverse().map((j) => `<div class="xsu-r" data-job="${j.id}"><span class="n" title="${esc(j.name)}">${esc(j.name)}</span>`
         + `<span class="a">${['queued', 'starting', 'uploading'].includes(j.state) ? `<button type="button" data-xsu="cancel" data-id="${j.id}" aria-label="Cancel ${esc(j.name)}">Cancel</button>` : j.state === 'failed' || j.state === 'canceled' ? `<button type="button" data-xsu="retry" data-id="${j.id}" aria-label="Retry ${esc(j.name)}">Retry</button>` : j.state === 'done' ? '<span aria-hidden="true">✓</span>' : ''}</span>`
         + `<span class="s${j.state === 'failed' ? ' bad' : ''}">${esc(rowStatus(j))}</span>`
-        + `${['uploading', 'checking'].includes(j.state) ? `<span class="xsu-bar${j.state === 'checking' ? ' chk' : ''}"><i style="width:${j.state === 'checking' ? 100 : j.size ? (100 * Math.min(j.sent, j.size) / j.size).toFixed(1) : 0}%"></i></span>` : ''}</div>`).join('')}</div>`;
+        + `${['uploading', 'checking'].includes(j.state) ? `<span class="xsu-bar${j.state === 'checking' ? ' chk' : ''}"><i style="width:${j.state === 'checking' ? 100 : j.size ? (100 * Math.min(j.sent, j.size) / j.size).toFixed(1) : 0}%"></i></span>` : ''}`
+        + `${j.state === 'conflict' ? `<span class="xsu-ask" role="group" aria-label="What to do with ${esc(j.name)}">`
+          + `<button type="button" class="pri" data-xsu="resolve" data-choice="version" data-id="${j.id}" title="The upload becomes the newest version; the old one stays in the file’s versions">Replace</button>`
+          + `<button type="button" data-xsu="resolve" data-choice="keep-both" data-id="${j.id}" title="Add it as ${esc(j.name.replace(/(\.[^.]+)?$/, ' (1)$1'))}">Keep both</button>`
+          + `<button type="button" data-xsu="resolve" data-choice="skip" data-id="${j.id}">Skip</button>`
+          + `${asking.length > 1 ? `<label><input type="checkbox" data-xsu-all> Do this for all ${asking.length}</label>` : ''}</span>` : ''}</div>`).join('')}</div>`;
   }
   function onClick(e) {
     const b = e.target.closest('[data-xsu]'); if (!b) return;
@@ -237,6 +253,16 @@
     if (b.dataset.xsu === 'cancel-all') { for (const j of active()) cancel(j); return; }
     if (b.dataset.xsu === 'cancel' && job) return cancel(job);
     if (b.dataset.xsu === 'retry' && job) { job.state = 'queued'; job.error = ''; draw(); pump(); }
+    if (b.dataset.xsu === 'resolve' && job) {
+      const choice = b.dataset.choice;
+      const all = b.closest('.xsu-ask')?.querySelector('[data-xsu-all]')?.checked;   // the box on the row that was answered
+      if (all) batchChoice = choice;
+      for (const j of all ? jobs.filter((x) => x.state === 'conflict') : [job]) {
+        j.onConflict = choice;
+        if (choice === 'skip') { j.state = 'skipped'; onDone(j); } else { j.state = 'queued'; j.existing = null; }
+      }
+      draw(); pump();
+    }
   }
   function cancel(job) { const was = job.state; job.state = 'canceled'; if (was === 'queued' || was === 'starting') { if (job.session) abort(job); else draw(); return; } abort(job); }
 
