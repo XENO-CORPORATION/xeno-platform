@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2117 actions · 248 agent capability · 1387 planned (debt) · 482 excluded · **coverage 15.2%** of the 1635 owed.
+**Total:** 2128 actions · 248 agent capability · 1392 planned (debt) · 488 excluded · **coverage 15.1%** of the 1640 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -15,8 +15,8 @@ Every action a person can take on the platform, and whether an agent can take it
 | workspace | 197 | 23 | 108 | 66 | 17.6% |
 | workspace-ui | 193 | 4 | 103 | 86 | 3.7% |
 | chat | 104 | 0 | 102 | 2 | 0% |
+| storage | 112 | 5 | 90 | 17 | 5.3% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
-| storage | 101 | 5 | 85 | 11 | 5.6% |
 | account | 123 | 4 | 58 | 61 | 6.5% |
 | forum | 54 | 8 | 44 | 2 | 15.4% |
 | platform | 86 | 0 | 37 | 49 | 0% |
@@ -728,7 +728,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:schedulingRoutes.js:PUT /availability`
 - `ui:platform-scheduling.js:data-sc-page`
 
-## storage — 85 planned
+## storage — 90 planned
 
 - `route:collaborationRoutes.js:DELETE /sessions/:sessionId`
 - `route:collaborationRoutes.js:GET /my-sessions`
@@ -797,6 +797,11 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:storageSharedRoutes.js:GET /:token`
 - `route:storageSharedRoutes.js:GET /:token/f/:folderId`
 - `route:storageSharedRoutes.js:GET /:token/files/:fileId`
+- `route:storageUploadRoutes.js:DELETE /:id`
+- `route:storageUploadRoutes.js:GET /:id`
+- `route:storageUploadRoutes.js:POST /`
+- `route:storageUploadRoutes.js:POST /:id/complete`
+- `route:storageUploadRoutes.js:PUT /:id/parts/:n`
 - `route:userDataRoutes.js:DELETE /files/:id`
 - `route:userDataRoutes.js:GET /files`
 - `route:userDataRoutes.js:GET /settings`
