@@ -1230,9 +1230,11 @@
   }
   function renderProductHeader() {
     if (!PRODUCT) return;
-    let ph = document.getElementById('ph');
+    let ph = document.getElementById('xph');
     if (!ph) {
-      ph = document.createElement('header'); ph.id = 'ph'; ph.className = 'ph'; ph.setAttribute('data-product-header', PRODUCT);
+      // `xph`, never `ph`: the workspace's own sidebar header is `.ph`, and a product bar named the same restyled it
+      // on every workspace page (2026-11-22)
+      ph = document.createElement('header'); ph.id = 'xph'; ph.className = 'xph'; ph.setAttribute('data-product-header', PRODUCT);
       document.body.prepend(ph);
       ph.addEventListener('click', (e) => {
         const go = e.target.closest('[data-ph-go]');
