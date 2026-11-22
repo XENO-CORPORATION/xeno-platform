@@ -243,6 +243,22 @@ Rules that are easy to break:
 - **Only a failed token verification may answer "sign in again".** The first live sign-in hid an agent-cap error behind that message (#675).
 - Public docs for Tasks on the site are **not** written yet, on purpose (owner, 2026-10-11).
 
+## 💬 XENO Chat on its own host: chat.xenosystem.ai (owner, 2026-11-22)
+
+The owner: *"a dedicated chat.xenosystem.ai … full screen … its own thing, like the Gemini web app … AI quick and
+intuitive for everyone … with the new chat, library, images, scheduled, corpus"* (typos corrected). The Tasks pattern
+below, with one difference: the chat keeps its OWN sidebar (Gemini's shape), so the page has no product bar.
+- `address.js` `HOST_ROUTES.chat`: `/` → `#/overview/p/chat`, `/c/<id>` ↔ item `<id>`, `/projects/<pid>[/c/<id>]`,
+  `/library[/…]`, `/images[/…]` (Studio's image generation). Every other place is the workspace's, on the main site.
+- The page is `dist/workspace/chat.html` (`PRODUCT_SCRIPTS.chat`). Inside it, the platform's chat app at `/chat/…` on
+  the SAME origin (nginx serves `index.html` there as a file, gated), so the frame and the page share the host's session.
+- `app.js` `panelChat`: on the host, the header carries the mark and "Chat" and the sidebar adds Images.
+- nginx `server_name chat.xenosystem.ai` (it was a redirect into the workspace), host sign-in client `xeno-chat-web`.
+- **Every class or id a product host adds is prefixed `x…`:** `.ph` is the workspace sidebar's own header, and a product
+  bar named `.ph` restyled it on every workspace page (2026-11-22, #1214).
+- Not here yet: Corpus notebooks (chat against a project's sources) and Scheduled as its own place.
+Proofs: `test:chat-host-ui`, `test:chat-host-mutation`, `scripts/oidc-chat-web-client.test.mjs`, `test:product-address`.
+
 ## ✅ XENO Tasks on its own host: tasks.xenosystem.ai (owner, 2026-11-21)
 
 The owner: *"a full viewport render for the tasks alone, with a header, fast"* (typos corrected). It is the WORKSPACE's
