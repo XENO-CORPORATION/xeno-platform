@@ -91,6 +91,24 @@ try {
   const away = await p.evaluate(() => [window.XENO_ADDR.url('#/overview/g/projects'), window.XENO_ADDR.url('#/overview/g/tasks/T-1'), document.querySelector('.ph-hi')?.getAttribute('href')]);
   ok(away[0] === 'http://localhost:' + PORT + '/workspace/projects' && away[1] === HOST + '/T-1' && away[2] === 'http://localhost:' + PORT + '/workspace/tasks', 'a place that is not Tasks is the full workspace on the main site; Tasks stays on this host; the header links to Tasks in the workspace');
 
+  // ── the product bar never touches the workspace itself: on the main site, the sidebar's own header (.ph) stays a
+  // header inside the sidebar (2026-11-22: a product bar named .ph pinned it across every workspace page)
+  {
+    const ws = await br.newPage(); await ws.setViewport({ width: 1400, height: 900 });
+    await ws.setRequestInterception(true);
+    ws.on('request', (q) => { const u = new URL(q.url()); if (!/(^|\.)localhost$|^127\.0\.0\.1$/.test(u.hostname)) return q.respond({ status: 204, body: '' });
+      if (!u.pathname.startsWith('/api/')) return q.continue();
+      const json = (body) => q.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      if (u.pathname === '/api/auth/me') return json({ success: true, user: USER });
+      if (u.pathname === '/api/tasks') return json({ success: true, tasks: db.tasks.map(view) });
+      return json({ success: true }); });
+    await ws.goto(`http://127.0.0.1:${PORT}/workspace/tasks`, { waitUntil: 'domcontentloaded' }); await ws.waitForSelector('#panel .ph', { timeout: 15000 }); await settle(600);
+    const h = await ws.evaluate(() => { const e = document.querySelector('#panel .ph'), r = e.getBoundingClientRect(), pr = document.getElementById('panel').getBoundingClientRect(), main = document.getElementById('main').getBoundingClientRect();
+      return { pos: getComputedStyle(e).position, inside: r.left >= pr.left - 1 && r.right <= pr.right + 1, overMain: r.right > main.left + 1 && r.bottom > main.top + 1, bar: !!document.getElementById('xph') }; });
+    ok(h.pos !== 'fixed' && h.inside && !h.overMain && !h.bar, `on the main site the sidebar header stays in the sidebar, and no product bar is drawn (${JSON.stringify(h)})`);
+    await ws.close();
+  }
+
   // ── Andreia's flow: New task → the project and a person → To do → an agent
   await p.goto(HOST + '/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('[data-tk-card]', { timeout: 15000 }); await settle(800);
   await p.click('[data-ph-new]'); await p.waitForSelector('.xd [data-tk-new]', { timeout: 4000 });
