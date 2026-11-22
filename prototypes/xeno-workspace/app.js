@@ -321,11 +321,16 @@
       return `<div class="pj ${open ? 'open' : ''}">${row(`data-project="${esc(name)}" data-ctx="project"`, `<span class="tw">${ic('right')}</span>${ic('folder')}<span class="t">${esc(name)}</span>${pinned ? ic('pin', 'i pin') : ''}<span class="meta">${chats.length || ''}</span><span class="more" data-more>${ic('more')}</span>`)}
         <div class="kids">${chats.map((c) => chatRow(c, name)).join('') || '<div class="row sub">No chats yet</div>'}<button class="row sub" data-open-project="${esc(name)}">${ic('folder')}<span class="t">Open project</span></button><button class="row sub" data-newin="${esc(name)}">${ic('plus')}<span class="t">New chat in project</span></button></div></div>`;
     }).join('');
-    return `${backHeader('chat', 'Chat')}
+    // on chat.xenosystem.ai the sidebar carries the product (the mark and its name), as Gemini's, ChatGPT's and Claude's
+    // do; the workspace's "Overview › Chat" path means nothing there. Images (Studio) is one of its places.
+    const onHost = window.XENO_ADDR?.product === 'chat';
+    const head = onHost ? `<div class="ph xch-head"><a class="xch-brand" href="/" data-newchat aria-label="XENO Chat, new chat">${XENO_MARK}<b>Chat</b></a><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>` : backHeader('chat', 'Chat');
+    return `${head}
       ${live ? '' : `<div class="ctx-note">Chats in ${esc(ctxName())} — each mode keeps its own</div>`}
       <div class="pbody">
         <button class="act primary" data-newchat>${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
         <button class="act" data-go-library="From chats">${ic('lib')}Library<kbd>From chats</kbd></button>
+        ${onHost ? `<button class="act" data-chat-images>${ic('image')}Images</button>` : ''}
         <button class="act" data-xa="scheduled">${ic('clock')}Scheduled</button>
         ${live && window.XENO_CHAT.area && window.XENO_CHAT.area() ? `<button class="act" data-chat-instructions data-tip="What every chat in ${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))} should know or do">${ic('edit')}Instructions<kbd>${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))}</kbd></button>` : ''}
         ${sec('projects', 'Projects', projects + `<button class="row sub" data-go="projects">${ic('folder')}<span class="t">All projects</span></button>`, `<button class="ib" data-xa="newProject" aria-label="New project" data-tip="New project">${ic('plus')}</button>`)}
@@ -1229,7 +1234,7 @@
       + (u ? `<a class="ph-avatar" href="${esc(origin + '/workspace/settings')}" title="${esc(nm)}" aria-label="Account: ${esc(nm)}">${esc(nm.trim().charAt(0).toUpperCase() || '?')}</a>` : `<a class="ph-signin" href="/login">Sign in</a>`);
   }
   function renderProductHeader() {
-    if (!PRODUCT) return;
+    if (!PRODUCT || !PRODUCT_INFO[PRODUCT]) return;   // a product without a bar (chat: its sidebar carries it)
     let ph = document.getElementById('xph');
     if (!ph) {
       // `xph`, never `ph`: the workspace's own sidebar header is `.ph`, and a product bar named the same restyled it
@@ -2360,6 +2365,7 @@
     if (b.dataset.openProject) return go('global', { global: 'projects', item: b.dataset.openProject + '/Conversations' });
     if (b.dataset.cat) { const set = new Set(ovOpen()); set.has(b.dataset.cat) ? set.delete(b.dataset.cat) : set.add(b.dataset.cat); store.set('ovOpen', [...set]); const el = $('#rzone'), mid = $('#rmid'); if (el) { const y0 = b.getBoundingClientRect().top; ovPatch(); const hold = () => {};  /* holding the button under the pointer was measured to fight scroll-into-view; the fold itself is smooth */ const t0 = performance.now(); const loop = () => { hold(); if (performance.now() - t0 < 230) requestAnimationFrame(loop); else { const kids = el.querySelector('.rcat[aria-expanded="true"] + .rcat-kids'); if (kids) kids.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); railFit(); } }; requestAnimationFrame(loop); } return; }
     if (b.dataset.goLibrary) return go('global', { global: 'library', item: b.dataset.goLibrary });
+    if ('chatImages' in b.dataset) return window.XENO_ADDR.go('#/studio/p/image');   // chat.xenosystem.ai/images: Studio's image generation
     if (b.dataset.product) { const id = b.dataset.product; if (S.view === 'product' && S.product === id && b.closest('#rail')) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return openProduct(id); }
     const g = b.dataset.go;
     if (g === 'search') return openPalette();

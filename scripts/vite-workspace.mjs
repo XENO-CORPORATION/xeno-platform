@@ -30,6 +30,11 @@ export const PRODUCT_SCRIPTS = Object.freeze({
   tasks: ['address.js', 'theme-palette.js', 'theme.js', 'mark-loader.js', 'report-client.js', 'report-capture.js', 'report-view.js', 'platform.js', 'keys.js', 'net.js',
     'history-core.js', 'history.js', 'select-core.js', 'select.js', 'drag.js', 'mode-marks.js', 'data.js', 'nav.js', 'xeno-icons.js', 'ctx-menu.js', 'custom-modes.js',
     'pages-data.js', 'platform-work.js', 'pages.js', 'modals.js', 'actions.js', 'visibility.js', 'search.js', 'platform-canvas.js', 'platform-tasks.js', 'app.js', 'panel-sel.js'],
+  // chat.xenosystem.ai: the chat, its Library and Studio's generation pages (Images), on the same shell core
+  chat: ['address.js', 'theme-palette.js', 'theme.js', 'mark-loader.js', 'report-client.js', 'report-capture.js', 'report-view.js', 'platform.js', 'keys.js', 'net.js',
+    'history-core.js', 'history.js', 'select-core.js', 'select.js', 'drag.js', 'mode-marks.js', 'data.js', 'nav.js', 'live-chat.js', 'xeno-icons.js', 'ctx-menu.js',
+    'library-files.js', 'custom-modes.js', 'pages-data.js', 'platform-work.js', 'platform-library.js', 'platform-generations.js', 'platform-chat.js',
+    'pages.js', 'modals.js', 'actions.js', 'visibility.js', 'search.js', 'app.js', 'panel-sel.js'],
 });
 /** index.html → the page for one product: the same markup and styles, only that product's scripts */
 export function productPage(html, product) {
@@ -65,9 +70,11 @@ export function xenoWorkspace(rootDir) {
         if (u.pathname === '/workspace') { res.statusCode = 301; res.setHeader('Location', '/workspace/' + u.search); return res.end(); }
         // a product host (address.js PRODUCT: tasks.localhost here, tasks.xenosystem.ai behind nginx): its own
         // addresses (/, /T-4, /My tasks) are the workspace page, which shows that product alone
-        const productHost = /^tasks\.localhost(:\d+)?$/i.test(String(req.headers.host || ''));
-        if (productHost && !u.pathname.startsWith('/workspace/') && !u.pathname.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(u.pathname)) {
-          const page = productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), 'tasks').html;
+        // The chat host's /chat/… is the platform's chat app itself (the frame the chat page shows), never this page.
+        const productHost = (/^(tasks|chat)\.localhost(:\d+)?$/i.exec(String(req.headers.host || '')) || [])[1];
+        if (productHost && !u.pathname.startsWith('/workspace/') && !u.pathname.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(u.pathname)
+          && !(productHost === 'chat' && /^\/chat(\/|$)/.test(u.pathname))) {
+          const page = productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), productHost.toLowerCase()).html;
           res.setHeader('Content-Type', TYPES['.html']); res.setHeader('Cache-Control', 'no-cache'); return res.end(page);
         }
         if (!u.pathname.startsWith('/workspace/')) return next();

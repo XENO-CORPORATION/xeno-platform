@@ -20,7 +20,19 @@
   // workspace page served on a product's own host, showing that product alone. On tasks.xenosystem.ai the address is
   // the product's own: `/` is the board, `/T-4` a task, `/My tasks` a list. A place that is not the product's opens in
   // the full workspace on the main site. `tasks.localhost` is the same host in development and the browser tests.
-  const PRODUCT = (() => { const m = /^(tasks)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
+  // chat.xenosystem.ai (owner, 2026-11-22: "a dedicated chat … full screen … its own thing, like the Gemini web app … with
+  // the new chat, library, images, scheduled, corpus"): the chat, and the places a person reaches from it, on one host.
+  const PRODUCT = (() => { const m = /^(tasks|chat)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
+  // What each product host shows, as [host prefix, kind, id, area]: the first route with the empty prefix is the product
+  // itself (its items are the host's own paths); the others are the places it keeps in the same window. A kind/id
+  // without an area matches it in any area. Anything else is the full workspace, on the main site.
+  const HOST_ROUTES = {
+    tasks: [['', 'g', 'tasks']],
+    chat: [['', 'p', 'chat'], ['library', 'g', 'library'], ['images', 'p', 'image', 'studio']],
+  };
+  // the chat's own items read as its addresses: a conversation is /c/<id>, a project's are /projects/<pid>[/c/<id>]
+  const ITEM_OUT = { chat: (it) => (/^projects\//.test(it) || !it ? it : 'c/' + it) };
+  const ITEM_IN = { chat: (p) => p.replace(/^c\//, '') };
   const WORKSPACE_ORIGIN = location.hostname.endsWith('.localhost') ? location.origin.replace(/\/\/[^.]+\./, '//') : 'https://' + location.hostname.replace(/^[^.]+\./, '');
   if (PRODUCT) document.documentElement.dataset.product = PRODUCT;
   const BASE = '/workspace';
@@ -71,9 +83,21 @@
   }
   // The product host's own addresses (see PRODUCT). Its place is <area>/g/<product>[/<item>], shown as /<item>; any
   // other place is the full workspace's, on the main site (a different origin, so it is opened, never pushed).
-  const productItem = (h) => { const [route, q] = split(String(h || '#/')); const [, kind, id, ...rest] = route.replace(/^#?\/?/, '').split('/'); return kind === 'g' && id === PRODUCT ? { item: rest.join('/'), q } : null; };
-  const hostPath = (h) => { const p = productItem(h); return p ? '/' + p.item + p.q : WORKSPACE_ORIGIN + toPath(h); };
-  const hostHash = (p) => { const [path, q] = split(String(p || '')); if (path === BASE || path.startsWith(BASE + '/')) return toHash(p); const item = path.replace(/^\/+/, '').replace(/\/+$/, ''); return '#/overview/g/' + PRODUCT + (item ? '/' + item : '') + q; };
+  const ROUTES = HOST_ROUTES[PRODUCT] || [];
+  const hostPath = (h) => {
+    const [route, q] = split(String(h || '#/')); const [area, kind, id, ...rest] = route.replace(/^#?\/?/, '').split('/');
+    const r = ROUTES.find(([, k, i, a]) => k === kind && i === id && (!a || a === area));
+    if (!r) return WORKSPACE_ORIGIN + toPath(h);
+    const item = rest.join('/'), out = r[0] ? (item ? r[0] + '/' + item : r[0]) : (ITEM_OUT[PRODUCT] ? ITEM_OUT[PRODUCT](item) : item);
+    return '/' + out + q;
+  };
+  const hostHash = (p) => {
+    const [path, q] = split(String(p || '')); if (path === BASE || path.startsWith(BASE + '/')) return toHash(p);
+    const parts = path.replace(/^\/+/, '').replace(/\/+$/, '').split('/');
+    const r = ROUTES.find(([pre]) => pre && pre === parts[0]) || ROUTES.find(([pre]) => !pre);
+    const rest = r[0] ? parts.slice(1).join('/') : (ITEM_IN[PRODUCT] ? ITEM_IN[PRODUCT](parts.join('/')) : parts.join('/'));
+    return `#/${r[3] || 'overview'}/${r[1]}/${r[2]}${rest ? '/' + rest : ''}${q}`;
+  };
   const outPath = PRODUCT ? hostPath : toPath, inHash = PRODUCT ? hostHash : toHash;
   const away = (p) => /^https?:/.test(p);
   const legacy = () => (location.hash && location.hash.startsWith('#/') ? location.hash : null);
