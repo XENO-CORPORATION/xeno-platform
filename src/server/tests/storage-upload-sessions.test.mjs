@@ -50,9 +50,9 @@ async function main() {
   const server = http.createServer(app);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/api/library/uploads`;
-  const req = async (method, p, { who = me, json, body, type } = {}) => {
-    const r = await fetch(base + p, { method, headers: { ...as(who), ...(json ? { 'content-type': 'application/json' } : type ? { 'content-type': type } : {}) }, body: json ? JSON.stringify(json) : body });
-    return { status: r.status, d: await r.json().catch(() => null) };
+  const req = async (method, p, { who = me, json, body, type, headers = {} } = {}) => {
+    const r = await fetch(base + p, { method, headers: { ...as(who), ...(json ? { 'content-type': 'application/json' } : type ? { 'content-type': type } : {}), ...headers }, body: json ? JSON.stringify(json) : body });
+    return { status: r.status, d: await r.json().catch(() => null), replayed: r.headers.get('idempotent-replayed') };
   };
   const partsOf = (bytes, size) => Array.from({ length: Math.ceil(bytes.length / size) }, (_, i) => bytes.subarray(i * size, (i + 1) * size));
   const putPart = (id, n, bytes, who = me) => req('PUT', `/${id}/parts/${n}`, { who, body: bytes, type: 'application/octet-stream' });
@@ -185,6 +185,66 @@ async function main() {
     const theirFolder = (await pool.query(`INSERT INTO storage_folders (owner_user_id, name) VALUES ($1, 'Private') RETURNING id`, [other])).rows[0].id;
     r = await req('POST', '', { json: { name: 'x.txt', size: 3, type: 'text/plain', folder: theirFolder } });
     assert.equal(r.status, 404, 'not into someone else’s folder');
+
+    // ── a sync client replacing one file (the drive): { fileId, ifMatch } — the If-Match of /versions, for any size ──
+    const planFile = (await pool.query('SELECT file_id FROM user_files WHERE id = $1', [firstId])).rows[0].file_id;
+    const newestNow = async () => (await pool.query(`SELECT f.id FROM user_files f WHERE f.file_id = $1 AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)`, [planFile])).rows[0].id;
+    const headRev = await newestNow();
+    const v3 = Buffer.from('third, from the drive');
+    r = await req('POST', '', { json: { fileId: planFile, ifMatch: firstId, size: v3.length, type: 'text/plain' } });
+    assert.equal(r.status, 412, 'a change made on an old revision is refused at open');
+    assert.equal(r.d.code, 'version_conflict'); assert.equal(r.d.current, headRev, 'and the answer names the newest revision');
+    w = await whole({ fileId: planFile, ifMatch: headRev }, v3);
+    assert.equal(w.session.state, 'done', JSON.stringify(w.session));
+    assert.equal(w.session.name, 'plan.txt', 'a version keeps the file’s name');
+    const afterDrive = await newestNow();
+    assert.equal((await pool.query('SELECT replaces_asset_id, content_sha256 FROM user_files WHERE id = $1', [afterDrive])).rows[0].replaces_asset_id, headRev);
+    // changed elsewhere while the upload ran: the session ends version_conflict, nothing is overwritten
+    const v4 = Buffer.from('fourth, raced');
+    const raced = await req('POST', '', { json: { fileId: planFile, ifMatch: afterDrive, size: v4.length, type: 'text/plain' } });
+    assert.equal(raced.status, 201);
+    await putPart(raced.d.session.id, 1, v4);
+    await whole({ name: 'plan.txt', onConflict: 'version' }, Buffer.from('someone else saved meanwhile'));
+    const elsewhere = await newestNow();
+    await req('POST', `/${raced.d.session.id}/complete`);
+    const racedEnd = await until(async () => { const g = await req('GET', `/${raced.d.session.id}`); return g.d.session.state !== 'processing' && g.d.session; });
+    assert.equal(racedEnd.state, 'failed'); assert.equal(racedEnd.errorCode, 'version_conflict', 'a change that lost the race fails with version_conflict');
+    assert.equal(await newestNow(), elsewhere, 'the other change stays the newest');
+    r = await req('POST', '', { json: { fileId: planFile, size: 3, type: 'text/plain' }, who: other });
+    assert.equal(r.status, 404, 'not someone else’s file');
+
+    // ── Idempotency-Key: a client that lost a reply gets the SAME session back (resume), or its file, never a second ──
+    const key = `drive-op-${tag}-0001`;
+    const idem = crypto.randomBytes(3000);
+    const openK = (json, k = key) => req('POST', '', { json: { name: `idem-${tag}.bin`, size: idem.length, type: 'application/octet-stream', ...json }, headers: { 'idempotency-key': k } });
+    const k1 = await openK({});
+    assert.equal(k1.status, 201);
+    await putPart(k1.d.session.id, 1, idem);
+    const k2 = await openK({});
+    assert.equal(k2.status, 200); assert.equal(k2.replayed, 'true');
+    assert.equal(k2.d.session.id, k1.d.session.id, 'the same key returns the same session');
+    assert.deepEqual(k2.d.session.parts.map((p) => p.n), [1], 'with the parts that already arrived, so the client resumes');
+    await req('POST', `/${k1.d.session.id}/complete`);
+    await until(async () => { const g = await req('GET', `/${k1.d.session.id}`); return g.d.session.state === 'done'; });
+    const k3 = await openK({});
+    assert.equal(k3.d.session.state, 'done', 'after it finished, the same key returns the finished session');
+    assert.ok(k3.d.session.file?.id, 'and its file');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM user_files WHERE original_name = $1 AND deleted_at IS NULL', [`idem-${tag}.bin`])).rows[0].n, 1, 'one file, however many times it was asked');
+    r = await openK({ size: idem.length + 1 });
+    assert.equal(r.status, 409); assert.equal(r.d.code, 'idempotency_mismatch', 'the same key for a different upload is refused');
+    r = await openK({}, 'bad key!');
+    assert.equal(r.status, 400, 'a malformed key is refused');
+    // keep-both renames the new file; a replay is still the same upload (it compares the name it asked for)
+    const key2 = `drive-op-${tag}-0002`;
+    const kb1 = await openK({ onConflict: 'keep-both' }, key2);
+    assert.equal(kb1.status, 201); assert.notEqual(kb1.d.session.name, `idem-${tag}.bin`, 'keep-both took a free name');
+    const kb2 = await openK({ onConflict: 'keep-both' }, key2);
+    assert.equal(kb2.status, 200, 'a keep-both session replays under its key'); assert.equal(kb2.d.session.id, kb1.d.session.id);
+    // a session that ended without a file gives its key back: the retry opens a fresh one, never the dead one
+    assert.equal((await req('DELETE', `/${kb1.d.session.id}`)).status, 200);
+    const kb3 = await openK({ onConflict: 'keep-both' }, key2);
+    assert.equal(kb3.status, 201, 'after an abort the same key opens a NEW session'); assert.notEqual(kb3.d.session.id, kb1.d.session.id);
+    await req('DELETE', `/${kb3.d.session.id}`);
 
     // ── the streamed inspection sniffs exactly as the whole-buffer sniff ──
     const samples = [

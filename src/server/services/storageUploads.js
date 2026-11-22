@@ -31,7 +31,7 @@ import { fileObjectKey } from './storageObjects.js';
 import { check } from '../utils/authzReBAC.js';
 import { ALLOWED_UPLOAD_MIMES } from '../utils/uploadPolicy.js';
 import { folderAccess, moveItemToFolder } from './storageFolders.js';
-import { addVersion } from './storageVersions.js';
+import { addVersion, canAddVersion, latestFor, revisionFor } from './storageVersions.js';
 
 /**
  * The current (newest-version, not deleted) file with this name in a place, or null. Case-insensitive: the XENO Storage
@@ -99,7 +99,7 @@ export function transportFor(session, { env = process.env, store = fileStorage()
 
 const describe = (row) => ({
   id: row.id, name: row.name, mimeType: row.mime_type, size: Number(row.size_bytes), partSize: row.part_size,
-  partCount: row.part_count, state: row.state, error: row.error || null, file: row.result || null,
+  partCount: row.part_count, state: row.state, error: row.error || null, errorCode: row.error_code || null, file: row.result || null,
   workspace: row.workspace_id || null, folder: row.folder_id || null, replaces: row.replace_file_id || null, createdAt: row.created_at,
 });
 
@@ -115,11 +115,43 @@ async function freeDiskBytes(dir) {
 }
 
 /** Open a session. Checks everything that can refuse the file before a byte is sent. */
-export async function openUploadSession(db, { userId, workspaceId = null, folderId = null, onConflict = 'ask', name, mimeType, size, area = null }, { store = fileStorage(), env = process.env, uploadsDir } = {}) {
+/** The session opened earlier with this Idempotency-Key, as `open` returns it, or null. Refuses a different request. */
+const TERMINAL_WITHOUT_FILE = new Set(['failed', 'aborted', 'expired']);
+async function replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }) {
+  const row = (await db.query('SELECT * FROM storage_upload_sessions WHERE user_id = $1 AND idempotency_key = $2', [userId, idempotencyKey])).rows[0];
+  if (!row) return null;
+  // the name the client ASKED for: keep-both may have stored `name (1).ext`
+  const sameFile = fileId ? Boolean(row.replace_file_id) : (!name || path.basename(String(name)).trim() === (row.requested_name || row.name) || Boolean(row.replace_file_id));
+  if (Number(row.size_bytes) !== Number(size) || !sameFile) throw fail('idempotency_mismatch', 'This Idempotency-Key was used for a different upload', 409);
+  // a session that ended without a file gives its key back, so the retry opens a fresh session (a version that lost
+  // its race is refused again at open by the revision check) instead of replaying the same failure forever
+  if (TERMINAL_WITHOUT_FILE.has(row.state)) {
+    await db.query('UPDATE storage_upload_sessions SET idempotency_key = NULL WHERE id = $1', [row.id]);
+    return null;
+  }
+  const parts = row.state === 'uploading' ? ((await store.listParts(row.object_key, row.multipart_id)) || []) : [];
+  return { ...describe(row), parts: parts.map((p) => ({ n: p.partNumber, size: p.size })), transport: row.state === 'uploading' ? transportFor(row, { env, store }) : null, replayed: true };
+}
+
+export async function openUploadSession(db, { userId, workspaceId = null, folderId = null, onConflict = 'ask', fileId = null, ifMatch = null, idempotencyKey = null, name, mimeType, size, area = null }, { store = fileStorage(), env = process.env, uploadsDir } = {}) {
+  if (idempotencyKey) { const again = await replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }); if (again) return again; }
+  // a sync client replacing ONE file (the drive): the session becomes that file's newest version, on top of `ifMatch`
+  let versionOf = null;
+  if (fileId !== null) {
+    if (!UUID.test(String(fileId))) throw fail('bad_file', 'Not a file', 400);
+    const revision = String(await revisionFor(db, fileId));   // the file id, or any version's id, names its newest row
+    if (!(await canAddVersion(db, userId, revision))) throw fail('not_found', 'File not found', 404);
+    const current = String(await latestFor(db, revision));
+    if (ifMatch && String(ifMatch) !== current) throw Object.assign(fail('version_conflict', 'The file has a newer version than the one this change was made on', 412), { current });
+    versionOf = { id: revision, expected: ifMatch ? String(ifMatch) : null };
+    const named = (await db.query('SELECT original_name, filename FROM user_files WHERE id = $1', [versionOf.id])).rows[0];
+    if (!name && named) name = named.original_name || named.filename;
+  }
   let clean = path.basename(String(name || '')).trim();
   if (!ON_CONFLICT.has(onConflict)) throw fail('bad_conflict_choice', 'onConflict is ask, version or keep-both', 400);
   if (folderId !== null && !UUID.test(String(folderId))) throw fail('bad_folder', 'Not a folder', 400);
   if (!clean || clean.length > 255) throw fail('bad_name', 'A file needs a name of at most 255 characters', 400);
+  const requested = clean;
   const type = String(mimeType || '').trim() || 'application/octet-stream';
   if (!ALLOWED_UPLOAD_MIMES.has(type)) throw fail('type_not_allowed', `Files of type '${type}' can’t be added yet`, 400);
   const bytes = Number(size);
@@ -152,8 +184,8 @@ export async function openUploadSession(db, { userId, workspaceId = null, folder
     workspaceId = folder.workspace_id || workspaceId;
   }
   const place = { userId, workspaceId, folderId };
-  let replaceFileId = null;
-  const existing = await sameNameFile(db, { ...place, name: clean });
+  let replaceFileId = versionOf?.id || null;
+  const existing = versionOf ? null : await sameNameFile(db, { ...place, name: clean });   // a version has its file already
   if (existing) {
     if (onConflict === 'ask') throw Object.assign(fail('name_conflict', `“${existing.original_name}” is already here`, 409), { existing: { id: existing.id, name: existing.original_name } });
     if (onConflict === 'keep-both') clean = await freeName(db, place, clean);
@@ -163,10 +195,18 @@ export async function openUploadSession(db, { userId, workspaceId = null, folder
   const key = `uploads/${id}`;
   const partCount = Math.max(1, Math.ceil(bytes / PART_SIZE));
   const multipartId = await store.createMultipart(key);
-  const { rows } = await db.query(
-    `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
-    [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId]);
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id, expected_revision, idempotency_key, requested_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
+      [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId, versionOf?.expected || null, idempotencyKey, requested]));
+  } catch (error) {
+    // the same key opened concurrently: the first one wins and this one answers with it
+    await store.abortMultipart(key, multipartId).catch(() => {});
+    if (error?.code === '23505' && idempotencyKey) { const again = await replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }); if (again) return again; }
+    throw error;
+  }
   return { ...describe(rows[0]), parts: [], transport: transportFor(rows[0], { env, store }) };
 }
 
@@ -226,6 +266,10 @@ export async function finishUpload(db, id, { store = fileStorage(), uploadsDir, 
     if (!(await store.head(objectKey))) await store.copy(row.object_key, objectKey);   // inside the bucket
     let stored;
     if (row.replace_file_id) {
+      // a sync client's change must still sit on the revision it was made on (the If-Match of /versions, checked again)
+      if (row.expected_revision && String(await latestFor(db, row.replace_file_id)) !== row.expected_revision) {
+        throw Object.assign(new Error('the file changed elsewhere while this was uploading'), { code: 'version_conflict' });
+      }
       // "Replace": the upload becomes the existing file's newest version (folder, stars and shares move with it)
       const v = await addVersion(db, row.user_id, row.replace_file_id, { filename: path.basename(local), mimeType: row.mime_type, fileSize: got.size, storagePath: local }, registerManagedLibraryFile);
       if (!v.ok) throw new Error('the file it replaces is no longer there');
@@ -253,9 +297,10 @@ export async function finishUpload(db, id, { store = fileStorage(), uploadsDir, 
     local = null;   // the file is the Library's now
   } catch (error) {
     if (local) await fs.promises.unlink(local).catch(() => {});
-    const message = error?.code === 'storage_full' ? 'Your storage is full' : 'The file couldn’t be added';
+    const code = ['storage_full', 'version_conflict'].includes(error?.code) ? error.code : 'failed';
+    const message = code === 'storage_full' ? 'Your storage is full' : code === 'version_conflict' ? 'The file changed elsewhere while this was uploading' : 'The file couldn’t be added';
     log.warn?.('[storage/uploads] session', id, 'failed:', error.message);
-    await db.query("UPDATE storage_upload_sessions SET state = 'failed', error = $2, updated_at = now() WHERE id = $1", [id, message]);
+    await db.query("UPDATE storage_upload_sessions SET state = 'failed', error = $2, error_code = $3, updated_at = now() WHERE id = $1", [id, message, code]);
   }
 }
 

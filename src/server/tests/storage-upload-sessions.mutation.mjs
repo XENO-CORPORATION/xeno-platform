@@ -18,6 +18,13 @@ const mutations = [
   ['other personal workspace allowed', [["if (String(ws.owner_user_id) !== String(userId)) throw", 'if (false) throw']]],
   ['same name never asked', [["if (onConflict === 'ask') throw", "if (false) throw"]]],
   ['name match case-sensitive', [['lower(f.original_name) = lower($1)', 'f.original_name = $1']]],
+  ['stale revision accepted at open', [['if (ifMatch && String(ifMatch) !== current) throw', 'if (false) throw']]],
+  ['revision not re-checked at completion', [['if (row.expected_revision && String(await latestFor(db, row.replace_file_id)) !== row.expected_revision) {', 'if (false) {']]],
+  ['version permission not checked', [['if (!(await canAddVersion(db, userId, revision))) throw', 'if (false) throw']]],
+  ['idempotency key not replayed', [["if (idempotencyKey) { const again = await replayed(", "if (false) { const again = await replayed("]]],
+  ['replay ignores a different upload', [["if (Number(row.size_bytes) !== Number(size) || !sameFile) throw", 'if (false) throw']]],
+  ['replay compares the stored name, not the requested one', [['=== (row.requested_name || row.name)', '=== row.name']]],
+  ['a dead session keeps its key', [['if (TERMINAL_WITHOUT_FILE.has(row.state)) {', 'if (false) {']]],
   ['folder access not checked', [["await folderAccess(db, userId, folderId, 'edit')", "(await db.query('SELECT * FROM storage_folders WHERE id = $1', [folderId])).rows[0]"]]],
 ];
 let failures = 0;
