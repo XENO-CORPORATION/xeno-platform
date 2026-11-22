@@ -16,6 +16,25 @@
  * The first path segment is an area unless it is one of RESERVED, so an area can never be named after one of them.
  */
 (() => {
+  // A PRODUCT HOST (owner, 2026-11-21: "a full viewport render for the tasks alone, with a header, fast"): the same
+  // workspace page served on a product's own host, showing that product alone. On tasks.xenosystem.ai the address is
+  // the product's own: `/` is the board, `/T-4` a task, `/My tasks` a list. A place that is not the product's opens in
+  // the full workspace on the main site. `tasks.localhost` is the same host in development and the browser tests.
+  // chat.xenosystem.ai (owner, 2026-11-22: "a dedicated chat … full screen … its own thing, like the Gemini web app … with
+  // the new chat, library, images, scheduled, corpus"): the chat, and the places a person reaches from it, on one host.
+  const PRODUCT = (() => { const m = /^(tasks|chat)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
+  // What each product host shows, as [host prefix, kind, id, area]: the first route with the empty prefix is the product
+  // itself (its items are the host's own paths); the others are the places it keeps in the same window. A kind/id
+  // without an area matches it in any area. Anything else is the full workspace, on the main site.
+  const HOST_ROUTES = {
+    tasks: [['', 'g', 'tasks']],
+    chat: [['', 'p', 'chat'], ['library', 'g', 'library'], ['images', 'p', 'image', 'studio']],
+  };
+  // the chat's own items read as its addresses: a conversation is /c/<id>, a project's are /projects/<pid>[/c/<id>]
+  const ITEM_OUT = { chat: (it) => (/^projects\//.test(it) || !it ? it : 'c/' + it) };
+  const ITEM_IN = { chat: (p) => p.replace(/^c\//, '') };
+  const WORKSPACE_ORIGIN = location.hostname.endsWith('.localhost') ? location.origin.replace(/\/\/[^.]+\./, '//') : 'https://' + location.hostname.replace(/^[^.]+\./, '');
+  if (PRODUCT) document.documentElement.dataset.product = PRODUCT;
   const BASE = '/workspace';
   const GLOBALS = ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases', 'shell'];
   const RESERVED = [...GLOBALS, 'apps', 'spaces', 'adaptive', 'overview', 'divisions'];
@@ -62,15 +81,34 @@
     if (KIND_IN[a] && b) return `#/${area}/${KIND_IN[a]}/${b}${rest.length ? '/' + rest.join('/') : ''}${q}`;
     return '#/' + area + q;
   }
+  // The product host's own addresses (see PRODUCT). Its place is <area>/g/<product>[/<item>], shown as /<item>; any
+  // other place is the full workspace's, on the main site (a different origin, so it is opened, never pushed).
+  const ROUTES = HOST_ROUTES[PRODUCT] || [];
+  const hostPath = (h) => {
+    const [route, q] = split(String(h || '#/')); const [area, kind, id, ...rest] = route.replace(/^#?\/?/, '').split('/');
+    const r = ROUTES.find(([, k, i, a]) => k === kind && i === id && (!a || a === area));
+    if (!r) return WORKSPACE_ORIGIN + toPath(h);
+    const item = rest.join('/'), out = r[0] ? (item ? r[0] + '/' + item : r[0]) : (ITEM_OUT[PRODUCT] ? ITEM_OUT[PRODUCT](item) : item);
+    return '/' + out + q;
+  };
+  const hostHash = (p) => {
+    const [path, q] = split(String(p || '')); if (path === BASE || path.startsWith(BASE + '/')) return toHash(p);
+    const parts = path.replace(/^\/+/, '').replace(/\/+$/, '').split('/');
+    const r = ROUTES.find(([pre]) => pre && pre === parts[0]) || ROUTES.find(([pre]) => !pre);
+    const rest = r[0] ? parts.slice(1).join('/') : (ITEM_IN[PRODUCT] ? ITEM_IN[PRODUCT](parts.join('/')) : parts.join('/'));
+    return `#/${r[3] || 'overview'}/${r[1]}/${r[2]}${rest ? '/' + rest : ''}${q}`;
+  };
+  const outPath = PRODUCT ? hostPath : toPath, inHash = PRODUCT ? hostHash : toHash;
+  const away = (p) => /^https?:/.test(p);
   const legacy = () => (location.hash && location.hash.startsWith('#/') ? location.hash : null);
   /** where the person is, in the router's internal form */
-  const current = () => legacy() || toHash(location.pathname + location.search);
+  const current = () => legacy() || inHash(location.pathname + location.search);
   // the selected workspace rides EVERY address as ?ws=<id> (platform-work.js sets it): the router builds paths from
   // its own state, so the workspace is carried here, once, rather than in every place that makes a link
   let WS = null;
   const withWs = (p) => { if (!WS) return p; const [path, q] = split(p); const sp = new URLSearchParams(q.replace(/^\?/, '')); sp.set('ws', WS); return path + '?' + sp.toString(); };
-  const push = (h, state = null) => history.pushState(state, '', withWs(toPath(h)));
-  const replace = (h, state = history.state) => history.replaceState(state, '', withWs(toPath(h)));
+  const push = (h, state = null) => { const p = withWs(outPath(h)); if (away(p)) return location.assign(p); history.pushState(state, '', p); };
+  const replace = (h, state = history.state) => { const p = withWs(outPath(h)); if (away(p)) return; history.replaceState(state, '', p); };
   /** set the workspace every address carries (null: the personal workspace, no ?ws) */
   // a deliberate switch (`step`) is a new history entry, so Back returns to the workspace you came from; reading the
   // workspace from the address on load only aligns it (no step)
@@ -78,16 +116,17 @@
   /** go somewhere by internal form: a new history step, and the router told (as a real navigation would) */
   function go(h) {
     if (current() === h) return;
+    if (away(outPath(h))) return location.assign(withWs(outPath(h)));
     push(h);
     dispatchEvent(new PopStateEvent('popstate', { state: null }));
     dispatchEvent(new HashChangeEvent('hashchange'));
   }
   /** a full, shareable URL for an internal form */
-  const url = (h) => location.origin + withWs(toPath(h));
+  const url = (h) => { const p = withWs(outPath(h)); return away(p) ? p : location.origin + p; };
   // an old "#/…" address (a bookmark, a link from before, a test setting location.hash) is honoured, then upgraded
-  const upgrade = () => { const h = legacy(); if (h) history.replaceState(history.state, '', toPath(h)); };
+  const upgrade = () => { const h = legacy(); if (h && !away(outPath(h))) history.replaceState(history.state, '', outPath(h)); };
   addEventListener('hashchange', () => setTimeout(upgrade, 0));
   // a division's old address (/workspace[/<area>]/workspace/Divisions/<id>) is the same place: show its own address
   try { if (!legacy() && /\/workspace\/Divisions(\/|$)/.test(location.pathname)) history.replaceState(history.state, '', toPath(toHash(location.pathname)) + location.search); } catch {}
-  window.XENO_ADDR = { BASE, RESERVED, GLOBALS, toPath, toHash, current, push, replace, go, url, upgrade, setWorkspace, workspace: () => WS };
+  window.XENO_ADDR = { BASE, RESERVED, GLOBALS, toPath, toHash, current, push, replace, go, url, upgrade, setWorkspace, workspace: () => WS, product: PRODUCT, workspaceOrigin: WORKSPACE_ORIGIN };
 })();

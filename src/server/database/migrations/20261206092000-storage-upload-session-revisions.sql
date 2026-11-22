@@ -1,0 +1,25 @@
+-- UP
+-- XENO Storage upload sessions for sync clients (the XENO Storage drive, services/storageUploads.js): a session that
+-- replaces ONE file, on top of the revision the client last saw, like POST /api/library/assets/file/:id/versions with
+-- If-Match. The drive saves files of any size this way (the single-request route stops at 100 MB).
+--   expected_revision  the revision the client's change was made on; checked when the session opens and again when
+--                      it completes, so a file changed elsewhere in between ends `failed` with error_code
+--                      `version_conflict` (the drive's existing conflict handling), never a silent overwrite.
+--   error_code         the machine-readable reason of a failed session, beside the human `error`.
+--   idempotency_key    the client's Idempotency-Key (storageOperations.keyFrom's shape): opening again with the same
+--                      key returns the SAME session, so a sync client that lost a reply resumes its missing parts or
+--                      gets the finished file, never a second file (the guarantee POST /api/upload's key gives).
+--                      A session that ended without a file (failed, aborted, expired) gives its key back.
+--   requested_name     the name the client asked for, when keep-both stored `name (1).ext`: a replay compares this.
+-- Additive: new nullable columns on a table this series created.
+ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS expected_revision text;
+ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS error_code text;
+ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS idempotency_key text;
+ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS requested_name text;
+CREATE UNIQUE INDEX IF NOT EXISTS storage_upload_sessions_idempotency ON storage_upload_sessions (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+-- DOWN
+DROP INDEX IF EXISTS storage_upload_sessions_idempotency;
+ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS requested_name;
+ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS idempotency_key;
+ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS error_code;
+ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS expected_revision;

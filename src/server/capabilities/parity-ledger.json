@@ -187,7 +187,9 @@
     "stockRoutes.js": "forms",
     "platform-stock.js": "forms",
     "githubRoutes.js": "account",
-    "storageDepotServiceRoutes.js": "storage"
+    "storageDepotServiceRoutes.js": "storage",
+    "storageUploadRoutes.js": "storage",
+    "platform-storage-uploads.js": "storage"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -12079,6 +12081,77 @@
       "class": "reversible",
       "scope": "none",
       "because": "called by XENO Depot's server with a service credential (Depot object store); no person or agent calls it"
+    },
+    "route:storageUploadRoutes.js:POST /": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "storage:write"
+    },
+    "route:storageUploadRoutes.js:GET /:id": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "storage:read"
+    },
+    "route:storageUploadRoutes.js:PUT /:id/parts/:n": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "storage:write"
+    },
+    "route:storageUploadRoutes.js:POST /:id/complete": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "storage:write"
+    },
+    "route:storageUploadRoutes.js:DELETE /:id": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "storage:write"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=toggle": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "minimises or shows the upload panel"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=clear": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "closes the finished upload list"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=cancel": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:storageUploadRoutes.js:DELETE /:id",
+      "class": "reversible",
+      "scope": "storage:write",
+      "because": "cancelling an upload is aborting its session"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=cancel-all": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:storageUploadRoutes.js:DELETE /:id",
+      "class": "reversible",
+      "scope": "storage:write",
+      "because": "aborts each open session"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=retry": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:storageUploadRoutes.js:GET /:id",
+      "class": "reversible",
+      "scope": "storage:write",
+      "because": "resumes the same session from the parts that arrived"
+    },
+    "ui:platform-storage-uploads.js:data-xsu=resolve": {
+      "status": "excluded",
+      "category": "covered-by",
+      "of": "route:storageUploadRoutes.js:POST /",
+      "class": "reversible",
+      "scope": "storage:write",
+      "because": "the choice is the onConflict field of opening an upload session (version, keep-both) or not uploading (skip)"
     }
   }
 }

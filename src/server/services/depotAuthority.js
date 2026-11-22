@@ -245,15 +245,38 @@ async function actorForSubject(db, { subjectToken, subjectTokenType }) {
   if (!payload) throw exchangeError('invalid_grant', 'the subject token is not a valid XENO Depot token');
   if (payload.depot_resources !== undefined) throw exchangeError('invalid_grant', 'a token for one repo cannot be exchanged again');
   if (payload.xdp_cred) {
-    const row = (await db.query(`SELECT agent_user_id, scopes FROM depot_agent_credentials
-      WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`, [String(payload.xdp_cred)])).rows[0];
-    if (!row || String(row.agent_user_id) !== String(payload.sub)) throw exchangeError('invalid_grant', 'the credential behind this token is no longer valid');
-    const principal = await resolvePrincipal(db, row.agent_user_id);
-    if (!principal || principal.kind !== 'agent') throw exchangeError('invalid_grant', 'the agent is gone');
-    return { principal, accountableId: String(principal.owner.id), via: 'agent', clientId: null,
-      scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)), expiresAt: Number(payload.exp) * 1000, credentialId: String(payload.xdp_cred) };
+    const a = await actorForAgentSession(db, payload);
+    if (!a) throw exchangeError('invalid_grant', 'the credential behind this token is no longer valid');
+    return a;
   }
   try { return await actorForToken(db, payload); } catch { throw exchangeError('invalid_grant', 'the subject token is not a valid XENO Depot token'); }
+}
+/** A token minted from an agent's xdp_ credential: the credential is read again, so revoking it ends the token at once. */
+async function actorForAgentSession(db, payload) {
+  const row = (await db.query(`SELECT agent_user_id, scopes FROM depot_agent_credentials
+    WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`, [String(payload.xdp_cred)])).rows[0];
+  if (!row || String(row.agent_user_id) !== String(payload.sub)) return null;
+  const principal = await resolvePrincipal(db, row.agent_user_id);
+  if (!principal || principal.kind !== 'agent') return null;
+  return { principal, accountableId: String(principal.owner.id), via: 'agent', clientId: null,
+    scopes: row.scopes.filter((s) => DEPOT_SCOPES.includes(s)), expiresAt: Number(payload.exp) * 1000, credentialId: String(payload.xdp_cred) };
+}
+/** A token for ONE repo (XO - DEPOT, 2026-11-22: Depot's repo view asks "what may the bearer of this token do on the repo it
+ *  names?"). Read-only by construction: its actor carries the repo (`onlyRepo`) and the Lore actions the token itself grants
+ *  (`tokenActions`); authorityFor answers for that repo only, capped by them; every other route refuses the token. Who it
+ *  speaks for is resolved live as for any token: a person's (its client), or an agent's (its credential, read again). */
+async function actorForRepoToken(db, payload) {
+  const res = Array.isArray(payload.depot_resources) && payload.depot_resources.length === 1 ? payload.depot_resources[0] : null;
+  const m = res && /^depot-(.+)$/.exec(String(res.resource_id || ''));
+  if (!m || !Array.isArray(res.permission)) return null;
+  let repo; try { repo = repoIdOf(m[1]); } catch { return null; }
+  let actor;
+  if (payload.xdp_cred) actor = await actorForAgentSession(db, payload);
+  else { try { actor = await actorForToken(db, payload); } catch { actor = null; } }
+  if (!actor) return null;
+  // its source's scopes stay as they are (they decide the live grants); the scopes the token was ISSUED with are a second
+  // ceiling, applied in authorityFor (a run token is depot:read even when its agent's credential is depot:write)
+  return { ...actor, issuedScopes: scopeList(payload.scope).filter((s) => DEPOT_SCOPES.includes(s)), onlyRepo: repo, tokenActions: res.permission.map(String), runId: payload.depot_run?.id ? String(payload.depot_run.id) : null };
 }
 
 /**
@@ -290,6 +313,8 @@ export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, r
     const perms = workspaceId ? await effectivePermissions(db, actor, id, workspaceId) : new Set();
     if (!perms.has('read')) throw exchangeError('invalid_target', 'no access to that repo');   // never confirms the repo exists
     claims.depot_resources = [{ resource_id: `depot-${id}`, permission: run ? [] : loreActions(perms) }];   // [] = read in Lore
+    // an agent's per-repo token names the credential it came from, so the authority can read it again (actorForRepoToken)
+    if (actor.credentialId) claims.xdp_cred = actor.credentialId;
     if (run) claims.depot_run = { id: String(run.id) };
   } else if (subjectTokenType === LORE_API_KEY_TOKEN_TYPE) {
     claims.xdp_cred = actor.credentialId;                       // the agent's session token; exchanged again per repo
@@ -320,14 +345,23 @@ export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, r
   return { access_token: token, issued_token_type: ACCESS_TOKEN_TYPE, token_type: 'Bearer', expires_in: expiresIn, scope: scope.join(' ') };
 }
 
-export async function verifyToken(db, token) {
+export async function verifyToken(db, token, { repoToken = false } = {}) {
   if (String(token || '').startsWith('xdp_')) {
     const actor = await actorForCredential(db, token);
     if (!actor) throw new DepotAuthorityError('invalid_token', 401);
     return actor;
   }
-  // A JWT: a Depot sign-in, or an agent session token from an xdp_ exchange (its credential checked again). A token minted
-  // for ONE repo is Lore's, and is refused here as it is as an exchange subject.
+  // A token minted for ONE repo is accepted only where the caller asks what it may do on that repo (repoToken: the /token
+  // route), read-only; everywhere else it is refused, as it is as an exchange subject.
+  if (repoToken) {
+    let payload; try { payload = await verifyDepotAccessToken(db, String(token || '')); } catch { payload = null; }
+    if (payload && payload.depot_resources !== undefined) {
+      const actor = await actorForRepoToken(db, payload);
+      if (!actor) throw new DepotAuthorityError('invalid_token', 401);
+      return actor;
+    }
+  }
+  // A JWT: a Depot sign-in, or an agent session token from an xdp_ exchange (its credential checked again).
   try { return await actorForSubject(db, { subjectToken: token, subjectTokenType: ACCESS_TOKEN_TYPE }); } catch {
     throw new DepotAuthorityError('invalid_token', 401);
   }
@@ -411,10 +445,19 @@ export async function authorityFor(db, actor, { repoId = null } = {}) {
     principal: principalView(actor), door, scopes: actor.scopes,
     authorityExpiresAt: actor.expiresAt, repo: null,
   };
+  // a token for one repo answers for that repo only (actorForRepoToken)
+  if (actor.onlyRepo && (!repoId || repoIdOf(repoId) !== actor.onlyRepo)) throw new DepotAuthorityError('repo_not_in_token', 403, 'this token is for one repo; ask about that repo');
   if (!repoId) return out;
   const id = repoIdOf(repoId);
   const workspaceId = await repoWorkspace(db, id);
-  const permissions = door.allowed && workspaceId ? ordered(await effectivePermissions(db, actor, id, workspaceId)) : [];
+  let permissions = door.allowed && workspaceId ? ordered(await effectivePermissions(db, actor, id, workspaceId)) : [];
+  // ...and never for more than the token itself grants: a permission counts only if every Lore action it needs is in the
+  // token (read and review need none), so a read-only run token is never reported as able to write
+  if (actor.onlyRepo) {
+    const has = new Set(actor.tokenActions), issued = ceilingFor(actor.issuedScopes);
+    permissions = permissions.filter((p) => issued.has(p) && (LORE_ACTIONS[p] || []).every((a) => has.has(a)));
+    out.scopes = actor.issuedScopes; out.runId = actor.runId;
+  }
   out.repo = { id, registered: Boolean(workspaceId), workspaceId, permissions };
   return out;
 }

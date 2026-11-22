@@ -321,11 +321,16 @@
       return `<div class="pj ${open ? 'open' : ''}">${row(`data-project="${esc(name)}" data-ctx="project"`, `<span class="tw">${ic('right')}</span>${ic('folder')}<span class="t">${esc(name)}</span>${pinned ? ic('pin', 'i pin') : ''}<span class="meta">${chats.length || ''}</span><span class="more" data-more>${ic('more')}</span>`)}
         <div class="kids">${chats.map((c) => chatRow(c, name)).join('') || '<div class="row sub">No chats yet</div>'}<button class="row sub" data-open-project="${esc(name)}">${ic('folder')}<span class="t">Open project</span></button><button class="row sub" data-newin="${esc(name)}">${ic('plus')}<span class="t">New chat in project</span></button></div></div>`;
     }).join('');
-    return `${backHeader('chat', 'Chat')}
+    // on chat.xenosystem.ai the sidebar carries the product (the mark and its name), as Gemini's, ChatGPT's and Claude's
+    // do; the workspace's "Overview › Chat" path means nothing there. Images (Studio) is one of its places.
+    const onHost = window.XENO_ADDR?.product === 'chat';
+    const head = onHost ? `<div class="ph xch-head"><a class="xch-brand" href="/" data-newchat aria-label="XENO Chat, new chat">${XENO_MARK}<b>Chat</b></a><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>` : backHeader('chat', 'Chat');
+    return `${head}
       ${live ? '' : `<div class="ctx-note">Chats in ${esc(ctxName())} — each mode keeps its own</div>`}
       <div class="pbody">
         <button class="act primary" data-newchat>${ic('plus')}New chat<kbd>Ctrl ⇧ O</kbd></button>
         <button class="act" data-go-library="From chats">${ic('lib')}Library<kbd>From chats</kbd></button>
+        ${onHost ? `<button class="act" data-chat-images>${ic('image')}Images</button>` : ''}
         <button class="act" data-xa="scheduled">${ic('clock')}Scheduled</button>
         ${live && window.XENO_CHAT.area && window.XENO_CHAT.area() ? `<button class="act" data-chat-instructions data-tip="What every chat in ${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))} should know or do">${ic('edit')}Instructions<kbd>${esc(window.XENO_CHAT.areaName(window.XENO_CHAT.area()))}</kbd></button>` : ''}
         ${sec('projects', 'Projects', projects + `<button class="row sub" data-go="projects">${ic('folder')}<span class="t">All projects</span></button>`, `<button class="ib" data-xa="newProject" aria-label="New project" data-tip="New project">${ic('plus')}</button>`)}
@@ -1205,6 +1210,53 @@
     return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div>${stTop ? (stTop.left ? `<span class="pg-top-sep" aria-hidden="true"></span>${stTop.left}` : '') : ''}${window.XENO_GENERATIONS?.route?.() ? '' : isChat && window.XENO_CHAT && window.XENO_CHAT.served ? `<button class="tb-mid" data-chat-transcript aria-live="polite" data-tip="Copy the whole conversation, with its diagnostics">${ic('copy')}<span>Copy transcript</span></button>` : ''}<div class="sp"></div>${stTop ? stTop.right : ''}${window.XENO_GENERATIONS?.route?.() ? window.XENO_GENERATIONS.viewSwitch() : isChat ? `<button class="ib" aria-label="Share" data-tip="Share">${ic('share')}</button><button class="ib" aria-label="More" data-tip="Copy transcript, rename, delete">${ic('more')}</button>` : ''}</div>${isChat ? body : `<div class="mview">${body}</div>`}`;
   }
 
+  // ---- PRODUCT HOST (address.js PRODUCT; owner, 2026-11-21: Tasks "full viewport, alone, with a header, fast"): one
+  // product fills the window under its own 44px header, the one XENO Tools and XENO Workshop have: the mark and the
+  // product's name, its views in the middle, then the workspace, Search · Ctrl K, New and the account. The rail and the
+  // sidebar are not drawn. The page below is the workspace's own page for that product: one Tasks, not a second copy.
+  const PRODUCT = window.XENO_ADDR.product;
+  const PRODUCT_INFO = { tasks: { name: 'Tasks', views: [['', 'Board'], ['My tasks', 'My tasks'], ['Needs triage', 'Triage'], ['In review', 'In review']], newLabel: 'New task', workspacePath: '/workspace/tasks' } };
+  const XENO_MARK = '<svg width="18" height="18" viewBox="0 0 1082 1082" aria-hidden="true"><path fill="currentColor" d="M489.1 219.763L323.457 39.7072L101.649 30.4597C51.6926 28.3769 39.5494 67.5718 39.7224 87.4296L30.4124 310.735L347.816 655.757L475.833 537.987L241.73 283.514C207.644 246.462 222.019 240.156 233.467 241.634L455.275 250.881L489.1 219.763Z"/><path fill="currentColor" d="M861.765 489.52L1041.69 323.704L1050.94 101.684C1053.03 51.6793 1013.87 39.5273 994.024 39.7019L770.9 30.3995L426.135 348.133L543.8 476.263L798.083 241.917C835.108 207.796 841.408 222.184 839.931 233.644L830.674 455.664L861.765 489.52Z"/><path fill="currentColor" d="M592.871 862.143L758.514 1042.2L980.322 1051.45C1030.28 1053.53 1042.42 1014.33 1042.25 994.477L1051.56 771.171L734.155 426.15L606.138 543.919L840.241 798.392C874.327 835.444 859.952 841.751 848.504 840.272L626.696 831.025L592.871 862.143Z"/><path fill="currentColor" d="M220.763 592.907L40.7063 758.55L31.4588 980.358C29.3761 1030.31 68.5709 1042.46 88.4287 1042.28L311.735 1051.59L656.756 734.191L538.986 606.174L284.514 840.277C247.462 874.363 241.155 859.988 242.633 848.54L251.881 626.733L220.763 592.907Z"/></svg>';
+  function productHeaderHTML() {
+    const info = PRODUCT_INFO[PRODUCT]; if (!info) return '';
+    const it = S.view === 'global' && S.global === PRODUCT ? (S.item || '') : null;
+    const isView = info.views.some(([k]) => k === it);
+    const ws = window.XENO_SCOPE?.served ? window.XENO_SCOPE.current?.() : null;
+    const u = window.XENO_PLATFORM?.user, nm = u ? String(u.display_name || u.username || u.email || '?') : '';
+    const origin = window.XENO_ADDR.workspaceOrigin;
+    return `<a class="ph-hb ph-home" href="/" data-ph-go="" title="XENO ${esc(info.name)} home">${XENO_MARK}<b>${esc(info.name)}</b></a>`
+      + (it && !isView ? `<span class="ph-crumb" aria-hidden="true">/</span><span class="ph-crumb-name">${esc(String(it).split('/')[0])}</span>` : '')
+      + `<div class="ph-sp"></div><div class="ph-tabs" role="tablist" aria-label="${esc(info.name)}">${info.views.map(([k, l]) => `<button type="button" role="tab" class="ph-tab" aria-selected="${isView && it === k}" data-ph-go="${esc(k)}">${esc(l)}</button>`).join('')}</div><div class="ph-sp"></div>`
+      + (ws ? `<button type="button" class="ph-ws" data-ph-ws aria-haspopup="menu" title="Workspace">${esc(ws.name)}${ic('chev')}</button>` : '')
+      + `<button type="button" class="ph-search" data-ph-search title="Search · Ctrl K">${ic('search')}<span class="ph-wide">Search</span><kbd>Ctrl K</kbd></button>`
+      + (u ? `<button type="button" class="ph-new" data-ph-new title="${esc(info.newLabel)} · C">${ic('plus')}<span class="ph-wide">${esc(info.newLabel)}</span></button>` : '')
+      + `<a class="ph-hb ph-hi" href="${esc(origin + info.workspacePath)}" title="Open in the workspace" aria-label="Open in the workspace">${ic('open')}</a>`
+      + (u ? `<a class="ph-avatar" href="${esc(origin + '/workspace/settings')}" title="${esc(nm)}" aria-label="Account: ${esc(nm)}">${esc(nm.trim().charAt(0).toUpperCase() || '?')}</a>` : `<a class="ph-signin" href="/login">Sign in</a>`);
+  }
+  function renderProductHeader() {
+    if (!PRODUCT || !PRODUCT_INFO[PRODUCT]) return;   // a product without a bar (chat: its sidebar carries it)
+    let ph = document.getElementById('xph');
+    if (!ph) {
+      // `xph`, never `ph`: the workspace's own sidebar header is `.ph`, and a product bar named the same restyled it
+      // on every workspace page (2026-11-22)
+      ph = document.createElement('header'); ph.id = 'xph'; ph.className = 'xph'; ph.setAttribute('data-product-header', PRODUCT);
+      document.body.prepend(ph);
+      ph.addEventListener('click', (e) => {
+        const go = e.target.closest('[data-ph-go]');
+        if (go) { e.preventDefault(); const k = go.dataset.phGo; window.XENO_ADDR.go('#/overview/g/' + PRODUCT + (k ? '/' + encodeURIComponent(k) : '')); return; }
+        if (e.target.closest('[data-ph-new]')) return void window.XENO_TASKS?.newTask?.();
+        if (e.target.closest('[data-ph-search]')) return void window.XW.search();
+        const wb = e.target.closest('[data-ph-ws]');
+        if (wb && window.XENO_SCOPE?.served) {
+          const cur = window.XENO_SCOPE.current?.() || {}, r = wb.getBoundingClientRect();
+          window.XCM?.show([window.XENO_SCOPE.list().map((w) => ({ label: w.name, checked: w.id === cur.id, run: () => window.XA?.switchWorkspace?.(w.id) }))], { x: r.left, y: r.bottom + 4, opener: wb, label: 'Workspace' });
+        }
+      });
+    }
+    const html = productHeaderHTML();
+    if (ph.__html !== html) { ph.innerHTML = html; ph.__html = html; }
+  }
+
   window.XW = { get S() { return S; }, go, setFold, reloadData: (key) => { try { if (DS[key]) DS[key].err = null; load(key); } catch {} }, setChatItem, openModelMenu: (anchor) => openModelMenu(anchor, 'model'), openEffortMenu: (anchor) => openModelMenu(anchor, 'effort'), closeModelMenu: () => closeAp(), modelMenuOpen: () => !!document.querySelector('#apmenu.show'), crumbs: () => crumbs(), esc, ic, PR, M, pIconFull, mini, toast: (s) => toast(s), store, ctxName, ctxKey, ctxChats, inOv, zoneNow, zoneKey, zonesFor, modeOf, mark, render: () => render(), hiddenModes, toggleHidden, modeOrder, renderRail: () => renderRail(), openShortcuts: (o) => openShortcuts(o), openUsage: () => openUsage(), openAdConsent: (o) => openAdConsent(o), hidePops: () => hidePops(), applyWorkspace: () => applyWorkspace(), markAllRead: () => markAllRead(() => render()), refreshSwitcher: () => refreshSwitcher(), search: (q) => { openPalette(); const i = document.querySelector('#palette input'); if (i && q) { i.value = q; i.dispatchEvent(new Event('input')); } }, refreshPanel: () => { const pv = $('#panel > .pv'); const html = panelHTML(); if (pv && pv.__html === html) return markItems(pv); const top = pv?.querySelector('.pbody')?.scrollTop || 0; setPv($('#panel'), `<div class="pv">${html}</div>`).__html = html; const n = $('#panel > .pv .pbody'); if (n) n.scrollTop = top; } };
   // ---- render with crossfade ----
   let first = true;
@@ -1231,6 +1283,7 @@
     if (mv && !first && !samePlace) { mv.classList.add('swap-out'); setTimeout(() => { main.innerHTML = mainHTML(); }, 90); }
     else if (mv && samePlace && window.XENO_PAGES?.repaint && main.querySelector('.mview.pg-mview') && window.XENO_PAGES.framed?.() != null) { window.XENO_PAGES.repaint(); const c = main.querySelector('.topbar .crumbs'); if (c) { const h = crumbs(); if (c.innerHTML !== h) c.innerHTML = h; } }
     else main.innerHTML = mainHTML();
+    renderProductHeader();
     first = false;
   }
   // replace the panel's content node only — never the switcher layer that may sit above it
@@ -2312,6 +2365,7 @@
     if (b.dataset.openProject) return go('global', { global: 'projects', item: b.dataset.openProject + '/Conversations' });
     if (b.dataset.cat) { const set = new Set(ovOpen()); set.has(b.dataset.cat) ? set.delete(b.dataset.cat) : set.add(b.dataset.cat); store.set('ovOpen', [...set]); const el = $('#rzone'), mid = $('#rmid'); if (el) { const y0 = b.getBoundingClientRect().top; ovPatch(); const hold = () => {};  /* holding the button under the pointer was measured to fight scroll-into-view; the fold itself is smooth */ const t0 = performance.now(); const loop = () => { hold(); if (performance.now() - t0 < 230) requestAnimationFrame(loop); else { const kids = el.querySelector('.rcat[aria-expanded="true"] + .rcat-kids'); if (kids) kids.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); railFit(); } }; requestAnimationFrame(loop); } return; }
     if (b.dataset.goLibrary) return go('global', { global: 'library', item: b.dataset.goLibrary });
+    if ('chatImages' in b.dataset) return window.XENO_ADDR.go('#/studio/p/image');   // chat.xenosystem.ai/images: Studio's image generation
     if (b.dataset.product) { const id = b.dataset.product; if (S.view === 'product' && S.product === id && b.closest('#rail')) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return openProduct(id); }
     const g = b.dataset.go;
     if (g === 'search') return openPalette();

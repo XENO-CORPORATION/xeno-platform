@@ -2568,6 +2568,49 @@ html body .main .live-chat .chat-themed.chat-theme-dark{background:transparent!i
 #modeIntro .mi-copy .mi-defcard{margin-top:auto!important}
 #modeIntro .mi-copy .adx-btns{margin-top:10px!important}
 #modeIntro .mi-copy .mi-pick{margin-top:clamp(14px,2.2vh,26px)}
+/* PRODUCT HOST (address.js PRODUCT, app.js renderProductHeader): one product, the whole window, under the 44px
+   header XENO Tools and XENO Workshop have. No rail, no sidebar; the page's own bar keeps its tools, not the opener
+   or the workspace path (the product header says where you are). Monochrome: emphasis by surface and text brightness. */
+html[data-product] .rail,html[data-product] .peekzone,html[data-product="tasks"] .slot{display:none!important}
+html[data-product="tasks"] .main,html[data-product="tasks"][data-panel] .main{top:44px;left:0;right:0;bottom:0;border:0;border-radius:0;clip-path:none;background:var(--canvas)}
+html[data-product="tasks"] .main .topbar .opener,html[data-product] .main .topbar .crumbs{display:none}
+/* chat.xenosystem.ai (owner, 2026-11-22: "like the Gemini web app"): the chat's own sidebar at the left edge, the chat
+   filling the rest. No product bar on top: the sidebar carries the product, as Gemini's, ChatGPT's and Claude's do. */
+html[data-product="chat"] .slot{left:0}
+html[data-product="chat"] .main{top:0;right:0;bottom:0;border:0;border-radius:0;clip-path:none;left:calc(var(--panel-w) + var(--gap-x))}
+html[data-product="chat"][data-panel="closed"] .main,html[data-product="chat"][data-panel="none"] .main{left:0}
+.panel .xch-head .xch-brand{flex:1;display:flex;align-items:center;gap:9px;min-width:0;height:30px;margin-left:-6px;padding:0 6px;border-radius:6px;color:var(--text);text-decoration:none}
+.panel .xch-head .xch-brand:hover{background:var(--w50)}
+.panel .xch-head .xch-brand b{font-size:14px;font-weight:600;letter-spacing:-.01em}
+/* the header's New is the page's New: drop the copy, and the page bar itself when nothing else is left in it */
+html[data-product="tasks"] .main .topbar [data-tk="new"]{display:none}
+html[data-product="tasks"] .main .topbar.pg-top:not(:has(.pg-top-sum:not(:empty),.pg-top-left>*,.pg-top-tools>*,.pg-top-acts>:not([data-tk="new"]))){display:none}
+html[data-product="tasks"] .main .topbar.pg-top:not(:has(.pg-top-sum:not(:empty),.pg-top-left>*,.pg-top-tools>*,.pg-top-acts>:not([data-tk="new"])))+.mview{top:0}
+.xph{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;gap:10px;height:44px;padding:0 12px 0 14px;background:var(--n20);border-bottom:1px solid var(--n30)}
+.xph svg.i{width:14px;height:14px}
+.ph-hb{flex:none;display:flex;align-items:center;height:30px;border-radius:5px;color:var(--text);text-decoration:none}
+.ph-hb:hover{background:var(--n30)}
+.ph-home{gap:9px;margin-left:-6px;padding:0 8px 0 6px}
+.ph-home b{font-size:13px;font-weight:600;letter-spacing:-.01em}
+.ph-crumb{color:var(--dim)}
+.ph-crumb-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.ph-sp{flex:1}
+.ph-tabs{flex:none;display:flex;gap:2px;padding:2px;border-radius:6px;background:var(--n26)}
+.ph-tab{display:flex;align-items:center;height:26px;padding:0 12px;border-radius:4px;color:var(--muted);font-size:12.5px;font-weight:500;white-space:nowrap}
+.ph-tab:hover{color:var(--text)}
+.ph-tab[aria-selected="true"]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--panel-stroke)}
+.ph-ws{flex:none;display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:5px;color:var(--muted);font-size:12.5px;font-weight:500;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-ws:hover{background:var(--n30);color:var(--text)}
+.ph-search{flex:none;display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border:1px solid var(--panel-stroke);border-radius:5px;background:var(--canvas);color:var(--dim);font-size:12px}
+.ph-search:hover{color:var(--text);border-color:var(--n38)}
+.ph-search kbd{font:10px ui-monospace,'Cascadia Mono',Consolas,monospace}
+.ph-new{flex:none;display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:5px;background:var(--text);color:var(--canvas);font-size:12.5px;font-weight:600}
+.ph-new:hover{opacity:.9}
+.ph-hi{width:30px;height:28px;justify-content:center;color:var(--muted)}
+.ph-hi:hover{color:var(--text)}
+.ph-avatar{flex:none;display:grid;place-items:center;width:24px;height:24px;margin-left:2px;border-radius:4px;background:var(--text);color:var(--canvas);font-size:10.5px;font-weight:600;text-decoration:none}
+.ph-signin{flex:none;display:flex;align-items:center;height:28px;padding:0 12px;border-radius:5px;background:var(--text);color:var(--canvas);font-size:12.5px;font-weight:600;text-decoration:none}
+@media (max-width:760px){.ph-wide{display:none}.ph-tabs{display:none}}
 </style>
 <link href="pages.css" rel="stylesheet">
 <link href="support.css" rel="stylesheet">
@@ -2651,6 +2694,7 @@ html body .main .live-chat .chat-themed.chat-theme-dark{background:transparent!i
 <script src="search.js"></script>
 <script src="platform-area.js"></script>
 <script src="platform-usage.js"></script>
+<script src="platform-storage-uploads.js"></script>
 <script src="platform-storage.js"></script>
 <script src="platform-storage-clouds.js"></script>
 <script src="platform-mcp.js"></script>

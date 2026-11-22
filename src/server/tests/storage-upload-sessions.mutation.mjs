@@ -1,0 +1,44 @@
+/**
+ * Mutation check for storage-upload-sessions.test.mjs: remove each protection in turn and prove the test fails.
+ * Restores the file in `finally`. Run: DATABASE_URL=… node tests/storage-upload-sessions.mutation.mjs
+ */
+import { readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+
+const file = new URL('../services/storageUploads.js', import.meta.url);
+const original = readFileSync(file, 'utf8');
+const mutations = [
+  ['no room check at open', [['try { await client.query(\'BEGIN\'); await assertStorageRoom(client, { userId, workspaceId, bytes }); }', 'try { await client.query(\'BEGIN\'); }']]],
+  ['no size cap', [['if (bytes > cap) throw', 'if (false) throw']]],
+  ['no type check', [['if (!ALLOWED_UPLOAD_MIMES.has(type)) throw', 'if (false) throw']]],
+  ['session not bound to its owner', [["'SELECT * FROM storage_upload_sessions WHERE id = $1 AND user_id = $2', [id, userId]", "'SELECT * FROM storage_upload_sessions WHERE id = $1 AND $2::uuid IS NOT NULL', [id, userId]"]]],
+  ['part size not checked', [['if (!Buffer.isBuffer(bytes) || bytes.length !== expected) throw', 'if (!Buffer.isBuffer(bytes)) throw']]],
+  ['missing parts not checked', [['if (missing.length) throw', 'if (false) throw']]],
+  ['assembled size not checked', [["if (!got || got.size !== Number(row.size_bytes)) throw", 'if (!got) throw']]],
+  ['other personal workspace allowed', [["if (String(ws.owner_user_id) !== String(userId)) throw", 'if (false) throw']]],
+  ['same name never asked', [["if (onConflict === 'ask') throw", "if (false) throw"]]],
+  ['name match case-sensitive', [['lower(f.original_name) = lower($1)', 'f.original_name = $1']]],
+  ['stale revision accepted at open', [['if (ifMatch && String(ifMatch) !== current) throw', 'if (false) throw']]],
+  ['revision not re-checked at completion', [['if (row.expected_revision && String(await latestFor(db, row.replace_file_id)) !== row.expected_revision) {', 'if (false) {']]],
+  ['version permission not checked', [['if (!(await canAddVersion(db, userId, revision))) throw', 'if (false) throw']]],
+  ['idempotency key not replayed', [["if (idempotencyKey) { const again = await replayed(", "if (false) { const again = await replayed("]]],
+  ['replay ignores a different upload', [["if (Number(row.size_bytes) !== Number(size) || !sameFile) throw", 'if (false) throw']]],
+  ['replay compares the stored name, not the requested one', [['=== (row.requested_name || row.name)', '=== row.name']]],
+  ['a dead session keeps its key', [['if (TERMINAL_WITHOUT_FILE.has(row.state)) {', 'if (false) {']]],
+  ['folder access not checked', [["await folderAccess(db, userId, folderId, 'edit')", "(await db.query('SELECT * FROM storage_folders WHERE id = $1', [folderId])).rows[0]"]]],
+];
+let failures = 0;
+try {
+  for (const [name, edits] of mutations) {
+    let text = original;
+    for (const [from, to] of edits) { if (!text.includes(from)) throw new Error(`mutation "${name}": anchor not found: ${from}`); text = text.replace(from, to); }
+    writeFileSync(file, text);
+    const run = spawnSync(process.execPath, ['tests/storage-upload-sessions.test.mjs'], { encoding: 'utf8', timeout: 240000 });
+    const caught = run.status !== 0;
+    console.log(`${caught ? 'CAUGHT' : 'MISSED'}  ${name}`);
+    if (!caught) failures += 1;
+  }
+} finally { writeFileSync(file, original); }
+const control = spawnSync(process.execPath, ['tests/storage-upload-sessions.test.mjs'], { encoding: 'utf8', timeout: 240000 });
+console.log(control.status === 0 ? 'control (restored) passes' : 'CONTROL FAILED');
+process.exit(failures || control.status !== 0 ? 1 : 0);

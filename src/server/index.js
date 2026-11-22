@@ -233,6 +233,9 @@ import {
 import { rateLimitKey, requesterRateLimitKey } from './utils/clientIp.js';
 import { globalLimiterSkips, isAuthenticatedLedgerServiceCall, isAuthenticatedDepotStorageCall, oauthTokenLimiterOptions } from './utils/globalLimiterSkip.js';
 import storageDepotServiceRoutes from './routes/storageDepotServiceRoutes.js';
+import { ALLOWED_UPLOAD_MIMES, MAX_UPLOAD_SIZE } from './utils/uploadPolicy.js';
+import { createStorageUploadRouter } from './routes/storageUploadRoutes.js';
+import { startUploadSessionSweeps } from './services/storageUploads.js';
 import { sweepExpiredHolds, MICRO_PER_CREDIT } from './utils/creditLedgerV2.js';
 import * as creditLedgerForReconcile from './utils/creditLedgerV2.js';
 import { proxyReceiptVerifierFromEnv, reconcileUnmeasuredDraws } from './services/proxyUsageReceipts.js';
@@ -590,6 +593,9 @@ app.use('/api/storage/projects', databaseMiddleware, projectFolderRoutes({ uploa
 // BEFORE the global body parsers: the 100 MB express.raw below would otherwise read the body first and this
 // namespace's 1 MiB object cap would never apply.
 app.use('/api/storage/service/depot/v1', databaseMiddleware, storageDepotServiceRoutes);
+// XENO Storage upload sessions: files in parts straight to object storage (no 100 MB wall, progress, resume). Before the
+// global body parsers, so a part's raw body is read once, capped at one part (routes/storageUploadRoutes.js).
+app.use('/api/library/uploads', areaFromRequest, createStorageUploadRouter({ authMiddleware, databaseMiddleware, uploadsDir }));
 
 // ULTRA HIGH LIMITS for base64 image data processing
 // Bound evidence requests before the general 100 MB parser allocates their body.
@@ -1253,17 +1259,7 @@ app.get('/api/test-db', async (req, res) => {
 // eliminate the latent auth-flip risk if the mount order ever changed.
 
 // File upload endpoint with validation
-const ALLOWED_UPLOAD_MIMES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-  'application/pdf', 'text/plain', 'application/json',
-  'text/csv', 'text/markdown', 'text/html', 'application/xml',
-  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/zip', 'application/octet-stream',
-  'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/mp4',
-]);
-const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
+// one list for every upload path, shared with XENO Storage upload sessions (utils/uploadPolicy.js)
 
 // XENO Storage: upload a NEW VERSION of a file the caller owns (services/storageVersions.js). The same type and
 // size rules as an upload; the bytes go through the same registration, allowance check and security scan.
@@ -4219,6 +4215,10 @@ startDownloadCleanup();
       t.unref(); sweepHolds();
       return () => clearInterval(t);
     });
+
+    // XENO Storage upload sessions (services/storageUploads.js): finish a session whose server restarted mid-way,
+    // abort ones abandoned for two days. Leader only, like the other storage sweeps.
+    backgroundLeader.whenLeader(() => { const t = startUploadSessionSweeps(pool, { uploadsDir }); return () => clearInterval(t); });
 
     // XENO Storage: every account file gets a verified copy in object storage (services/storageObjects.js).
     // New files are picked up within five minutes; the first run backfills what is already there.

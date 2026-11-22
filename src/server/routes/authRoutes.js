@@ -3185,6 +3185,10 @@ export const HOST_SIGNIN_CLIENTS = Object.freeze({
   'motion.xenosystem.ai': 'xeno-motion-web',
   // XENO Creator in the browser (owner 2026-11-03: "bring it live at creator.xenosystem.ai the same way … motion.xenosystem.ai is")
   'creator.xenosystem.ai': 'xeno-creator-web',
+  // XENO Tasks on its own host (owner 2026-11-21: "a full viewport render for the tasks alone, with a header, fast")
+  'tasks.xenosystem.ai': 'xeno-tasks-web',
+  // XENO Chat on its own host (owner 2026-11-22: "a dedicated chat … like the Gemini web app")
+  'chat.xenosystem.ai': 'xeno-chat-web',
 });
 const HOST_STATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-xeno_host_signin' : 'xeno_host_signin';
 const hostOf = (req) => String(req.headers.host || '').toLowerCase().split(':')[0];
