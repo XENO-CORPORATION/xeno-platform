@@ -22,11 +22,11 @@ import {
 export function createDepotAuthorityRouter({ getExpected = () => process.env.DEPOT_SERVICE_TOKEN } = {}) {
   const router = express.Router();
   router.use(express.json({ limit: '16kb' }), requireConnectServiceToken(getExpected));
-  const send = (fn) => async (req, res) => {
+  const send = (fn, opts) => async (req, res) => {
     try {
       res.set('cache-control', 'no-store');
       const b = req.body || {};
-      const actor = await verifyToken(req.db, b.token);
+      const actor = await verifyToken(req.db, b.token, opts);
       res.json(await fn(req.db, actor, b, req.params));
     } catch (e) {
       if (e instanceof DepotAuthorityError) return res.status(e.status).json({ error: e.code, message: e.message !== e.code ? e.message : undefined });
@@ -34,7 +34,8 @@ export function createDepotAuthorityRouter({ getExpected = () => process.env.DEP
       return res.status(500).json({ error: 'authority_unavailable' });
     }
   };
-  router.post('/token', send((db, actor, b) => authorityFor(db, actor, { repoId: b.repoId || null })));
+  // the one route a per-repo token may use: what it may do on its own repo, read-only (every other route refuses it)
+  router.post('/token', send((db, actor, b) => authorityFor(db, actor, { repoId: b.repoId || null }), { repoToken: true }));
   router.post('/repos', send((db, actor, b) => registerRepo(db, actor, { repoId: b.repoId, workspaceId: b.workspaceId })));
   router.post('/repos/:repoId/delete', send((db, actor, b, p) => unregisterRepo(db, actor, { repoId: p.repoId })));
   router.post('/repos/:repoId/grants/list', send((db, actor, b, p) => listGrants(db, actor, { repoId: p.repoId })));

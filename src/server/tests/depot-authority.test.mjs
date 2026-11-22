@@ -316,7 +316,63 @@ async function main() {
   await oauthRefusal(runAsk({ resource: undefined }), 'invalid_target');
   await oauthRefusal(runAsk({ resource: R('nope') }), 'invalid_target');                                    // a repo it cannot read
   await oauthRefusal(exchange({ subjectToken: (await runAsk()).access_token, resource: R('build') }), 'invalid_grant');
-  await depot.revokeAgentCredential(pool, me, runnerCred.id);
+
+  // ── 7c. A per-repo token asks what it may do on ITS repo (XO - DEPOT, 2026-11-22: Depot's repo view, which Runner's run
+  // API uses). Only /token accepts it; only for the repo it names; never for more than the token itself grants; read live.
+  {
+    const asRepo = (t, repoId) => depot.verifyToken(pool, t, { repoToken: true }).then((a) => depot.authorityFor(pool, a, { repoId }));
+    const live = (await depot.authorityFor(pool, staff, { repoId: 'build' })).repo.permissions;
+    const personView = await asRepo(full.access_token, 'build');                      // a person's token with every action: the live grants
+    assert.deepEqual([personView.repo.id, personView.repo.registered, personView.repo.workspaceId, personView.repo.permissions], ['build', true, u.ws, live]);
+    assert.equal(personView.principal.id, u.staff);
+    const roSession = await signIn(u.staff, 'xeno-depot-cli', 'openid depot:read');
+    const roRaw = (await exchange({ subjectToken: roSession, resource: R('build') })).access_token;
+    const roView = await asRepo(roRaw, 'build');                                      // a depot:read sign-in's repo token: what its session gets
+    const roLive = (await depot.authorityFor(pool, await depot.verifyToken(pool, roSession), { repoId: 'build' })).repo.permissions;
+    assert.deepEqual(roView.repo.permissions, roLive);
+    assert.ok(!roView.repo.permissions.includes('write'), 'a read sign-in is never reported able to write');
+    const runRaw = (await runAsk()).access_token;
+    assert.equal(decode(runRaw).claims.xdp_cred, runnerCred.id, 'an agent per-repo token names its credential');
+    const runView = await asRepo(runRaw, 'build');                                    // a run token: read-only, never write
+    // read, and nothing else: its empty action list would still allow review (review needs no Lore action), so this is the
+    // token's issued scope (depot:read) at work, not its actions
+    assert.deepEqual(runView.repo.permissions, ['read'], `run token reported ${runView.repo.permissions}`);
+    // the token's own actions cap the answer: a grant made AFTER it was minted shows in a fresh session, not through it
+    {
+      const adminCred = await depot.issueAgentCredential(pool, me, { agentId: u.robot, scopes: ['depot:admin'] });
+      const adminSession = (await exchange({ subjectToken: adminCred.token, subjectTokenType: KEYT })).access_token;
+      const before = (await exchange({ subjectToken: adminSession, resource: R('build') })).access_token;
+      await depot.grant(pool, staff, { repoId: 'build', userId: u.robot, permission: 'admin' });
+      const fresh = (await depot.authorityFor(pool, await depot.verifyToken(pool, adminSession), { repoId: 'build' })).repo.permissions;
+      const through = (await asRepo(before, 'build')).repo.permissions;
+      assert.ok(fresh.includes('admin') && !through.includes('admin'), `a later grant: session ${fresh}, minted token ${through}`);
+      await depot.revoke(pool, staff, { repoId: 'build', userId: u.robot, permission: 'admin' });
+      await depot.revokeAgentCredential(pool, me, adminCred.id);
+    }
+    assert.equal(runView.runId, 'cichk_0123456789abcdef');
+    assert.equal(runView.principal.id, u.robot);
+    await refusal(asRepo(runRaw, 'other'), 'repo_not_in_token');                      // another repo: refused, not answered
+    await refusal(asRepo(runRaw, null), 'repo_not_in_token');                         // it must name its repo
+    await refusal(depot.verifyToken(pool, runRaw), 'invalid_token');                  // every other route still refuses it
+    // over HTTP: /token answers, the write routes refuse
+    const app2 = express();
+    app2.use((req, _res, next) => { req.db = pool; next(); });
+    app2.use('/a', createDepotAuthorityRouter({ getExpected: () => secret }));
+    const srv = await new Promise((r) => { const s = app2.listen(0, '127.0.0.1', () => r(s)); });
+    const at = (p, body) => fetch(`http://127.0.0.1:${srv.address().port}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` }, body: JSON.stringify(body) });
+    try {
+      const r = await at('/a/token', { token: runRaw, repoId: 'build' });
+      assert.equal(r.status, 200); assert.ok((await r.json()).repo.permissions.includes('read'));
+      assert.equal((await at('/a/token', { token: runRaw, repoId: 'other' })).status, 403);
+      assert.equal((await at('/a/repos/build/grants', { token: full.access_token, userId: u.robot, permission: 'read' })).status, 401);
+      assert.equal((await at('/a/repos/build/grants/list', { token: runRaw })).status, 401);
+      assert.equal((await at('/a/repos', { token: full.access_token, repoId: 'x2', workspaceId: u.ws })).status, 401);
+      assert.equal((await at('/a/repos/build/delete', { token: full.access_token })).status, 401);
+    } finally { srv.close(); }
+    // live: revoking the credential ends its per-repo token at once
+    await depot.revokeAgentCredential(pool, me, runnerCred.id);
+    await refusal(asRepo(runRaw, 'build'), 'invalid_token');
+  }
 
   // live: the door and a suspension are read at exchange time
   await pool.query("UPDATE users SET role = 'user' WHERE id = $1", [u.staff]);

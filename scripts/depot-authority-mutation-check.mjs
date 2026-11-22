@@ -62,6 +62,22 @@ const MUTANTS = [
     "if (subjectTokenType !== LORE_API_KEY_TOKEN_TYPE) throw exchangeError('invalid_request', 'a run token", "if (false) throw exchangeError('invalid_request', 'a run token"],
   ['exchange: lifetime not capped', 'src/server/services/depotAuthority.js',
     ': Math.min(DEPOT_TOKEN_SECONDS, subjectExp - now);', ': 3600;'],
+  // a per-repo token at /token (XO - DEPOT, 2026-11-22): its repo only, read-only, never more than it grants, read live
+  ['repo token: answers for another repo', 'src/server/services/depotAuthority.js',
+    "if (actor.onlyRepo && (!repoId || repoIdOf(repoId) !== actor.onlyRepo)) throw", 'if (false) throw'],
+  ['repo token: not capped by its actions', 'src/server/services/depotAuthority.js',
+    "permissions = permissions.filter((p) => issued.has(p) && (LORE_ACTIONS[p] || []).every((a) => has.has(a)));",
+    "permissions = permissions.filter((p) => issued.has(p));"],
+  ['repo token: not capped by its issued scopes', 'src/server/services/depotAuthority.js',
+    "permissions = permissions.filter((p) => issued.has(p) && (LORE_ACTIONS[p] || []).every((a) => has.has(a)));",
+    "permissions = permissions.filter((p) => (LORE_ACTIONS[p] || []).every((a) => has.has(a)));"],
+  ['repo token: accepted on write routes', 'src/server/routes/depotAuthorityRoutes.js',
+    'const actor = await verifyToken(req.db, b.token, opts);', 'const actor = await verifyToken(req.db, b.token, { repoToken: true });'],
+  ['repo token: credential not read again', 'src/server/services/depotAuthority.js',
+    'if (payload.xdp_cred) actor = await actorForAgentSession(db, payload);',
+    "if (payload.xdp_cred) { const pr = await resolvePrincipal(db, payload.sub); actor = pr && { principal: pr, accountableId: String(pr.owner?.id), via: 'agent', clientId: null, scopes: ['depot:read', 'depot:write', 'depot:admin'], expiresAt: Number(payload.exp) * 1000 }; }"],
+  ['repo token: no credential in it', 'src/server/services/depotAuthority.js',
+    'if (actor.credentialId) claims.xdp_cred = actor.credentialId;', ''],
 ];
 
 async function freshDb(name) {
