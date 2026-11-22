@@ -30,6 +30,44 @@ import { registerManagedLibraryFile } from './libraryAssets.js';
 import { fileObjectKey } from './storageObjects.js';
 import { check } from '../utils/authzReBAC.js';
 import { ALLOWED_UPLOAD_MIMES } from '../utils/uploadPolicy.js';
+import { folderAccess, moveItemToFolder } from './storageFolders.js';
+import { addVersion } from './storageVersions.js';
+
+/**
+ * The current (newest-version, not deleted) file with this name in a place, or null. Case-insensitive: the XENO Storage
+ * drive mounts on Windows, where `A.txt` and `a.txt` cannot sit side by side. The place is a folder, or the top of the
+ * person's own files, or the top of a team's.
+ */
+export async function sameNameFile(db, { userId, workspaceId = null, folderId = null, name }) {
+  const current = `f.deleted_at IS NULL AND lower(f.original_name) = lower($1)
+    AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)`;
+  let rows;
+  if (folderId) {
+    ({ rows } = await db.query(`SELECT f.id, f.original_name FROM user_files f JOIN storage_item_folders i ON i.source = 'file' AND i.source_id = f.id
+      WHERE ${current} AND i.folder_id = $2 LIMIT 1`, [name, folderId]));
+  } else {
+    const team = workspaceId ? (await db.query("SELECT workspace_type FROM workspaces WHERE id = $1", [workspaceId])).rows[0] : null;
+    const place = team && team.workspace_type !== 'personal'
+      ? 'f.workspace_id = $2'
+      : "f.owner_user_id = $2 AND (f.workspace_id IS NULL OR f.workspace_id IN (SELECT id FROM workspaces WHERE owner_user_id = $2 AND workspace_type = 'personal'))";
+    ({ rows } = await db.query(`SELECT f.id, f.original_name FROM user_files f
+      WHERE ${current} AND ${place} AND NOT EXISTS (SELECT 1 FROM storage_item_folders i WHERE i.source = 'file' AND i.source_id = f.id) LIMIT 1`,
+      [name, team && team.workspace_type !== 'personal' ? workspaceId : userId]));
+  }
+  return rows[0] || null;
+}
+
+/** `name (1).ext`, `name (2).ext`, … : the first that no current file in the place has. */
+export async function freeName(db, place, name) {
+  const dot = name.lastIndexOf('.');
+  const [base, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
+  for (let n = 1; n < 1000; n += 1) {
+    const candidate = `${base} (${n})${ext}`;
+    if (!(await sameNameFile(db, { ...place, name: candidate }))) return candidate;
+  }
+  return `${base} (${crypto.randomUUID().slice(0, 8)})${ext}`;
+}
+const ON_CONFLICT = new Set(['ask', 'version', 'keep-both']);
 
 export const PART_SIZE = 16 * 1024 * 1024;          // R2/S3: parts >= 5 MiB except the last, all the same size
 export const MAX_PART_BYTES = PART_SIZE;
@@ -62,7 +100,7 @@ export function transportFor(session, { env = process.env, store = fileStorage()
 const describe = (row) => ({
   id: row.id, name: row.name, mimeType: row.mime_type, size: Number(row.size_bytes), partSize: row.part_size,
   partCount: row.part_count, state: row.state, error: row.error || null, file: row.result || null,
-  workspace: row.workspace_id || null, createdAt: row.created_at,
+  workspace: row.workspace_id || null, folder: row.folder_id || null, replaces: row.replace_file_id || null, createdAt: row.created_at,
 });
 
 async function sessionFor(db, { userId, id }) {
@@ -77,8 +115,10 @@ async function freeDiskBytes(dir) {
 }
 
 /** Open a session. Checks everything that can refuse the file before a byte is sent. */
-export async function openUploadSession(db, { userId, workspaceId = null, name, mimeType, size, area = null }, { store = fileStorage(), env = process.env, uploadsDir } = {}) {
-  const clean = path.basename(String(name || '')).trim();
+export async function openUploadSession(db, { userId, workspaceId = null, folderId = null, onConflict = 'ask', name, mimeType, size, area = null }, { store = fileStorage(), env = process.env, uploadsDir } = {}) {
+  let clean = path.basename(String(name || '')).trim();
+  if (!ON_CONFLICT.has(onConflict)) throw fail('bad_conflict_choice', 'onConflict is ask, version or keep-both', 400);
+  if (folderId !== null && !UUID.test(String(folderId))) throw fail('bad_folder', 'Not a folder', 400);
   if (!clean || clean.length > 255) throw fail('bad_name', 'A file needs a name of at most 255 characters', 400);
   const type = String(mimeType || '').trim() || 'application/octet-stream';
   if (!ALLOWED_UPLOAD_MIMES.has(type)) throw fail('type_not_allowed', `Files of type '${type}' can’t be added yet`, 400);
@@ -105,14 +145,28 @@ export async function openUploadSession(db, { userId, workspaceId = null, name, 
     const free = await freeDiskBytes(uploadsDir);
     if (free !== null && free - bytes < minFreeBytes(env)) throw fail('busy', 'XENO Storage can’t take a file this size right now. Try again later.', 503);
   }
+  // where it lands, and what happens to a file of the same name already there: decided now, before a byte is sent
+  if (folderId) {
+    const folder = await folderAccess(db, userId, folderId, 'edit');
+    if (!folder) throw fail('bad_folder', 'You can’t add files to this folder', 404);
+    workspaceId = folder.workspace_id || workspaceId;
+  }
+  const place = { userId, workspaceId, folderId };
+  let replaceFileId = null;
+  const existing = await sameNameFile(db, { ...place, name: clean });
+  if (existing) {
+    if (onConflict === 'ask') throw Object.assign(fail('name_conflict', `“${existing.original_name}” is already here`, 409), { existing: { id: existing.id, name: existing.original_name } });
+    if (onConflict === 'keep-both') clean = await freeName(db, place, clean);
+    else replaceFileId = existing.id;
+  }
   const id = crypto.randomUUID();
   const key = `uploads/${id}`;
   const partCount = Math.max(1, Math.ceil(bytes / PART_SIZE));
   const multipartId = await store.createMultipart(key);
   const { rows } = await db.query(
-    `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-    [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area]);
+    `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+    [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId]);
   return { ...describe(rows[0]), parts: [], transport: transportFor(rows[0], { env, store }) };
 }
 
@@ -170,11 +224,23 @@ export async function finishUpload(db, id, { store = fileStorage(), uploadsDir, 
     if (!got || got.size !== Number(row.size_bytes)) throw new Error('the assembled file is not the size that was announced');
     const objectKey = fileObjectKey(got.sha256);
     if (!(await store.head(objectKey))) await store.copy(row.object_key, objectKey);   // inside the bucket
-    const stored = await registerManagedLibraryFile(db, {
-      userId: row.user_id, workspaceId: row.workspace_id, enforceAllowance: true,
-      filename: path.basename(local), originalName: row.name, mimeType: row.mime_type, fileSize: got.size,
-      storagePath: local, metadata: { source: 'upload', via: 'upload-session' }, area: row.area ?? null,
-    });
+    let stored;
+    if (row.replace_file_id) {
+      // "Replace": the upload becomes the existing file's newest version (folder, stars and shares move with it)
+      const v = await addVersion(db, row.user_id, row.replace_file_id, { filename: path.basename(local), mimeType: row.mime_type, fileSize: got.size, storagePath: local }, registerManagedLibraryFile);
+      if (!v.ok) throw new Error('the file it replaces is no longer there');
+      stored = { id: v.file.id, file_id: v.file.fileId };
+    } else {
+      stored = await registerManagedLibraryFile(db, {
+        userId: row.user_id, workspaceId: row.workspace_id, enforceAllowance: true,
+        filename: path.basename(local), originalName: row.name, mimeType: row.mime_type, fileSize: got.size,
+        storagePath: local, metadata: { source: 'upload', via: 'upload-session' }, area: row.area ?? null,
+      });
+      if (row.folder_id) {
+        const placed = await moveItemToFolder(db, { type: 'user', id: row.user_id }, 'file', stored.id, row.folder_id);
+        if (!placed.ok) log.warn?.('[storage/uploads] session', id, 'could not be placed in its folder:', JSON.stringify(placed));
+      }
+    }
     const head = await store.head(objectKey);
     if (head && head.sizeBytes === got.size) {
       await db.query(
