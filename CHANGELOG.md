@@ -3,6 +3,15 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-22
+
+**XENO Depot can ask what a repo token may do on its own repo.** Depot's repo view (which XENO Runner's run API checks access through) holds the per-repo token a caller exchanged for one repo, and the platform's authority refused those tokens. Now `POST /api/depot/authority/token` answers for a per-repo token, read-only:
+- **That repo only.** Another repo, or none, is refused (403). Every other authority route (registering repos, grants, deleting) still refuses such a token.
+- **Never more than the token grants.** The answer is the live grants, capped by the token's own Lore actions and the scope it was issued with. A CI run's token always answers read only, and a grant made after a token was minted shows in a fresh session, not through it.
+- **Read live.** A person's token is checked against its sign-in; an agent's per-repo token now names the credential it came from, so revoking that credential ends the token at once.
+
+Proof: `node tests/depot-authority.test.mjs` on real Postgres; `scripts/depot-authority-mutation-check.mjs` catches 30 of 30, 6 of them new (another repo answered, either cap removed, accepted on write routes, credential not re-read, credential missing from the token).
+
 ## 2026-11-21
 
 **XENO Tasks has its own address: tasks.xenosystem.ai.** Tasks opens alone, filling the window under its own header, the one XENO Tools and XENO Workshop have: the mark and "Tasks", the views (Board, My tasks, Triage, In review), then the workspace, Search · Ctrl K, New task and your account. It is the workspace's own Tasks, not a copy: the same board, task page, New task window and agent delegation, so someone who spots a problem opens tasks.xenosystem.ai, picks the project, files it, assigns a person or an agent, and it is the same task the workspace shows. Every view has its own address there: `/` is the board, `/T-12` a task, `/My tasks` a list. task.xenosystem.ai forwards to it, and anything that isn't Tasks opens in the full workspace. Sign-in is the host's own (client `xeno-tasks-web`), behind the site gate, like Tools.
