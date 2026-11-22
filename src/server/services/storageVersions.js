@@ -79,6 +79,11 @@ async function ownedCurrent(db, userId, fileId, orEdits = false) {
   return null;
 }
 
+/** Whether `userId` may add a version to the file (`fileId` = its current revision's id): the rule addVersion applies. */
+export async function canAddVersion(db, userId, fileId) {
+  return Boolean(await ownedCurrent(db, userId, fileId, true));
+}
+
 /** Newest first: [{ id, sizeBytes, createdAt, current }] — `id` is each VERSION's id; `fileId` is the file's. */
 export async function listVersions(db, userId, fileId) {
   if (!(await ownedCurrent(db, userId, fileId))) return { notFound: true };

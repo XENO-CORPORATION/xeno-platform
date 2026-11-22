@@ -186,6 +186,33 @@ async function main() {
     r = await req('POST', '', { json: { name: 'x.txt', size: 3, type: 'text/plain', folder: theirFolder } });
     assert.equal(r.status, 404, 'not into someone else’s folder');
 
+    // ── a sync client replacing one file (the drive): { fileId, ifMatch } — the If-Match of /versions, for any size ──
+    const planFile = (await pool.query('SELECT file_id FROM user_files WHERE id = $1', [firstId])).rows[0].file_id;
+    const newestNow = async () => (await pool.query(`SELECT f.id FROM user_files f WHERE f.file_id = $1 AND NOT EXISTS (SELECT 1 FROM user_files n WHERE n.replaces_asset_id = f.id)`, [planFile])).rows[0].id;
+    const headRev = await newestNow();
+    const v3 = Buffer.from('third, from the drive');
+    r = await req('POST', '', { json: { fileId: planFile, ifMatch: firstId, size: v3.length, type: 'text/plain' } });
+    assert.equal(r.status, 412, 'a change made on an old revision is refused at open');
+    assert.equal(r.d.code, 'version_conflict'); assert.equal(r.d.current, headRev, 'and the answer names the newest revision');
+    w = await whole({ fileId: planFile, ifMatch: headRev }, v3);
+    assert.equal(w.session.state, 'done', JSON.stringify(w.session));
+    assert.equal(w.session.name, 'plan.txt', 'a version keeps the file’s name');
+    const afterDrive = await newestNow();
+    assert.equal((await pool.query('SELECT replaces_asset_id, content_sha256 FROM user_files WHERE id = $1', [afterDrive])).rows[0].replaces_asset_id, headRev);
+    // changed elsewhere while the upload ran: the session ends version_conflict, nothing is overwritten
+    const v4 = Buffer.from('fourth, raced');
+    const raced = await req('POST', '', { json: { fileId: planFile, ifMatch: afterDrive, size: v4.length, type: 'text/plain' } });
+    assert.equal(raced.status, 201);
+    await putPart(raced.d.session.id, 1, v4);
+    await whole({ name: 'plan.txt', onConflict: 'version' }, Buffer.from('someone else saved meanwhile'));
+    const elsewhere = await newestNow();
+    await req('POST', `/${raced.d.session.id}/complete`);
+    const racedEnd = await until(async () => { const g = await req('GET', `/${raced.d.session.id}`); return g.d.session.state !== 'processing' && g.d.session; });
+    assert.equal(racedEnd.state, 'failed'); assert.equal(racedEnd.errorCode, 'version_conflict', 'a change that lost the race fails with version_conflict');
+    assert.equal(await newestNow(), elsewhere, 'the other change stays the newest');
+    r = await req('POST', '', { json: { fileId: planFile, size: 3, type: 'text/plain' }, who: other });
+    assert.equal(r.status, 404, 'not someone else’s file');
+
     // ── the streamed inspection sniffs exactly as the whole-buffer sniff ──
     const samples = [
       [Buffer.from('89504e470d0a1a0a0000', 'hex'), 'image/png'], [Buffer.from([0xff, 0xd8, 0xff, 1, 2]), 'image/jpeg'],

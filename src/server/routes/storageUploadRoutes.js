@@ -5,6 +5,9 @@
  *                             transport, parts: [] }. A current file with the same name in that place answers
  *                             409 name_conflict { existing } unless onConflict is `version` (the upload becomes its newest
  *                             version) or `keep-both` (the upload is named `name (1).ext`). The server places the file.
+ *                             A sync client replacing one file sends { fileId, ifMatch: <revision it last saw>, size }:
+ *                             412 version_conflict { current } when the file moved on; checked again at completion, where
+ *                             a conflict ends the session `failed` with errorCode `version_conflict`.
  *   GET    /:id               the session, the parts the store holds (resume after a reload or a dropped connection),
  *                             and a fresh transport token
  *   PUT    /:id/parts/:n      one part, only where the session's transport is `platform` (no objects host configured)
@@ -27,6 +30,7 @@ export function createStorageUploadRouter({ authMiddleware, databaseMiddleware, 
     const body = { success: false, code: error.code || 'error', error: status === 500 ? 'Something went wrong. Try again.' : error.message };
     if (error.missing) body.missing = error.missing;
     if (error.existing) body.existing = error.existing;   // name_conflict: the file already there, so the page can ask
+    if (error.current) body.current = error.current;      // version_conflict: the revision that is newest now
     if (error.code === 'storage_full') Object.assign(body, { usedBytes: error.usedBytes, allowanceBytes: error.allowanceBytes });
     res.status(status).json(body);
   };
@@ -35,7 +39,7 @@ export function createStorageUploadRouter({ authMiddleware, databaseMiddleware, 
   router.post('/', express.json({ limit: '16kb' }), async (req, res) => {
     try {
       const b = req.body || {};
-      res.status(201).json({ success: true, session: await openUploadSession(req.db, { userId: req.user.id, workspaceId: b.workspace || null, folderId: b.folder || null, onConflict: b.onConflict || 'ask', name: b.name, mimeType: b.type, size: b.size, area: req.xenoArea ?? null }, opts) });
+      res.status(201).json({ success: true, session: await openUploadSession(req.db, { userId: req.user.id, workspaceId: b.workspace || null, folderId: b.folder || null, onConflict: b.onConflict || 'ask', fileId: b.fileId || null, ifMatch: b.ifMatch || null, name: b.name, mimeType: b.type, size: b.size, area: req.xenoArea ?? null }, opts) });
     } catch (error) { send(res, error); }
   });
   router.get('/:id', async (req, res) => {

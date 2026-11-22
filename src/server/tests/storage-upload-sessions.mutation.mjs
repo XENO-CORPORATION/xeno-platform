@@ -18,6 +18,9 @@ const mutations = [
   ['other personal workspace allowed', [["if (String(ws.owner_user_id) !== String(userId)) throw", 'if (false) throw']]],
   ['same name never asked', [["if (onConflict === 'ask') throw", "if (false) throw"]]],
   ['name match case-sensitive', [['lower(f.original_name) = lower($1)', 'f.original_name = $1']]],
+  ['stale revision accepted at open', [['if (ifMatch && String(ifMatch) !== current) throw', 'if (false) throw']]],
+  ['revision not re-checked at completion', [['if (row.expected_revision && String(await latestFor(db, row.replace_file_id)) !== row.expected_revision) {', 'if (false) {']]],
+  ['version permission not checked', [['if (!(await canAddVersion(db, userId, revision))) throw', 'if (false) throw']]],
   ['folder access not checked', [["await folderAccess(db, userId, folderId, 'edit')", "(await db.query('SELECT * FROM storage_folders WHERE id = $1', [folderId])).rows[0]"]]],
 ];
 let failures = 0;
