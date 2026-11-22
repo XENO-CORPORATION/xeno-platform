@@ -17,6 +17,7 @@
  * Mounted before the global body parsers (index.js): the part route reads its own raw body, capped at one part.
  */
 import express from 'express';
+import * as storageOps from '../services/storageOperations.js';
 import {
   openUploadSession, getUploadSession, putUploadPart, completeUploadSession, abortUploadSession, MAX_PART_BYTES,
 } from '../services/storageUploads.js';
@@ -39,7 +40,10 @@ export function createStorageUploadRouter({ authMiddleware, databaseMiddleware, 
   router.post('/', express.json({ limit: '16kb' }), async (req, res) => {
     try {
       const b = req.body || {};
-      res.status(201).json({ success: true, session: await openUploadSession(req.db, { userId: req.user.id, workspaceId: b.workspace || null, folderId: b.folder || null, onConflict: b.onConflict || 'ask', fileId: b.fileId || null, ifMatch: b.ifMatch || null, name: b.name, mimeType: b.type, size: b.size, area: req.xenoArea ?? null }, opts) });
+      const idempotencyKey = storageOps.keyFrom(req);   // the same key returns the same session (resume, or its file)
+      const session = await openUploadSession(req.db, { userId: req.user.id, workspaceId: b.workspace || null, folderId: b.folder || null, onConflict: b.onConflict || 'ask', fileId: b.fileId || null, ifMatch: b.ifMatch || null, idempotencyKey, name: b.name, mimeType: b.type, size: b.size, area: req.xenoArea ?? null }, opts);
+      if (session.replayed) res.set('Idempotent-Replayed', 'true');
+      res.status(session.replayed ? 200 : 201).json({ success: true, session });
     } catch (error) { send(res, error); }
   });
   router.get('/:id', async (req, res) => {

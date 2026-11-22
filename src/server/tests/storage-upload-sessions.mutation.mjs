@@ -21,6 +21,8 @@ const mutations = [
   ['stale revision accepted at open', [['if (ifMatch && String(ifMatch) !== current) throw', 'if (false) throw']]],
   ['revision not re-checked at completion', [['if (row.expected_revision && String(await latestFor(db, row.replace_file_id)) !== row.expected_revision) {', 'if (false) {']]],
   ['version permission not checked', [['if (!(await canAddVersion(db, userId, revision))) throw', 'if (false) throw']]],
+  ['idempotency key not replayed', [["if (idempotencyKey) { const again = await replayed(", "if (false) { const again = await replayed("]]],
+  ['replay ignores a different upload', [["if (Number(row.size_bytes) !== Number(size) || !sameFile) throw", 'if (false) throw']]],
   ['folder access not checked', [["await folderAccess(db, userId, folderId, 'edit')", "(await db.query('SELECT * FROM storage_folders WHERE id = $1', [folderId])).rows[0]"]]],
 ];
 let failures = 0;

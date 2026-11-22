@@ -50,9 +50,9 @@ async function main() {
   const server = http.createServer(app);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/api/library/uploads`;
-  const req = async (method, p, { who = me, json, body, type } = {}) => {
-    const r = await fetch(base + p, { method, headers: { ...as(who), ...(json ? { 'content-type': 'application/json' } : type ? { 'content-type': type } : {}) }, body: json ? JSON.stringify(json) : body });
-    return { status: r.status, d: await r.json().catch(() => null) };
+  const req = async (method, p, { who = me, json, body, type, headers = {} } = {}) => {
+    const r = await fetch(base + p, { method, headers: { ...as(who), ...(json ? { 'content-type': 'application/json' } : type ? { 'content-type': type } : {}), ...headers }, body: json ? JSON.stringify(json) : body });
+    return { status: r.status, d: await r.json().catch(() => null), replayed: r.headers.get('idempotent-replayed') };
   };
   const partsOf = (bytes, size) => Array.from({ length: Math.ceil(bytes.length / size) }, (_, i) => bytes.subarray(i * size, (i + 1) * size));
   const putPart = (id, n, bytes, who = me) => req('PUT', `/${id}/parts/${n}`, { who, body: bytes, type: 'application/octet-stream' });
@@ -212,6 +212,28 @@ async function main() {
     assert.equal(await newestNow(), elsewhere, 'the other change stays the newest');
     r = await req('POST', '', { json: { fileId: planFile, size: 3, type: 'text/plain' }, who: other });
     assert.equal(r.status, 404, 'not someone else’s file');
+
+    // ── Idempotency-Key: a client that lost a reply gets the SAME session back (resume), or its file, never a second ──
+    const key = `drive-op-${tag}-0001`;
+    const idem = crypto.randomBytes(3000);
+    const openK = (json, k = key) => req('POST', '', { json: { name: `idem-${tag}.bin`, size: idem.length, type: 'application/octet-stream', ...json }, headers: { 'idempotency-key': k } });
+    const k1 = await openK({});
+    assert.equal(k1.status, 201);
+    await putPart(k1.d.session.id, 1, idem);
+    const k2 = await openK({});
+    assert.equal(k2.status, 200); assert.equal(k2.replayed, 'true');
+    assert.equal(k2.d.session.id, k1.d.session.id, 'the same key returns the same session');
+    assert.deepEqual(k2.d.session.parts.map((p) => p.n), [1], 'with the parts that already arrived, so the client resumes');
+    await req('POST', `/${k1.d.session.id}/complete`);
+    await until(async () => { const g = await req('GET', `/${k1.d.session.id}`); return g.d.session.state === 'done'; });
+    const k3 = await openK({});
+    assert.equal(k3.d.session.state, 'done', 'after it finished, the same key returns the finished session');
+    assert.ok(k3.d.session.file?.id, 'and its file');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM user_files WHERE original_name = $1 AND deleted_at IS NULL', [`idem-${tag}.bin`])).rows[0].n, 1, 'one file, however many times it was asked');
+    r = await openK({ size: idem.length + 1 });
+    assert.equal(r.status, 409); assert.equal(r.d.code, 'idempotency_mismatch', 'the same key for a different upload is refused');
+    r = await openK({}, 'bad key!');
+    assert.equal(r.status, 400, 'a malformed key is refused');
 
     // ── the streamed inspection sniffs exactly as the whole-buffer sniff ──
     const samples = [

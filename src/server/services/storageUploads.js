@@ -115,7 +115,18 @@ async function freeDiskBytes(dir) {
 }
 
 /** Open a session. Checks everything that can refuse the file before a byte is sent. */
-export async function openUploadSession(db, { userId, workspaceId = null, folderId = null, onConflict = 'ask', fileId = null, ifMatch = null, name, mimeType, size, area = null }, { store = fileStorage(), env = process.env, uploadsDir } = {}) {
+/** The session opened earlier with this Idempotency-Key, as `open` returns it, or null. Refuses a different request. */
+async function replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }) {
+  const row = (await db.query('SELECT * FROM storage_upload_sessions WHERE user_id = $1 AND idempotency_key = $2', [userId, idempotencyKey])).rows[0];
+  if (!row) return null;
+  const sameFile = fileId ? Boolean(row.replace_file_id) : (!name || path.basename(String(name)).trim() === row.name || Boolean(row.replace_file_id));
+  if (Number(row.size_bytes) !== Number(size) || !sameFile) throw fail('idempotency_mismatch', 'This Idempotency-Key was used for a different upload', 409);
+  const parts = row.state === 'uploading' ? ((await store.listParts(row.object_key, row.multipart_id)) || []) : [];
+  return { ...describe(row), parts: parts.map((p) => ({ n: p.partNumber, size: p.size })), transport: row.state === 'uploading' ? transportFor(row, { env, store }) : null, replayed: true };
+}
+
+export async function openUploadSession(db, { userId, workspaceId = null, folderId = null, onConflict = 'ask', fileId = null, ifMatch = null, idempotencyKey = null, name, mimeType, size, area = null }, { store = fileStorage(), env = process.env, uploadsDir } = {}) {
+  if (idempotencyKey) { const again = await replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }); if (again) return again; }
   // a sync client replacing ONE file (the drive): the session becomes that file's newest version, on top of `ifMatch`
   let versionOf = null;
   if (fileId !== null) {
@@ -175,10 +186,18 @@ export async function openUploadSession(db, { userId, workspaceId = null, folder
   const key = `uploads/${id}`;
   const partCount = Math.max(1, Math.ceil(bytes / PART_SIZE));
   const multipartId = await store.createMultipart(key);
-  const { rows } = await db.query(
-    `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id, expected_revision)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
-    [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId, versionOf?.expected || null]);
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id, expected_revision, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+      [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId, versionOf?.expected || null, idempotencyKey]));
+  } catch (error) {
+    // the same key opened concurrently: the first one wins and this one answers with it
+    await store.abortMultipart(key, multipartId).catch(() => {});
+    if (error?.code === '23505' && idempotencyKey) { const again = await replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }); if (again) return again; }
+    throw error;
+  }
   return { ...describe(rows[0]), parts: [], transport: transportFor(rows[0], { env, store }) };
 }
 

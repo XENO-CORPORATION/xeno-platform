@@ -6,9 +6,16 @@
 --                      it completes, so a file changed elsewhere in between ends `failed` with error_code
 --                      `version_conflict` (the drive's existing conflict handling), never a silent overwrite.
 --   error_code         the machine-readable reason of a failed session, beside the human `error`.
+--   idempotency_key    the client's Idempotency-Key (storageOperations.keyFrom's shape): opening again with the same
+--                      key returns the SAME session, so a sync client that lost a reply resumes its missing parts or
+--                      gets the finished file, never a second file (the guarantee POST /api/upload's key gives).
 -- Additive: new nullable columns on a table this series created.
 ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS expected_revision text;
 ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS error_code text;
+ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS idempotency_key text;
+CREATE UNIQUE INDEX IF NOT EXISTS storage_upload_sessions_idempotency ON storage_upload_sessions (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 -- DOWN
+DROP INDEX IF EXISTS storage_upload_sessions_idempotency;
+ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS idempotency_key;
 ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS error_code;
 ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS expected_revision;
