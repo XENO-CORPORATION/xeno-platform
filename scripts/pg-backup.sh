@@ -116,15 +116,11 @@ SIZE_H="$(numfmt --to=iec "$ENC_BYTES" 2>/dev/null || echo "$ENC_BYTES bytes")"
 log "OK: encrypted backup stored at $DEST ($SIZE_H; archive parsed; packet, bytes and size verified; nothing kept here)"
 printf '%s %s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$DEST" "$ENC_BYTES" >"$STAMP_FILE"
 
-# ---- retention on R2 ---------------------------------------------------------------------------------------------------
-# Only this script's own nightly objects (<db>-YYYYMMDDTHHMMSS.dump.gpg) are counted and pruned, and only after a good
-# run. Anything else in the bucket (re-keyed copies, base backups, WAL) is never touched here.
-mapfile -t NIGHTLY < <(rclone lsf --max-depth 1 --files-only "$R2_REMOTE" 2>/dev/null \
-  | grep -E "^${PG_DB}-[0-9]{8}T[0-9]{6}\.dump\.gpg$" | sort)
-COUNT=${#NIGHTLY[@]}
-if [ "$COUNT" -gt "$BACKUP_KEEP" ]; then
-  for old in "${NIGHTLY[@]:0:$((COUNT - BACKUP_KEEP))}"; do
-    rclone deletefile "${R2_REMOTE%/}/$old" 2>>"$LOGFILE" && log "rotated out of R2: $old"
-  done
-fi
-log "=== backup done: $COUNT nightly object(s) on R2 before rotation, keep=$BACKUP_KEEP ==="
+# ---- retention: NEVER deleted by this script ------------------------------------------------------------------------
+# 🔴 This script deletes nothing on R2. On 2026-11-22 a rotation here (keep the newest 14) deleted 43 offsite backups
+# from 2026-09-11 to 2026-10-22 on its first run: the earlier script had only ever trimmed LOCAL dumps, so everything on
+# R2 was history nobody had decided to drop, and R2 has no versioning. What R2 keeps is the bucket's own policy (its
+# object lock, and a lifecycle rule if the owner sets one), decided once by a person, never by a nightly job.
+# BACKUP_KEEP is accepted and ignored, so an old crontab line still runs.
+COUNT=$(rclone lsf --max-depth 1 --files-only "$R2_REMOTE" 2>/dev/null | grep -cE "^${PG_DB}-[0-9]{8}T[0-9]{6}\.dump\.gpg$" || true)
+log "=== backup done: ${COUNT:-?} nightly object(s) on R2; nothing deleted (retention is the bucket's policy) ==="

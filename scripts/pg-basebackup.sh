@@ -48,6 +48,17 @@ OUT="$BASE_DIR/base-${STAMP}.tar.gz"
 
 log "=== base backup start: container=$PG_CONTAINER keep=$BASE_KEEP ==="
 
+# ---- room check: never fill the disk Postgres lives on --------------------------------------------------------------
+# This writes the whole cluster as a tar here, then an encrypted copy beside it. On 2026-11-22 the database had grown to
+# 23 GB (xep_jobs alone 21 GB) with 22 GB free: a run would have filled the disk Postgres writes its WAL to. So it needs
+# room for both copies at full size plus a margin, measured from the live cluster, and refuses (logged, alerting) otherwise.
+DB_BYTES="$($DOCKER exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -Atc 'SELECT sum(pg_database_size(datname)) FROM pg_database' 2>>"$LOGFILE")" \
+  || fail "could not measure the cluster's size"
+NEED_KB=$(( DB_BYTES / 1024 * 2 + 5 * 1024 * 1024 ))
+FREE_KB="$(df -Pk "$BASE_DIR" | awk 'NR==2 {print $4}')"
+[ "$FREE_KB" -ge "$NEED_KB" ] \
+  || fail "not enough disk for a base backup: $((FREE_KB / 1048576)) GB free, $((NEED_KB / 1048576)) GB needed (2 x the $((DB_BYTES / 1073741824)) GB cluster + 5 GB). Nothing written."
+
 # -Ft -z -Xf: tar, gzip, and FETCH the WAL needed to make the backup consistent
 # into the tar itself, so the base is self-sufficient even if a segment has not
 # shipped yet. --checkpoint=fast so we do not wait on a spread checkpoint.
