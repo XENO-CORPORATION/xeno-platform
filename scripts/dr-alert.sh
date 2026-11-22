@@ -63,7 +63,10 @@ elif [ -n "${NEWEST_DUMP:-}" ]; then
 else
   add "No nightly backup found: no backups/.last-backup-ok and no local dump."
 fi
-NEWEST_BASE="$(ls -t "$BASE"/backups/base/base-*.tar.gz 2>/dev/null | head -1)"
+# the base backup keeps no local copy (pg-basebackup.sh, 2026-11-22): its success stamp says when one last reached R2;
+# an older local tar from before then still counts until the stamp exists
+NEWEST_BASE="$BASE/backups/.last-base-ok"
+[ -f "$NEWEST_BASE" ] || NEWEST_BASE="$(ls -t "$BASE"/backups/base/base-*.tar.gz 2>/dev/null | head -1)"
 if [ -n "${NEWEST_BASE:-}" ]; then
   AGE_D=$(( ( $(date +%s) - $(stat -c %Y "$NEWEST_BASE") ) / 86400 ))
   [ "$AGE_D" -ge "$BASE_MAX_D" ] && add "Newest PHYSICAL base backup is ${AGE_D}d old (limit ${BASE_MAX_D}d) — PITR has nothing recent to replay onto."
