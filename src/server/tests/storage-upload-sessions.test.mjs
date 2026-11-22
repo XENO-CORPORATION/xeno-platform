@@ -234,6 +234,17 @@ async function main() {
     assert.equal(r.status, 409); assert.equal(r.d.code, 'idempotency_mismatch', 'the same key for a different upload is refused');
     r = await openK({}, 'bad key!');
     assert.equal(r.status, 400, 'a malformed key is refused');
+    // keep-both renames the new file; a replay is still the same upload (it compares the name it asked for)
+    const key2 = `drive-op-${tag}-0002`;
+    const kb1 = await openK({ onConflict: 'keep-both' }, key2);
+    assert.equal(kb1.status, 201); assert.notEqual(kb1.d.session.name, `idem-${tag}.bin`, 'keep-both took a free name');
+    const kb2 = await openK({ onConflict: 'keep-both' }, key2);
+    assert.equal(kb2.status, 200, 'a keep-both session replays under its key'); assert.equal(kb2.d.session.id, kb1.d.session.id);
+    // a session that ended without a file gives its key back: the retry opens a fresh one, never the dead one
+    assert.equal((await req('DELETE', `/${kb1.d.session.id}`)).status, 200);
+    const kb3 = await openK({ onConflict: 'keep-both' }, key2);
+    assert.equal(kb3.status, 201, 'after an abort the same key opens a NEW session'); assert.notEqual(kb3.d.session.id, kb1.d.session.id);
+    await req('DELETE', `/${kb3.d.session.id}`);
 
     // ── the streamed inspection sniffs exactly as the whole-buffer sniff ──
     const samples = [

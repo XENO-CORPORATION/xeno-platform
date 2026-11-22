@@ -116,11 +116,19 @@ async function freeDiskBytes(dir) {
 
 /** Open a session. Checks everything that can refuse the file before a byte is sent. */
 /** The session opened earlier with this Idempotency-Key, as `open` returns it, or null. Refuses a different request. */
+const TERMINAL_WITHOUT_FILE = new Set(['failed', 'aborted', 'expired']);
 async function replayed(db, { userId, idempotencyKey, size, fileId, name }, { store, env }) {
   const row = (await db.query('SELECT * FROM storage_upload_sessions WHERE user_id = $1 AND idempotency_key = $2', [userId, idempotencyKey])).rows[0];
   if (!row) return null;
-  const sameFile = fileId ? Boolean(row.replace_file_id) : (!name || path.basename(String(name)).trim() === row.name || Boolean(row.replace_file_id));
+  // the name the client ASKED for: keep-both may have stored `name (1).ext`
+  const sameFile = fileId ? Boolean(row.replace_file_id) : (!name || path.basename(String(name)).trim() === (row.requested_name || row.name) || Boolean(row.replace_file_id));
   if (Number(row.size_bytes) !== Number(size) || !sameFile) throw fail('idempotency_mismatch', 'This Idempotency-Key was used for a different upload', 409);
+  // a session that ended without a file gives its key back, so the retry opens a fresh session (a version that lost
+  // its race is refused again at open by the revision check) instead of replaying the same failure forever
+  if (TERMINAL_WITHOUT_FILE.has(row.state)) {
+    await db.query('UPDATE storage_upload_sessions SET idempotency_key = NULL WHERE id = $1', [row.id]);
+    return null;
+  }
   const parts = row.state === 'uploading' ? ((await store.listParts(row.object_key, row.multipart_id)) || []) : [];
   return { ...describe(row), parts: parts.map((p) => ({ n: p.partNumber, size: p.size })), transport: row.state === 'uploading' ? transportFor(row, { env, store }) : null, replayed: true };
 }
@@ -143,6 +151,7 @@ export async function openUploadSession(db, { userId, workspaceId = null, folder
   if (!ON_CONFLICT.has(onConflict)) throw fail('bad_conflict_choice', 'onConflict is ask, version or keep-both', 400);
   if (folderId !== null && !UUID.test(String(folderId))) throw fail('bad_folder', 'Not a folder', 400);
   if (!clean || clean.length > 255) throw fail('bad_name', 'A file needs a name of at most 255 characters', 400);
+  const requested = clean;
   const type = String(mimeType || '').trim() || 'application/octet-stream';
   if (!ALLOWED_UPLOAD_MIMES.has(type)) throw fail('type_not_allowed', `Files of type '${type}' can’t be added yet`, 400);
   const bytes = Number(size);
@@ -189,9 +198,9 @@ export async function openUploadSession(db, { userId, workspaceId = null, folder
   let rows;
   try {
     ({ rows } = await db.query(
-      `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id, expected_revision, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
-      [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId, versionOf?.expected || null, idempotencyKey]));
+      `INSERT INTO storage_upload_sessions (id, user_id, workspace_id, name, mime_type, size_bytes, part_size, part_count, object_key, multipart_id, backend, area, folder_id, replace_file_id, expected_revision, idempotency_key, requested_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
+      [id, userId, workspaceId, clean, type, bytes, PART_SIZE, partCount, key, multipartId, store.kind, area, folderId, replaceFileId, versionOf?.expected || null, idempotencyKey, requested]));
   } catch (error) {
     // the same key opened concurrently: the first one wins and this one answers with it
     await store.abortMultipart(key, multipartId).catch(() => {});

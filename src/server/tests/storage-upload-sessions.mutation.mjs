@@ -23,6 +23,8 @@ const mutations = [
   ['version permission not checked', [['if (!(await canAddVersion(db, userId, revision))) throw', 'if (false) throw']]],
   ['idempotency key not replayed', [["if (idempotencyKey) { const again = await replayed(", "if (false) { const again = await replayed("]]],
   ['replay ignores a different upload', [["if (Number(row.size_bytes) !== Number(size) || !sameFile) throw", 'if (false) throw']]],
+  ['replay compares the stored name, not the requested one', [['=== (row.requested_name || row.name)', '=== row.name']]],
+  ['a dead session keeps its key', [['if (TERMINAL_WITHOUT_FILE.has(row.state)) {', 'if (false) {']]],
   ['folder access not checked', [["await folderAccess(db, userId, folderId, 'edit')", "(await db.query('SELECT * FROM storage_folders WHERE id = $1', [folderId])).rows[0]"]]],
 ];
 let failures = 0;

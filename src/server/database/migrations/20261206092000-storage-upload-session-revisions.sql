@@ -9,13 +9,17 @@
 --   idempotency_key    the client's Idempotency-Key (storageOperations.keyFrom's shape): opening again with the same
 --                      key returns the SAME session, so a sync client that lost a reply resumes its missing parts or
 --                      gets the finished file, never a second file (the guarantee POST /api/upload's key gives).
+--                      A session that ended without a file (failed, aborted, expired) gives its key back.
+--   requested_name     the name the client asked for, when keep-both stored `name (1).ext`: a replay compares this.
 -- Additive: new nullable columns on a table this series created.
 ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS expected_revision text;
 ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS error_code text;
 ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS idempotency_key text;
+ALTER TABLE storage_upload_sessions ADD COLUMN IF NOT EXISTS requested_name text;
 CREATE UNIQUE INDEX IF NOT EXISTS storage_upload_sessions_idempotency ON storage_upload_sessions (user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 -- DOWN
 DROP INDEX IF EXISTS storage_upload_sessions_idempotency;
+ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS requested_name;
 ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS idempotency_key;
 ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS error_code;
 ALTER TABLE storage_upload_sessions DROP COLUMN IF EXISTS expected_revision;
