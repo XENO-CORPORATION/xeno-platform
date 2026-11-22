@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-22
 
+**On the agent page, a new workspace and an edit made to it at once save without a false conflict.** Creating something and changing it straight away (a workspace and the folder linked into it) showed "Workspace changes are not saved: Workspace edits conflict at …", and the change was not kept. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #270, packages 0.1.205); the same fix is in desktop 0.3.54, where it was proven on the real app.
+
 **On the agent page you can type while your PC's model gets ready, and a PC page fits a laptop window.** The message box on a PC's chat no longer locks and unlocks while the PC's model loads, which lost what was typed in between; only Send waits until the model is ready. Inside the workspace, a PC's page now always shows the whole interface with its session list, where below 900 px (a laptop window) it fell back to the phone view and left the workspace's side panel empty. The page also no longer throws a bridge error as it unloads. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #269, packages 0.1.204), proven by that repo's `run-remote-web-agent-live.mjs` (31/31 three runs in a row on a real app and browser, including a frame 860 px wide).
 
 **XENO Depot can ask what a repo token may do on its own repo.** Depot's repo view (which XENO Runner's run API checks access through) holds the per-repo token a caller exchanged for one repo, and the platform's authority refused those tokens. Now `POST /api/depot/authority/token` answers for a per-repo token, read-only:
