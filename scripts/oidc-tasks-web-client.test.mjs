@@ -54,12 +54,19 @@ test('nginx serves tasks. from the workspace’s tasks.html, gated, with stamped
   const conf = readFileSync(new URL('../nginx/default.conf', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const block = conf.slice(conf.indexOf('server_name tasks.xenosystem.ai;'));
   const body = block.slice(0, block.indexOf('\n}\n'));
-  assert.match(body, /location \/api\/ \{[\s\S]*?proxy_pass http:\/\/\$backend_upstream;/);
+  // ^~ on /api/ and /auth/: the page rule is a regex for every extensionless path, and a regex beats a plain prefix
+  assert.match(body, /location \^~ \/api\/ \{[\s\S]*?proxy_pass http:\/\/\$backend_upstream;/);
+  for (const m of body.matchAll(/\n    location (\/[a-z]+\/) \{/g)) assert.fail(`plain prefix ${m[1]} loses to the page regex: make it ^~`);
   assert.match(body, /location ~ "\^\/\[\^\.\]\*\$" \{[\s\S]*?auth_request \/__site_gate;[\s\S]*?error_page 401 = \/coming-soon\.html;[\s\S]*?try_files \/workspace\/tasks\.html =404;[\s\S]*?no-cache/);
   assert.match(body, /location \^~ \/workspace\/ \{[\s\S]*?auth_request \/__site_gate;[\s\S]*?Cache-Control \$tasks_asset_cache/);
   assert.match(conf, /map \$arg_v \$tasks_asset_cache \{\s*""\s+"no-cache";\s*default "public, max-age=31536000, immutable";/);
   assert.match(body, /location = \/login \{ return 302 \/api\/auth\/host\/start\?return=\$arg_returnUrl; \}/);
   assert.match(body, /X-Robots-Tag "noindex, nofollow, noarchive"/);
+  // every root file the gate page and the workspace page ask for is served here (coming-soon.html: /favicon-v2.svg)
+  const gate = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
+  const rootFiles = [...new Set([...gate.matchAll(/(?:src|href)="(\/[^"/]+\.[a-z0-9]+)"/g)].map((m) => m[1]).concat('/favicon.svg'))];
+  const fav = /location ~ \^\/favicon\(-v2\)\?\\\.svg\$ \{/.test(body);
+  for (const f of rootFiles) assert.ok(/^\/favicon(-v2)?\.svg$/.test(f) && fav, `${f} is linked at the root but the Tasks host does not serve it`);
   const typo = conf.slice(conf.indexOf('server_name task.xenosystem.ai;'));
   assert.match(typo.slice(0, typo.indexOf('\n}\n')), /return 301 https:\/\/tasks\.xenosystem\.ai\$request_uri;/);
 });
