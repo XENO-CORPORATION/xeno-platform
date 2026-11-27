@@ -20,6 +20,21 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 **The workspace's project-page test is green again.** Its stand-in API now answers `GET /api/workspaces/:id/billing`, shaped as the real route answers it. Proof: `work-test.mjs` 88/88; it had one failure on main.
 
+**storage.xenosystem.ai is XENO Storage on its own, the way Drive is.** It used to redirect into the workspace. It now shows Storage alone, full screen, with the workspace's own rail, sidebar and plate. The rail carries Storage's places: Upload, My files, Recent, Starred, Shared, Trash, Storage used and Search. Each place has its own address (`/`, `/recent`, `/starred`, `/shared`, `/trash`, `/usage`, `/folders/<id>`, `/teams/<id>`), so a link or a reload opens the same view. The sidebar is headed "Storage" instead of "Overview › Storage". If you are signed in on xenosystem.ai, storage. signs you in without a click.
+- It is the workspace's own Storage page, not a copy (the tasks. shape): a `storage.html` page with only Storage's scripts, its own sign-in client `xeno-storage-web` (identity only, one exact callback), separate from the desktop app's.
+- Product hosts' rails are now one table (`HOST_RAILS` in the workspace), so chat. keeps its buttons unchanged and the next host adds one entry.
+- Proof:
+  - `npm run test:storage-host-ui`, from the production build, against `/workspace/corpo/apps/storage`:
+    - rail, slot, curve, sidebar and plate are equal at 1920 and 768 px (rail 56 px, curve 15 px, sidebar 63/7, plate 338/7/7/7, radius 14 px), collapsing and expanding included;
+    - at 390 px the drawer is closed and nothing scrolls sideways;
+    - every rail place reaches its own address, and a deep link to a folder opens it;
+    - Upload on the rail opens the file picker. A 120 MB file went in 8 parts of 16 MiB, its sent bytes rising 0 → 45 → 48 → 96 → 120 MiB, and a 3-file folder had its folders made. Files waited in a queue, all four finished, with no page errors.
+  - `npm run test:storage-host-mutation`: 7 of 7 removed pieces make that test fail; the restored control passes.
+  - `npm run test:phone-drawer` now also runs the storage host at 390 and 360 px: a place on its rail or in its sidebar closes the drawer. With the drawer's old chat-only check put back, the rail case fails.
+  - `test:host-signin` now takes the host: storage. and tools. each pass 16 of 16, the silent sign-in included.
+  - `scripts/oidc-storage-web-client.test.mjs` checks the new client, its one callback, the host map, nginx and the page.
+  - The chat and tasks host tests still pass. Their mutation checks had stale anchors, three from this change and three on main since #1215; they are fixed.
+
 **On a phone, the sidebar is a drawer and the chat gets the whole screen.** Below 720 px wide, the workspace and every product host (chat., tasks., …) used to keep the rail and the sidebar open, which left the chat 45 px wide on a 390 px phone. They are now a drawer, as in ChatGPT, Gemini and Claude on a phone, and Material's modal navigation drawer.
 - The drawer is closed when a page opens, and the chat fills the screen edge to edge.
 - The menu button in the top bar opens the rail and the sidebar together, with the same curved join, over a darkened page.

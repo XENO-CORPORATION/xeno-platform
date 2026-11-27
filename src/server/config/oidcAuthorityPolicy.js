@@ -114,6 +114,8 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-creator-web': IDENTITY,
   'xeno-tasks-web': IDENTITY,
   'xeno-chat-web': IDENTITY,
+  // XENO Storage on its own host (storage.xenosystem.ai): identity only; the files are reached with the browser session
+  'xeno-storage-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],

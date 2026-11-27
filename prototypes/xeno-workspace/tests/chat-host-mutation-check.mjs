@@ -4,11 +4,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'; import { spawnSync } from 'node:child_process'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), ws = path.resolve(here, '..'), repo = path.resolve(here, '../../..');
 const MUTANTS = [
-  ['the host is not read as the chat host', path.join(ws, 'address.js'), '^(tasks|chat)\\.(xenosystem', '^(tasks|chatX)\\.(xenosystem'],
-  ['conversations keep the workspace\'s item form', path.join(ws, 'address.js'), "const ITEM_OUT = { chat: (it) => (/^projects\\//.test(it) || !it ? it : 'c/' + it) };", 'const ITEM_OUT = {};'],
+  ['the host is not read as the chat host', path.join(ws, 'address.js'), '^(tasks|chat|storage)\\.(xenosystem', '^(tasks|chatX|storage)\\.(xenosystem'],
+  ['conversations keep the workspace\'s item form', path.join(ws, 'address.js'), "chat: (it) => (/^projects\\//.test(it) || !it ? it : 'c/' + it),", 'chat: (it) => it,'],
   ['Images is not one of the host\'s places', path.join(ws, 'address.js'), "['images', 'p', 'image', 'studio']", "['imagesX', 'p', 'image', 'studio']"],
   ['the sidebar shows the workspace path', path.join(ws, 'app.js'), "const onHost = window.XENO_ADDR?.product === 'chat';", 'const onHost = false;'],
-  ['the rail carries the workspace\'s areas, not the chat\'s places', path.join(ws, 'app.js'), "if (window.XENO_ADDR?.product === 'chat') return renderChatRail($('#rail'));", ''],
+  ['the rail carries the workspace\'s areas, not the chat\'s places', path.join(ws, 'app.js'), "const hostRail = HOST_RAILS[window.XENO_ADDR?.product];", 'const hostRail = null;'],
   ['the rail is hidden on the chat host, the sidebar left floating', path.join(ws, 'index.html'), 'html[data-product="tasks"] .rail,', 'html[data-product] .rail,'],
   ['the host serves every workspace script', path.join(repo, 'scripts', 'vite-workspace.mjs'), "productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), productHost.toLowerCase()).html", "fs.readFileSync(path.join(src, 'index.html'), 'utf8').replace('<html lang=\"en\">', `<html lang=\"en\" data-product=\"${productHost.toLowerCase()}\">`)"],
 ];

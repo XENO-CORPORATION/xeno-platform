@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2128 actions · 248 agent capability · 1392 planned (debt) · 488 excluded · **coverage 15.1%** of the 1640 owed.
+**Total:** 2134 actions · 248 agent capability · 1393 planned (debt) · 493 excluded · **coverage 15.1%** of the 1641 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -13,7 +13,7 @@ Every action a person can take on the platform, and whether an agent can take it
 | commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
 | workspace | 197 | 23 | 108 | 66 | 17.6% |
-| workspace-ui | 193 | 4 | 103 | 86 | 3.7% |
+| workspace-ui | 199 | 4 | 104 | 91 | 3.7% |
 | chat | 104 | 0 | 102 | 2 | 0% |
 | storage | 112 | 5 | 90 | 17 | 5.3% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
@@ -1405,7 +1405,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:platform-work.js:data-share-remove`
 - `ui:platform-work.js:data-share-role`
 
-## workspace-ui — 103 planned
+## workspace-ui — 104 planned
 
 - `ui:actions.js:data-ac`
 - `ui:actions.js:data-sc-del`
@@ -1470,6 +1470,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `ui:app.js:data-nt-viewall-page`
 - `ui:app.js:data-part=effort`
 - `ui:app.js:data-part=model`
+- `ui:app.js:data-ph-new`
 - `ui:app.js:data-r=close`
 - `ui:app.js:data-r=home`
 - `ui:app.js:data-r=search`

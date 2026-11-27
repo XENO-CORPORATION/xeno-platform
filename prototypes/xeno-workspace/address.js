@@ -22,17 +22,29 @@
   // the full workspace on the main site. `tasks.localhost` is the same host in development and the browser tests.
   // chat.xenosystem.ai (owner, 2026-11-22: "a dedicated chat … full screen … its own thing, like the Gemini web app … with
   // the new chat, library, images, scheduled, corpus"): the chat, and the places a person reaches from it, on one host.
-  const PRODUCT = (() => { const m = /^(tasks|chat)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
+  // storage.xenosystem.ai (owner, 2026-11-21: "the same for storage.xenosystem.ai … that drive-like interface … that made
+  // people be familiar with, but under our XENO system logic for his account"): the account's files alone, the way Drive is.
+  const PRODUCT = (() => { const m = /^(tasks|chat|storage)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
   // What each product host shows, as [host prefix, kind, id, area]: the first route with the empty prefix is the product
   // itself (its items are the host's own paths); the others are the places it keeps in the same window. A kind/id
   // without an area matches it in any area. Anything else is the full workspace, on the main site.
   const HOST_ROUTES = {
     tasks: [['', 'g', 'tasks']],
     chat: [['', 'p', 'chat'], ['library', 'g', 'library'], ['images', 'p', 'image', 'studio']],
+    storage: [['', 'p', 'storage']],
   };
   // the chat's own items read as its addresses: a conversation is /c/<id>, a project's are /projects/<pid>[/c/<id>]
-  const ITEM_OUT = { chat: (it) => (/^projects\//.test(it) || !it ? it : 'c/' + it) };
-  const ITEM_IN = { chat: (p) => p.replace(/^c\//, '') };
+  // Storage's (platform-storage.js `here`): '' My files, Recent/Starred/Shared/Trash/Usage, f/<id> a folder, t/<id> a
+  // team's files, read on the host as /, /recent, /starred, /shared, /trash, /usage, /folders/<id>, /teams/<id>
+  const STORAGE_VIEWS = ['Recent', 'Starred', 'Shared', 'Trash', 'Usage'];
+  const ITEM_OUT = {
+    chat: (it) => (/^projects\//.test(it) || !it ? it : 'c/' + it),
+    storage: (it) => (STORAGE_VIEWS.includes(it) ? it.toLowerCase() : it.replace(/^f\//, 'folders/').replace(/^t\//, 'teams/')),
+  };
+  const ITEM_IN = {
+    chat: (p) => p.replace(/^c\//, ''),
+    storage: (p) => STORAGE_VIEWS.find((v) => v.toLowerCase() === p.toLowerCase()) || p.replace(/^folders\//, 'f/').replace(/^teams\//, 't/'),
+  };
   const WORKSPACE_ORIGIN = location.hostname.endsWith('.localhost') ? location.origin.replace(/\/\/[^.]+\./, '//') : 'https://' + location.hostname.replace(/^[^.]+\./, '');
   if (PRODUCT) document.documentElement.dataset.product = PRODUCT;
   // The phone drawer (app.js drawerSync) adds one history entry when it opens, so the back gesture closes it. That Back is

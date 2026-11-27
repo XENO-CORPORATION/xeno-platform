@@ -100,6 +100,9 @@ export const FIRST_PARTY_CLIENTS = [
   { id: 'xeno-tasks-web', name: 'XENO Tasks (web)', loopback: false, redirects: ['https://tasks.xenosystem.ai/api/auth/host/callback'] },
   // XENO Chat on its own host (chat.xenosystem.ai): the same host sign-in, ending in a browser session; no token is kept.
   { id: 'xeno-chat-web', name: 'XENO Chat (web)', loopback: false, redirects: ['https://chat.xenosystem.ai/api/auth/host/callback'] },
+  // XENO Storage on its own host (storage.xenosystem.ai): the same host sign-in, ending in a browser session; no token is kept.
+  // Not the desktop app's client (xeno-storage, loopback PKCE): a browser host is its own first-party client.
+  { id: 'xeno-storage-web', name: 'XENO Storage (web)', loopback: false, redirects: ['https://storage.xenosystem.ai/api/auth/host/callback'] },
   // XENO Places — a public browser SPA (no backend): authorization code + PKCE-S256 in the browser, access token in
   // memory only. One exact-match redirect; no localhost redirect (no other web client registers one).
   { id: 'xeno-places', name: 'XENO Places', loopback: false, redirects: ['https://places.xenosystem.ai/auth/callback'] },

@@ -24,9 +24,12 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 let passed = 0;
 const check = (ok, label) => { if (!ok) throw new Error(`FAIL: ${label}`); passed += 1; console.log(`  ok  ${label}`); };
 const tag = `hs${Date.now().toString(36)}`;
-const HOST = 'tools.xenosystem.ai', CB = `https://${HOST}/api/auth/host/callback`;
+// HOST_SIGNIN_HOST runs the same checks against another product host's own client (storage.xenosystem.ai, …)
+const HOST = process.env.HOST_SIGNIN_HOST || 'tools.xenosystem.ai', CB = `https://${HOST}/api/auth/host/callback`;
 
-const { default: authRoutes } = await import('../routes/authRoutes.js');
+const { default: authRoutes, HOST_SIGNIN_CLIENTS } = await import('../routes/authRoutes.js');
+const CLIENT = HOST_SIGNIN_CLIENTS[HOST];
+if (!CLIENT) throw new Error(`${HOST} has no host sign-in client`);
 const app = express();
 app.use((req, _res, next) => { req.db = pool; next(); });
 app.use('/api/auth', authRoutes);
@@ -50,7 +53,7 @@ async function start(ret = '/whisper') {
   const verifier = JSON.parse(Buffer.from(decodeURIComponent(carry.split('=')[1]), 'base64url').toString()).v;
   return { r, loc, carry, verifier };
 }
-const mint = async (userId, loc) => createAuthorizationCode(pool, { clientId: 'xeno-tools-web', userId, redirectUri: CB, scope: 'openid profile email', codeChallenge: loc.searchParams.get('code_challenge') });
+const mint = async (userId, loc) => createAuthorizationCode(pool, { clientId: CLIENT, userId, redirectUri: CB, scope: 'openid profile email', codeChallenge: loc.searchParams.get('code_challenge') });
 
 async function main() {
   await runAllMigrations(pool);
@@ -62,9 +65,9 @@ async function main() {
   // start
   check((await get('/api/auth/host/start', { host: 'xenosystem.ai' })).status === 404, 'a host with no client of its own gets no host sign-in');
   const s1 = await start('/whisper');
-  check(s1.r.status === 302 && s1.loc.pathname === '/api/oauth2/authorize' && s1.loc.searchParams.get('client_id') === 'xeno-tools-web'
+  check(s1.r.status === 302 && s1.loc.pathname === '/api/oauth2/authorize' && s1.loc.searchParams.get('client_id') === CLIENT
     && s1.loc.searchParams.get('redirect_uri') === CB && s1.loc.searchParams.get('code_challenge_method') === 'S256' && !!s1.carry,
-    'start sends the person to the XENO sign-in as xeno-tools-web, PKCE S256, back to this host');
+    `start sends the person to the XENO sign-in as ${CLIENT}, PKCE S256, back to this host`);
 
   // the real provider issues a code for that challenge; the callback turns it into a session on this host
   const c1 = await mint(me, s1.loc);
@@ -74,7 +77,7 @@ async function main() {
   const after = (await pool.query('SELECT count(*)::int n FROM user_sessions WHERE user_id = $1', [me])).rows[0].n;
   check(cb.status === 200 && !!cookieOf(cb, 'xeno_session') && after === before + 1, 'the callback opens an ordinary browser session on this host');
   check(/url=\/whisper"/.test(html), 'and continues to the return path on this host');
-  const live = (await pool.query("SELECT count(*)::int n FROM oauth_refresh_tokens WHERE user_id = $1 AND client_id = 'xeno-tools-web' AND NOT revoked", [me])).rows[0].n;
+  const live = (await pool.query("SELECT count(*)::int n FROM oauth_refresh_tokens WHERE user_id = $1 AND client_id = $2 AND NOT revoked", [me, CLIENT])).rows[0].n;
   check(live === 0, 'no refresh token is kept for the host sign-in');
 
   // the same code again
@@ -107,10 +110,10 @@ async function main() {
   const q1 = await silentStart('/c/42');
   check(q1.loc.searchParams.get('prompt') === 'none', 'a silent start asks XENO with prompt=none');
   check((await start('/')).loc.searchParams.get('prompt') === null, 'a plain start still does not');
-  const qc = await createAuthorizationCode(pool, { clientId: 'xeno-tools-web', userId: me, redirectUri: CB, scope: 'openid profile email', codeChallenge: q1.loc.searchParams.get('code_challenge'), prompt: 'none', authTime: new Date() });
+  const qc = await createAuthorizationCode(pool, { clientId: CLIENT, userId: me, redirectUri: CB, scope: 'openid profile email', codeChallenge: q1.loc.searchParams.get('code_challenge'), prompt: 'none', authTime: new Date() });
   const qr = await get(`/api/auth/host/callback?code=${encodeURIComponent(qc)}&state=${q1.loc.searchParams.get('state')}`, { cookie: q1.carry });
   check(qr.status === 200 && !!cookieOf(qr, 'xeno_session') && /url=\/c\/42"/.test(await qr.text()), 'a session there: the provider issues the code for prompt=none and the person lands signed in where they were');
-  let bogus = null; try { await createAuthorizationCode(pool, { clientId: 'xeno-tools-web', userId: me, redirectUri: CB, scope: 'openid', codeChallenge: q1.loc.searchParams.get('code_challenge'), prompt: 'select_account' }); } catch (e) { bogus = e; }
+  let bogus = null; try { await createAuthorizationCode(pool, { clientId: CLIENT, userId: me, redirectUri: CB, scope: 'openid', codeChallenge: q1.loc.searchParams.get('code_challenge'), prompt: 'select_account' }); } catch (e) { bogus = e; }
   check(!!bogus, 'any other prompt value is still refused');
   // no session there: the provider answers login_required on the callback, and the person goes back to the page asked for
   const q2 = await silentStart('/c/42');

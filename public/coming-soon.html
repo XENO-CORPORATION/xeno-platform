@@ -134,11 +134,11 @@
   </main>
   <footer><a href="/impressum">Impressum</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
   <script>
-    // A product host (chat., tasks., tools., motion., creator.) has its own session and its own gate pass, so a person
-    // signed in on xenosystem.ai first lands here. Ask xenosystem.ai once, silently (prompt=none): signed in there means
-    // signed in here with no click; not signed in means this page stays, and the tab does not ask again.
+    // A product host (chat., tasks., storage., tools., motion., creator.) has its own session and its own gate pass, so a
+    // person signed in on xenosystem.ai first lands here. Ask xenosystem.ai once, silently (prompt=none): signed in there
+    // means signed in here with no click; not signed in means this page stays, and the tab does not ask again.
     (function () {
-      if (!/^(chat|tasks|tools|motion|creator)\.(xenosystem\.ai|localhost)$/.test(window.location.hostname)) return;
+      if (!/^(chat|tasks|storage|tools|motion|creator)\.(xenosystem\.ai|localhost)$/.test(window.location.hostname)) return;
       try {
         // once per tab every ten minutes: enough to never loop, and a later visit (signed in there since) asks again
         var last = Number(sessionStorage.getItem('xeno.silent-signin') || 0);
