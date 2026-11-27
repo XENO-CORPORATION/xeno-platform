@@ -6,7 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url)), ws = path.resolve(her
 const MUTANTS = [
   ['the host is not read as the chat host', path.join(ws, 'address.js'), '^(tasks|chat|storage)\\.(xenosystem', '^(tasks|chatX|storage)\\.(xenosystem'],
   ['conversations keep the workspace\'s item form', path.join(ws, 'address.js'), "chat: (it) => (/^projects\\//.test(it) || !it ? it : 'c/' + it),", 'chat: (it) => it,'],
-  ['Images is not one of the host\'s places', path.join(ws, 'address.js'), "['images', 'p', 'image', 'studio']", "['imagesX', 'p', 'image', 'studio']"],
+  ['Images is not one of the host\'s places', path.join(ws, 'address.js'), "['images', 'p', 'image']", "['imagesX', 'p', 'image']"],
   ['the sidebar shows the workspace path', path.join(ws, 'app.js'), "const onHost = window.XENO_ADDR?.product === 'chat';", 'const onHost = false;'],
   ['the rail carries the workspace\'s areas, not the chat\'s places', path.join(ws, 'app.js'), "const hostRail = HOST_RAILS[window.XENO_ADDR?.product];", 'const hostRail = null;'],
   ['the rail is hidden on the chat host, the sidebar left floating', path.join(ws, 'index.html'), 'html[data-product="tasks"] .rail,', 'html[data-product] .rail,'],

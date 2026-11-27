@@ -30,7 +30,7 @@
   // without an area matches it in any area. Anything else is the full workspace, on the main site.
   const HOST_ROUTES = {
     tasks: [['', 'g', 'tasks']],
-    chat: [['', 'p', 'chat'], ['library', 'g', 'library'], ['images', 'p', 'image', 'studio']],
+    chat: [['', 'p', 'chat'], ['library', 'g', 'library'], ['images', 'p', 'image']],
     storage: [['', 'p', 'storage']],
   };
   // the chat's own items read as its addresses: a conversation is /c/<id>, a project's are /projects/<pid>[/c/<id>]

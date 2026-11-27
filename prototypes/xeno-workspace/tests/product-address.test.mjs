@@ -25,11 +25,13 @@ test('chat.xenosystem.ai: the chat, its conversations and projects have the host
     [`#/overview/p/chat/projects/${PJ}`, `/projects/${PJ}`],
     [`#/overview/p/chat/projects/${PJ}/c/${ID}`, `/projects/${PJ}/c/${ID}`],
     ['#/overview/g/library', '/library'],
-    ['#/studio/p/image', '/images'],
+    ['#/overview/p/image', '/images'],
   ]) {
     assert.equal(url(hash), path, `${hash} is shown as ${path}`);
     ctx.location.pathname = path; assert.equal(A.current(), hash, `${path} opens ${hash}`);
   }
+  // Images opened from any area is the host's /images
+  assert.equal(url('#/studio/p/image'), '/images');
   // a chat started in another area is still the chat; a place that is not the host's opens in the full workspace
   assert.equal(A.url('#/overview/g/tasks/T-4'), 'https://xenosystem.ai/workspace/tasks/T-4');
   assert.equal(A.url('#/studio/p/video'), 'https://xenosystem.ai/workspace/studio/generate/video');
