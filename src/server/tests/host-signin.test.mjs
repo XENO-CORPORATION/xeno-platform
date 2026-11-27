@@ -98,6 +98,29 @@ async function main() {
   const goneSessions = (await pool.query('SELECT count(*)::int n FROM user_sessions WHERE user_id = $1', [gone])).rows[0].n;
   check((!r4 || r4.status >= 400) && goneSessions === 0 && !(r4 && cookieOf(r4, 'xeno_session')), `a suspended account gets no session (${r4 ? r4.status : 'no code issued'})`);
 
+  // the silent check (prompt=none): a person signed in on xenosystem.ai, no click
+  const silentStart = async (ret) => {
+    const r = await get('/api/auth/host/start?silent=1&return=' + encodeURIComponent(ret));
+    const loc = new URL(r.headers.get('location'));
+    return { r, loc, carry: cookieOf(r, 'xeno_host_signin') };
+  };
+  const q1 = await silentStart('/c/42');
+  check(q1.loc.searchParams.get('prompt') === 'none', 'a silent start asks XENO with prompt=none');
+  check((await start('/')).loc.searchParams.get('prompt') === null, 'a plain start still does not');
+  const qc = await createAuthorizationCode(pool, { clientId: 'xeno-tools-web', userId: me, redirectUri: CB, scope: 'openid profile email', codeChallenge: q1.loc.searchParams.get('code_challenge'), prompt: 'none', authTime: new Date() });
+  const qr = await get(`/api/auth/host/callback?code=${encodeURIComponent(qc)}&state=${q1.loc.searchParams.get('state')}`, { cookie: q1.carry });
+  check(qr.status === 200 && !!cookieOf(qr, 'xeno_session') && /url=\/c\/42"/.test(await qr.text()), 'a session there: the provider issues the code for prompt=none and the person lands signed in where they were');
+  let bogus = null; try { await createAuthorizationCode(pool, { clientId: 'xeno-tools-web', userId: me, redirectUri: CB, scope: 'openid', codeChallenge: q1.loc.searchParams.get('code_challenge'), prompt: 'select_account' }); } catch (e) { bogus = e; }
+  check(!!bogus, 'any other prompt value is still refused');
+  // no session there: the provider answers login_required on the callback, and the person goes back to the page asked for
+  const q2 = await silentStart('/c/42');
+  const qe = await get(`/api/auth/host/callback?error=login_required&state=${q2.loc.searchParams.get('state')}`, { cookie: q2.carry });
+  const qeHtml = await qe.text();
+  check(qe.status === 200 && !cookieOf(qe, 'xeno_session') && /url=\/c\/42"/.test(qeHtml), 'no session there: back to the page asked for, signed out, no form');
+  const q3 = await silentStart('/c/42');
+  const qx = await get(`/api/auth/host/callback?error=login_required&state=forged`, { cookie: q3.carry });
+  check(/url=\/"/.test(await qx.text()), 'an error with a state that does not match goes home, never to the carried path');
+
   void crypto;
   console.log(`\nhost-signin: ${passed} checks passed`);
 }

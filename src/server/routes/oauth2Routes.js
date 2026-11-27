@@ -140,7 +140,10 @@ router.get('/authorize', async (req, res) => {
     return sendOauthError(res, e);
   }
   const requestedPrompt = String(req.query.prompt || '');
-  if (requestedPrompt && requestedPrompt !== 'login') {
+  // prompt=none (OIDC Core §3.1.2.1): a silent check. With a session the code is issued as usual; without one, or when
+  // the client would need consent, the answer is an error on the redirect_uri (validated above), never a form. The
+  // product hosts use it so a person signed in on xenosystem.ai is signed in on chat. and tasks. without a click.
+  if (requestedPrompt && requestedPrompt !== 'login' && requestedPrompt !== 'none') {
     return sendOauthError(res, Object.assign(new Error('unsupported prompt'), { oauthError: 'invalid_request' }));
   }
   res.set('content-type', 'text/html; charset=utf-8');
@@ -260,7 +263,16 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent2);outline-of
   var $=function(id){return document.getElementById(id)};
   // Hand unauthenticated users to the canonical human login route. The login
   // UI derives its consent label from this validated authorize transaction.
+  // prompt=none: never a form. Answer the client on its (already validated) redirect_uri with the OIDC error code.
+  function silentError(code){
+    var back=new URL(p.get('redirect_uri'));
+    back.searchParams.set('error',code);
+    if(p.get('state')) back.searchParams.set('state',p.get('state'));
+    location.replace(back.toString());
+  }
+  var silent=p.get('prompt')==='none';
   function toAuth(){
+    if(silent){ silentError('login_required'); return; }
     var resume=new URL(location.href);
     if(p.get('prompt')==='login') resume.searchParams.set('stepup_complete','1');
     location.href='/login?returnUrl='+encodeURIComponent(resume.pathname+resume.search);
@@ -280,8 +292,8 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent2);outline-of
     fetch('/api/oauth2/authorize',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json','x-xeno-csrf':csrf()},
       body:JSON.stringify(Object.assign((extra&&extra.actAs!==null&&extra.actAs!==undefined)?{act_as:extra.actAs}:{},{consent:!!(extra&&extra.consent),deny:!!(extra&&extra.deny),client_id:p.get('client_id'),redirect_uri:p.get('redirect_uri'),scope:p.get('scope'),code_challenge:p.get('code_challenge'),code_challenge_method:p.get('code_challenge_method'),state:p.get('state'),nonce:p.get('nonce'),prompt:p.get('prompt'),max_age:p.get('max_age'),acr_values:p.get('acr_values')}))})
     .then(function(r){ if(r.status===401){ toAuth(); throw 0;} return r.json(); })
-    .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else if(d&&d.error==='consent_required'){ showConsent(d.consent); } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
-    .catch(function(e){ if(e!==0) showForm('Error: '+(e&&e.message||e)); });
+    .then(function(d){ if(d&&d.redirect){ location.href=d.redirect; } else if(silent){ silentError(d&&d.error==='consent_required'?'consent_required':(d&&d.error==='login_required'?'login_required':'interaction_required')); } else if(d&&d.error==='consent_required'){ showConsent(d.consent); } else { showForm((d&&(d.error_description||d.error))||'Authorization failed'); } })
+    .catch(function(e){ if(e!==0){ if(silent) silentError('interaction_required'); else showForm('Error: '+(e&&e.message||e)); } });
   }
 
   var actAs=null;
