@@ -4,6 +4,33 @@ One entry per step, newest first: what changed, the owner's words that decided i
 numbers that proved it. Started 2026-11-21 (global rule of 2026-11-18: the platform is recorded like the Volumes).
 Earlier steps are in `CHANGELOG.md` and XENO Index's release record (`/workspace/releases`).
 
+## 2026-11-27 — storage.xenosystem.ai, XENO Storage on its own host
+
+**What changed:** storage.xenosystem.ai stopped redirecting into the workspace. It shows Storage alone, full screen, on
+the workspace's own rail, curve and plate. Its places are the host's addresses (`/`, `/recent`, `/starred`, `/shared`,
+`/trash`, `/usage`, `/folders/<id>`, `/teams/<id>`). It has its own sign-in client (`xeno-storage-web`) with the silent
+check. The product hosts' rails became one table (`HOST_RAILS`), so chat. kept its buttons and the next host adds one
+entry. PRs #1223, #1226, #1227.
+
+**Decided by:** the owner, 2026-11-21 (typos corrected): *"we need the same for storage.xenosystem.ai right? to have that
+drive-like interface ... that made people be familiar with ... but under our XENO system logic for his account"*, and
+2026-11-27: *"finish the rest of the interfaces that need to be on the platform"*.
+
+**How the leaders do it, and what we took:** Google Drive, Dropbox and OneDrive put the place list (My files, Recent,
+Starred, Shared, Trash, storage used) on one left column, each place with its own address. We took that list and those
+addresses, on our own construction rather than a copy of theirs, and kept Gemini's slim rail when the sidebar is collapsed.
+
+**Proof:**
+- `npm run test:storage-host-ui`, against the workspace's own Storage page:
+  - layout equal at 1920 and 768 px (rail 56, curve 15, sidebar 63/7, plate 338/7/7/7, radius 14), and at 390 px the drawer is closed;
+  - every place's address;
+  - a 120 MB file in 8 parts plus a folder through the upload panel.
+- Mutation check 7/7. Host sign-in 16/16 for storage.
+- After deploy, the served bytes are identical in the container (33/33 scripts), and a browser follows the silent sign-in from outside with no loop.
+
+**Material:** `X:/code/bunker-corporation/_process-archive/2026-11-27/xeno-storage-host/` (captures before and after
+#1227, logs, scripts, INDEX with provenance). Tags: `devlog`, `community`.
+
 ## 2026-11-21 — Depot credentials for headless agents (`xdp_`)
 
 **What changed:** a person can issue one of their agents an `xdp_` credential for Depot, which Runner needs to read
