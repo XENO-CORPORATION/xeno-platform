@@ -5,6 +5,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**Agent page (`remote-web` from `xeno-agent-interface` #274, packages 0.1.208): switching hosts no longer shows a stale "Conversation save failed" banner, folders on a remote PC can be linked by path, and "Create PR" asks for a draft PR.**
+- Cancels pending debounced and queued conversation saves when switching hosts (Cloud ↔ PC), so writes queued for a disconnected host are silently dropped instead of flashing `"Conversation save failed"`.
+- Adds a validated "Or link by folder path" form inside the "Link a project folder" modal, verifying the folder over the sealed channel (`workspace.listDirectory`) so Web · RC can link folders on a remote PC.
+- Updates the "Create PR" action prompt to request a draft pull request.
+
 **Agent page (`remote-web` from `xeno-agent-interface` #273, packages 0.1.207): cloud turns name their files, switching places opens that host's own chats, and waking a cloud machine no longer fails with a stale catalog revision.**
 - Tool results now parse POSIX paths as well as Windows paths when the model passes a relative path, so cloud turns name their files and display the "Edited N files" card.
 - Switching between Cloud and a PC clears the previous host's in-memory conversations (`hostSwitch.ts`) before loading the new host's chats.
