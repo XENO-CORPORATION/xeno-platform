@@ -25,6 +25,12 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 **The workspace's project-page test is green again.** Its stand-in API now answers `GET /api/workspaces/:id/billing`, shaped as the real route answers it. Proof: `work-test.mjs` 88/88; it had one failure on main.
 
+**Three fixes to Storage seen on its own host.**
+- A folder in a list that carries no counts (team folders, shared folders) said "NaN items". It now shows no count.
+- The workspace's "Preview. Still sample data: Create, Publish, Agents, Automate." note showed on storage. (and on chat. and tasks.), naming areas those hosts don't show. It no longer shows on a product host.
+- Shared, Trash and Usage in Storage's sidebar had a chevron where their icon belongs. They now carry the same icons as the rail.
+- Proof: `npm run test:storage-host-ui` gains a check for each; on the code before, all three fail.
+
 **storage.xenosystem.ai is XENO Storage on its own, the way Drive is.** It used to redirect into the workspace. It now shows Storage alone, full screen, with the workspace's own rail, sidebar and plate. The rail carries Storage's places: Upload, My files, Recent, Starred, Shared, Trash, Storage used and Search. Each place has its own address (`/`, `/recent`, `/starred`, `/shared`, `/trash`, `/usage`, `/folders/<id>`, `/teams/<id>`), so a link or a reload opens the same view. The sidebar is headed "Storage" instead of "Overview › Storage". If you are signed in on xenosystem.ai, storage. signs you in without a click.
 - It is the workspace's own Storage page, not a copy (the tasks. shape): a `storage.html` page with only Storage's scripts, its own sign-in client `xeno-storage-web` (identity only, one exact callback), separate from the desktop app's.
 - Product hosts' rails are now one table (`HOST_RAILS` in the workspace), so chat. keeps its buttons unchanged and the next host adds one entry.
