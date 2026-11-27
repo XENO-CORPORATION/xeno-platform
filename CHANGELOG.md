@@ -5,6 +5,8 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**chat.xenosystem.ai: Images opens in the area you are in.** The Images button jumped to the Studio area by a fixed address, which broke the rule that opening a feature keeps the current area (`test:workspace-overview-stays` was red on main). It now opens Image generation in place, and `/images` on the chat host matches Images from any area.
+
 **Agent page (`remote-web` from `xeno-agent-interface` #274, packages 0.1.208): switching hosts no longer shows a stale "Conversation save failed" banner, folders on a remote PC can be linked by path, and "Create PR" asks for a draft PR.**
 - Cancels pending debounced and queued conversation saves when switching hosts (Cloud ↔ PC), so writes queued for a disconnected host are silently dropped instead of flashing `"Conversation save failed"`.
 - Adds a validated "Or link by folder path" form inside the "Link a project folder" modal, verifying the folder over the sealed channel (`workspace.listDirectory`) so Web · RC can link folders on a remote PC.

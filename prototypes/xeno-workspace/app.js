@@ -2452,7 +2452,7 @@
     if (b.dataset.openProject) return go('global', { global: 'projects', item: b.dataset.openProject + '/Conversations' });
     if (b.dataset.cat) { const set = new Set(ovOpen()); set.has(b.dataset.cat) ? set.delete(b.dataset.cat) : set.add(b.dataset.cat); store.set('ovOpen', [...set]); const el = $('#rzone'), mid = $('#rmid'); if (el) { const y0 = b.getBoundingClientRect().top; ovPatch(); const hold = () => {};  /* holding the button under the pointer was measured to fight scroll-into-view; the fold itself is smooth */ const t0 = performance.now(); const loop = () => { hold(); if (performance.now() - t0 < 230) requestAnimationFrame(loop); else { const kids = el.querySelector('.rcat[aria-expanded="true"] + .rcat-kids'); if (kids) kids.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); railFit(); } }; requestAnimationFrame(loop); } return; }
     if (b.dataset.goLibrary) return go('global', { global: 'library', item: b.dataset.goLibrary });
-    if ('chatImages' in b.dataset) return window.XENO_ADDR.go('#/studio/p/image');   // chat.xenosystem.ai/images: Studio's image generation
+    if ('chatImages' in b.dataset) return go('product', { product: 'image' });   // Studio's image generation, in the current area (chat.xenosystem.ai/images)
     if (b.dataset.product) { const id = b.dataset.product; if (S.view === 'product' && S.product === id && b.closest('#rail')) return setPanel(root.dataset.panel === 'open' ? 'closed' : 'open'); return openProduct(id); }
     const g = b.dataset.go;
     if (g === 'search') return openPalette();
