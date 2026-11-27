@@ -12152,6 +12152,46 @@
       "class": "reversible",
       "scope": "storage:write",
       "because": "the choice is the onConflict field of opening an upload session (version, keep-both) or not uploading (skip)"
+    },
+    "ui:app.js:data-ph-go": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "changes only what the screen shows"
+    },
+    "ui:app.js:data-ph-search": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "changes only what the screen shows"
+    },
+    "ui:app.js:data-ph-ws": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "changes only what the screen shows"
+    },
+    "ui:app.js:data-newchat": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "changes only what the screen shows"
+    },
+    "ui:app.js:data-tip=XENO workspace": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "changes only what the screen shows"
+    },
+    "ui:app.js:data-ph-new": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "tasks:write"
     }
   }
 }
