@@ -63,11 +63,14 @@ try {
   const lay = await p.evaluate(() => {
     const vis = (s) => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== 'none'; };
     const pr = document.getElementById('panel').getBoundingClientRect(), m = document.getElementById('main').getBoundingClientRect();
-    return { product: document.documentElement.dataset.product, rail: vis('#rail'), panelLeft: Math.round(pr.left), mainFromPanel: m.left >= pr.right - 1 && m.left - pr.right < 20, mainRight: Math.round(innerWidth - m.right) === Math.round(pr.left), // the workspace's plate: the same gap to the window as the sidebar's (2026-11-27)
+    // 2026-11-27: the workspace's left construction, the rail carrying the chat's own places (not the workspace's areas or products)
+    const rl = document.getElementById('rail');
+    return { product: document.documentElement.dataset.product, rail: vis('#rail'), railChat: !!rl.querySelector('[data-newchat]') && !!rl.querySelector('[data-chat-images]') && !rl.querySelector('[data-product], [data-go="projects"], [data-go="market"]'),
+      panelFromRail: Math.round(pr.left - rl.getBoundingClientRect().right) === Math.round(pr.top), mainFromPanel: m.left >= pr.right - 1 && m.left - pr.right < 20, mainRight: Math.round(innerWidth - m.right) === Math.round(pr.top), // the plate's gap to the window is the panel's
       brand: document.querySelector('#panel .xch-brand b')?.textContent, crumb: !!document.querySelector('#panel .crumb'), bar: !!document.getElementById('xph'),
       acts: [...document.querySelectorAll('#panel .pbody > .act')].map((b) => b.textContent.replace(/Ctrl.*$|From chats/, '').trim()) };
   });
-  ok(lay.product === 'chat' && !lay.rail && lay.panelLeft <= 8 && lay.mainFromPanel && lay.mainRight, `the chat's sidebar sits at the left edge and the chat fills the rest on the workspace's plate; no rail (${JSON.stringify(lay)})`);
+  ok(lay.product === 'chat' && lay.rail && lay.railChat && lay.panelFromRail && lay.mainFromPanel && lay.mainRight, `the workspace's rail carries the chat's places, the sidebar grows out of it and the chat sits on the plate beside it (${JSON.stringify(lay)})`);
   ok(lay.brand === 'Chat' && !lay.crumb && !lay.bar, 'the sidebar carries the product, not the workspace path; no bar on top');
   ok(['New chat', 'Library', 'Images', 'Scheduled'].every((x) => lay.acts.includes(x)), `New chat, Library, Images and Scheduled are in the sidebar (${lay.acts})`);
   ok(await framePath() === '/chat' && await at() === '/', 'the host opens on a new chat, at /');

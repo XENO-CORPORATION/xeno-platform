@@ -170,7 +170,27 @@
     setTimeout(() => { el.innerHTML = zoneHTML(); el.dataset.for = k; el.classList.remove('out'); el.classList.add('in'); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('in'))); }, el.dataset.for ? 140 : 0);
   }
   // ---- RAIL ----
+  // chat.xenosystem.ai's rail (owner, 2026-11-27: "the left sidebar is a floating one … instead of having that nice effect and
+  // margin and the angle we got on our website, between the shrunk left side and the expanded one"): the workspace's own rail
+  // element, CSS and flare, carrying the chat's places instead of the workspace's. Collapsed, it is what remains, as Gemini's
+  // slim rail is. Each button is the panel's own action (the same data- attribute, handled once, document-wide).
+  function renderChatRail(rail) {
+    if (rail.firstElementChild) return;
+    const b = (attrs, icon, label, kbd = '') => `<button class="rbtn" ${attrs} aria-label="${label}" data-tip="${label}" data-kbd="${kbd}">${ic(icon)}</button>`;
+    rail.innerHTML = `
+      <a class="logo" id="logo" href="${esc((window.XENO_ADDR?.workspaceOrigin || '') + '/workspace')}" aria-label="XENO workspace" data-tip="XENO workspace"><span class="mk" data-mode="xeno">${M.xeno.svg}</span></a>
+      <div class="rmid" id="rmid">
+      ${b('data-newchat', 'plus', 'New chat', 'Ctrl ⇧ O')}
+      ${b('data-go="search"', 'search', 'Search', 'Ctrl K')}
+      ${b('data-go-library="From chats"', 'lib', 'Library')}
+      ${b('data-chat-images', 'image', 'Images')}
+      ${b('data-xa="scheduled"', 'clock', 'Scheduled')}
+      </div>
+      ${b('data-go="help"', 'help', 'Help & report', 'Shift R')}
+      <button class="avatar" data-go="account" data-tip="Account, settings, connected accounts, get the apps" aria-label="Account"></button>`;   // applyWorkspace() writes the initial, as on the workspace's rail
+  }
   function renderRail() {
+    if (window.XENO_ADDR?.product === 'chat') return renderChatRail($('#rail'));
     const onDash = inOv() || S.view === 'adaptive';   // the rail wears the CONTEXT: Overview stays Overview inside any product it opens
     const cur = (k) => (k === 'home' && S.view === 'mode') || (k === 'chat' && S.view === 'product' && S.product === 'chat') || (S.view === 'global' && S.global === k);
     const rb = (k, icon, label, kbd = '') => `<button class="rbtn" data-go="${k}" aria-label="${label}" data-tip="${label}" data-kbd="${kbd}" aria-current="${cur(k)}">${ic(icon)}${k === 'bell' ? '<span class="badge"></span>' : ''}</button>`;
