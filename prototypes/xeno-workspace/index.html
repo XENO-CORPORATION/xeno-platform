@@ -2577,8 +2577,11 @@ html[data-product="tasks"] .main .topbar .opener,html[data-product] .main .topba
 /* chat.xenosystem.ai (owner, 2026-11-22: "like the Gemini web app"): the chat's own sidebar at the left edge, the chat
    filling the rest. No product bar on top: the sidebar carries the product, as Gemini's, ChatGPT's and Claude's do. */
 html[data-product="chat"] .slot{left:0}
-html[data-product="chat"] .main{top:0;right:0;bottom:0;border:0;border-radius:0;clip-path:none;left:calc(var(--panel-w) + var(--gap-x))}
-html[data-product="chat"][data-panel="closed"] .main,html[data-product="chat"][data-panel="none"] .main{left:0}
+/* The chat sits on the workspace's own plate (owner, 2026-11-27: "we should have it as the platform has it"): the same
+   gaps, stroke, radius and clip as .main above, only moved left by the rail that is not here. The sidebar's slot puts its
+   plate at gap-x from the edge, so the chat plate starts one gap-x after it, as in the workspace. */
+html[data-product="chat"] .main{left:calc(var(--panel-w) + var(--gap-x) * 2)}
+html[data-product="chat"][data-panel="closed"] .main,html[data-product="chat"][data-panel="none"] .main{left:var(--gap-x)}
 .panel .xch-head .xch-brand{flex:1;display:flex;align-items:center;gap:9px;min-width:0;height:30px;margin-left:-6px;padding:0 6px;border-radius:6px;color:var(--text);text-decoration:none}
 .panel .xch-head .xch-brand:hover{background:var(--w50)}
 .panel .xch-head .xch-brand b{font-size:14px;font-weight:600;letter-spacing:-.01em}

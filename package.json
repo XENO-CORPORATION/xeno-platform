@@ -166,6 +166,7 @@
     "test:tasks-host-mutation": "node prototypes/xeno-workspace/tests/tasks-host-mutation-check.mjs",
     "test:chat-host-ui": "node prototypes/xeno-workspace/tests/chat-host-test.mjs",
     "test:chat-host-real-app": "node prototypes/xeno-workspace/tests/chat-host-real-app-test.mjs",
+    "test:chat-host-plate": "node prototypes/xeno-workspace/tests/chat-host-plate-test.mjs",
     "test:chat-host-mutation": "node prototypes/xeno-workspace/tests/chat-host-mutation-check.mjs",
     "test:product-address": "node --test prototypes/xeno-workspace/tests/product-address.test.mjs",
     "measure:tasks-open": "node prototypes/xeno-workspace/tests/tasks-open-measure.mjs",
