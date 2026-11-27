@@ -24,12 +24,27 @@ const to = new URL(start.headers.get('location') || 'about:blank');
 ok(start.status === 302 && to.origin === 'https://xenosystem.ai' && to.pathname === '/api/oauth2/authorize', `the silent start goes to the XENO sign-in (${start.status} ${to.origin}${to.pathname})`);
 ok(to.searchParams.get('client_id') === 'xeno-storage-web' && to.searchParams.get('code_challenge_method') === 'S256' && to.searchParams.get('prompt') === 'none'
   && to.searchParams.get('redirect_uri') === `${HOST}/api/auth/host/callback`, `as xeno-storage-web, PKCE S256, prompt=none, back to this host (${to.searchParams.get('client_id')}, ${to.searchParams.get('prompt')})`);
-if (to.origin === 'https://xenosystem.ai') {
-  const auth = await get(to.href);
-  const back = new URL(auth.headers.get('location') || 'about:blank', 'https://xenosystem.ai');
-  const body = auth.status === 302 ? '' : (await auth.text()).slice(0, 300);
-  ok(auth.status === 302 && back.origin === HOST && back.pathname === '/api/auth/host/callback' && back.searchParams.get('error') === 'login_required',
-    `signed out, the provider accepts the client and its callback and answers login_required (${auth.status} ${back.origin}${back.pathname} ${back.searchParams.get('error') || body})`);
+// The provider answers a signed-out prompt=none from its sign-in page's own script (the session lives in that page's
+// storage, so only the browser can tell): followed here in a real browser, signed out, from storage.'s front door. It must
+// reach xenosystem.ai's authorize as this client, come back to this host's callback with login_required, and stop on the
+// gate page with no loop (the page asks once per tab every ten minutes).
+{
+  const { createRequire } = await import('node:module'); const require = createRequire(import.meta.url);
+  const puppeteer = require('puppeteer');   // its own throwaway profile, removed when the browser closes
+  const br = await puppeteer.launch({ headless: true });
+  try {
+    const p = await br.newPage(); const hops = [];
+    p.on('framenavigated', (f) => { if (f === p.mainFrame()) hops.push(f.url()); });
+    await p.goto(`${HOST}/recent`, { waitUntil: 'networkidle2', timeout: 60000 });
+    await new Promise((r) => setTimeout(r, 3000));
+    const authz = hops.find((u) => u.startsWith('https://xenosystem.ai/api/oauth2/authorize'));
+    const cb = hops.find((u) => u.startsWith(`${HOST}/api/auth/host/callback`));
+    const end = p.url(), title = await p.title();
+    console.log('  hops:', hops.map((u) => u.replace(/\?.*/, '')).join(' → '));
+    ok(!!authz && new URL(authz).searchParams.get('client_id') === 'xeno-storage-web' && new URL(authz).searchParams.get('prompt') === 'none', 'signed out, the browser asks xenosystem.ai silently as xeno-storage-web');
+    ok(!!cb && /login_required/.test(cb), `and xenosystem.ai answers this host's callback with login_required (${cb ? new URL(cb).searchParams.get('error') : 'no callback'})`);
+    ok(end.startsWith(HOST) && hops.filter((u) => u.startsWith('https://xenosystem.ai/api/oauth2/authorize')).length === 1, `it stops on this host, asked once, no loop (${end.replace(/\?.*/, '')}, "${title}")`);
+  } finally { await br.close(); }
 }
 
 console.log(failed ? `${failed} FAILED` : 'storage-host-live: all passed'); process.exit(failed ? 1 : 0);
