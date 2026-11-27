@@ -32,6 +32,10 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 **Signed in on xenosystem.ai means signed in on chat., tasks., tools., motion. and creator., with no click.** Each of those hosts keeps its own session, so a person signed in on xenosystem.ai first met the "Coming soon" page with a Sign in button. That page now asks xenosystem.ai once, silently, with the OpenID Connect `prompt=none` check, the way Google and Atlassian sign their own sites in: signed in there, the person lands signed in where they were; not signed in, the page stays and offers Sign in, and that tab does not ask again for ten minutes. The sign-in page never shows a form for a silent check: it answers `login_required` (or `consent_required`) on the app's registered address, as the standard says.
 - Proof: `npm run test:host-signin` (16 checks, 6 new for the silent path) and `npm run test:oauth-prompt-none-ui` (6 checks in a real browser: no session → `login_required` and no form; a session → a code with no click; any other `prompt` value still refused). Each fails when its silent path is removed.
 
+## 2026-11-27
+
+**On the agent page, a PC you drive keeps its line, the cloud shows what it changed, and switching places works.** A turn on one of your PCs no longer stalls at "Working" or fails with "could not be trusted" when the relay loses a frame: the page checks the line when it has heard nothing for 15 s and reconnects by itself. Choosing another place (your cloud machine or a PC) opens it instead of leaving a blank page. Turns on your cloud machine now show the files they changed, with Undo and Review. Underneath: a new build of the agent page (`public/remote-web`, from xeno-agent-interface #272, packages 0.1.206); the PC half of the line check ships in XENO Agent 0.3.55.
+
 ## 2026-11-22
 
 **The database backups work again, and a restore of them is proven.** The nightly backup had failed since 2026-11-17 because the server's disk was full, and the weekly base backup (the one a point-in-time restore replays onto) had failed since 2026-11-08.
