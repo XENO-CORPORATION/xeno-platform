@@ -8,7 +8,8 @@ const MUTANTS = [
   ['conversations keep the workspace\'s item form', path.join(ws, 'address.js'), "const ITEM_OUT = { chat: (it) => (/^projects\\//.test(it) || !it ? it : 'c/' + it) };", 'const ITEM_OUT = {};'],
   ['Images is not one of the host\'s places', path.join(ws, 'address.js'), "['images', 'p', 'image', 'studio']", "['imagesX', 'p', 'image', 'studio']"],
   ['the sidebar shows the workspace path', path.join(ws, 'app.js'), "const onHost = window.XENO_ADDR?.product === 'chat';", 'const onHost = false;'],
-  ['the rail is drawn', path.join(ws, 'index.html'), 'html[data-product] .rail,html[data-product] .peekzone,', 'html[data-productX] .rail,html[data-product] .peekzone,'],
+  ['the rail carries the workspace\'s areas, not the chat\'s places', path.join(ws, 'app.js'), "if (window.XENO_ADDR?.product === 'chat') return renderChatRail($('#rail'));", ''],
+  ['the rail is hidden on the chat host, the sidebar left floating', path.join(ws, 'index.html'), 'html[data-product="tasks"] .rail,', 'html[data-product] .rail,'],
   ['the host serves every workspace script', path.join(repo, 'scripts', 'vite-workspace.mjs'), "productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), productHost.toLowerCase()).html", "fs.readFileSync(path.join(src, 'index.html'), 'utf8').replace('<html lang=\"en\">', `<html lang=\"en\" data-product=\"${productHost.toLowerCase()}\">`)"],
 ];
 let caught = 0;

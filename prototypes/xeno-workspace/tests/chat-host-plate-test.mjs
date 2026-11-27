@@ -34,31 +34,54 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
 const br = await puppeteer.launch({ headless: true, protocolTimeout: 60000 });
-const measure = async (url, w, h, shot) => {
+// The left construction, read from the page: the rail, the slot, the flare (the rail's inverted corners, .slot::before and
+// ::after, sized by --fr), the panel and the plate, each as numbers that the two pages must share.
+const geometry = () => {
+  const q = (s) => document.querySelector(s), rect = (e) => { if (!e || getComputedStyle(e).display === 'none') return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
+  const slot = q('.slot'), main = q('.main'), panel = q('.slot .panel'), sm = getComputedStyle(main), sb = getComputedStyle(slot, '::before'), sa = getComputedStyle(slot, '::after');
+  const mr = main.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+  return { panelState: document.documentElement.dataset.panel || null, rail: rect(q('.rail')), slot: rect(slot), fr: getComputedStyle(slot).getPropertyValue('--fr').trim(),
+    flareTop: [sb.width, sb.height, sb.top], flareBottom: [sa.width, sa.height, sa.bottom], panel: rect(panel), panelRadius: getComputedStyle(panel).borderTopLeftRadius,
+    main: [Math.round(mr.left), Math.round(mr.top), Math.round(innerWidth - mr.right), Math.round(innerHeight - mr.bottom)], radius: sm.borderTopLeftRadius, radiusBL: sm.borderBottomLeftRadius,
+    stroke: sm.borderTopWidth, clip: sm.clipPath, panelToMain: Math.round(mr.left - pr.right) };
+};
+const open = async (url, w, h) => {
   const p = await br.newPage(); await p.setViewport({ width: w, height: h });
   await p.goto(url, { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('.main', { timeout: 30000 });
   await p.waitForFunction(() => !document.documentElement.classList.contains('xp-wait'), { timeout: 30000 }).catch(() => {});
   await new Promise((r) => setTimeout(r, 2500));
-  const m = await p.evaluate(() => {
-    const main = document.querySelector('.main'), panel = document.querySelector('.slot .panel') || document.querySelector('.panel');
-    const r = main.getBoundingClientRect(), s = getComputedStyle(main), pr = panel && getComputedStyle(panel).display !== 'none' ? panel.getBoundingClientRect() : null;
-    return { radius: s.borderTopLeftRadius, radiusBL: s.borderBottomLeftRadius, stroke: s.borderTopWidth, clip: s.clipPath, top: Math.round(r.top), right: Math.round(innerWidth - r.right), bottom: Math.round(innerHeight - r.bottom),
-      panelGap: pr ? Math.round(r.left - pr.right) : null, panelTop: pr ? Math.round(pr.top) : null, panelRadius: panel ? getComputedStyle(panel).borderTopLeftRadius : null, panelState: document.documentElement.dataset.panel || null };
-  });
-  if (shot) { const f = path.join(repo, 'scratchpad', shot); fs.mkdirSync(path.dirname(f), { recursive: true }); await p.screenshot({ path: f }); console.log('SHOT', f); }
-  await p.close(); return m;
+  return p;
 };
+const shot = async (p, name) => { if (!process.env.SHOT) return; const f = path.join(repo, 'scratchpad', name); fs.mkdirSync(path.dirname(f), { recursive: true }); await p.bringToFront(); await p.screenshot({ path: f }); console.log('SHOT', f); };
+// collapse (or expand) with the page's own shortcut, sampling --fr while the flare's transition runs
+const toggle = async (p) => {
+  await p.bringToFront();   // a background tab throttles its timers and its transitions
+  await p.keyboard.down('Control'); await p.keyboard.press('Backslash'); await p.keyboard.up('Control');
+  const mid = []; for (let i = 0; i < 6; i++) { await new Promise((r) => setTimeout(r, 45)); mid.push(parseFloat(await p.evaluate(() => getComputedStyle(document.querySelector('.slot')).getPropertyValue('--fr')))); }
+  await new Promise((r) => setTimeout(r, 600));
+  return { mid, end: await p.evaluate(geometry) };
+};
+const same = (a, b, keys) => keys.every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
 try {
   for (const [w, h] of [[1920, 1080], [390, 844]]) {
-    const ws = await measure(`http://localhost:${port}/workspace/apps/chat`, w, h, process.env.SHOT && `plate-workspace-${w}.png`);
-    const ch = await measure(`http://chat.localhost:${port}/`, w, h, process.env.SHOT && `plate-chat-host-${w}.png`);
+    const pw = await open(`http://localhost:${port}/workspace/apps/chat`, w, h), pc = await open(`http://chat.localhost:${port}/`, w, h);
+    const ws = await pw.evaluate(geometry), ch = await pc.evaluate(geometry);
+    await shot(pw, `plate-workspace-${w}.png`); await shot(pc, `plate-chat-host-${w}.png`);
     console.log(`  ${w}px workspace`, JSON.stringify(ws)); console.log(`  ${w}px chat host`, JSON.stringify(ch));
-    ok(ch.radius === ws.radius && ch.radiusBL === ws.radiusBL && parseFloat(ch.radius) > 0, `${w}px: the chat plate's corners are the workspace's (${ch.radius} / ${ch.radiusBL} vs ${ws.radius})`);
-    ok(ch.stroke === ws.stroke && ch.clip === ws.clip, `${w}px: and its stroke and clip (${ch.stroke}, ${ch.clip})`);
-    ok(ch.top === ws.top && ch.right === ws.right && ch.bottom === ws.bottom, `${w}px: its gaps to the window top/right/bottom equal the workspace's (${ch.top}/${ch.right}/${ch.bottom} vs ${ws.top}/${ws.right}/${ws.bottom})`);
-    if (ws.panelGap !== null && ch.panelGap !== null) ok(ch.panelGap === ws.panelGap && ch.panelTop === ch.top, `${w}px: sidebar plate → chat plate gap equals the workspace's (${ch.panelGap} vs ${ws.panelGap}), on one grid`);
-    else console.log(`  ${w}px: sidebar not beside the plate here (workspace ${ws.panelState}, chat ${ch.panelState})`);
+    ok(!!ch.rail && same(ch, ws, ['rail']), `${w}px: a rail at the window's left edge, the workspace's (${JSON.stringify(ch.rail)} vs ${JSON.stringify(ws.rail)})`);
+    ok(same(ch, ws, ['slot', 'panel', 'panelRadius']), `${w}px: the panel grows out of it where the workspace's does (${JSON.stringify(ch.panel)} vs ${JSON.stringify(ws.panel)})`);
+    ok(same(ch, ws, ['fr', 'flareTop', 'flareBottom']) && parseFloat(ch.fr) > 0, `${w}px: joined by the same flare (--fr ${ch.fr}, corners ${ch.flareTop[0]})`);
+    ok(same(ch, ws, ['main', 'radius', 'radiusBL', 'stroke', 'clip', 'panelToMain']) && parseFloat(ch.radius) > 0, `${w}px: the chat on the same plate (${JSON.stringify(ch.main)}, ${ch.radius}, panel→plate ${ch.panelToMain})`);
+    // collapse, then expand, on both: the flare animates down to 0 and back, and the two stay equal
+    const cw = await toggle(pw), cc = await toggle(pc);
+    const animated = (t, from, to) => t.mid.some((v) => v > Math.min(from, to) && v < Math.max(from, to));
+    ok(cc.end.panelState === 'closed' && parseFloat(cc.end.fr) === 0 && animated(cc, 15, 0) && same(cc.end, cw.end, ['rail', 'main', 'radius']), `${w}px: collapsed, the rail remains and the plate meets it as in the workspace; the flare ran ${JSON.stringify(cc.mid)} → 0`);
+    await shot(pc, `plate-chat-host-${w}-collapsed.png`); await shot(pw, `plate-workspace-${w}-collapsed.png`);
+    console.log(`  ${w}px collapsed workspace`, JSON.stringify(cw.end.main), cw.end.radius, '· chat host', JSON.stringify(cc.end.main), cc.end.radius);
+    const ew = await toggle(pw), ec = await toggle(pc);
+    ok(ec.end.panelState === 'open' && same(ec.end, ew.end, ['rail', 'slot', 'fr', 'main', 'panelToMain']) && animated(ec, 0, 15), `${w}px: expanded again, equal to the workspace's; the flare ran ${JSON.stringify(ec.mid)}`);
+    await pw.close(); await pc.close();
   }
 } finally { await br.close(); server.close(); }
 console.log(failed ? `${failed} FAILED` : 'chat-host-plate: all passed'); process.exit(failed ? 1 : 0);

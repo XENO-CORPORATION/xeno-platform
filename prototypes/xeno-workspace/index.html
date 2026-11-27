@@ -2571,17 +2571,16 @@ html body .main .live-chat .chat-themed.chat-theme-dark{background:transparent!i
 /* PRODUCT HOST (address.js PRODUCT, app.js renderProductHeader): one product, the whole window, under the 44px
    header XENO Tools and XENO Workshop have. No rail, no sidebar; the page's own bar keeps its tools, not the opener
    or the workspace path (the product header says where you are). Monochrome: emphasis by surface and text brightness. */
-html[data-product] .rail,html[data-product] .peekzone,html[data-product="tasks"] .slot{display:none!important}
+html[data-product="tasks"] .rail,html[data-product="tasks"] .peekzone,html[data-product="tasks"] .slot{display:none!important}
 html[data-product="tasks"] .main,html[data-product="tasks"][data-panel] .main{top:44px;left:0;right:0;bottom:0;border:0;border-radius:0;clip-path:none;background:var(--canvas)}
 html[data-product="tasks"] .main .topbar .opener,html[data-product] .main .topbar .crumbs{display:none}
 /* chat.xenosystem.ai (owner, 2026-11-22: "like the Gemini web app"): the chat's own sidebar at the left edge, the chat
    filling the rest. No product bar on top: the sidebar carries the product, as Gemini's, ChatGPT's and Claude's do. */
-html[data-product="chat"] .slot{left:0}
-/* The chat sits on the workspace's own plate (owner, 2026-11-27: "we should have it as the platform has it"): the same
-   gaps, stroke, radius and clip as .main above, only moved left by the rail that is not here. The sidebar's slot puts its
-   plate at gap-x from the edge, so the chat plate starts one gap-x after it, as in the workspace. */
-html[data-product="chat"] .main{left:calc(var(--panel-w) + var(--gap-x) * 2)}
-html[data-product="chat"][data-panel="closed"] .main,html[data-product="chat"][data-panel="none"] .main{left:var(--gap-x)}
+/* Its left side IS the workspace's (owner, 2026-11-27: "the left sidebar is a floating one … instead of having that nice
+   effect and margin and the angle we got on our website, between the shrunk left side and the expanded one"): the rail
+   (app.js renderChatRail: the chat's own places), the panel growing out of it through the flare, the chat on the plate
+   beside it. No layout rule of its own here, so the rail, slot, flare, plate and their timings are the workspace's. */
+html[data-product="chat"] .panel .xch-head .xch-brand svg{display:none}   /* the mark is the rail's, once */
 .panel .xch-head .xch-brand{flex:1;display:flex;align-items:center;gap:9px;min-width:0;height:30px;margin-left:-6px;padding:0 6px;border-radius:6px;color:var(--text);text-decoration:none}
 .panel .xch-head .xch-brand:hover{background:var(--w50)}
 .panel .xch-head .xch-brand b{font-size:14px;font-weight:600;letter-spacing:-.01em}
