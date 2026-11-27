@@ -5,6 +5,9 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**A Word document in a chat project is read heading by heading.** A .docx used to come out as one block of text, so nothing in it could be pointed to precisely. It is now one section per heading, each knowing its heading, its level and its place in the document, with any text before the first heading as its own section. Tables keep their cells apart. This is the first step of Corpus notebooks in Chat (the contract agreed with XENO Corpus on 2026-11-27): a citation will open the heading its passage came from. Documents read before this carry the older extractor version and are read again.
+- Proof: `node --test scripts/chat-project-ingestion.test.mjs` (9; a new test builds a .docx with three headings and checks each section's heading, level, place and text). With the old single-section extraction, that test fails. `npm run test:chat-project-db` 14/14 on a migrated database.
+
 **The model's name in the chat composer reads in every theme.** With no theme chosen, on a system that states no light or dark preference, the chat inside the workspace's frame resolved dark while the page around it resolved light. The chat's own declaration that its frame is dark had made the frame's answer differ. So the composer's box took the page's light colour and the model's name the chat's dark-theme white: near-white on near-white, 1.07:1. An embedded chat now asks the page it sits in, so both sides follow one theme.
 - Proof: `npm run test:composer-contrast` measures the name against the box it sits on (WCAG contrast ratio, from everything painted at that point) in light, dark, and no theme with the system light, dark and stating nothing. Every case is now at least 17:1; the failing case was 1.07:1.
 

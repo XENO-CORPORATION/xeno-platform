@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 
 import { CHAT_PROJECT_CONTRACTS } from '../src/server/config/chatProjectContracts.js';
-import { extractAsset, UnsupportedAssetError } from '../src/server/services/library/assetExtractors.js';
+import { DOCX_EXTRACTOR_VERSION, docxSections, extractAsset, UnsupportedAssetError } from '../src/server/services/library/assetExtractors.js';
 import { scanFile } from '../src/server/services/library/assetIngestionService.js';
 import { startLibraryIngestionWorker } from '../src/server/workers/libraryIngestionWorker.js';
 
@@ -51,8 +51,42 @@ test('DOCX extraction uses bounded OOXML bytes and returns the document text', a
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
   assert.match(result.text, /CERULEAN-47/);
-  assert.deepEqual(result.sections[0].locator, { format: 'docx' });
+  // no heading: one section, before any heading
+  assert.deepEqual(result.sections[0].locator, { format: 'docx', heading: null, level: 0, section: 0 });
   assert.equal(result.extractorId, 'mammoth');
+  assert.equal(result.extractorVersion, DOCX_EXTRACTOR_VERSION);
+});
+
+test('DOCX extraction gives one section per heading, so a citation lands on its heading (Corpus notebooks)', async () => {
+  const document = new Document({
+    sections: [{ children: [
+      new Paragraph({ children: [new TextRun('Before any heading: the cover note.')] }),
+      new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Launch plan')] }),
+      new Paragraph({ children: [new TextRun('The launch word is ORCHID & it ships <Monday>.')] }),
+      new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun('Budget')] }),
+      new Paragraph({ children: [new TextRun('The budget is 40,000 credits.')] }),
+      new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Risks')] }),
+      new Paragraph({ children: [new TextRun('Weather.')] }),
+    ] }],
+  });
+  const result = await extractAsset({
+    storagePath: await fixture('plan.docx', await Packer.toBuffer(document)),
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  assert.deepEqual(result.sections.map((s) => s.locator), [
+    { format: 'docx', heading: null, level: 0, section: 0 },
+    { format: 'docx', heading: 'Launch plan', level: 1, section: 1 },
+    { format: 'docx', heading: 'Budget', level: 2, section: 2 },
+    { format: 'docx', heading: 'Risks', level: 1, section: 3 },
+  ]);
+  // each section starts with its heading and holds only its own text; entities come back as written
+  assert.match(result.sections[1].text, /^Launch plan\nThe launch word is ORCHID & it ships <Monday>\.$/);
+  assert.doesNotMatch(result.sections[1].text, /budget/i);
+  assert.match(result.sections[2].text, /40,000 credits/);
+  assert.match(result.text, /cover note[\s\S]*Launch plan[\s\S]*Budget[\s\S]*Risks/);
+  // tables: cells keep apart, rows end lines
+  const sections = docxSections('<h1>T</h1><table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>');
+  assert.equal(sections[0].text, 'T\na\tb\nc\td');
 });
 
 test('textual PDF preserves page locators without invoking OCR', async () => {

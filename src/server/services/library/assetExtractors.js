@@ -21,6 +21,51 @@ export class UnsupportedAssetError extends Error {
   }
 }
 
+// mammoth 1.11.0, split by heading. The version changes whenever the sections change shape, so an ingestion from before
+// reads as stale and is indexed again (Corpus: ready from an older extractor version → stale).
+export const DOCX_EXTRACTOR_VERSION = '1.11.0+headings.1';
+
+const decodeEntities = (s) => s
+  .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+  .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+  .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+  .replace(/&amp;/g, '&');
+
+// mammoth's HTML → plain text: blocks end lines, table cells are tab-separated, every other tag goes
+const htmlText = (html) => decodeEntities(String(html)
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/(p|li|tr|h[1-6]|blockquote|pre)>/gi, '\n')
+  .replace(/<\/t[dh]>/gi, '\t')
+  .replace(/<[^>]+>/g, ''))
+  .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+/**
+ * One section per heading (h1–h6), each with its heading's text, level and position as its locator; any text before
+ * the first heading is a section with no heading. A section's text starts with its heading, so a passage cut from it
+ * still says where it is. Empty sections (a heading with nothing under it before the next) are kept: the heading is text.
+ */
+export function docxSections(html) {
+  const parts = String(html || '').split(/(<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>)/i);
+  const out = [];
+  let current = null, index = 0;
+  const push = () => { if (current) { const t = current.text.trim(); if (t) out.push({ text: t, locator: current.locator }); } };
+  for (const part of parts) {
+    const h = part.match(/^<h([1-6])[^>]*>([\s\S]*?)<\/h[1-6]>$/i);
+    if (h) {
+      push();
+      const heading = htmlText(h[2]);
+      current = { text: heading + '\n', locator: { format: 'docx', heading, level: Number(h[1]), section: index++ } };
+    } else {
+      const body = htmlText(part);
+      if (!body) continue;
+      if (!current) current = { text: '', locator: { format: 'docx', heading: null, level: 0, section: index++ } };
+      current.text += body + '\n';
+    }
+  }
+  push();
+  return out;
+}
+
 function boundedText(buffer) {
   if (buffer.length > CHAT_PROJECT_CONTRACTS.ingestion.maxExtractedBytes) {
     throw new UnsupportedAssetError('Asset exceeds extraction byte limit', 'extract_limit');
@@ -159,11 +204,15 @@ export async function extractAsset({ storagePath, mimeType, runTool = runTextToo
   }
   if (mimeType === DOCX) {
     await assertBoundedZip(storagePath, sourceBytes);
-    const result = await mammoth.extractRawText({ path: storagePath });
-    if (Buffer.byteLength(result.value, 'utf8') > CHAT_PROJECT_CONTRACTS.ingestion.maxExtractedBytes) {
+    // One section per heading, so a citation lands on the heading it came from (XENO Corpus notebooks, agreed contract
+    // 2026-11-27). Raw text had made a long document one section, which nothing could cite precisely.
+    const result = await mammoth.convertToHtml({ path: storagePath });
+    const sections = docxSections(result.value);
+    const text = sections.map((s) => s.text).join('\n\n');
+    if (Buffer.byteLength(text, 'utf8') > CHAT_PROJECT_CONTRACTS.ingestion.maxExtractedBytes) {
       throw new UnsupportedAssetError('DOCX extraction exceeds output limit', 'extract_limit');
     }
-    return { text: result.value, sections: [{ text: result.value, locator: { format: 'docx' } }], locator: { format: 'docx' }, extractorId: 'mammoth', extractorVersion: '1.11.0' };
+    return { text, sections: sections.length ? sections : [{ text, locator: { format: 'docx' } }], locator: { format: 'docx' }, extractorId: 'mammoth', extractorVersion: DOCX_EXTRACTOR_VERSION };
   }
   if (mimeType === 'application/pdf') {
     return extractPdf(storagePath, runTool);
