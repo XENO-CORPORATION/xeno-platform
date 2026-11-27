@@ -24,7 +24,7 @@
   // the new chat, library, images, scheduled, corpus"): the chat, and the places a person reaches from it, on one host.
   // storage.xenosystem.ai (owner, 2026-11-21: "the same for storage.xenosystem.ai … that drive-like interface … that made
   // people be familiar with, but under our XENO system logic for his account"): the account's files alone, the way Drive is.
-  const PRODUCT = (() => { const m = /^(tasks|chat|storage)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
+  const PRODUCT = (() => { const m = /^(tasks|chat|storage|depot)\.(xenosystem\.ai|xenostudio\.ai|localhost)$/.exec(location.hostname); return m ? m[1] : null; })();
   // What each product host shows, as [host prefix, kind, id, area]: the first route with the empty prefix is the product
   // itself (its items are the host's own paths); the others are the places it keeps in the same window. A kind/id
   // without an area matches it in any area. Anything else is the full workspace, on the main site.
@@ -32,6 +32,8 @@
     tasks: [['', 'g', 'tasks']],
     chat: [['', 'p', 'chat'], ['library', 'g', 'library'], ['images', 'p', 'image']],
     storage: [['', 'p', 'storage']],
+    // depot.xenosystem.ai (xeno-depot design 0006): /w/<ws>/repos[/<repo id>/…] — the path is the item, unchanged
+    depot: [['', 'p', 'depot']],
   };
   // the chat's own items read as its addresses: a conversation is /c/<id>, a project's are /projects/<pid>[/c/<id>]
   // Storage's (platform-storage.js `here`): '' My files, Recent/Starred/Shared/Trash/Usage, f/<id> a folder, t/<id> a
@@ -84,6 +86,8 @@
     const parts = path.slice(BASE.length).split('/').filter(Boolean);
     if (!parts.length) return '#/overview' + q;
     if (parts[0] === 'adaptive') return '#/adaptive' + q;
+    // XENO Depot's first workspace door, /workspace/depot/… (decision 0001 §1), is the Dev area's app door since 2026-11-27
+    if (parts[0] === 'depot') return `#/dev/p/depot${parts.length > 1 ? '/' + parts.slice(1).join('/') : ''}${q}`;
     let area = 'overview';
     if (!RESERVED.includes(parts[0]) || parts[0] === 'overview') area = parts.shift();
     if (area === 'overview' && parts[0] === 'overview') parts.shift();

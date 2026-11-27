@@ -78,6 +78,23 @@ const MUTANTS = [
     "if (payload.xdp_cred) { const pr = await resolvePrincipal(db, payload.sub); actor = pr && { principal: pr, accountableId: String(pr.owner?.id), via: 'agent', clientId: null, scopes: ['depot:read', 'depot:write', 'depot:admin'], expiresAt: Number(payload.exp) * 1000 }; }"],
   ['repo token: no credential in it', 'src/server/services/depotAuthority.js',
     'if (actor.credentialId) claims.xdp_cred = actor.credentialId;', ''],
+  // the Depot web page's token (browserDepotToken; orchestrator's conditions, 2026-11-27)
+  ['web token: a second audience', 'src/server/services/depotAuthority.js',
+    'iss, iat: now, sub: String(principal.id), aud: [DEPOT_AUDIENCE],', "iss, iat: now, sub: String(principal.id), aud: [DEPOT_AUDIENCE, 'xeno-api'],"],
+  ['web token: sign-out ignored', 'src/server/services/depotAuthority.js',
+    "if (client.client_id === DEPOT_WEB_CLIENT && !(await browserSessionLive(db, payload.bsid, person))) throw new DepotAuthorityError('invalid_token', 401);", ''],
+  ['web token: per-repo token outlives sign-out', 'src/server/services/depotAuthority.js',
+    "...(sourcePayload?.bsid ? { bsid: sourcePayload.bsid } : {}),", ''],
+  ['web token: an agent is its subject', 'src/server/services/depotAuthority.js',
+    "if (!principal || principal.kind !== 'human') throw new DepotAuthorityError('invalid_session', 401);", ''],
+  ['web token: not read-only', 'src/server/services/depotAuthority.js',
+    "export const BROWSER_TOKEN_SCOPE = 'depot:read';", "export const BROWSER_TOKEN_SCOPE = 'depot:write';"],
+  ['web token: the door not checked', 'src/server/services/depotAuthority.js',
+    "if (!door.allowed) throw new DepotAuthorityError('depot_closed', 403,", "if (false) throw new DepotAuthorityError('depot_closed', 403,"],
+  ['web token: minted on any host', 'src/server/routes/authRoutes.js',
+    "if (!DEPOT_WEB_HOSTS.includes(host)) return res.status(404)", 'if (false) return res.status(404)'],
+  ['web token: cross-origin accepted', 'src/server/routes/authRoutes.js',
+    "if (req.get('origin') !== `https://${host}`) return res.status(403)", 'if (false) return res.status(403)'],
 ];
 
 async function freshDb(name) {

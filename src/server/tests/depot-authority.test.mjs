@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -386,6 +387,74 @@ async function main() {
   assert.equal(depot.isDepotExchange({ resource: R('x') }), true);
   assert.equal(depot.isDepotExchange({ subject_token: pixelTok, subject_token_type: AT, resource: 'https://api.xenostudio.ai' }), false);
   assert.deepEqual(depot.loreActions(new Set(['read', 'review'])), []);
+
+  // ── 9. The Depot web page's token (browserDepotToken; orchestrator's conditions, 2026-11-27): the browser session of
+  // depot.xenosystem.ai exchanged for a short xeno-depot token. Depot only; the person; read-only; five minutes, no refresh;
+  // ended by sign-out, with every per-repo token exchanged from it; the route same-origin, cookie-only, Depot host only.
+  {
+    await pool.query(`CREATE TABLE IF NOT EXISTS user_sessions (id uuid PRIMARY KEY, user_id uuid NOT NULL, token_hash text,
+      expires_at timestamptz NOT NULL)`);
+    const session = async (userId) => { const id = crypto.randomUUID(); await pool.query("INSERT INTO user_sessions (id, user_id, token_hash, expires_at) VALUES ($1,$2,'x', now() + interval '7 days')", [id, userId]); return id; };
+    const sid = await session(u.staff);
+    const web = await depot.browserDepotToken(pool, { userId: u.staff, browserSid: sid, iss: ISS });
+    const { header, claims } = decode(web.access_token);
+    assert.equal(header.typ, 'at+jwt');
+    assert.deepEqual(claims.aud, ['xeno-depot'], 'Depot is its only audience');
+    assert.deepEqual([claims.sub, claims.identity, claims.root_domains, claims.client_id, claims.scope, claims.bsid, claims.depot_resources],
+      [u.staff, u.staff, ['depot.xenosystem.ai'], 'xeno-depot-web', 'depot:read', sid, undefined]);
+    assert.ok(claims.exp - claims.iat <= 300 && web.expires_in === 300, 'five minutes');
+    assert.equal(web.refresh_token, undefined, 'no refresh');
+    await assert.rejects(verifyAccessToken(pool, web.access_token), /invalid/);                   // the platform's own API refuses it
+    const asPerson = await depot.verifyToken(pool, web.access_token);                             // Depot's gate accepts it, as the person
+    assert.deepEqual([asPerson.via, String(asPerson.principal.id), asPerson.scopes], ['person', u.staff, ['depot:read']]);
+    // read-only even for a repo admin: its per-repo token is cut to depot:read
+    const repoTok = await exchange({ subjectToken: web.access_token, resource: R('build') });
+    assert.equal(decode(repoTok.access_token).claims.scope, 'depot:read');
+    assert.equal(decode(repoTok.access_token).claims.bsid, sid, 'its per-repo token names the session too');
+    assert.ok(repoTok.expires_in <= 300, 'a per-repo token never outlives the page token');
+    // the person only: an agent has no browser session of its own
+    await refusal(depot.browserDepotToken(pool, { userId: u.robot, browserSid: await session(u.robot), iss: ISS }), 'invalid_session');
+    // the session must be the person's own and live
+    await refusal(depot.browserDepotToken(pool, { userId: u.mate, browserSid: sid, iss: ISS }), 'invalid_session');
+    await refusal(depot.browserDepotToken(pool, { userId: u.staff, browserSid: crypto.randomUUID(), iss: ISS }), 'invalid_session');
+    // the door: a non-staff person is refused, with the door's own words
+    const plain = (await pool.query("INSERT INTO users (email, username, display_name) VALUES ('plain@xeno.test','plain','plain') RETURNING id")).rows[0].id;
+    await refusal(depot.browserDepotToken(pool, { userId: plain, browserSid: await session(plain), iss: ISS }), 'depot_closed');
+    // sign-out (the user_sessions row deleted) ends the page token AND the per-repo token exchanged from it, at once
+    await pool.query('DELETE FROM user_sessions WHERE id = $1', [sid]);
+    await refusal(depot.verifyToken(pool, web.access_token), 'invalid_token');
+    await oauthRefusal(exchange({ subjectToken: web.access_token, resource: R('build') }), 'invalid_grant');
+    await refusal(depot.verifyToken(pool, repoTok.access_token, { repoToken: true }), 'invalid_token');
+    // a token claiming the web client with no session is refused too (no bsid, no way in)
+    const forged = await depot.browserDepotToken(pool, { userId: u.staff, browserSid: await session(u.staff), iss: ISS });
+    await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [u.staff]);
+    await refusal(depot.verifyToken(pool, forged.access_token), 'invalid_token');
+
+    // the route: POST /api/auth/depot-token, Depot host only, same-origin, a browser session only
+    const { default: authRouter } = await import('../routes/authRoutes.js');
+    const live = await session(u.staff);
+    const app3 = express();
+    app3.use((req, _res, next) => { req.db = pool; if (req.get('x-test-session')) req.browserSession = { sid: req.get('x-test-session'), userId: u.staff }; next(); });
+    app3.use('/api/auth', authRouter);
+    const srv = await new Promise((r) => { const s = app3.listen(0, '127.0.0.1', () => r(s)); });
+    // node:http, because fetch refuses to set Host, and Host is what the route decides on
+    const post = (headers) => new Promise((resolve, reject) => {
+      const rq = http.request({ host: '127.0.0.1', port: srv.address().port, path: '/api/auth/depot-token', method: 'POST', headers: { 'content-type': 'application/json', ...headers } }, (rs) => {
+        let text = ''; rs.on('data', (c) => { text += c; }); rs.on('end', () => resolve({ status: rs.statusCode, headers: { get: (k) => rs.headers[k] }, json: async () => JSON.parse(text) }));
+      });
+      rq.on('error', reject); rq.end('{}');
+    });
+    const DH = { host: 'depot.xenosystem.ai', origin: 'https://depot.xenosystem.ai' };
+    try {
+      const ok = await post({ ...DH, 'x-test-session': live });
+      assert.equal(ok.status, 200); const okBody = await ok.json();
+      assert.equal(decode(okBody.access_token).claims.aud[0], 'xeno-depot'); assert.equal(ok.headers.get('cache-control'), 'no-store');
+      assert.equal((await post({ host: 'chat.xenosystem.ai', origin: 'https://chat.xenosystem.ai', 'x-test-session': live })).status, 404, 'not on another host');
+      assert.equal((await post({ ...DH, origin: 'https://evil.example', 'x-test-session': live })).status, 403, 'not cross-origin');
+      assert.equal((await post({ host: 'depot.xenosystem.ai', 'x-test-session': live })).status, 403, 'not without an Origin');
+      assert.equal((await post(DH)).status, 401, 'not without a browser session');
+    } finally { srv.close(); }
+  }
 
   // ── 8. The door policy is data: no row closes Depot; the DOWN refuses while another product uses 'staff'.
   await pool.query("INSERT INTO product_access_policy (product, access) VALUES ('other', 'staff')");

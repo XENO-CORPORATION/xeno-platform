@@ -184,6 +184,8 @@
     storage: [['data-xl-new="storage"', 'upload', 'Upload'], ['data-item="" data-item-exact', 'folder', 'My files'], ['data-item="Recent"', 'clock', 'Recent'],
       ['data-item="Starred"', 'star', 'Starred'], ['data-item="Shared"', 'people', 'Shared'], ['data-item="Trash"', 'trash', 'Trash'],
       ['data-item="Usage"', 'chart', 'Storage used'], ['data-go="search"', 'search', 'Search', 'Ctrl K']],
+    // depot.xenosystem.ai: its repositories (the screens are platform-depot.js)
+    depot: [['data-item="" data-item-exact', 'folder', 'Repositories'], ['data-go="search"', 'search', 'Search', 'Ctrl K']],
   };
   function renderHostRail(rail, places) {
     if (rail.firstElementChild) return markItems(rail);   // drawn once; its current place follows the address
@@ -1141,7 +1143,8 @@
     const p = PR[S.product];
     if (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) return window.XENO_GENERATIONS.host();
     if (S.product === 'storage' && window.XENO_STORAGE) return window.XENO_STORAGE.page();   // XENO Storage: the account's space, on the real meter
-    if (S.product === 'mcp' && window.XENO_MCP) return window.XENO_MCP.page();   // XENO MCP: the agents connected to XENO, managed here
+    if (S.product === 'mcp' && window.XENO_MCP) return window.XENO_MCP.page();
+    if (S.product === 'depot' && window.XENO_DEPOT) return window.XENO_DEPOT.page();   // XENO Depot: its repositories, on Depot's own API (platform-depot.js)   // XENO MCP: the agents connected to XENO, managed here
     if (S.product === 'agent' && window.XENO_AGENT_REMOTE) return window.XENO_AGENT_REMOTE.page();   // XENO Agent: the chats your PCs share, in a frame that holds their keys
     if (S.product === 'research' && window.XENO_RESEARCH?.served) return window.XENO_RESEARCH.page();   // XENO Research: notebooks, runs and claims, from the platform
     if (p.kind === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) return window.XENO_CHAT.host();
@@ -1220,7 +1223,7 @@
     const pf = !genHost && window.XENO_PAGES && window.XENO_PAGES.framed();
     if (pf) return `<div class="topbar pg-top"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="pg-top-sum">${pf.sum}</div><div class="pg-top-left">${pf.left}</div><div class="sp"></div><div class="pg-top-tools">${pf.tools}</div><div class="pg-top-acts">${pf.acts}</div></div><div class="mview pg-mview${pf.foot ? ' has-foot' : ''}">${pf.body}</div>${pf.foot ? `<footer class="mfoot">${pf.foot}</footer>` : ''}`;
     // a real conversation is the chat page showing that conversation, not a generic "item" page
-    const liveChatItem = S.item && S.view === 'product' && ((S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) || (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) || (S.product === 'storage' && window.XENO_STORAGE) /* a folder or a view of Storage is the Storage page itself */ || (S.product === 'mcp' && window.XENO_MCP) /* a connection or the activity log is the XENO MCP page itself */ || (S.product === 'agent' && window.XENO_AGENT_REMOTE) /* a PC or a chat on it is the Agent page itself: the frame shows it */);
+    const liveChatItem = S.item && S.view === 'product' && ((S.product === 'chat' && window.XENO_CHAT && window.XENO_CHAT.served) || (S.mode === 'studio' && ['image', 'video', 'audio', '3d', 'enhance-image', 'enhance-video', 'enhance-audio', 'enhance-3d'].includes(S.product) && window.XENO_GENERATIONS) || (S.product === 'storage' && window.XENO_STORAGE) /* a folder or a view of Storage is the Storage page itself */ || (S.product === 'mcp' && window.XENO_MCP) /* a connection or the activity log is the XENO MCP page itself */ || (S.product === 'depot' && window.XENO_DEPOT) /* a repo or a path in it is the Depot page itself */ || (S.product === 'agent' && window.XENO_AGENT_REMOTE) /* a PC or a chat on it is the Agent page itself: the frame shows it */);
     if (S.item && !liveChatItem) return `<div class="topbar"><button class="ib opener" data-expand aria-label="Open sidebar" data-tip="Open sidebar" data-kbd="Ctrl \\">${ic('side')}</button><div class="crumbs">${crumbs()}</div><div class="sp"></div></div><div class="mview">${mainItem()}</div>`;
     const body = S.view === 'adaptive' ? mainAdaptive() : S.view === 'zone' ? mainZone() : S.view === 'dashboard' ? mainDashboard() : S.view === 'product' ? mainProduct() : S.view === 'global' ? mainGlobal() : mainMode();
     const stTop = S.view === 'product' && S.product === 'storage' && window.XENO_STORAGE?.top ? window.XENO_STORAGE.top() : null;   // Storage's meter and tools sit in the one header
