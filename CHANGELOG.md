@@ -5,6 +5,21 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**On a phone, the sidebar is a drawer and the chat gets the whole screen.** Below 720 px wide, the workspace and every product host (chat., tasks., …) used to keep the rail and the sidebar open, which left the chat 45 px wide on a 390 px phone. They are now a drawer, as in ChatGPT, Gemini and Claude on a phone, and Material's modal navigation drawer.
+- The drawer is closed when a page opens, and the chat fills the screen edge to edge.
+- The menu button in the top bar opens the rail and the sidebar together, with the same curved join, over a darkened page.
+- The drawer closes when you tap outside it, press Escape, go back, or choose a place.
+- While it is open, the page behind cannot be reached, and focus returns to the menu button afterwards.
+- Opening or closing the drawer on a phone never changes the sidebar choice your desktop remembers.
+- Why 720 px, measured: the rail, sidebar and gaps take 345 px, so the chat keeps a usable 360 px only from 712 px up. An upright iPad (768 px) keeps the sidebar.
+- Proof: `npm run test:phone-drawer` runs 28 checks on the workspace and on chat.xenosystem.ai at 390 and 360 px.
+  - Closed on load: the plate is the full width and no rail is on screen.
+  - Open: the drawer sits above the darkened page, and the page underneath is inert.
+  - It closes by tapping outside, by Escape, by Back (staying on the same page) and by choosing a place.
+  - Desktop's saved sidebar choice is untouched.
+  - With the breakpoint removed, 12 of the checks fail.
+- `npm run test:chat-host-plate` at 1920 px gives the same numbers as before the change. Its second width moved from 390 to 768 px, where the sidebar still stays open.
+
 **chat.xenosystem.ai has the workspace's left side: a slim rail, the sidebar growing out of it, the chat on the plate beside it.** The chat's sidebar floated as a detached plate at the window's edge, without the curved join between the rail and the sidebar that the workspace has. The chat host now draws the workspace's own rail, with the chat's places on it (New chat, Search, Library, Images, Scheduled, and Help and your account at the foot). The sidebar opens out of the rail through the same curve, and the chat sits on the same plate beside it. Collapsing the sidebar leaves the rail, like Gemini's slim rail. The rail, slot, curve and plate come from the workspace's rules and timings unchanged; the chat host no longer has layout rules of its own.
 - Proof: `npm run test:chat-host-plate` measures the rail, slot, curve corners, sidebar and plate on the chat host against `/workspace/apps/chat`, at 1920 and 390 px. Every number is equal: rail 56 px, curve 15 px with 16 px corners, sidebar at 63/7, plate 338/7/7/7 with a 14 px radius and a 7 px gap. It then collapses and expands both pages and samples the curve as it animates from 15 to 0 and back (for example 12.4, 3.9, 0.7, 0). On the code before this change, 10 of its 12 checks fail.
 

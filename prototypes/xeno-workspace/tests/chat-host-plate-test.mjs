@@ -2,7 +2,7 @@
 // issue with the top left and bottom left of the container where the chat is displayed … we should have it as the platform
 // has it"). Until then the chat host stripped the plate: square corners, no stroke, no gaps, edge to edge beside the
 // sidebar's rounded plate. Measured from the production build (dist/) against the workspace's own chat page
-// (/workspace/apps/chat), at 1920 and 390 px: the plate's radius, stroke and clip, its gaps to the window, and the gap
+// (/workspace/apps/chat), at 1920 and 768 px (phones: phone-drawer-test): the plate's radius, stroke and clip, its gaps to the window, and the gap
 // between the sidebar's plate and it, must equal the workspace's.
 //   npx vite build && node prototypes/xeno-workspace/tests/chat-host-plate-test.mjs   (SHOT=1 saves side-by-side captures)
 import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url'; import http from 'node:http'; import fs from 'node:fs';
@@ -64,7 +64,8 @@ const toggle = async (p) => {
 };
 const same = (a, b, keys) => keys.every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
 try {
-  for (const [w, h] of [[1920, 1080], [390, 844]]) {
+  // the persistent sidebar's widths; below 720 px the sidebar is a drawer, proven by phone-drawer-test (2026-11-27)
+  for (const [w, h] of [[1920, 1080], [768, 1024]]) {
     const pw = await open(`http://localhost:${port}/workspace/apps/chat`, w, h), pc = await open(`http://chat.localhost:${port}/`, w, h);
     const ws = await pw.evaluate(geometry), ch = await pc.evaluate(geometry);
     await shot(pw, `plate-workspace-${w}.png`); await shot(pc, `plate-chat-host-${w}.png`);

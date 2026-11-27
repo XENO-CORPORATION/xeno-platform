@@ -418,6 +418,24 @@ html[data-panel="closed"] .topbar,html[data-panel="none"] .topbar{transition:pad
 .topbar .opener,html[data-panel="open"] .topbar .opener{display:grid;width:0;min-width:0;margin-right:-10px;opacity:0;overflow:hidden;pointer-events:none;visibility:hidden;transition:width .3s var(--open),margin .3s var(--open),opacity .18s ease,visibility 0s linear .3s} /* hidden = out of the Tab order, after it has slid away */
 html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opener{width:28px;margin-right:0;opacity:1;pointer-events:auto;visibility:visible;transition:width .24s var(--close),margin .24s var(--close),opacity .2s ease .06s,visibility 0s}
 @media (prefers-reduced-motion:reduce){.topbar,.topbar .opener{transition:none!important}}
+/* PHONE (owner, 2026-11-27: "fix it", on the chat plate left 45 px wide at 390 px): below 720 px the rail and sidebar are a
+   modal drawer, as ChatGPT, Gemini and Claude do on a phone and Material's modal navigation drawer is for small windows.
+   720, measured: the rail, sidebar and gaps take 345 px, so the plate keeps a usable 360 px only from 712 px up; an
+   upright iPad (768) keeps the sidebar. Closed (the default on a phone): the plate is the whole window, flush, as the
+   workspace's own closed sidebar makes it. Open: the rail and sidebar, flare included, slide over a scrim. The state is
+   the same data-panel the desktop has, never saved from a phone (app.js setPanel), so the desktop is untouched. */
+@media (max-width:719.98px){
+  html .main,html[data-panel] .main{top:0;right:0;bottom:0;left:0;border-radius:0;clip-path:inset(0 round 0);border-color:transparent}
+  .rail{transition:transform .3s var(--open),visibility 0s}
+  html[data-panel="closed"] .rail,html[data-panel="none"] .rail{transform:translateX(-100%);visibility:hidden;transition:transform .24s var(--close),visibility 0s linear .24s}
+  html[data-panel] .peekzone{display:none}
+  .xw-scrim{position:fixed;inset:0;z-index:15;background:rgba(0,0,0,.5);opacity:0;visibility:hidden;transition:opacity .24s ease,visibility 0s linear .24s}
+  html[data-panel="open"] .xw-scrim{opacity:1;visibility:visible;transition:opacity .3s ease,visibility 0s}
+  html[data-panel="open"] body{overflow:hidden;overscroll-behavior:none}
+  html[data-panel="open"] .topbar .opener{display:none}
+}
+@media (min-width:720px){.xw-scrim{display:none}}
+@media (prefers-reduced-motion:reduce){.rail,.xw-scrim{transition:none!important}}
 /* object facts in the header bar: compact progress, status chip, next milestone, people */
 .pg-top-sum .pg-meta-prog{min-width:0;gap:6px}.pg-top-sum .pg-meter{width:64px;flex:none}.pg-top-sum .pg-meter-n{font-size:11.5px}
 .pg-top-sum .pg-st{font-size:12px}.pg-top-sum .pg-stack .pg-av{width:20px;height:20px;font-size:10px}

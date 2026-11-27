@@ -1352,11 +1352,58 @@
     panel.inert = closed; panel.setAttribute('aria-hidden', String(closed));
   }
   function setPanel(state, persist = true) {
+    const was = root.dataset.panel;
     root.removeAttribute('data-peek');
     root.dataset.panel = state;
     $('#panel').inert = state !== 'open'; $('#panel').setAttribute('aria-hidden', String(state !== 'open'));
-    if (persist) store.set('panel', state);
+    if (persist && !PHONE.matches) store.set('panel', state);   // a phone's drawer is never the desktop's saved choice
+    drawerSync(was, state);
   }
+  // ---- the PHONE drawer (pages.css, below 720 px): the rail and sidebar over a scrim, closed by default ----
+  // Modal while open: the page behind is inert (focus stays in the drawer, nothing behind can be reached), focus returns to
+  // what opened it, and it closes on the scrim, Escape, the back gesture, or choosing a place. Opening adds one history
+  // entry so Back closes it; address.js catches that Back before the router does (a drawer is not a place).
+  const PHONE = matchMedia('(max-width: 719.98px)');
+  let drawerOpener = null, drawerQuiet = false;
+  const scrim = Object.assign(document.createElement('div'), { className: 'xw-scrim' });
+  scrim.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(scrim);
+  function drawerSync(was, state) {
+    const phone = PHONE.matches, open = phone && state === 'open';
+    $('#main').inert = open;
+    $('#rail').inert = phone && !open;
+    if (!phone) { delete root.dataset.drawerEntry; return; }
+    if (open && was !== 'open') {
+      drawerOpener = document.activeElement && document.activeElement !== document.body && !document.activeElement.closest('#panel, #rail') ? document.activeElement : null;   // a tap does not focus a button on every phone
+      if (root.dataset.drawerEntry !== '1') { root.dataset.drawerEntry = '1'; history.pushState(history.state, '', location.href); }
+      requestAnimationFrame(() => ($('#panel').querySelector('button,a,[tabindex]') || $('#rail').querySelector('button,a'))?.focus({ preventScroll: true, focusVisible: false }));   // in the drawer, without a ring flashing on a tap
+    } else if (!open && was === 'open') {
+      if (root.dataset.drawerEntry === '1' && !drawerQuiet) { root.dataset.drawerEntry = 'closing'; history.back(); }   // address.js swallows this pop
+      // back to what opened it, else to the menu button now on screen (the page has a hidden one beside it)
+      const back = drawerOpener && drawerOpener.isConnected ? drawerOpener : [...document.querySelectorAll('#main .opener, #main .opener-float')].find((b) => b.getBoundingClientRect().width > 0 && getComputedStyle(b).visibility !== 'hidden');
+      drawerOpener = null; try { back?.focus({ preventScroll: true }); } catch {}
+    }
+  }
+  // closing because a place was chosen: the router has already pushed the new address, so the drawer's entry stays behind
+  // it (a Back from the chat lands on the same page once) rather than undoing that navigation
+  const drawerClose = (quiet = false) => { if (root.dataset.panel !== 'open' || !PHONE.matches) return; drawerQuiet = quiet; if (quiet) delete root.dataset.drawerEntry; setPanel('closed', false); drawerQuiet = false; };
+  window.XENO_DRAWER_POP = () => { drawerQuiet = true; if (PHONE.matches && root.dataset.panel === 'open') setPanel('closed', false); drawerQuiet = false; };
+  scrim.addEventListener('click', () => drawerClose());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented && PHONE.matches && root.dataset.panel === 'open') { e.preventDefault(); drawerClose(); } });
+  // a place chosen in the drawer: the sidebar's rows, and on chat.xenosystem.ai the rail's buttons (there they are places;
+  // on the workspace's rail they choose which sidebar to show, so the drawer stays open on them)
+  let drawerFrom = null;
+  document.addEventListener('click', (e) => {
+    if (!PHONE.matches || root.dataset.panel !== 'open') return;
+    const inPanel = e.target.closest('#panel'), inChatRail = window.XENO_ADDR?.product === 'chat' && e.target.closest('#rail .rbtn, #rail .logo');
+    drawerFrom = inPanel || inChatRail ? location.pathname + location.search : null;
+  }, true);
+  document.addEventListener('click', (e) => {
+    if (drawerFrom === null) return;
+    const from = drawerFrom, fresh = e.target.closest('[data-newchat]'); drawerFrom = null;
+    setTimeout(() => { if (fresh || location.pathname + location.search !== from) drawerClose(true); }, 0);
+  });
+  PHONE.addEventListener('change', () => setPanel(PHONE.matches ? 'closed' : (store.get('panel', 'open') === 'closed' ? 'closed' : 'open'), false));
 
   // ---- navigation ----
   // ---- routes: every place has an address; Back/Forward and refresh work ----
@@ -2744,7 +2791,7 @@
   new MutationObserver(paintModelTrigger).observe(document.getElementById('main'), { childList: true });
   // ---- boot ----
   root.classList.add('noanim');
-  setPanel(S.panel === 'closed' ? 'closed' : 'open', false);
+  setPanel(S.panel === 'closed' || PHONE.matches ? 'closed' : 'open', false);   // a phone opens with the drawer closed
   // PROTOTYPE ONLY — Ctrl Shift R (the browser's hard reload) brings the first-run sheets back, so we can
   // review them again. The key reaches the page just before the browser reloads; we leave a note in
   // sessionStorage and act on it here, on the fresh load. A plain F5 changes nothing.
