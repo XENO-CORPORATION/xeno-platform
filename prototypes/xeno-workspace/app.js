@@ -1403,6 +1403,12 @@
     const from = drawerFrom, fresh = e.target.closest('[data-newchat]'); drawerFrom = null;
     setTimeout(() => { if (fresh || location.pathname + location.search !== from) drawerClose(true); }, 0);
   });
+  // Keyboard hints ("Ctrl ⇧ O", "Esc", "?") mean nothing on a phone or a touch screen: pages.css hides every kbd tagged
+  // here. Tagged by what it says, because kbd also carries labels and counts ("From chats", "Marketplace", "3").
+  const KEY_HINT = /^(?:(?:ctrl|⌘|cmd|alt|option|⌥|shift|⇧)(?:\s.*)?|esc|enter|↵|tab|space|f\d{1,2}|[a-z?/,.\\`])$/i;
+  const markKeys = (el) => { if (!el || !el.querySelectorAll) return; for (const k of el.querySelectorAll('kbd:not([data-key-hint])')) if (KEY_HINT.test(k.textContent.trim())) k.setAttribute('data-key-hint', ''); };
+  markKeys(document);
+  new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) markKeys(n.tagName === 'KBD' ? n.parentElement : n); }).observe(document.body, { childList: true, subtree: true });
   PHONE.addEventListener('change', () => setPanel(PHONE.matches ? 'closed' : (store.get('panel', 'open') === 'closed' ? 'closed' : 'open'), false));
 
   // ---- navigation ----

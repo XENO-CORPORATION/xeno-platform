@@ -63,6 +63,9 @@ try {
       const s1 = await openDrawer(p);
       ok(s1.panel === 'open' && s1.railOnScreen && s1.scrim && s1.panelOnTop && s1.mainW >= w - 14 && s1.mainInert && s1.focusInDrawer, `${tag}: open, the drawer is above the scrim and the plate sits under it, inert (${JSON.stringify({ top: s1.panelOnTop, scrim: s1.scrim, inert: s1.mainInert, focus: s1.focusInDrawer })})`);
       if (process.env.SHOT) { await p.screenshot({ path: path.join(repo, 'scratchpad', `phone-${name.replace(' ', '-')}-${w}-open.png`) }); }
+      // no keyboard hints in the drawer ("Ctrl ⇧ O"), while a kbd that is a label ("From chats") stays
+      const kb = await p.evaluate(() => { const shown = (k) => k.getBoundingClientRect().width > 0 && getComputedStyle(k).display !== 'none'; const all = [...document.querySelectorAll('#panel kbd, #rail kbd')]; return { hints: all.filter((k) => k.hasAttribute('data-key-hint') && shown(k)).map((k) => k.textContent), labels: all.filter((k) => !k.hasAttribute('data-key-hint') && shown(k)).map((k) => k.textContent), tagged: all.filter((k) => k.hasAttribute('data-key-hint')).length }; });
+      ok(kb.tagged > 0 && kb.hints.length === 0 && kb.labels.includes('From chats'), `${tag}: no keyboard hints in the drawer (${kb.tagged} tagged, ${kb.hints.length} shown), labels kept (${kb.labels.join(', ')})`);
       // closed by the scrim (tapped right of the drawer), focus back on the menu button, the history entry gone
       await p.mouse.click(w - 8, 420); await wait(450);
       const s2 = await p.evaluate(state);
@@ -83,5 +86,11 @@ try {
       await p.close();
     }
   }
+  // the control: on a desktop with a mouse, the same hints stay
+  { const p = await br.newPage(); await p.setViewport({ width: 1920, height: 1080 });
+    await p.goto(`http://localhost:${port}/workspace/apps/chat`, { waitUntil: 'domcontentloaded' }); await p.waitForSelector('#panel kbd', { timeout: 30000 }); await wait(1500);
+    const shownHints = await p.evaluate(() => [...document.querySelectorAll('#panel kbd[data-key-hint]')].filter((k) => k.getBoundingClientRect().width > 0 && getComputedStyle(k).display !== 'none').map((k) => k.textContent));
+    ok(shownHints.length > 0, `1920px with a mouse: the keyboard hints stay (${shownHints.join(', ')})`);
+    await p.close(); }
 } finally { await br.close(); server.close(); }
 console.log(failed ? `${failed} FAILED` : 'phone-drawer: all passed'); process.exit(failed ? 1 : 0);

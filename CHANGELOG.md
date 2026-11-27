@@ -5,6 +5,13 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**The model's name in the chat composer reads in every theme.** With no theme chosen, on a system that states no light or dark preference, the chat inside the workspace's frame resolved dark while the page around it resolved light. The chat's own declaration that its frame is dark had made the frame's answer differ. So the composer's box took the page's light colour and the model's name the chat's dark-theme white: near-white on near-white, 1.07:1. An embedded chat now asks the page it sits in, so both sides follow one theme.
+- Proof: `npm run test:composer-contrast` measures the name against the box it sits on (WCAG contrast ratio, from everything painted at that point) in light, dark, and no theme with the system light, dark and stating nothing. Every case is now at least 17:1; the failing case was 1.07:1.
+
+**Keyboard hints are gone on phones and touch screens.** A hint such as "Ctrl ⇧ O" next to New chat, and the key in a tooltip, no longer show below 720 px or with a touch pointer. Labels that use the same look ("From chats", counts) stay. Proof: `npm run test:phone-drawer` now also checks no hint shows in the drawer at 390 and 360 px while "From chats" does, and that at 1920 px with a mouse the hints are still there.
+
+**The workspace's project-page test is green again.** Its stand-in API now answers `GET /api/workspaces/:id/billing`, shaped as the real route answers it. Proof: `work-test.mjs` 88/88; it had one failure on main.
+
 **On a phone, the sidebar is a drawer and the chat gets the whole screen.** Below 720 px wide, the workspace and every product host (chat., tasks., …) used to keep the rail and the sidebar open, which left the chat 45 px wide on a 390 px phone. They are now a drawer, as in ChatGPT, Gemini and Claude on a phone, and Material's modal navigation drawer.
 - The drawer is closed when a page opens, and the chat fills the screen edge to edge.
 - The menu button in the top bar opens the rail and the sidebar together, with the same curved join, over a darkened page.

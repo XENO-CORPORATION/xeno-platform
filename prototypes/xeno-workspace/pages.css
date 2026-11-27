@@ -435,6 +435,8 @@ html[data-panel="closed"] .topbar .opener,html[data-panel="none"] .topbar .opene
   html[data-panel="open"] .topbar .opener{display:none}
 }
 @media (min-width:720px){.xw-scrim{display:none}}
+/* no keyboard on a phone or a touch screen: its shortcut hints go (app.js tags them data-key-hint; tooltips' kbd are keys) */
+@media (max-width:719.98px),(pointer:coarse){kbd[data-key-hint],.tip kbd{display:none!important}}
 @media (prefers-reduced-motion:reduce){.rail,.xw-scrim{transition:none!important}}
 /* object facts in the header bar: compact progress, status chip, next milestone, people */
 .pg-top-sum .pg-meta-prog{min-width:0;gap:6px}.pg-top-sum .pg-meter{width:64px;flex:none}.pg-top-sum .pg-meter-n{font-size:11.5px}

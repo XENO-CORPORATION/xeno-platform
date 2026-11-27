@@ -56,6 +56,8 @@ function answer(q) {
   if (p === '/api/user-data/settings') return json(200, { success: true, settings: {} });
   if (p === '/api/workspaces' && m === 'GET') return json(200, { success: true, workspaces: db.workspaces });
   if (p === '/api/workspaces' && m === 'POST') { const w = { id: `44444444-4444-4444-8444-${String(db.next++).padStart(12, '0')}`, workspace_type: 'team', name: body.name, member_role: 'owner', member_count: 1 }; db.workspaces.push(w); return json(200, { success: true, workspace: w }); }
+  // the workspace's own wallet, shaped as routes/workspaceRoutes.js GET /:id/billing answers it
+  { const bm = p.match(/^\/api\/workspaces\/([0-9a-f-]{36})\/billing$/); if (bm && m === 'GET') return json(200, { success: true, billing: { scope: 'workspace-wallet', workspace_id: bm[1], billing_mode: 'personal', wallet: { credits: 0, available_credits: 0, pending_credits: 0, is_frozen: false }, budget: null, seats: 1 } }); }
   if (p === '/api/library/assets') return json(200, { success: true, items: u.searchParams.get('folder') === 'root' && u.searchParams.get('owned') === 'mine' ? db.files : [] });
   if (p === '/api/canvases') return json(200, { success: true, canvases: [] });
   if (p === '/api/tasks/projects') return json(200, { success: true, projects: [] });

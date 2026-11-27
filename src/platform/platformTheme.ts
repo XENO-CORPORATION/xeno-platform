@@ -56,9 +56,24 @@ const readStoredBrightness = (): number => {
   return normalizePlatformThemeBrightness(current ?? legacy ?? 0);
 };
 
+// The system scheme as the person's page sees it. A chat shown in the workspace's frame (same origin) asks the page around
+// it, not its own frame: the frame declares `color-scheme: dark` (chat-theme.css html.xw-embed), and where the system states
+// no preference that made the frame resolve dark while the workspace resolved light, so the composer's box took the
+// workspace's light colours and its text the chat's dark-theme white, 1.07:1 (2026-11-27, composer-contrast-test).
+const systemSchemeQuery = (): MediaQueryList | null => {
+  if (typeof window === 'undefined' || !window.matchMedia) return null;
+  try {
+    if (window.parent !== window && window.parent.location.origin === window.location.origin && window.parent.matchMedia) {
+      return window.parent.matchMedia('(prefers-color-scheme: dark)');
+    }
+  } catch { /* a cross-origin parent: this frame's own answer */ }
+  return window.matchMedia('(prefers-color-scheme: dark)');
+};
+
 const readSystemTheme = (): Extract<ResolvedPlatformTheme, 'light' | 'dark'> => {
-  if (typeof window === 'undefined' || !window.matchMedia) return 'dark';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const query = systemSchemeQuery();
+  if (!query) return 'dark';
+  return query.matches ? 'dark' : 'light';
 };
 
 export const announcePlatformTheme = (
@@ -144,8 +159,8 @@ export const useResolvedPlatformTheme = () => {
   const [systemTheme, setSystemTheme] = useState<Extract<ResolvedPlatformTheme, 'light' | 'dark'>>(readSystemTheme);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const media = systemSchemeQuery();
+    if (!media) return;
     const onSystemTheme = (event: MediaQueryListEvent) => setSystemTheme(event.matches ? 'dark' : 'light');
     const onPreference = (event: Event) => {
       const detail = (event as CustomEvent<{ preference?: unknown; brightness?: unknown }>).detail;
