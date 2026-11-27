@@ -3,6 +3,14 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-27
+
+**chat.xenosystem.ai shows only the chat.** The chat on its own host drew the old workspace shell inside its sidebar: the icon rail, the Personal panel (Home, Ask XENO, Projects, Automations, Integrations, Billing…) and the old home page. The chat decided whether it sat inside the workspace by the page's address starting with `/workspace`, and on the chat host the address is `/`. It now also recognises the chat host's page. A link out of the chat (settings, billing) opens on xenosystem.ai, because the chat host only serves the chat.
+- Proof: `npm run test:chat-host-real-app` runs the real chat app from the production build on the chat host, at 1920 and 390 px wide: no Personal panel, no navigation inside the chat, the composer shown. With the old check it finds the Personal panel and two navigation bars, as the owner saw.
+
+**Signed in on xenosystem.ai means signed in on chat., tasks., tools., motion. and creator., with no click.** Each of those hosts keeps its own session, so a person signed in on xenosystem.ai first met the "Coming soon" page with a Sign in button. That page now asks xenosystem.ai once, silently, with the OpenID Connect `prompt=none` check, the way Google and Atlassian sign their own sites in: signed in there, the person lands signed in where they were; not signed in, the page stays and offers Sign in, and that tab does not ask again for ten minutes. The sign-in page never shows a form for a silent check: it answers `login_required` (or `consent_required`) on the app's registered address, as the standard says.
+- Proof: `npm run test:host-signin` (16 checks, 6 new for the silent path) and `npm run test:oauth-prompt-none-ui` (6 checks in a real browser: no session → `login_required` and no form; a session → a code with no click; any other `prompt` value still refused). Each fails when its silent path is removed.
+
 ## 2026-11-22
 
 **The database backups work again, and a restore of them is proven.** The nightly backup had failed since 2026-11-17 because the server's disk was full, and the weekly base backup (the one a point-in-time restore replays onto) had failed since 2026-11-08.

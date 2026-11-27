@@ -30,6 +30,22 @@
  */
 const WORKSPACE_PATH = /^\/workspace(\/|$)/;
 
+/**
+ * The workspace page served on a PRODUCT HOST (chat.xenosystem.ai, tasks.xenosystem.ai): the same workspace page at the
+ * host's own addresses (`/`, `/c/<id>`), so its path is not /workspace. address.js marks that page with
+ * `data-product` on its root. Without this check the chat on chat.xenosystem.ai took itself for a standalone page and
+ * drew its whole old shell (icon rail, Personal panel, the old Ask XENO page) inside the chat host's sidebar
+ * (owner, 2026-11-27).
+ */
+function parentProduct(): string | null {
+  try {
+    const product = window.parent.document.documentElement.dataset.product;
+    return typeof product === 'string' && /^[a-z]{1,20}$/.test(product) ? product : null;
+  } catch {
+    return null;
+  }
+}
+
 let cached: boolean | null = null;
 
 export function isWorkspaceEmbed(): boolean {
@@ -39,7 +55,7 @@ export function isWorkspaceEmbed(): boolean {
     if (typeof window === 'undefined' || window.parent === window) return cached;
     // Reading a cross-origin parent's location throws; that is the "not embedded" answer.
     const parent = window.parent.location;
-    cached = parent.origin === window.location.origin && WORKSPACE_PATH.test(parent.pathname);
+    cached = parent.origin === window.location.origin && (WORKSPACE_PATH.test(parent.pathname) || parentProduct() !== null);
   } catch {
     cached = false;
   }
@@ -103,6 +119,13 @@ export function tellWorkspace(message: WorkspaceChatMessage): void {
 /** A link out of the chat (billing, settings, a product page) opens in the whole tab, not in the frame. */
 export function leaveEmbed(pathAndQuery: string): void {
   try {
+    // A product host serves only its own addresses, so a place outside the chat opens on the main site, where the
+    // workspace lives (address.js does the same for the workspace's own links). chat.localhost → localhost in tests.
+    if (parentProduct() !== null && pathAndQuery.startsWith('/')) {
+      const host = window.location.hostname.replace(/^[^.]+\./, '');
+      window.parent.location.assign(`${window.location.protocol}//${host}${window.location.port ? ':' + window.location.port : ''}${pathAndQuery}`);
+      return;
+    }
     window.parent.location.assign(pathAndQuery);
   } catch {
     window.location.assign(pathAndQuery);

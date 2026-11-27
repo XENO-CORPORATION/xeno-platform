@@ -3211,9 +3211,13 @@ router.get('/host/start', async (req, res) => {
     const host = hostOf(req);
     const state = crypto.randomBytes(24).toString('base64url');
     const verifier = crypto.randomBytes(48).toString('base64url');
-    const carry = Buffer.from(JSON.stringify({ s: state, v: verifier, c: clientId, h: host, r: hostReturnPath(req.query.return) })).toString('base64url');
+    // ?silent=1: the silent check (prompt=none), the Google / Atlassian shape: a person signed in on xenosystem.ai comes
+    // back signed in here with no click, and one who is not comes back to the page they asked for, with no form shown.
+    const silent = req.query.silent === '1';
+    const carry = Buffer.from(JSON.stringify({ s: state, v: verifier, c: clientId, h: host, r: hostReturnPath(req.query.return), q: silent ? 1 : 0 })).toString('base64url');
     res.cookie(HOST_STATE_COOKIE, carry, { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', path: '/', maxAge: 10 * 60 * 1000 });
     const q = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: `https://${host}/api/auth/host/callback`, scope: 'openid profile email', state, code_challenge: generateCodeChallenge(verifier), code_challenge_method: 'S256' });
+    if (silent) q.set('prompt', 'none');
     return res.redirect(302, `${publicSiteOrigin()}/api/oauth2/authorize?${q}`);
   } catch (error) {
     console.error('[auth] host sign-in start', error.message);
@@ -3229,7 +3233,12 @@ router.get('/host/callback', async (req, res) => {
   try { carry = JSON.parse(Buffer.from(readCookie(req, HOST_STATE_COOKIE) || '', 'base64url').toString('utf8')); } catch { carry = null; }
   res.clearCookie(HOST_STATE_COOKIE, { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', path: '/' });
   const { code, state, error } = req.query;
-  if (error) return continuePage(res, '/', 'Sign-in was cancelled.');
+  // A silent check that found no session (login_required …) goes back to the page asked for, which then offers Sign in;
+  // the state must still match, so nobody can send a person to a path of their choosing through this.
+  if (error) {
+    const quiet = carry && carry.q === 1 && typeof state === 'string' && carry.s === state && carry.h === host;
+    return continuePage(res, quiet ? hostReturnPath(carry.r) : '/', quiet ? 'Opening…' : 'Sign-in was cancelled.');
+  }
   if (typeof state !== 'string' || typeof code !== 'string' || !carry || typeof carry.s !== 'string' || carry.s !== state
       || carry.c !== clientId || carry.h !== host || typeof carry.v !== 'string') return res.status(400).type('text').send('This sign-in link is not valid any more. Start again.');
   try {

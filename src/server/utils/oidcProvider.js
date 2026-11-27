@@ -433,7 +433,8 @@ export async function createAuthorizationCode(db, {
   });
   const grantedScope = downscope(scope || (client.dynamic ? 'openid tasks:read tasks:write' : 'openid profile email'), client.allowed_scopes);
   if (client.dynamic && !grantedScope.split(' ').some((s) => DYNAMIC_SCOPES.includes(s))) throw oauthError('invalid_scope', 'this client may only request the scopes it registered for');
-  if (prompt !== null && prompt !== '' && prompt !== 'login') {
+  // 'none' is the silent check (OIDC Core §3.1.2.1): it changes nothing about a code issued from a live session
+  if (prompt !== null && prompt !== '' && prompt !== 'login' && prompt !== 'none') {
     throw oauthError('invalid_request', 'unsupported prompt');
   }
   const normalizedMaxAge = maxAge === null || maxAge === '' ? null : Number(maxAge);
