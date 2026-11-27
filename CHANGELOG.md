@@ -5,6 +5,11 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**Agent page (`remote-web` from `xeno-agent-interface` #273, packages 0.1.207): cloud turns name their files, switching places opens that host's own chats, and waking a cloud machine no longer fails with a stale catalog revision.**
+- Tool results now parse POSIX paths as well as Windows paths when the model passes a relative path, so cloud turns name their files and display the "Edited N files" card.
+- Switching between Cloud and a PC clears the previous host's in-memory conversations (`hostSwitch.ts`) before loading the new host's chats.
+- `CATALOG_REVISION_CONFLICT` refreshes the provider catalog once and retries lane selection on the current revision.
+
 **A Word document in a chat project is read heading by heading.** A .docx used to come out as one block of text, so nothing in it could be pointed to precisely. It is now one section per heading, each knowing its heading, its level and its place in the document, with any text before the first heading as its own section. Tables keep their cells apart. This is the first step of Corpus notebooks in Chat (the contract agreed with XENO Corpus on 2026-11-27): a citation will open the heading its passage came from. Documents read before this carry the older extractor version and are read again.
 - Proof: `node --test scripts/chat-project-ingestion.test.mjs` (9; a new test builds a .docx with three headings and checks each section's heading, level, place and text). With the old single-section extraction, that test fails. `npm run test:chat-project-db` 14/14 on a migrated database.
 
