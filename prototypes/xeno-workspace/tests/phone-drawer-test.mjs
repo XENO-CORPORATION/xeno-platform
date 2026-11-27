@@ -69,7 +69,9 @@ try {
       if (process.env.SHOT) { await p.screenshot({ path: path.join(repo, 'scratchpad', `phone-${name.replace(' ', '-')}-${w}-open.png`) }); }
       // no keyboard hints in the drawer ("Ctrl ⇧ O"), while a kbd that is a label ("From chats") stays
       const kb = await p.evaluate(() => { const shown = (k) => k.getBoundingClientRect().width > 0 && getComputedStyle(k).display !== 'none'; const all = [...document.querySelectorAll('#panel kbd, #rail kbd')]; return { hints: all.filter((k) => k.hasAttribute('data-key-hint') && shown(k)).map((k) => k.textContent), labels: all.filter((k) => !k.hasAttribute('data-key-hint') && shown(k)).map((k) => k.textContent), tagged: all.filter((k) => k.hasAttribute('data-key-hint')).length }; });
-      ok(kb.tagged > 0 && kb.hints.length === 0 && kb.labels.includes('From chats'), `${tag}: no keyboard hints in the drawer (${kb.tagged} tagged, ${kb.hints.length} shown), labels kept (${kb.labels.join(', ')})`);
+      // the chat's drawer has hints and a label kbd ("From chats"); Storage's has no kbd at all, so only "none shown" applies there
+      if (name.startsWith('storage')) ok(kb.hints.length === 0, `${tag}: no keyboard hints in the drawer (${kb.tagged} tagged, ${kb.hints.length} shown)`);
+      else ok(kb.tagged > 0 && kb.hints.length === 0 && kb.labels.includes('From chats'), `${tag}: no keyboard hints in the drawer (${kb.tagged} tagged, ${kb.hints.length} shown), labels kept (${kb.labels.join(', ')})`);
       // closed by the scrim (tapped right of the drawer), focus back on the menu button, the history entry gone
       await p.mouse.click(w - 8, 420); await wait(450);
       const s2 = await p.evaluate(state);
