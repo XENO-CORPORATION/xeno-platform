@@ -5,6 +5,9 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-27
 
+**The chat on chat.xenosystem.ai sits on the workspace's plate.** The chat area ran square and edge to edge beside the sidebar's rounded plate, so its top-left and bottom-left corners met the sidebar badly. It now has the workspace's own plate: 14 px corners, the same stroke, a 7 px gap to the window, and a 7 px gap from the sidebar, only moved left by the rail that the chat host does not have.
+- Proof: `npm run test:chat-host-plate` measures the chat host against `/workspace/apps/chat` at 1920 and 390 px: corners, stroke, clip, the gaps to the window, and the gap between the sidebar and the chat all equal the workspace's. With the old rule all 8 checks fail.
+
 **chat.xenosystem.ai shows only the chat.** The chat on its own host drew the old workspace shell inside its sidebar: the icon rail, the Personal panel (Home, Ask XENO, Projects, Automations, Integrations, Billing…) and the old home page. The chat decided whether it sat inside the workspace by the page's address starting with `/workspace`, and on the chat host the address is `/`. It now also recognises the chat host's page. A link out of the chat (settings, billing) opens on xenosystem.ai, because the chat host only serves the chat.
 - Proof: `npm run test:chat-host-real-app` runs the real chat app from the production build on the chat host, at 1920 and 390 px wide: no Personal panel, no navigation inside the chat, the composer shown. With the old check it finds the Personal panel and two navigation bars, as the owner saw.
 
