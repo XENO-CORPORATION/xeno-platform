@@ -135,6 +135,9 @@
   // XENO_ZONE_LIVE), so this line cannot fall behind as areas get connected. An area's sidebar rows are already removed on
   // the platform (platform-home.js); what can still show sample rows is its table in XENO_PG_AREAS, plus the whole pages.
   function previewNote() {
+    // a product host (storage., chat., tasks.) shows that product alone: the workspace's other areas, and their sample
+    // data, are not reachable there, so naming them is noise
+    if (window.XENO_ADDR?.product) return '';
     const live = window.XENO_ZONE_LIVE || {}, tables = window.XENO_PG_AREAS || {}, names = [];
     for (const [mode, zones] of Object.entries(window.XENO_MODE_ZONES || {})) {
       for (const z of zones) if (tables[`${mode}.${z.id}`] && !live[`${mode}.${z.id}`]) names.push(z.label);

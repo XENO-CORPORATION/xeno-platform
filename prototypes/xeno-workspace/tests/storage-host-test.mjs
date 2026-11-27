@@ -137,6 +137,13 @@ try {
   ok(head.brand === 'Storage' && !head.back, `the sidebar carries the product: ${JSON.stringify(head)}`);
   ok(await p.evaluate(() => document.querySelector('#rail [aria-label="My files"]')?.getAttribute('aria-current') === 'true'), 'My files is the current place at /');
   ok(await p.evaluate(() => !!document.querySelector('.xst [data-xst-folder]')), 'My files lists the account\'s folders');
+  // a folder list with no counts (this fake's, and some of the platform's) says nothing, never "NaN items"
+  ok(await p.evaluate(() => !/NaN/.test(document.querySelector('#main')?.textContent || '')), 'no "NaN" in the file list');
+  // the workspace's "Preview. Still sample data: <areas>" names areas this host does not show
+  ok(await p.evaluate(() => { const n = document.getElementById('xp-note'); return !n || n.hidden || !n.textContent; }), 'no workspace sample-data note on the host');
+  // every view in the sidebar has its own icon (a missing one falls back to the chevron)
+  const chevrons = await p.evaluate(() => { const right = /data-glyph="([^"]*)"/.exec(window.XW.ic('right'))[1]; return [...document.querySelectorAll('#panel .views [data-item]')].filter((r) => r.querySelector('svg')?.getAttribute('data-glyph') === right).map((r) => r.textContent.trim()); });
+  ok(chevrons.length === 0, `every sidebar view has its own icon${chevrons.length ? ' (chevron on: ' + chevrons.join(', ') + ')' : ''}`);
   for (const [label, want] of [['Recent', '/recent'], ['Starred', '/starred'], ['Shared', '/shared'], ['Trash', '/trash'], ['Storage used', '/usage'], ['My files', '/']]) {
     await p.click(`#rail [aria-label="${label}"]`); await new Promise((r) => setTimeout(r, 500));
     const at = await p.evaluate(() => ({ path: location.pathname, current: document.querySelector('#rail .rmid [aria-current="true"]')?.getAttribute('aria-label') }));
