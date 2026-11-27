@@ -35,6 +35,13 @@
   const ITEM_IN = { chat: (p) => p.replace(/^c\//, '') };
   const WORKSPACE_ORIGIN = location.hostname.endsWith('.localhost') ? location.origin.replace(/\/\/[^.]+\./, '//') : 'https://' + location.hostname.replace(/^[^.]+\./, '');
   if (PRODUCT) document.documentElement.dataset.product = PRODUCT;
+  // The phone drawer (app.js drawerSync) adds one history entry when it opens, so the back gesture closes it. That Back is
+  // not a navigation: caught here, before every other popstate listener (this script loads first), and handed to the drawer.
+  addEventListener('popstate', (e) => {
+    const r = document.documentElement, mark = r.dataset.drawerEntry; if (mark !== '1' && mark !== 'closing') return;
+    delete r.dataset.drawerEntry; e.stopImmediatePropagation();
+    if (mark === '1') window.XENO_DRAWER_POP?.();   // 'closing': the drawer already closed itself and stepped back
+  });
   const BASE = '/workspace';
   const GLOBALS = ['anima', 'community', 'market', 'library', 'projects', 'tasks', 'workspace', 'inbox', 'settings', 'places', 'support', 'releases', 'shell'];
   const RESERVED = [...GLOBALS, 'apps', 'spaces', 'adaptive', 'overview', 'divisions'];
