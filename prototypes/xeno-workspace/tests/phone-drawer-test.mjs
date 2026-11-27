@@ -27,6 +27,7 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/env-config.js') { res.writeHead(200, { 'content-type': 'text/javascript' }); return res.end('window.__ENV__={};'); }
   if (/^\/chat(\/|$)/.test(u.pathname)) return file(res, path.join(dist, 'index.html'));
   if (chatHost && /^\/((c|projects|library|images)(\/[^.]*)?)?$/.test(u.pathname)) return file(res, path.join(dist, 'workspace', 'chat.html'));
+  if (String(req.headers.host || '').startsWith('storage.') && /^\/[^.]*$/.test(u.pathname)) return file(res, path.join(dist, 'workspace', 'storage.html'));
   if (!chatHost && /^\/workspace(\/[^.]*)?$/.test(u.pathname)) return file(res, path.join(dist, 'workspace', 'index.html'));
   return file(res, path.join(dist, decodeURIComponent(u.pathname)));
 });
@@ -51,6 +52,9 @@ try {
     for (const [name, url, choose] of [
       ['workspace', `http://localhost:${port}/workspace/apps/chat`, '#panel [data-go-library]'],
       ['chat host', `http://chat.localhost:${port}/`, '#panel [data-go-library]'],
+      // storage.: a place on the host's rail (HOST_RAILS) closes the drawer, as a place in its sidebar does
+      ['storage host rail', `http://storage.localhost:${port}/`, '#rail [aria-label="Recent"]'],
+      ['storage host sidebar', `http://storage.localhost:${port}/`, '#panel [data-item="Starred"]'],
     ]) {
       const p = await br.newPage(); await p.setViewport({ width: w, height: 844, isMobile: true, hasTouch: true });
       await p.goto(url, { waitUntil: 'domcontentloaded' }); await p.waitForSelector('.main', { timeout: 30000 });

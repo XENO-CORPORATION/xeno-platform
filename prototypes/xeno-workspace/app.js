@@ -174,23 +174,32 @@
   // margin and the angle we got on our website, between the shrunk left side and the expanded one"): the workspace's own rail
   // element, CSS and flare, carrying the chat's places instead of the workspace's. Collapsed, it is what remains, as Gemini's
   // slim rail is. Each button is the panel's own action (the same data- attribute, handled once, document-wide).
-  function renderChatRail(rail) {
-    if (rail.firstElementChild) return;
+  // A product host's rail places, as [attributes, icon, label, shortcut]: each button is the panel's own action (the same
+  // data- attribute, handled once, document-wide). A product host adds one entry here (storage.: owner, 2026-11-21, "the
+  // same for storage.xenosystem.ai … that drive-like interface"); the rail element, its CSS and flare stay the workspace's.
+  const HOST_RAILS = {
+    chat: [['data-newchat', 'plus', 'New chat', 'Ctrl ⇧ O'], ['data-go="search"', 'search', 'Search', 'Ctrl K'], ['data-go-library="From chats"', 'lib', 'Library'],
+      ['data-chat-images', 'image', 'Images'], ['data-xa="scheduled"', 'clock', 'Scheduled']],
+    // Drive's own left column: New, My Drive, Recent, Starred, Shared with me, Trash, Storage (the meter)
+    storage: [['data-xl-new="storage"', 'upload', 'Upload'], ['data-item="" data-item-exact', 'folder', 'My files'], ['data-item="Recent"', 'clock', 'Recent'],
+      ['data-item="Starred"', 'star', 'Starred'], ['data-item="Shared"', 'people', 'Shared'], ['data-item="Trash"', 'trash', 'Trash'],
+      ['data-item="Usage"', 'chart', 'Storage used'], ['data-go="search"', 'search', 'Search', 'Ctrl K']],
+  };
+  function renderHostRail(rail, places) {
+    if (rail.firstElementChild) return markItems(rail);   // drawn once; its current place follows the address
     const b = (attrs, icon, label, kbd = '') => `<button class="rbtn" ${attrs} aria-label="${label}" data-tip="${label}" data-kbd="${kbd}">${ic(icon)}</button>`;
     rail.innerHTML = `
       <a class="logo" id="logo" href="${esc((window.XENO_ADDR?.workspaceOrigin || '') + '/workspace')}" aria-label="XENO workspace" data-tip="XENO workspace"><span class="mk" data-mode="xeno">${M.xeno.svg}</span></a>
       <div class="rmid" id="rmid">
-      ${b('data-newchat', 'plus', 'New chat', 'Ctrl ⇧ O')}
-      ${b('data-go="search"', 'search', 'Search', 'Ctrl K')}
-      ${b('data-go-library="From chats"', 'lib', 'Library')}
-      ${b('data-chat-images', 'image', 'Images')}
-      ${b('data-xa="scheduled"', 'clock', 'Scheduled')}
+      ${places.map((p) => b(...p)).join('\n      ')}
       </div>
       ${b('data-go="help"', 'help', 'Help & report', 'Shift R')}
       <button class="avatar" data-go="account" data-tip="Account, settings, connected accounts, get the apps" aria-label="Account"></button>`;   // applyWorkspace() writes the initial, as on the workspace's rail
+    markItems(rail);
   }
   function renderRail() {
-    if (window.XENO_ADDR?.product === 'chat') return renderChatRail($('#rail'));
+    const hostRail = HOST_RAILS[window.XENO_ADDR?.product];
+    if (hostRail) return renderHostRail($('#rail'), hostRail);
     const onDash = inOv() || S.view === 'adaptive';   // the rail wears the CONTEXT: Overview stays Overview inside any product it opens
     const cur = (k) => (k === 'home' && S.view === 'mode') || (k === 'chat' && S.view === 'product' && S.product === 'chat') || (S.view === 'global' && S.global === k);
     const rb = (k, icon, label, kbd = '') => `<button class="rbtn" data-go="${k}" aria-label="${label}" data-tip="${label}" data-kbd="${kbd}" aria-current="${cur(k)}">${ic(icon)}${k === 'bell' ? '<span class="badge"></span>' : ''}</button>`;
@@ -377,10 +386,15 @@
         ${window.XL.notifyBtn(id, 'act primary')}
         <div class="empty-note"><b>${esc(p.name)} is coming.</b><span>${esc(p.blurb)}. It is planned and not built yet — nothing here is real work.</span></div>
       </div>`;
-    if (nav) return `${backHeader(id, p.name)}
+    // on the product's own host (storage.xenosystem.ai) the sidebar carries the product, as chat.'s does: "Overview › X"
+    // and its back button mean nothing there. Storage's home (My files) is a place of its own, as My Drive is Drive's.
+    const onHost = window.XENO_ADDR?.product === id;
+    const head = onHost ? `<div class="ph xch-head"><a class="xch-brand" href="/" data-item="" data-item-exact aria-label="XENO ${esc(p.name)}">${XENO_MARK}<b>${esc(p.name)}</b></a><button class="ib" data-go="search" aria-label="Search" data-tip="Search" data-kbd="Ctrl K">${ic('search')}</button><button class="ib" data-collapse aria-label="Collapse sidebar" data-tip="Collapse" data-kbd="Ctrl \\">${ic('side')}</button></div>` : backHeader(id, p.name);
+    const home = id === 'storage' ? row('data-item="" data-item-exact', `${ic('folder')}<span class="t">My files</span>`) : '';
+    if (nav) return `${head}
       <div class="pbody">
-        <button class="act primary" data-xl-new="${id}" data-xl-noun="${esc(nav.primary)}">${ic('plus')}${esc(nav.primary)}</button>
-        ${(nav.views || []).length ? `<div class="views">${nav.views.map(viewRow).join('')}</div>` : ''}
+        <button class="act primary" data-xl-new="${id}" data-xl-noun="${esc(nav.primary)}">${ic(id === 'storage' ? 'upload' : 'plus')}${esc(nav.primary)}</button>
+        ${(nav.views || []).length ? `<div class="views">${home}${nav.views.map(viewRow).join('')}</div>` : ''}
         ${(nav.views || []).includes('Recent') ? '' : recentSec}
         ${(window.XENO_PLATFORM?.served && !LIVE_PRODUCT_SECTIONS.has(id) ? [] : nav.sections || []).map(([t, rows]) => sec(t.toLowerCase().replace(/\W+/g, '-'), t, rows.map((r) => workRow(r, t)).join(''))).join('')}
       </div>`;
@@ -1395,7 +1409,7 @@
   let drawerFrom = null;
   document.addEventListener('click', (e) => {
     if (!PHONE.matches || root.dataset.panel !== 'open') return;
-    const inPanel = e.target.closest('#panel'), inChatRail = window.XENO_ADDR?.product === 'chat' && e.target.closest('#rail .rbtn, #rail .logo');
+    const inPanel = e.target.closest('#panel'), inChatRail = !!HOST_RAILS[window.XENO_ADDR?.product] && e.target.closest('#rail .rbtn, #rail .logo');
     drawerFrom = inPanel || inChatRail ? location.pathname + location.search : null;
   }, true);
   document.addEventListener('click', (e) => {

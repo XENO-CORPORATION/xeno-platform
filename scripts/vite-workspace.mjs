@@ -35,6 +35,11 @@ export const PRODUCT_SCRIPTS = Object.freeze({
     'history-core.js', 'history.js', 'select-core.js', 'select.js', 'drag.js', 'mode-marks.js', 'data.js', 'nav.js', 'live-chat.js', 'xeno-icons.js', 'ctx-menu.js',
     'library-files.js', 'custom-modes.js', 'pages-data.js', 'platform-work.js', 'platform-library.js', 'platform-generations.js', 'platform-chat.js',
     'pages.js', 'modals.js', 'actions.js', 'visibility.js', 'search.js', 'app.js', 'panel-sel.js'],
+  // storage.xenosystem.ai: XENO Storage alone, Drive-like (its uploads, folders, sharing and connected clouds)
+  storage: ['address.js', 'theme-palette.js', 'theme.js', 'mark-loader.js', 'report-client.js', 'report-capture.js', 'report-view.js', 'platform.js', 'keys.js', 'net.js',
+    'history-core.js', 'history.js', 'select-core.js', 'select.js', 'drag.js', 'mode-marks.js', 'data.js', 'nav.js', 'xeno-icons.js', 'ctx-menu.js', 'custom-modes.js',
+    'pages-data.js', 'platform-work.js', 'platform-storage-uploads.js', 'platform-storage.js', 'platform-storage-clouds.js',
+    'pages.js', 'modals.js', 'actions.js', 'visibility.js', 'search.js', 'app.js', 'panel-sel.js'],
 });
 /** index.html → the page for one product: the same markup and styles, only that product's scripts */
 export function productPage(html, product) {
@@ -71,7 +76,7 @@ export function xenoWorkspace(rootDir) {
         // a product host (address.js PRODUCT: tasks.localhost here, tasks.xenosystem.ai behind nginx): its own
         // addresses (/, /T-4, /My tasks) are the workspace page, which shows that product alone
         // The chat host's /chat/… is the platform's chat app itself (the frame the chat page shows), never this page.
-        const productHost = (/^(tasks|chat)\.localhost(:\d+)?$/i.exec(String(req.headers.host || '')) || [])[1];
+        const productHost = (/^(tasks|chat|storage)\.localhost(:\d+)?$/i.exec(String(req.headers.host || '')) || [])[1];
         if (productHost && !u.pathname.startsWith('/workspace/') && !u.pathname.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(u.pathname)
           && !(productHost === 'chat' && /^\/chat(\/|$)/.test(u.pathname))) {
           const page = productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), productHost.toLowerCase()).html;

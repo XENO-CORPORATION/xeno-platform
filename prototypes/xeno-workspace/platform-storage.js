@@ -235,7 +235,7 @@
   const focusName = (tries = 12) => setTimeout(() => { const all = document.querySelectorAll('.xst [data-xst-name]'), i = all[all.length - 1]; if (i && document.activeElement !== i) { i.focus(); const dot = i.value.lastIndexOf('.'); try { i.setSelectionRange(0, dot > 0 ? dot : i.value.length); } catch {} } if (tries > 0 && (!i || document.activeElement !== i || all.length > 1)) focusName(tries - 1); }, 60);
 
   document.addEventListener('click', async (e) => {
-    if (e.target.closest('#panel [data-xl-new="storage"]')) { e.preventDefault(); e.stopImmediatePropagation(); go(null); setTimeout(() => document.querySelector('.xst [data-xst-files]')?.click(), 250); return; }
+    if (e.target.closest('#panel [data-xl-new="storage"], #rail [data-xl-new="storage"]')) { e.preventDefault(); e.stopImmediatePropagation(); go(null); setTimeout(() => document.querySelector('.xst [data-xst-files]')?.click(), 250); return; }
     const b = e.target.closest('.xst [data-xst]');
     // a click on a folder opens it (its buttons and its name field are their own)
     if (!b) {

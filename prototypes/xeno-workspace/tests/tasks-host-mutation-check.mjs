@@ -4,10 +4,10 @@
 import { readFileSync, writeFileSync } from 'node:fs'; import { spawnSync } from 'node:child_process'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url)), ws = path.resolve(here, '..'), repo = path.resolve(here, '../../..');
 const MUTANTS = [
-  ['the host is not read as the Tasks host', path.join(ws, 'address.js'), "/^(tasks)\\.(xenosystem\\.ai|xenostudio\\.ai|localhost)$/", "/^(tasksX)\\.(xenosystem\\.ai|xenostudio\\.ai|localhost)$/"],
+  ['the host is not read as the Tasks host', path.join(ws, 'address.js'), "/^(tasks|chat|storage)\\.(xenosystem\\.ai|xenostudio\\.ai|localhost)$/", "/^(tasksX|chat|storage)\\.(xenosystem\\.ai|xenostudio\\.ai|localhost)$/"],
   ['the product header is never drawn', path.join(ws, 'app.js'), '    renderProductHeader();', '    void 0;'],
-  ['the workspace chrome is not hidden', path.join(ws, 'index.html'), 'html[data-product] .rail,html[data-product] .slot,html[data-product] .peekzone{display:none!important}', ''],
-  ['the host serves every workspace script', path.join(repo, 'scripts', 'vite-workspace.mjs'), "const page = productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), 'tasks').html;", "const page = fs.readFileSync(path.join(src, 'index.html'), 'utf8').replace('<html lang=\"en\">', '<html lang=\"en\" data-product=\"tasks\">');"],
+  ['the workspace chrome is not hidden', path.join(ws, 'index.html'), 'html[data-product="tasks"] .rail,html[data-product="tasks"] .peekzone,html[data-product="tasks"] .slot{display:none!important}', ''],
+  ['the host serves every workspace script', path.join(repo, 'scripts', 'vite-workspace.mjs'), "productPage(fs.readFileSync(path.join(src, 'index.html'), 'utf8'), productHost.toLowerCase()).html", "fs.readFileSync(path.join(src, 'index.html'), 'utf8').replace('<html lang=\"en\">', `<html lang=\"en\" data-product=\"${productHost.toLowerCase()}\">`)"],
   ['the platform does not count the host as served', path.join(ws, 'platform.js'), '(product || /^\\/workspace(\\/|$)/.test(location.pathname))', '/^\\/workspace(\\/|$)/.test(location.pathname)'],
 ];
 let caught = 0;
