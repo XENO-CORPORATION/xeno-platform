@@ -41,6 +41,7 @@ import PinnedProjectsSection from './PinnedProjectsSection';
 import { ChatBreadcrumb, ChatRouteNotice, ProjectChatsSidebarSection } from './ChatProjectNavigation';
 import {
   buildChatConversationPath,
+  buildProjectNotebookPath,
   buildProjectPath,
   buildProjectsPath,
   conversationUrlCorrection,
@@ -50,6 +51,7 @@ import {
 import { isOutlineDebugOn, OUTLINE_DEBUG_CSS } from './outlineDebug';
   import ChatLibraryPage from './ChatLibraryPage';
 import ChatScheduledPage from './ChatScheduledPage';
+import ChatNotebookPage from './ChatNotebookPage';
 import { createScheduledTask, deleteScheduledTask, listScheduledTasks, previewScheduledOccurrences, setScheduledTaskStatus } from './chatScheduled';
 import ChatGlobalSettingsPage from './ChatGlobalSettingsPage';
 import ChatCustomizePage from './ChatCustomizePage';
@@ -97,7 +99,7 @@ import LibraryAssetViewer, { type LibraryViewerItem } from '@/components/library
 import { countMessageTokens, estimateTokens as quickEstimateTokens } from '@/services/tokenizerService';
 import { userDataService } from '@/services/userDataService';
 import { webContextService, type WebContextProgress, type WebContextSearchResult, type WebContextSource } from '@/services/webContextService';
-import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment, ChatMessage as DBChatMessage, ProjectSourceReference } from '@/services/chatService';
+import type { Conversation as DBConversation, ChatAttachment as DBChatAttachment, ChatMessage as DBChatMessage, NotebookCitations, ProjectSourceReference } from '@/services/chatService';
 import { ArrowUp, Clock, X, ChevronDown, ChevronRight, Plus, Download, Brain, Folder, FolderUp, Link, File, FileClock, FileImage, FileText, FilePenLine, MessageSquare, MessagesSquare, Check, Copy, Search, ExternalLink, Info, Target, MessageSquareX, Image, Stop, Mic, Globe, Settings, TrendingUp, CheckCircle, Pencil, Hand, Pin, Monitor, Archive, Library, PanelLeftOpen, Star, Contrast, UserRoundX, RefreshDecl, CopyDecl, CheckDecl, EditDecl, ThumbsUpDecl, ThumbsDownDecl, InfoDecl, XDecl, SearchDecl, PanelLeftCloseDecl, ArrowUpRightDecl, FolderDecl, TrashDecl, BriefcaseDecl, GearDecl, PlusDecl, BookmarkDecl, ArchiveDecl, LayersDecl, StarDecl, FeatherDecl, TargetDecl, SmileDecl, BrainCircuitDecl, MessageSquareXDecl, QuoteDecl, ImageDecl, WandSparklesDecl, FileXDecl, ContrastDecl, UserRoundXDecl, MenuDecl, ShareDecl, MoreVerticalDecl, PaperclipDecl, ChevronDownDecl, ChevronRightDecl, WrapTextDecl, FolderUpDecl, FileClockDecl, PanelRightOpenDecl, PanelRightCloseDecl, MessageSquarePlusDecl, PanelLeftOpenDecl, ArrowRightDecl, CalendarDecl, ClockDecl, BrainDecl, SlidersDecl } from '@/lib/icons';
 import { announceSidebarExpanded, onSidebarCollapseRequest } from '@/lib/sidebarExclusion';
 import ReactMarkdown from 'react-markdown';
@@ -504,6 +506,8 @@ interface ChatMessage {
     isXenoDeepSearchContainer?: boolean; // New flag to identify deep search containers
     isStreaming?: boolean; // True while the answer is being revealed (typewriter); actions hidden until done
     projectSources?: ProjectSourceReference[];
+    /** A notebook answer's checked citations (Corpus's cite()); refused marks are listed, never linked. */
+    notebookCitations?: NotebookCitations | null;
     projectContextId?: string;
     isPersistenceError?: boolean;
     /** The row's id in the database, once persisted — the tree edge needs it. Local `id` stays the UI key. */
@@ -669,6 +673,7 @@ const dbMessageToLocal = (msg: DBChatMessage, index: number): ChatMessage => {
       contentUrl: generated.contentUrl!,
     } : undefined,
     projectSources: Array.isArray(msg.project_sources) ? msg.project_sources : undefined,
+    notebookCitations: msg.notebook_citations ?? undefined,
     searchInfo: persistedSearch,
     turn: storedTurn,
   };
@@ -2786,6 +2791,12 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const [isArtifactsPageOpen, setIsArtifactsPageOpen] = useState(false);
   const [isGlobalSettingsPageOpen, setIsGlobalSettingsPageOpen] = useState(false);
   const [isScheduledPageOpen, setIsScheduledPageOpen] = useState(false);
+  // Which project's NOTEBOOK is open (`/chat/projects/<id>/notebook`), from the URL on entry like the project home.
+  const [notebookProjectId, setNotebookProjectId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const entry = parseChatLocation(window.location.pathname);
+    return entry.view === 'project-notebook' ? entry.projectId : null;
+  });
   const [isCustomizePageOpen, setIsCustomizePageOpen] = useState(false);
   const [isCustomizePageMounted, setIsCustomizePageMounted] = useState(false);
   const [isCustomizePageShown, setIsCustomizePageShown] = useState(false);
@@ -3511,6 +3522,11 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
   const applyChatLocationRef = useRef<(pathname: string) => void>(() => {});
   applyChatLocationRef.current = (pathname: string) => {
     const loc = parseChatLocation(pathname);
+    if (loc.view === 'project-notebook' && loc.projectId) {
+      openNotebook(loc.projectId);
+      return;
+    }
+    setNotebookProjectId(null);
     if (loc.view === 'projects') {
       openProjectsPage();
       return;
@@ -4975,6 +4991,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsArtifactsPageOpen(false);
     setIsGlobalSettingsPageOpen(false);
     setIsScheduledPageOpen(false);
+    setNotebookProjectId(null);
     setIsCustomizePageOpen(false);
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
@@ -4998,6 +5015,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsArtifactsPageOpen(true);
     setIsGlobalSettingsPageOpen(false);
     setIsScheduledPageOpen(false);
+    setNotebookProjectId(null);
     setIsCustomizePageOpen(false);
     setIsProjectsPageOpen(false);
     setActiveProjectId(null);
@@ -5020,6 +5038,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsGlobalSettingsPageOpen(true);
     setIsArtifactsPageOpen(false);
     setIsScheduledPageOpen(false);
+    setNotebookProjectId(null);
     setIsCustomizePageOpen(false);
     setIsProjectsPageOpen(false);
     setActiveProjectId(null);
@@ -5034,6 +5053,22 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       localStorage.removeItem(ACTIVE_PROJECT_ID_STORAGE_KEY);
     } catch {
       /* ignore storage failures */
+    }
+  }, []);
+
+  const openNotebook = useCallback((projectId: string) => {
+    setIsArtifactsPageOpen(false);
+    setIsGlobalSettingsPageOpen(false);
+    setIsScheduledPageOpen(false);
+    setIsCustomizePageOpen(false);
+    setIsChatsCatalogOpen(false);
+    setNotebookProjectId(projectId);
+    if (typeof window !== 'undefined') {
+      const here = parseChatLocation(window.location.pathname);
+      if (here.view !== 'project-notebook' || here.projectId !== projectId) {
+        window.history.pushState({ view: 'project-notebook', projectId }, '', buildProjectNotebookPath(projectId));
+        tellWorkspace({ source: 'xeno-chat', type: 'location', path: window.location.pathname, title: document.title });
+      }
     }
   }, []);
 
@@ -5194,6 +5229,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsArtifactsPageOpen(false);
     setIsGlobalSettingsPageOpen(false);
     setIsScheduledPageOpen(false);
+    setNotebookProjectId(null);
     setIsCustomizePageOpen(false);
     setIsChatsCatalogOpen(false);
     setIsChatsCatalogFilterOpen(false);
@@ -5213,6 +5249,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
     setIsArtifactsPageOpen(false);
     setIsGlobalSettingsPageOpen(false);
     setIsScheduledPageOpen(false);
+    setNotebookProjectId(null);
     setIsCustomizePageOpen(false);
     setActiveProjectId(projectId);
     setOpenProjectMenuId(null);
@@ -5224,6 +5261,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       const here = parseChatLocation(window.location.pathname);
       if (here.view !== 'project' || here.projectId !== projectId) {
         window.history.pushState({ view: 'project', projectId }, '', buildProjectPath(projectId));
+        // a raw pushState is not a router change, so the chat host would keep showing the previous address
+        tellWorkspace({ source: 'xeno-chat', type: 'location', path: window.location.pathname, title: document.title });
       }
     }
     // Any conversation the reused composer starts from here should link to this project.
@@ -15386,11 +15425,20 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
             }}
           />
         )}
+        {notebookProjectId && (
+          <ChatNotebookPage
+            pageLeft={historyWorkspaceInsetPx}
+            projectId={notebookProjectId}
+            projectName={chatProjects.find((item) => item.id === notebookProjectId)?.name}
+            onClose={() => openProject(notebookProjectId)}
+          />
+        )}
         {isScheduledPageOpen && (
           <ChatScheduledPage
             pageLeft={historyWorkspaceInsetPx}
             onClose={() => {
               setIsScheduledPageOpen(false);
+    setNotebookProjectId(null);
               setHistoryNavView('chats');
             }}
           />
@@ -15810,6 +15858,17 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                               <span aria-hidden="true" />
                             )}
                             <div className="flex items-center justify-end">
+                              {/* the project's notebook: which files answers use, and whether each was read */}
+                              <IconButton
+                                icon={LayersDecl}
+                                variant="ghost"
+                                size="sm"
+                                iconSize={15}
+                                onClick={() => openNotebook(project.id)}
+                                aria-label="Open the notebook"
+                                title="Notebook: the sources answers use"
+                                data-open-notebook=""
+                              />
                               <IconButton
                                 icon={SearchDecl}
                                 variant="ghost"
@@ -17761,21 +17820,34 @@ Provide the search queries as a comma-separated list, each query should be 3-8 w
                                               <div className="flex flex-wrap gap-1.5">
                                                 {message.projectSources!.map((source, sourceIndex) => {
                                                   const page = typeof source.locator?.page === 'number' ? ` · p. ${source.locator.page}` : '';
+                                                  const heading = !page && typeof source.locator?.heading === 'string' ? ` · ${source.locator.heading}` : '';
                                                   const activeId = `${message.id}:project-source:${source.chunk_id}`;
+                                                  // a notebook answer names its sources [n]; n is this pill's number
+                                                  const cited = Boolean(message.notebookCitations?.citations.some((c) => c.n === sourceIndex + 1));
                                                   return (
                                                     <button
                                                       key={source.chunk_id}
+                                                      id={message.notebookCitations ? `cite-${sourceIndex + 1}` : undefined}
+                                                      data-cited={message.notebookCitations ? (cited ? 'true' : 'false') : undefined}
+                                                      style={message.notebookCitations && !cited ? { opacity: 0.55 } : undefined}
                                                       type="button"
                                                       onClick={() => setLibraryViewerSelection({ items: conversationLibraryViewerItems, activeId })}
                                                       className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--chat-border)] bg-[var(--chat-control)] px-2.5 py-1.5 text-left text-xs text-[var(--chat-text)] transition-colors hover:bg-[var(--chat-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]"
                                                       aria-label={`Open project source ${sourceIndex + 1}: ${source.display_name}`}
                                                     >
                                                       <FileText size={13} className="shrink-0 text-[var(--chat-muted)]" aria-hidden="true" />
-                                                      <span className="truncate">{sourceIndex + 1}. {source.display_name}{page}</span>
+                                                      <span className="truncate">{sourceIndex + 1}. {source.display_name}{page}{heading}</span>
                                                     </button>
                                                   );
                                                 })}
                                               </div>
+                                              {Boolean(message.notebookCitations?.refused.length) && (
+                                                <div role="note" data-citations-refused={message.notebookCitations!.refused.length} className="mt-2 px-1 text-[11.5px] text-[var(--chat-muted)]">
+                                                  {message.notebookCitations!.refused.length === 1
+                                                    ? `${message.notebookCitations!.refused[0].mark} is not a source this answer was given, so it is not linked.`
+                                                    : `${message.notebookCitations!.refused.map((r) => r.mark).join(', ')} are not sources this answer was given, so they are not linked.`}
+                                                </div>
+                                              )}
                                             </div>
                                           )}
                                       </div>

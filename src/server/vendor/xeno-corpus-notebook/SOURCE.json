@@ -1,0 +1,24 @@
+{
+  "owner": "xeno-corpus",
+  "repo": "XENO-CORPORATION/xeno-corpus",
+  "commit": "7a1b67c287d87d6b192ec98ada13e383cb5e053d",
+  "note": "Vendored byte-identical: the chat notebook runs Corpus's own engine. Never edit here: change xeno-corpus, then run scripts/corpus-notebook-vendor.mjs --sync --commit <sha> --confirm.",
+  "files": {
+    "corpus-notebook.mjs": {
+      "blob": "256a3f4c47c8d0e725e0eeb5864776412d297b1f",
+      "sha256": "6f950466c0f75e7ff7b086c1216efc97f47bfbcb937b0bf1c2e9e3140781fc38"
+    },
+    "corpus-rank.mjs": {
+      "blob": "b010704fae08f87217caabb1694d6babfd457d0f",
+      "sha256": "bd61df2e881753685149272fd9ab6e9e37b9019eb4371d82d9cfdddeb2362a6d"
+    },
+    "vendor/porter-stemmer/index.mjs": {
+      "blob": "877ab604b65a45ab9f853b7023ec2c49c753913c",
+      "sha256": "154936155f541e1dca18bb75f0fe47c5d881f7b68b2953d92bd33254aca5cc39"
+    },
+    "vendor/porter-stemmer/LICENSE": {
+      "blob": "0c06d5bc0a5dc8d5e60c76b0d1578177083812c3",
+      "sha256": "9966260ba3ea9d6a5f839297dca80ddc99735a34b4ae82811cac7b956d2e3afd"
+    }
+  }
+}

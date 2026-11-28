@@ -61,7 +61,7 @@ export async function readProjectKnowledge({ db, principal, projectId, conversat
   if (section === 'files') {
     const rows = (await db.query(`SELECT f.id, COALESCE(f.original_name,f.filename) AS name, f.mime_type,
       i.state AS ingestion_state FROM chat_project_assets pa JOIN user_files f ON f.id = pa.asset_id AND f.deleted_at IS NULL
-      LEFT JOIN LATERAL (SELECT state FROM library_asset_ingestions WHERE asset_id = f.id ORDER BY created_at DESC LIMIT 1) i ON TRUE
+      LEFT JOIN LATERAL (SELECT state FROM library_asset_ingestions WHERE asset_id = f.id AND extractor_id IS DISTINCT FROM 'corpus-notebook' ORDER BY created_at DESC LIMIT 1) i ON TRUE
       WHERE pa.project_id = $1 ORDER BY pa.created_at DESC LIMIT 101`, [projectId])).rows;
     const items = [];
     for (const row of rows.slice(0, 100)) if (await visible('library_asset', row.id)) items.push(row);

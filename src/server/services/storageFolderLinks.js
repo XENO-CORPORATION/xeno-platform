@@ -161,7 +161,7 @@ export async function fileInLink(db, link, fileId) {
   if (!link || !isId(fileId)) return null;
   const row = (await db.query(
     `SELECT f.id, f.file_id, f.original_name, f.filename, f.mime_type, f.file_size, f.storage_path, f.storage_type, f.user_id, i.folder_id,
-            EXISTS (SELECT 1 FROM library_asset_ingestions g WHERE g.asset_id = f.id AND g.state IN ('ready','unsupported')) AS ingestion_safe
+            EXISTS (SELECT 1 FROM library_asset_ingestions g WHERE g.asset_id = f.id AND g.state IN ('ready','unsupported') AND g.extractor_id IS DISTINCT FROM 'corpus-notebook') AS ingestion_safe
        FROM user_files f JOIN storage_item_folders i ON i.source = 'file' AND i.source_id = f.id
       WHERE f.id = $1 AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload'`, [fileId])).rows[0];
   if (!row || !(await folderInLink(db, link, row.folder_id))) return null;

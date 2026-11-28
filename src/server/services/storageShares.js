@@ -189,7 +189,7 @@ export async function fileForLink(db, token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const { rows } = await db.query(
     `SELECT f.id, f.original_name, f.filename, f.mime_type, f.file_size, f.storage_path,
-            EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = f.id AND i.state IN ('ready','unsupported')) AS ingestion_safe
+            EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = f.id AND i.state IN ('ready','unsupported') AND i.extractor_id IS DISTINCT FROM 'corpus-notebook') AS ingestion_safe
        FROM storage_shares s JOIN user_files f ON f.id = s.file_id JOIN users u ON u.id = s.owner_user_id
       WHERE s.token_sha256 = $1 AND s.kind = 'link' AND ${LIVE}
         AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload' AND u.is_active = true`, [hash(token)]);

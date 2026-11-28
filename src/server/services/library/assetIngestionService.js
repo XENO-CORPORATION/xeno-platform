@@ -9,6 +9,7 @@ import { resolveManagedLibraryPath } from '../libraryAssets.js';
 import { chunkExtractedText } from './assetChunker.js';
 import { extractAsset, UnsupportedAssetError } from './assetExtractors.js';
 import { extractAssetInIsolatedRuntime } from './isolatedExtractorClient.js';
+import { writeNotebookPassages } from '../chatNotebook.js';
 import {
   embedDocuments,
   isSemanticStoreQualified,
@@ -208,17 +209,48 @@ export async function indexLibraryAssetEmbeddings(db, ingestionId) {
   return (await db.query('SELECT * FROM library_asset_ingestions WHERE id=$1', [ingestionId])).rows[0];
 }
 
+/**
+ * Read an already-ingested file into its notebook passages, without touching its own chunks or state: for files ingested
+ * before notebooks existed, and for a passage version bump. The file must already have passed its scan (state ready).
+ */
+export async function rereadIntoNotebook(db, assetId, {
+  extractor = extractAsset,
+  isolatedExtractor = extractAssetInIsolatedRuntime,
+  notebookPassages = writeNotebookPassages,
+} = {}) {
+  const ingestion = (await db.query(
+    `SELECT i.*, f.storage_path FROM library_asset_ingestions i
+     JOIN user_files f ON f.id = i.asset_id AND f.deleted_at IS NULL
+     WHERE i.asset_id = $1 AND i.extractor_id IS DISTINCT FROM 'corpus-notebook' AND i.state = 'ready'
+     ORDER BY i.created_at DESC LIMIT 1`,
+    [assetId],
+  )).rows[0];
+  if (!ingestion) return { skipped: 'no_ready_extraction' };
+  const storagePath = resolveManagedLibraryPath(ingestion.storage_path) || await localLibraryPath(db, { id: ingestion.asset_id, storage_path: ingestion.storage_path });
+  if (!storagePath) return { skipped: 'asset_bytes_missing' };
+  const isolated = (process.env.CHAT_EXTRACTOR_MODE || (process.env.NODE_ENV === 'production' ? 'filesystem-queue' : 'direct')) === 'filesystem-queue';
+  const extracted = isolated
+    ? await isolatedExtractor({ storagePath, mimeType: ingestion.mime_type })
+    : await extractor({ storagePath, mimeType: ingestion.mime_type });
+  const sections = extracted.sections?.length ? extracted.sections : [{ text: extracted.text, locator: extracted.locator }];
+  return withTransaction(db, (tx) => notebookPassages(tx, {
+    assetId, contentSha256: ingestion.content_sha256, mimeType: ingestion.mime_type, sections,
+    extractor: { id: extracted.extractorId, version: extracted.extractorVersion },
+  }));
+}
+
 export async function ingestLibraryAsset(db, assetId, {
   ingestionId = null,
   scanner = scanFile,
   extractor = extractAsset,
   isolatedExtractor = extractAssetInIsolatedRuntime,
   semanticIndexer = indexLibraryAssetEmbeddings,
+  notebookPassages = writeNotebookPassages,
 } = {}) {
   const { rows } = await db.query(
     `SELECT i.*, f.storage_path FROM library_asset_ingestions i
      JOIN user_files f ON f.id = i.asset_id AND f.deleted_at IS NULL
-     WHERE i.asset_id = $1 AND ($2::uuid IS NULL OR i.id = $2)
+     WHERE i.asset_id = $1 AND i.extractor_id IS DISTINCT FROM 'corpus-notebook' AND ($2::uuid IS NULL OR i.id = $2)
      ORDER BY i.created_at DESC LIMIT 1`,
     [assetId, ingestionId],
   );
@@ -277,6 +309,12 @@ export async function ingestLibraryAsset(db, assetId, {
          completed_at = NOW(), lease_owner = NULL, lease_expires_at = NULL, updated_at = NOW() WHERE id = $1`,
         [ingestion.id, extracted.extractorId, extracted.extractorVersion],
       );
+      // the notebook's passages, from the SAME sections in the same transaction (notebooks-in-chat §3.1), so a file's
+      // passages never describe a different extraction than its chunks. Content failures are recorded, never thrown.
+      await notebookPassages(tx, {
+        assetId, contentSha256: ingestion.content_sha256, mimeType: ingestion.mime_type, sections,
+        extractor: { id: extracted.extractorId, version: extracted.extractorVersion },
+      });
     });
     return semanticIndexer(db, ingestion.id);
   } catch (error) {

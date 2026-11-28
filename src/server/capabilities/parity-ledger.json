@@ -12221,6 +12221,16 @@
       "class": "safe",
       "scope": "none",
       "because": "loads the Depot page again after an error"
+    },
+    "route:chatRoutes.js:GET /projects/:id/notebook": {
+      "status": "planned",
+      "class": "safe",
+      "scope": "chat:read"
+    },
+    "route:chatRoutes.js:PATCH /projects/:id/notebook/sources/:sourceId": {
+      "status": "planned",
+      "class": "reversible",
+      "scope": "chat:write"
     }
   }
 }

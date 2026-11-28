@@ -133,10 +133,13 @@
   const dec = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
   const projOf = (item) => { const m = String(item || '').match(/^projects\/([^/]+)/); return m && ID.test(m[1]) ? m[1] : null; };
   const convOf = (item) => { const s = String(item || ''); if (ID.test(s)) return s; const m = s.match(/(?:^|\/)c\/([^/]+)$/); return m && ID.test(m[1]) ? m[1] : null; };
-  const pathFor = (item) => { const p = projOf(item), c = convOf(item); if (p) return '/chat/projects/' + encodeURIComponent(p) + (c ? '/c/' + encodeURIComponent(c) : ''); return c ? '/chat/c/' + encodeURIComponent(c) : NEW; };
+  // a project's notebook (notebooks-in-chat §3.3): projects/<pid>/notebook ↔ /chat/projects/<pid>/notebook
+  const nbOf = (item) => /^projects\/[^/]+\/notebook$/.test(String(item || ''));
+  const pathFor = (item) => { const p = projOf(item), c = convOf(item); if (p) return '/chat/projects/' + encodeURIComponent(p) + (nbOf(item) ? '/notebook' : c ? '/c/' + encodeURIComponent(c) : ''); return c ? '/chat/c/' + encodeURIComponent(c) : NEW; };
   /** the chat's own path (any prefix) → the item the workspace address carries */
   const itemIn = (path) => { const s = String(path || '').split(/[?#]/)[0];
     let m = s.match(/\/chat\/projects\/([^/]+)\/c\/([^/]+)$/); if (m && ID.test(dec(m[1])) && ID.test(dec(m[2]))) return `projects/${dec(m[1])}/c/${dec(m[2])}`;
+    m = s.match(/\/chat\/projects\/([^/]+)\/notebook$/); if (m && ID.test(dec(m[1]))) return `projects/${dec(m[1])}/notebook`;
     m = s.match(/\/chat\/projects\/([^/]+)$/); if (m && ID.test(dec(m[1]))) return `projects/${dec(m[1])}`;
     m = s.match(/\/(?:c|llm)\/([^/]+)$/); return m && ID.test(dec(m[1])) ? dec(m[1]) : null; };
   /** a conversation's canonical item: inside its project when it has one */

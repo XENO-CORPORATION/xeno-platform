@@ -4,7 +4,7 @@
 
 Every action a person can take on the platform, and whether an agent can take it (XENO AGENT CAPABILITY - SPEC.md §19.4). **Planned** entries are the owning division’s backlog: each is a feature agents are missing.
 
-**Total:** 2138 actions · 248 agent capability · 1393 planned (debt) · 497 excluded · **coverage 15.1%** of the 1641 owed.
+**Total:** 2140 actions · 248 agent capability · 1395 planned (debt) · 497 excluded · **coverage 15.1%** of the 1643 owed.
 
 | division | actions | capability | planned (debt) | excluded | coverage |
 |---|---:|---:|---:|---:|---:|
@@ -13,8 +13,8 @@ Every action a person can take on the platform, and whether an agent can take it
 | commerce | 155 | 0 | 121 | 34 | 0% |
 | studio | 122 | 4 | 118 | 0 | 3.3% |
 | workspace | 197 | 23 | 108 | 66 | 17.6% |
+| chat | 106 | 0 | 104 | 2 | 0% |
 | workspace-ui | 199 | 4 | 104 | 91 | 3.7% |
-| chat | 104 | 0 | 102 | 2 | 0% |
 | storage | 112 | 5 | 90 | 17 | 5.3% |
 | tasks | 107 | 13 | 86 | 8 | 13.1% |
 | account | 124 | 4 | 58 | 62 | 6.5% |
@@ -309,7 +309,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:officeCanvasRoutes.js:POST /join/:token`
 - `route:officeCanvasRoutes.js:PUT /canvases/:canvasId`
 
-## chat — 102 planned
+## chat — 104 planned
 
 - `route:aiRoutes.js:GET /local-model-catalog`
 - `route:aiRoutes.js:GET /models`
@@ -348,6 +348,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:GET /projects/:id/activity`
 - `route:chatRoutes.js:GET /projects/:id/files`
 - `route:chatRoutes.js:GET /projects/:id/funding`
+- `route:chatRoutes.js:GET /projects/:id/notebook`
 - `route:chatRoutes.js:GET /projects/:id/people`
 - `route:chatRoutes.js:GET /projects/:id/storage`
 - `route:chatRoutes.js:GET /projects/:id/summary`
@@ -355,6 +356,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:GET /scheduled/:id/runs`
 - `route:chatRoutes.js:GET /share/:token`
 - `route:chatRoutes.js:GET /skills`
+- `route:chatRoutes.js:PATCH /projects/:id/notebook/sources/:sourceId`
 - `route:chatRoutes.js:POST /artifacts`
 - `route:chatRoutes.js:POST /conversations`
 - `route:chatRoutes.js:POST /conversations/:id/handoff`

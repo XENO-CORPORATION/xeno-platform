@@ -243,7 +243,7 @@ router.post('/assets/:id/ingestions/retry', async (req, res) => {
        SET state = 'queued', attempt_count = 0, error_code = NULL, error_message = NULL,
            lease_owner = NULL, lease_expires_at = NULL, completed_at = NULL, updated_at = NOW()
        WHERE id = (
-         SELECT id FROM library_asset_ingestions WHERE asset_id = $1 ORDER BY created_at DESC LIMIT 1
+         SELECT id FROM library_asset_ingestions WHERE asset_id = $1 AND extractor_id IS DISTINCT FROM 'corpus-notebook' ORDER BY created_at DESC LIMIT 1
        )
        RETURNING id, asset_id, state`,
       [req.params.id],

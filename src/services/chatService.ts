@@ -41,6 +41,8 @@ export interface ChatMessage {
   /** The turn's presentational record (chatTurnTranscript.ts); validated server-side. */
   turn?: unknown;
   project_sources?: ProjectSourceReference[];
+  /** A notebook answer's [n] marks, checked by Corpus's cite() against what the model was given. */
+  notebook_citations?: NotebookCitations | null;
   created_at?: string;
   message_index?: number;
   /** The message this one follows — the tree edge. `null` = the conversation's first. */
@@ -73,6 +75,33 @@ export interface ProjectSourceReference {
   mime_type?: string;
   digest?: string;
   token_count?: number;
+}
+
+/** A notebook answer's citations: `ok` is false when the answer named a source it was not given (that mark is refused). */
+export interface NotebookCitations {
+  ok: boolean;
+  mode: 'full' | 'retrieval';
+  citations: { n: number; passageId: string; assetId: string; anchor: Record<string, unknown> | null; source: string | null }[];
+  refused: { mark: string; why: string }[];
+}
+
+export type NotebookSourceState = 'indexed' | 'queued' | 'stale' | 'failed';
+export interface NotebookSource {
+  id: string;
+  kind: 'file' | 'web' | 'note' | 'local_corpus';
+  title: string;
+  mimeType?: string;
+  url?: string | null;
+  selected: boolean;
+  state: NotebookSourceState;
+  reason: string | null;
+  passages: number;
+  addedAt: string;
+}
+export interface ProjectNotebook {
+  projectId: string;
+  passageVersion: string;
+  sources: NotebookSource[];
 }
 
 export interface Conversation {
@@ -1153,6 +1182,25 @@ export const chatService = {
       console.error('Failed to delete project:', error);
       throw error;
     }
+  },
+
+  /** A project's notebook: every source, its state, and whether answers use it (notebooks-in-chat §3.1). */
+  async getProjectNotebook(projectId: string): Promise<ProjectNotebook> {
+    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/notebook`, {
+      headers: getAuthHeaders(),
+    });
+    const result = await handleResponse<{ notebook: ProjectNotebook }>(response);
+    return result.notebook;
+  },
+
+  async setNotebookSourceSelected(projectId: string, sourceId: string, selected: boolean): Promise<{ id: string; selected: boolean }> {
+    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/notebook/sources/${encodeURIComponent(sourceId)}`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ selected }),
+    });
+    const result = await handleResponse<{ source: { id: string; selected: boolean } }>(response);
+    return result.source;
   },
 
   async getProjectFiles(projectId: string): Promise<any[]> {
