@@ -5067,6 +5067,7 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       const here = parseChatLocation(window.location.pathname);
       if (here.view !== 'project-notebook' || here.projectId !== projectId) {
         window.history.pushState({ view: 'project-notebook', projectId }, '', buildProjectNotebookPath(projectId));
+        tellWorkspace({ source: 'xeno-chat', type: 'location', path: window.location.pathname, title: document.title });
       }
     }
   }, []);
@@ -5260,6 +5261,8 @@ const ChatWithLLM: React.FC<ChatWithLLMProps> = ({
       const here = parseChatLocation(window.location.pathname);
       if (here.view !== 'project' || here.projectId !== projectId) {
         window.history.pushState({ view: 'project', projectId }, '', buildProjectPath(projectId));
+        // a raw pushState is not a router change, so the chat host would keep showing the previous address
+        tellWorkspace({ source: 'xeno-chat', type: 'location', path: window.location.pathname, title: document.title });
       }
     }
     // Any conversation the reused composer starts from here should link to this project.
