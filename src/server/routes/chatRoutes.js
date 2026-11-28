@@ -1,6 +1,5 @@
 import { ensureChatProjectFolder, projectFolderUsage, renameChatProjectFolder, syncProjectFolderAccess, releaseChatProjectFolder } from '../services/chatProjectFolders.js';
 import { citationsFor, notebookSources, selectFileSource, PASSAGE_VERSION } from '../services/chatNotebook.js';
-import { legacyNotebookRedirect } from './chatCorpusRedirect.js';
 import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
 import { handOff } from '../services/chatHandoff.js';
@@ -3059,8 +3058,8 @@ router.get('/projects/:id/files', async (req, res) => {
   }
 });
 
-// The page and its API were first called "notebook" (live 2026-11-28 for minutes): those addresses 308 to /corpus.
-router.use(legacyNotebookRedirect);
+// The page and its API were first called "notebook": those addresses 308 to /corpus, mounted in index.js ahead of the
+// chat's sign-in check (chatCorpusRedirect.js).
 
 // GET /api/chat/projects/:id/corpus - the project's Corpus: every source, its state and whether answers use it
 // (notebooks-in-chat §3.1; a failed source always says why, a stale one is not used until it is read again)
