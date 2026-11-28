@@ -24,6 +24,7 @@ test('chat.xenosystem.ai: the chat, its conversations and projects have the host
     [`#/overview/p/chat/${ID}`, `/c/${ID}`],
     [`#/overview/p/chat/projects/${PJ}`, `/projects/${PJ}`],
     [`#/overview/p/chat/projects/${PJ}/c/${ID}`, `/projects/${PJ}/c/${ID}`],
+    [`#/overview/p/chat/projects/${PJ}/notebook`, `/projects/${PJ}/notebook`],
     ['#/overview/g/library', '/library'],
     ['#/overview/p/image', '/images'],
   ]) {

@@ -17,6 +17,7 @@ import test from 'node:test';
 import {
   buildChatConversationPath,
   buildProjectConversationPath,
+  buildProjectNotebookPath,
   buildProjectPath,
   buildProjectsPath,
   conversationUrlCorrection,
@@ -38,6 +39,14 @@ test('parses every project and conversation URL form', () => {
   assert.deepEqual(parseChatLocation('/overview/chat/projects'), { view: 'projects', projectId: null, conversationId: null });
   assert.deepEqual(parseChatLocation('/overview/chat/projects/' + P), { view: 'project', projectId: P, conversationId: null });
   assert.deepEqual(parseChatLocation(`/overview/chat/projects/${P}/c/${C}`), { view: 'project-conversation', projectId: P, conversationId: C });
+  // the project's notebook has its own address, parent in the path (notebooks-in-chat §3.3)
+  assert.deepEqual(parseChatLocation(`/chat/projects/${P}/notebook`), { view: 'project-notebook', projectId: P, conversationId: null });
+  assert.deepEqual(parseChatLocation(`/projects/${P}/notebook`), { view: 'project-notebook', projectId: P, conversationId: null });
+  assert.equal(buildProjectNotebookPath(P), `/chat/projects/${P}/notebook`);
+  assert.deepEqual(parseChatLocation(buildProjectNotebookPath(P)), { view: 'project-notebook', projectId: P, conversationId: null });
+  // a refresh lands on it: the URL opens it, and any other address closes it
+  assert.match(chat, /loc\.view === 'project-notebook' && loc\.projectId\) \{\s*openNotebook\(loc\.projectId\)/);
+  assert.match(chat, /<ChatNotebookPage[\s\S]*?projectId=\{notebookProjectId\}/);
 });
 
 test('compact aliases mean the same thing as the canonical forms', () => {
