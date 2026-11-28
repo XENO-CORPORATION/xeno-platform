@@ -1,5 +1,6 @@
 import { ensureChatProjectFolder, projectFolderUsage, renameChatProjectFolder, syncProjectFolderAccess, releaseChatProjectFolder } from '../services/chatProjectFolders.js';
 import { citationsFor, notebookSources, selectFileSource, PASSAGE_VERSION } from '../services/chatNotebook.js';
+import { legacyNotebookRedirect } from './chatCorpusRedirect.js';
 import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
 import { handOff } from '../services/chatHandoff.js';
@@ -515,7 +516,7 @@ router.get('/conversations/:id', async (req, res) => {
     // a notebook answer's [n] marks, checked by Corpus's cite() against exactly what the model was given; a mark naming
     // anything else is refused and never shown as a citation (notebooks-in-chat §3.2)
     const allRows = messagesResult.rows.map(({ notebook_manifest, ...m }) => (notebook_manifest && m.role === 'assistant'
-      ? { ...m, notebook_citations: citationsFor(m.content, { notebook: notebook_manifest }) } : m));
+      ? { ...m, corpus_citations: citationsFor(m.content, { notebook: notebook_manifest }) } : m));
     const path = activePath(allRows, convResult.rows[0].active_leaf_id);
     const leafId = path.length ? path[path.length - 1].id : null;
     res.json({
@@ -991,7 +992,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
         );
         inserted.project_sources = generationContext.safe_sources;
         const nbCites = role === 'assistant' ? citationsFor(content, generationContext.context_manifest) : null;
-        if (nbCites) inserted.notebook_citations = nbCites;
+        if (nbCites) inserted.corpus_citations = nbCites;
       } else {
         inserted.project_sources = [];
       }
@@ -3058,23 +3059,26 @@ router.get('/projects/:id/files', async (req, res) => {
   }
 });
 
-// GET /api/chat/projects/:id/notebook - the project's notebook: every source, its state and whether answers use it
+// The page and its API were first called "notebook" (live 2026-11-28 for minutes): those addresses 308 to /corpus.
+router.use(legacyNotebookRedirect);
+
+// GET /api/chat/projects/:id/corpus - the project's Corpus: every source, its state and whether answers use it
 // (notebooks-in-chat §3.1; a failed source always says why, a stale one is not used until it is read again)
-router.get('/projects/:id/notebook', async (req, res) => {
+router.get('/projects/:id/corpus', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const sources = await notebookSources(req.db, userPrincipal(userId), req.params.id);
-    res.json({ success: true, notebook: { projectId: req.params.id, passageVersion: PASSAGE_VERSION, sources } });
+    res.json({ success: true, corpus: { projectId: req.params.id, passageVersion: PASSAGE_VERSION, sources } });
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
-    console.error('Failed to read the notebook:', error);
+    console.error('Failed to read the Corpus:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
-// PATCH /api/chat/projects/:id/notebook/sources/:sourceId - use a file in answers, or not ({ selected })
-router.patch('/projects/:id/notebook/sources/:sourceId', async (req, res) => {
+// PATCH /api/chat/projects/:id/corpus/sources/:sourceId - use a file in answers, or not ({ selected })
+router.patch('/projects/:id/corpus/sources/:sourceId', async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
@@ -3082,9 +3086,9 @@ router.patch('/projects/:id/notebook/sources/:sourceId', async (req, res) => {
     const source = await selectFileSource(req.db, userPrincipal(userId), req.params.id, req.params.sourceId, req.body.selected);
     res.json({ success: true, source });
   } catch (error) {
-    if (error.code === 'notebook_source_not_found') return res.status(404).json({ success: false, error: error.message });
+    if (error.code === 'corpus_source_not_found') return res.status(404).json({ success: false, error: error.message });
     if (sendChatAuthorityError(res, error)) return;
-    console.error('Failed to change a notebook source:', error);
+    console.error('Failed to change a Corpus source:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

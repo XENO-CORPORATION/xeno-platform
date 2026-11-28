@@ -12222,12 +12222,12 @@
       "scope": "none",
       "because": "loads the Depot page again after an error"
     },
-    "route:chatRoutes.js:GET /projects/:id/notebook": {
+    "route:chatRoutes.js:GET /projects/:id/corpus": {
       "status": "planned",
       "class": "safe",
       "scope": "chat:read"
     },
-    "route:chatRoutes.js:PATCH /projects/:id/notebook/sources/:sourceId": {
+    "route:chatRoutes.js:PATCH /projects/:id/corpus/sources/:sourceId": {
       "status": "planned",
       "class": "reversible",
       "scope": "chat:write"

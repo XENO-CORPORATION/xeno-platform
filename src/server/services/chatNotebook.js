@@ -108,9 +108,9 @@ export async function notebookSources(db, principal, projectId) {
 /** Turn a file on or off for answers (chat_project_assets.retrieval_enabled). Editor of the project. */
 export async function selectFileSource(db, principal, projectId, assetId, selected) {
   await requireResourceRelation(db, principal, 'project', projectId, 'editor');
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(assetId))) throw Object.assign(new Error('Not a source of this notebook'), { code: 'notebook_source_not_found', status: 404 });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(assetId))) throw Object.assign(new Error('Not a source of this project\'s Corpus'), { code: 'corpus_source_not_found', status: 404 });
   const r = await db.query('UPDATE chat_project_assets SET retrieval_enabled = $3 WHERE project_id = $1 AND asset_id = $2', [projectId, assetId, Boolean(selected)]);
-  if (!r.rowCount) throw Object.assign(new Error('Not a source of this notebook'), { code: 'notebook_source_not_found', status: 404 });
+  if (!r.rowCount) throw Object.assign(new Error('Not a source of this project\'s Corpus'), { code: 'corpus_source_not_found', status: 404 });
   return { id: String(assetId), selected: Boolean(selected) };
 }
 
@@ -137,7 +137,7 @@ export async function authorisedPassages(db, principal, projectId) {
       LIMIT $3`,
     [projectId, PASSAGE_VERSION, MAX_PROJECT_PASSAGES + 1],
   )).rows;
-  if (rows.length > MAX_PROJECT_PASSAGES) throw Object.assign(new Error('This notebook has more passages than one answer can rank'), { code: 'notebook_too_large', status: 413 });
+  if (rows.length > MAX_PROJECT_PASSAGES) throw Object.assign(new Error('This Corpus has more passages than one answer can rank'), { code: 'corpus_too_large', status: 413 });
   const allowed = new Map();
   const out = [];
   for (const r of rows) {
