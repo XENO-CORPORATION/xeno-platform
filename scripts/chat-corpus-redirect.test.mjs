@@ -56,6 +56,20 @@ test('the redirect never leaves this router: an encoded slash stays inside the s
   assert.equal(r.headers.get('location'), '/api/chat/projects/..%2F..%2Fevil/corpus');
 }));
 
+test('with sign-in required behind it, an unsigned caller still gets the 308 (and the new address still asks to sign in)', async () => {
+  const app = express();
+  app.use('/api/chat', legacyNotebookRedirect);
+  app.use('/api/chat', (req, res) => res.status(401).json({ error: 'sign in' }));
+  const server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const old = await fetch(`${base}/api/chat/projects/${P}/notebook`, { redirect: 'manual' });
+    assert.equal(old.status, 308);
+    assert.equal(old.headers.get('location'), `/api/chat/projects/${P}/corpus`);
+    assert.equal((await fetch(`${base}/api/chat/projects/${P}/corpus`, { redirect: 'manual' })).status, 401);
+  } finally { server.close(); }
+});
+
 test('the chat host 308s the old page address before its generic page location', () => {
   const conf = fs.readFileSync(path.join(repo, 'nginx/default.conf'), 'utf8');
   const start = conf.indexOf('server_name chat.xenosystem.ai;');
@@ -68,10 +82,13 @@ test('the chat host 308s the old page address before its generic page location',
   assert.ok(generic > legacy && app > legacy, 'regex locations match in order: the redirect must come before both page locations');
 });
 
-test('the chat router mounts the redirect ahead of the Corpus routes', () => {
-  const src = fs.readFileSync(path.join(repo, 'src/server/routes/chatRoutes.js'), 'utf8');
-  const mount = src.indexOf('router.use(legacyNotebookRedirect);');
-  assert.ok(mount > 0, 'chatRoutes.js mounts legacyNotebookRedirect');
-  assert.ok(mount < src.indexOf("router.get('/projects/:id/corpus'"), 'before the Corpus routes it sends to');
-  assert.equal(src.includes("'/projects/:id/notebook"), false, 'no route is still registered at the old address');
+test('the server mounts the redirect ahead of the chat sign-in check, so any caller gets the 308', () => {
+  // behind chatAuthMiddleware an unsigned caller got 401 at the old address (measured live 2026-11-28 18:19Z): the
+  // redirect is a path rewrite that reveals nothing, so it answers before sign-in is asked for
+  const index = fs.readFileSync(path.join(repo, 'src/server/index.js'), 'utf8');
+  const mount = index.indexOf("app.use('/api/chat', legacyNotebookRedirect);");
+  assert.ok(mount > 0, 'index.js mounts legacyNotebookRedirect on /api/chat');
+  assert.ok(mount < index.indexOf("app.use('/api/chat', databaseMiddleware, chatAuthMiddleware, chatRoutes);"), 'before the chat auth and routes');
+  const routes = fs.readFileSync(path.join(repo, 'src/server/routes/chatRoutes.js'), 'utf8');
+  assert.equal(routes.includes("'/projects/:id/notebook"), false, 'no route is still registered at the old address');
 });

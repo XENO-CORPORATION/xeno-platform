@@ -92,6 +92,7 @@ import conversionRoutes from './routes/conversionRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
 import imageRoutes, { imagePublicRoutes } from './routes/imageRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import { legacyNotebookRedirect } from './routes/chatCorpusRedirect.js';
 import libraryRoutes from './routes/libraryRoutes.js';
 import projectFolderRoutes from './routes/projectFolderRoutes.js';
 import tokenizerRoutes from './routes/tokenizerRoutes.js';
@@ -900,6 +901,9 @@ const chatAuthMiddleware = (req, res, next) => {
 };
 // AREA: the area a request was made in (X-Xeno-Area), so what it stores lands there. A label, never an authority.
 app.use('/api', areaFromRequest);
+// a project's Corpus was first served at /projects/<id>/notebook: those addresses 308 to /corpus BEFORE sign-in is
+// checked (a path rewrite reveals nothing), so any caller is sent to the address it then signs in at
+app.use('/api/chat', legacyNotebookRedirect);
 app.use('/api/chat', databaseMiddleware, chatAuthMiddleware, chatRoutes);
 console.log('💬 Chat routes integrated: /api/chat/*');
 
