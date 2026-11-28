@@ -134,7 +134,9 @@
   const projOf = (item) => { const m = String(item || '').match(/^projects\/([^/]+)/); return m && ID.test(m[1]) ? m[1] : null; };
   const convOf = (item) => { const s = String(item || ''); if (ID.test(s)) return s; const m = s.match(/(?:^|\/)c\/([^/]+)$/); return m && ID.test(m[1]) ? m[1] : null; };
   // a project's Corpus (notebooks-in-chat §3.3): projects/<pid>/corpus ↔ /chat/projects/<pid>/corpus
-  const nbOf = (item) => /^projects\/[^/]+\/corpus$/.test(String(item || ''));
+  // (an item from the page's first address, …/notebook, opens the Corpus too: the frame goes to /corpus, and the
+  // address follows it there)
+  const nbOf = (item) => /^projects\/[^/]+\/(?:corpus|notebook)$/.test(String(item || ''));
   const pathFor = (item) => { const p = projOf(item), c = convOf(item); if (p) return '/chat/projects/' + encodeURIComponent(p) + (nbOf(item) ? '/corpus' : c ? '/c/' + encodeURIComponent(c) : ''); return c ? '/chat/c/' + encodeURIComponent(c) : NEW; };
   /** the chat's own path (any prefix) → the item the workspace address carries */
   const itemIn = (path) => { const s = String(path || '').split(/[?#]/)[0];
