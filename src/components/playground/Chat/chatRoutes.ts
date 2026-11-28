@@ -6,7 +6,8 @@
  *   /chat/projects                                      the project list
  *   /chat/projects/:projectId                           a project's home (chats, instructions, files, composer)
  *   /chat/projects/:projectId/c/:conversationId         a conversation INSIDE its project
- *   /chat/projects/:projectId/notebook                  its notebook: the sources its answers are grounded in
+ *   /chat/projects/:projectId/corpus                    its Corpus: the sources its answers are grounded in
+ *   /chat/projects/:projectId/notebook                  the same page's first address (live 2026-11-28); it still parses
  *
  * The old /overview/chat/... and /overview/c/... forms still parse (links from before keep working).
  *
@@ -27,8 +28,8 @@ export type ChatLocationView =
   | 'projects'
   | 'project'
   | 'project-conversation'
-  /** `/chat/projects/:id/notebook`: the project's notebook (its sources, their state, which ones answers use). */
-  | 'project-notebook'
+  /** `/chat/projects/:id/corpus`: the project's Corpus (its sources, their state, which ones answers use). */
+  | 'project-corpus'
   | 'conversation'
   /** Not a chat location this module owns (scheduled, library, settings, anything else). */
   | 'other';
@@ -113,7 +114,8 @@ export function parseChatLocation(pathname: string): ChatLocation {
     // A malformed project id is the projects list, not a project named "undefined".
     if (!projectId) return { view: 'projects', projectId: null, conversationId: null };
     if (b === undefined) return { view: 'project', projectId, conversationId: null };
-    if (b === 'notebook' && c === undefined) return { view: 'project-notebook', projectId, conversationId: null };
+    // `notebook` was this page's first address (live 2026-11-28 for minutes); it parses to the Corpus so no link breaks
+    if ((b === 'corpus' || b === 'notebook') && c === undefined) return { view: 'project-corpus', projectId, conversationId: null };
     if (b === 'c' && c !== undefined && rest.length === 0) {
       const conversationId = safeDecode(c);
       if (conversationId) return { view: 'project-conversation', projectId, conversationId };
@@ -130,7 +132,7 @@ export const buildProjectsPath = (): string => '/chat/projects';
 export const buildProjectPath = (projectId: string): string => `/chat/projects/${enc(projectId)}`;
 export const buildProjectConversationPath = (projectId: string, conversationId: string): string =>
   `${buildProjectPath(projectId)}/c/${enc(conversationId)}`;
-export const buildProjectNotebookPath = (projectId: string): string => `${buildProjectPath(projectId)}/notebook`;
+export const buildProjectCorpusPath = (projectId: string): string => `${buildProjectPath(projectId)}/corpus`;
 export const buildConversationPath =(conversationId: string): string => `/chat/c/${enc(conversationId)}`;
 
 /** The one URL a conversation lives at: project-scoped when it has a project, plain otherwise. */

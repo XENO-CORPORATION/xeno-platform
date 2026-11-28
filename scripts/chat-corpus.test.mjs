@@ -3,7 +3,7 @@
 // a project's answers are grounded in those passages through Corpus's retrieve(), numbered [n]; an answer's marks are
 // checked by Corpus's cite() against exactly what the manifest says the model was given; and none of the notebook's
 // rows leak into the platform's own readers (the worker, "safe to serve", the chunk path).
-//   TEST_DATABASE_URL=postgresql://… node --test --test-force-exit scripts/chat-notebook.test.mjs
+//   TEST_DATABASE_URL=postgresql://… node --test --test-force-exit scripts/chat-corpus.test.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';

@@ -346,9 +346,9 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:GET /projects/:id`
 - `route:chatRoutes.js:GET /projects/:id/access`
 - `route:chatRoutes.js:GET /projects/:id/activity`
+- `route:chatRoutes.js:GET /projects/:id/corpus`
 - `route:chatRoutes.js:GET /projects/:id/files`
 - `route:chatRoutes.js:GET /projects/:id/funding`
-- `route:chatRoutes.js:GET /projects/:id/notebook`
 - `route:chatRoutes.js:GET /projects/:id/people`
 - `route:chatRoutes.js:GET /projects/:id/storage`
 - `route:chatRoutes.js:GET /projects/:id/summary`
@@ -356,7 +356,7 @@ Every action a person can take on the platform, and whether an agent can take it
 - `route:chatRoutes.js:GET /scheduled/:id/runs`
 - `route:chatRoutes.js:GET /share/:token`
 - `route:chatRoutes.js:GET /skills`
-- `route:chatRoutes.js:PATCH /projects/:id/notebook/sources/:sourceId`
+- `route:chatRoutes.js:PATCH /projects/:id/corpus/sources/:sourceId`
 - `route:chatRoutes.js:POST /artifacts`
 - `route:chatRoutes.js:POST /conversations`
 - `route:chatRoutes.js:POST /conversations/:id/handoff`

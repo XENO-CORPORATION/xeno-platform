@@ -41,8 +41,8 @@ export interface ChatMessage {
   /** The turn's presentational record (chatTurnTranscript.ts); validated server-side. */
   turn?: unknown;
   project_sources?: ProjectSourceReference[];
-  /** A notebook answer's [n] marks, checked by Corpus's cite() against what the model was given. */
-  notebook_citations?: NotebookCitations | null;
+  /** A Corpus answer's [n] marks, checked by Corpus's cite() against what the model was given. */
+  corpus_citations?: CorpusCitations | null;
   created_at?: string;
   message_index?: number;
   /** The message this one follows — the tree edge. `null` = the conversation's first. */
@@ -77,31 +77,31 @@ export interface ProjectSourceReference {
   token_count?: number;
 }
 
-/** A notebook answer's citations: `ok` is false when the answer named a source it was not given (that mark is refused). */
-export interface NotebookCitations {
+/** A Corpus answer's citations: `ok` is false when the answer named a source it was not given (that mark is refused). */
+export interface CorpusCitations {
   ok: boolean;
   mode: 'full' | 'retrieval';
   citations: { n: number; passageId: string; assetId: string; anchor: Record<string, unknown> | null; source: string | null }[];
   refused: { mark: string; why: string }[];
 }
 
-export type NotebookSourceState = 'indexed' | 'queued' | 'stale' | 'failed';
-export interface NotebookSource {
+export type CorpusSourceState = 'indexed' | 'queued' | 'stale' | 'failed';
+export interface CorpusSource {
   id: string;
   kind: 'file' | 'web' | 'note' | 'local_corpus';
   title: string;
   mimeType?: string;
   url?: string | null;
   selected: boolean;
-  state: NotebookSourceState;
+  state: CorpusSourceState;
   reason: string | null;
   passages: number;
   addedAt: string;
 }
-export interface ProjectNotebook {
+export interface ProjectCorpus {
   projectId: string;
   passageVersion: string;
-  sources: NotebookSource[];
+  sources: CorpusSource[];
 }
 
 export interface Conversation {
@@ -1184,17 +1184,17 @@ export const chatService = {
     }
   },
 
-  /** A project's notebook: every source, its state, and whether answers use it (notebooks-in-chat §3.1). */
-  async getProjectNotebook(projectId: string): Promise<ProjectNotebook> {
-    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/notebook`, {
+  /** A project's Corpus: every source, its state, and whether answers use it (notebooks-in-chat §3.1). */
+  async getProjectCorpus(projectId: string): Promise<ProjectCorpus> {
+    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/corpus`, {
       headers: getAuthHeaders(),
     });
-    const result = await handleResponse<{ notebook: ProjectNotebook }>(response);
-    return result.notebook;
+    const result = await handleResponse<{ corpus: ProjectCorpus }>(response);
+    return result.corpus;
   },
 
-  async setNotebookSourceSelected(projectId: string, sourceId: string, selected: boolean): Promise<{ id: string; selected: boolean }> {
-    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/notebook/sources/${encodeURIComponent(sourceId)}`, {
+  async setCorpusSourceSelected(projectId: string, sourceId: string, selected: boolean): Promise<{ id: string; selected: boolean }> {
+    const response = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/corpus/sources/${encodeURIComponent(sourceId)}`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
       body: JSON.stringify({ selected }),
