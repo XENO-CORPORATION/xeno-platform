@@ -319,7 +319,13 @@ const stopPg = () => { if (!EXTERNAL_PG) spawnSync('docker', ['rm', '-f', PG.con
 /* `template` copies a prepared database instead of creating an empty one (it must have no open
  * connections, which is why migrateDatabase ends its pool before returning). */
 function freshDb(name, template = null) {
-  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}${template ? ` TEMPLATE ${template}` : ''}`];
+  // Production's database runs in UTC, and the code relies on it: naive `timestamp` columns hold UTC wall-clock time,
+  // written by DEFAULT now() and compared with now() AT TIME ZONE 'UTC'. An embedded Postgres takes the machine's zone
+  // (Europe/Berlin measured 2026-11-28), and that made workspace-area and ledger-chain fail on main while passing in
+  // UTC. Every suite database is pinned to UTC here, the way the service container and production run. A per-database
+  // setting is not copied by TEMPLATE, so it is set on each one.
+  const statements = [`DROP DATABASE IF EXISTS ${name}`, `CREATE DATABASE ${name}${template ? ` TEMPLATE ${template}` : ''}`,
+    `ALTER DATABASE ${name} SET timezone TO 'UTC'`];
   // A failed CREATE used to be discarded here and surfaced later as a suite that could not connect
   // -- a broken database reading as a broken test. Refuse at the statement that failed instead.
   const check = (r, sql) => {
