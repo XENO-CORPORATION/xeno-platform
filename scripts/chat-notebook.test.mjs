@@ -15,7 +15,7 @@ import { createAuthorizedProject, linkAssetToProject, userPrincipal } from '../s
 import { registerManagedLibraryFile, getAuthorizedLibraryFile } from '../src/server/services/libraryAssets.js';
 import { assembleProjectContext } from '../src/server/services/chatProjectContext.js';
 import { extractAsset } from '../src/server/services/library/assetExtractors.js';
-import { ingestLibraryAsset } from '../src/server/services/library/assetIngestionService.js';
+import { ingestLibraryAsset, rereadIntoNotebook } from '../src/server/services/library/assetIngestionService.js';
 import { claimLibraryIngestion } from '../src/server/workers/libraryIngestionWorker.js';
 import {
   notebookSources, selectFileSource, authorisedPassages, citationsFor, notebookActive, PASSAGE_VERSION,
@@ -209,4 +209,23 @@ test('corpus_sources refuses a malformed source at the database', { skip: !pool 
   assert.ok(ok.rows[0].id);
   const listed = (await notebookSources(pool, userPrincipal(ownerId), project.id)).find((x) => x.kind === 'web');
   assert.equal(listed.state, 'queued');
+});
+
+test('a file ingested before notebooks is read into passages without touching its own chunks', { skip: !pool }, async () => {
+  const older = await addFile('older.md', '# Opening hours\n\nThe shop opens at nine and closes at six.');
+  await pool.query("DELETE FROM library_asset_ingestions WHERE asset_id=$1 AND extractor_id='corpus-notebook'", [older.id]);
+  const before = (await pool.query(
+    `SELECT i.id, i.state, i.completed_at, count(c.id)::int AS chunks FROM library_asset_ingestions i
+       LEFT JOIN library_asset_chunks c ON c.ingestion_id=i.id WHERE i.asset_id=$1 GROUP BY i.id`, [older.id])).rows;
+  assert.equal(before.length, 1, 'only its own ingestion, as before notebooks existed');
+  let s = (await notebookSources(pool, userPrincipal(ownerId), project.id)).find((x) => x.id === String(older.id));
+  assert.deepEqual([s.state, s.reason], ['stale', 'not_read_into_passages']);
+  const out = await rereadIntoNotebook(pool, older.id, { extractor: extractAsset });
+  assert.equal(out.passages, 1);
+  s = (await notebookSources(pool, userPrincipal(ownerId), project.id)).find((x) => x.id === String(older.id));
+  assert.equal(s.state, 'indexed');
+  const after = (await pool.query(
+    `SELECT i.id, i.state, i.completed_at, count(c.id)::int AS chunks FROM library_asset_ingestions i
+       LEFT JOIN library_asset_chunks c ON c.ingestion_id=i.id WHERE i.asset_id=$1 AND i.extractor_id IS DISTINCT FROM 'corpus-notebook' GROUP BY i.id`, [older.id])).rows;
+  assert.deepEqual(after, before, 'its own ingestion and chunks are byte-for-byte the same rows');
 });
