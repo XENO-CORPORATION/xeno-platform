@@ -9,6 +9,7 @@ import { resolveManagedLibraryPath } from '../libraryAssets.js';
 import { chunkExtractedText } from './assetChunker.js';
 import { extractAsset, UnsupportedAssetError } from './assetExtractors.js';
 import { extractAssetInIsolatedRuntime } from './isolatedExtractorClient.js';
+import { writeNotebookPassages } from '../chatNotebook.js';
 import {
   embedDocuments,
   isSemanticStoreQualified,
@@ -214,6 +215,7 @@ export async function ingestLibraryAsset(db, assetId, {
   extractor = extractAsset,
   isolatedExtractor = extractAssetInIsolatedRuntime,
   semanticIndexer = indexLibraryAssetEmbeddings,
+  notebookPassages = writeNotebookPassages,
 } = {}) {
   const { rows } = await db.query(
     `SELECT i.*, f.storage_path FROM library_asset_ingestions i
@@ -277,6 +279,12 @@ export async function ingestLibraryAsset(db, assetId, {
          completed_at = NOW(), lease_owner = NULL, lease_expires_at = NULL, updated_at = NOW() WHERE id = $1`,
         [ingestion.id, extracted.extractorId, extracted.extractorVersion],
       );
+      // the notebook's passages, from the SAME sections in the same transaction (notebooks-in-chat §3.1), so a file's
+      // passages never describe a different extraction than its chunks. Content failures are recorded, never thrown.
+      await notebookPassages(tx, {
+        assetId, contentSha256: ingestion.content_sha256, mimeType: ingestion.mime_type, sections,
+        extractor: { id: extracted.extractorId, version: extracted.extractorVersion },
+      });
     });
     return semanticIndexer(db, ingestion.id);
   } catch (error) {

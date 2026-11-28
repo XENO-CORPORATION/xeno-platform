@@ -1,4 +1,5 @@
 import { ensureChatProjectFolder, projectFolderUsage, renameChatProjectFolder, syncProjectFolderAccess, releaseChatProjectFolder } from '../services/chatProjectFolders.js';
+import { citationsFor, notebookSources, selectFileSource, PASSAGE_VERSION } from '../services/chatNotebook.js';
 import { localLibraryPath } from '../services/storageObjects.js';
 import express from 'express';
 import { handOff } from '../services/chatHandoff.js';
@@ -497,7 +498,8 @@ router.get('/conversations/:id', async (req, res) => {
     // Get messages
     const messagesResult = await req.db.query(
       `SELECT m.*,
-              COALESCE(cm.context_manifest->'sources', '[]'::jsonb) AS project_sources
+              COALESCE(cm.context_manifest->'sources', '[]'::jsonb) AS project_sources,
+              cm.context_manifest->'notebook' AS notebook_manifest
        FROM chat_messages m
        LEFT JOIN chat_message_context_manifests cm ON cm.message_id = m.id
        WHERE m.conversation_id = $1 ORDER BY m.message_index ASC`,
@@ -510,7 +512,10 @@ router.get('/conversations/:id', async (req, res) => {
      * ACTIVE PATH in reading order, and the rest ride in `branches` (every message, with
      * `parent_id`) for the ‹ i/n › controls. The leaf never dangles (chatBranches.js).
      */
-    const allRows = messagesResult.rows;
+    // a notebook answer's [n] marks, checked by Corpus's cite() against exactly what the model was given; a mark naming
+    // anything else is refused and never shown as a citation (notebooks-in-chat §3.2)
+    const allRows = messagesResult.rows.map(({ notebook_manifest, ...m }) => (notebook_manifest && m.role === 'assistant'
+      ? { ...m, notebook_citations: citationsFor(m.content, { notebook: notebook_manifest }) } : m));
     const path = activePath(allRows, convResult.rows[0].active_leaf_id);
     const leafId = path.length ? path[path.length - 1].id : null;
     res.json({
@@ -985,6 +990,8 @@ router.post('/conversations/:id/messages', async (req, res) => {
           [generationContext.id, inserted.id],
         );
         inserted.project_sources = generationContext.safe_sources;
+        const nbCites = role === 'assistant' ? citationsFor(content, generationContext.context_manifest) : null;
+        if (nbCites) inserted.notebook_citations = nbCites;
       } else {
         inserted.project_sources = [];
       }
@@ -3047,6 +3054,37 @@ router.get('/projects/:id/files', async (req, res) => {
   } catch (error) {
     if (sendChatAuthorityError(res, error)) return;
     console.error('Failed to list project files:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// GET /api/chat/projects/:id/notebook - the project's notebook: every source, its state and whether answers use it
+// (notebooks-in-chat §3.1; a failed source always says why, a stale one is not used until it is read again)
+router.get('/projects/:id/notebook', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    const sources = await notebookSources(req.db, userPrincipal(userId), req.params.id);
+    res.json({ success: true, notebook: { projectId: req.params.id, passageVersion: PASSAGE_VERSION, sources } });
+  } catch (error) {
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to read the notebook:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/chat/projects/:id/notebook/sources/:sourceId - use a file in answers, or not ({ selected })
+router.patch('/projects/:id/notebook/sources/:sourceId', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (typeof req.body?.selected !== 'boolean') return res.status(400).json({ success: false, error: 'selected must be true or false' });
+    const source = await selectFileSource(req.db, userPrincipal(userId), req.params.id, req.params.sourceId, req.body.selected);
+    res.json({ success: true, source });
+  } catch (error) {
+    if (error.code === 'notebook_source_not_found') return res.status(404).json({ success: false, error: error.message });
+    if (sendChatAuthorityError(res, error)) return;
+    console.error('Failed to change a notebook source:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });

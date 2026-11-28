@@ -208,12 +208,14 @@ test('project grounding validates persisted conversation ownership before retrie
 
 test('project instructions carry persisted project identity even with no matching files', () => {
   const source = readFileSync(join(ROOT, 'src/server/services/chatProjectContext.js'), 'utf8');
-  const start = source.indexOf('  return {');
-  assert.ok(start > 0);
-  const result = new Function('project', 'conversationId', 'contentBlocks', 'manifest',
-    source.slice(start, source.lastIndexOf('}')))(
-      { id: 'p1', name: 'Aetherwyn', description: 'Build the world', custom_instructions: '', instructions_revision: 1 },
-      'c1', [], {});
+  // both paths (project chunks and the notebook) build their instructions from this one function
+  assert.equal(source.split('instructions: projectInstructions(project, conversationId').length - 1, 2, 'both result shapes use projectInstructions');
+  const start = source.indexOf('export const projectInstructions = ');
+  const end = source.indexOf(".filter(Boolean).join('\\n\\n');", start);
+  assert.ok(start > 0 && end > start);
+  const projectInstructions = new Function('return ' + source.slice(start + 'export const projectInstructions = '.length, end) + ".filter(Boolean).join('\\n\\n');")();
+  const result = { instructions: projectInstructions(
+    { id: 'p1', name: 'Aetherwyn', description: 'Build the world', custom_instructions: '', instructions_revision: 1 }, 'c1') };
   assert.match(result.instructions, /Aetherwyn/);
   assert.match(result.instructions, /Build the world/);
   assert.match(result.instructions, /"project_id":"p1"/);
