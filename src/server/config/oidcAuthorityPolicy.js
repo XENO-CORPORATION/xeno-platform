@@ -116,6 +116,8 @@ export const CLIENT_AUTHORITY = Object.freeze({
   'xeno-chat-web': IDENTITY,
   // XENO Storage on its own host (storage.xenosystem.ai): identity only; the files are reached with the browser session
   'xeno-storage-web': IDENTITY,
+  // XENO Depot on the web (depot.xenosystem.ai): identity only; Depot is reached with a token from the browser session
+  'xeno-depot-web': IDENTITY,
   'xeno-web': WEB,
   'xeno-post': [...COLLAB_PRODUCT, 'team:manage', 'billing:read'],
   'xeno-api-portal': [...IDENTITY, 'inference:run', 'ledger:read', 'ledger:spend', 'billing:read', 'billing:manage'],

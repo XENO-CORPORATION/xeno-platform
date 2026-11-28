@@ -78,6 +78,9 @@ window.XENO_PRODUCTS = Object.fromEntries([
   P('engine', 'Engine', { blurb: 'Game engine' }),
   P('shell', 'Shell', { blurb: 'Desktop environment' }),
   P('spawn', 'Spawn', { blurb: 'Canvases of agents' }),
+  // XENO Depot (version control for large projects) on depot.xenosystem.ai. Not in a sidebar section: its door is staff-only
+  // until its name is cleared (product_access_policy 'depot'), so it is reached by its address alone.
+  P('depot', 'Depot', { icon: null, code: 'Dp', kind: 'web', blurb: 'Version control for large projects' }),
   P('rt', 'RT', { blurb: 'Local inference runtime' }),
   P('lib', 'Lib', { blurb: 'Native media library' }),
   // Tools (catalogue items)

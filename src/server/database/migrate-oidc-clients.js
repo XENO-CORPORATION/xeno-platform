@@ -103,6 +103,10 @@ export const FIRST_PARTY_CLIENTS = [
   // XENO Storage on its own host (storage.xenosystem.ai): the same host sign-in, ending in a browser session; no token is kept.
   // Not the desktop app's client (xeno-storage, loopback PKCE): a browser host is its own first-party client.
   { id: 'xeno-storage-web', name: 'XENO Storage (web)', loopback: false, redirects: ['https://storage.xenosystem.ai/api/auth/host/callback'] },
+  // XENO Depot on the web (depot.xenosystem.ai, xeno-depot design 0006): the same host sign-in, ending in a browser
+  // session; no token is kept. Its Depot calls use a five-minute token from that session (depotAuthority.js
+  // browserDepotToken). Not the CLI's client (xeno-depot-cli, device grant / loopback PKCE).
+  { id: 'xeno-depot-web', name: 'XENO Depot (web)', loopback: false, redirects: ['https://depot.xenosystem.ai/api/auth/host/callback'] },
   // XENO Places — a public browser SPA (no backend): authorization code + PKCE-S256 in the browser, access token in
   // memory only. One exact-match redirect; no localhost redirect (no other web client registers one).
   { id: 'xeno-places', name: 'XENO Places', loopback: false, redirects: ['https://places.xenosystem.ai/auth/callback'] },
