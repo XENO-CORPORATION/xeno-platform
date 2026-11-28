@@ -49,6 +49,25 @@ test('tasks.xenosystem.ai keeps its addresses', () => {
   assert.equal(A.url('#/overview/p/chat'), 'https://xenosystem.ai/workspace/apps/chat');
 });
 
+test('depot.xenosystem.ai: the path is the screen (xeno-depot design 0006), and the workspace doors lead to it', () => {
+  const WS = '0000000b-0000-4000-8000-00000000000b', REPO = '01a2006168da76c3b7d3447784891668';
+  const { A, ctx } = addrOn('depot.xenosystem.ai');
+  assert.equal(A.product, 'depot'); assert.equal(ctx.document.documentElement.dataset.product, 'depot');
+  for (const path of ['/', `/w/${WS}/repos`, `/w/${WS}/repos/${REPO}`, `/w/${WS}/repos/${REPO}/tree/${'a'.repeat(64)}/Content/Maps`]) {
+    const hash = '#/overview/p/depot' + (path === '/' ? '' : path);
+    assert.equal(A.url(hash), 'https://depot.xenosystem.ai' + path, `${hash} is shown as ${path}`);
+    ctx.location.pathname = path; assert.equal(A.current(), hash, `${path} opens ${hash}`);
+  }
+  // a place that is not Depot's opens in the full workspace on the main site
+  assert.equal(A.url('#/overview/g/tasks/T-4'), 'https://xenosystem.ai/workspace/tasks/T-4');
+  // the main site: the Dev area's door, and the first door (decision 0001 §1) rewritten to it
+  const main = addrOn('xenosystem.ai', '/workspace');
+  assert.equal(main.A.url(`#/dev/p/depot/repos/${REPO}`), `https://xenosystem.ai/workspace/dev/apps/depot/repos/${REPO}`);
+  main.ctx.location.pathname = `/workspace/dev/apps/depot/repos/${REPO}`; assert.equal(main.A.current(), `#/dev/p/depot/repos/${REPO}`);
+  main.ctx.location.pathname = `/workspace/depot/w/${WS}/repos/${REPO}`; assert.equal(main.A.current(), `#/dev/p/depot/w/${WS}/repos/${REPO}`);
+  main.ctx.location.pathname = '/workspace/depot'; assert.equal(main.A.current(), '#/dev/p/depot');
+});
+
 test('the main site is not a product host', () => {
   const { A } = addrOn('xenosystem.ai', '/workspace');
   assert.equal(A.product, null);

@@ -11,7 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Redis from 'ioredis';
-import { siteOrigin, siteUrl, mailDomain, publicSiteOrigin, acceptedSiteOrigins } from '../config/hosts.js';
+import { siteOrigin, siteUrl, mailDomain, publicSiteOrigin, acceptedSiteOrigins, issuer } from '../config/hosts.js';
+import { DepotAuthorityError, browserDepotToken } from '../services/depotAuthority.js';
 import { confirmationStatus } from '../services/accountConfirmation.js';
 import { exchangeAuthorizationCode, revokeToken } from '../utils/oidcProvider.js';
 import { MICRO_PER_CREDIT } from '../utils/creditLedgerV2.js';
@@ -3191,6 +3192,9 @@ export const HOST_SIGNIN_CLIENTS = Object.freeze({
   'chat.xenosystem.ai': 'xeno-chat-web',
   // XENO Storage on its own host (owner 2026-11-21: "the same for storage.xenosystem.ai … that drive-like interface")
   'storage.xenosystem.ai': 'xeno-storage-web',
+  // XENO Depot web (xeno-depot design 0006): depot.xenosystem.ai's Worker sends every page path here, through the
+  // depot-web server block, which pins Host to depot.xenosystem.ai (nginx/default.conf); its callback is on depot.
+  'depot.xenosystem.ai': 'xeno-depot-web',
 });
 const HOST_STATE_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-xeno_host_signin' : 'xeno_host_signin';
 const hostOf = (req) => String(req.headers.host || '').toLowerCase().split(':')[0];
@@ -3256,6 +3260,27 @@ router.get('/host/callback', async (req, res) => {
     if (e instanceof AccountSuspendedError) return res.status(403).type('text').send('This account is suspended.');
     console.error('[auth] host sign-in callback', e.message);
     return res.status(400).type('text').send('Sign-in did not complete. Start again.');
+  }
+});
+
+// The Depot web page's token (services/depotAuthority.js browserDepotToken; xeno-depot design 0006 §3): the page's
+// browser session exchanged for a five-minute, read-only `xeno-depot` token it holds in memory and sends to Depot's
+// /api/v1. Only on the Depot host, only from a browser session (a Bearer caller is refused: the cookie IS the subject),
+// only same-origin, and the POST already passed the session's double-submit CSRF check (middleware/browserSession.js).
+export const DEPOT_WEB_HOSTS = Object.freeze(['depot.xenosystem.ai']);
+router.post('/depot-token', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const host = hostOf(req);
+  if (!DEPOT_WEB_HOSTS.includes(host)) return res.status(404).json({ success: false, error: 'Not the XENO Depot host' });
+  if (req.get('origin') !== `https://${host}`) return res.status(403).json({ success: false, error: 'cross_origin' });
+  const s = req.browserSession;
+  if (!s?.sid || !s?.userId) return res.status(401).json({ success: false, error: 'sign_in_required' });
+  try {
+    return res.json(await browserDepotToken(req.db, { userId: s.userId, browserSid: s.sid, iss: issuer() }));
+  } catch (e) {
+    if (e instanceof DepotAuthorityError) return res.status(e.status).json({ success: false, error: e.code, message: e.message !== e.code ? e.message : undefined });
+    console.error('[auth] depot-token', e.message);
+    return res.status(500).json({ success: false, error: 'depot_token_unavailable' });
   }
 });
 

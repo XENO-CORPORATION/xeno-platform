@@ -23,7 +23,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import {
-  ACCESS_TOKEN_TYP, DEPOT_AUDIENCE, DEPOT_SCOPES, getClient, getSigningKey, verifyDepotAccessToken,
+  ACCESS_TOKEN_TYP, DEPOT_AUDIENCE, DEPOT_SCOPES, depotLoginClaims, getClient, getSigningKey, verifyDepotAccessToken,
 } from '../utils/oidcProvider.js';
 import { rightsOf } from './agentAccess.js';
 import { resolvePrincipal } from './agentIdentity.js';
@@ -97,6 +97,9 @@ async function actorForToken(db, payload) {
   const client = payload.client_id ? await getClient(db, payload.client_id) : null;
   if (!client) throw new DepotAuthorityError('invalid_token', 401);
   const person = String(payload.sub);
+  // A token the Depot web page got from its browser session (browserDepotToken) lives only while that session does:
+  // signing out deletes the user_sessions row, and the token, and every per-repo token exchanged from it, stop at once.
+  if (client.client_id === DEPOT_WEB_CLIENT && !(await browserSessionLive(db, payload.bsid, person))) throw new DepotAuthorityError('invalid_token', 401);
   let principal;
   let via;
   if (client.dynamic) {
@@ -117,6 +120,43 @@ export async function actorForSession(db, userId) {
   if (!principal) throw new DepotAuthorityError('unknown_principal', 401);
   const accountable = principal.kind === 'agent' ? String(principal.owner.id) : String(principal.id);
   return { principal, accountableId: accountable, via: principal.kind === 'agent' ? 'agent' : 'person', clientId: null, scopes: [...DEPOT_SCOPES], expiresAt: null };
+}
+
+// ── The Depot web page (depot.xenosystem.ai): its browser session → a short Depot token (design 0006 §3) ───────────
+
+/** The host sign-in client of depot.xenosystem.ai (routes/authRoutes.js HOST_SIGNIN_CLIENTS, migrate-oidc-clients.js). */
+export const DEPOT_WEB_CLIENT = 'xeno-depot-web';
+export const BROWSER_TOKEN_SECONDS = 300;
+export const BROWSER_TOKEN_SCOPE = 'depot:read';
+async function browserSessionLive(db, bsid, userId) {
+  if (!bsid || !UUID_RE.test(String(bsid))) return false;
+  const r = await db.query('SELECT 1 FROM user_sessions WHERE id = $1 AND user_id = $2 AND expires_at > NOW()', [String(bsid), String(userId)]);
+  return r.rows.length === 1;
+}
+
+/**
+ * The page's Depot token (orchestrator's conditions, 2026-11-27): an RFC 8693-style exchange of the browser session on
+ * the existing provider, never a second issuer. Audience `xeno-depot` only, so no other API accepts it. The subject is
+ * the PERSON (a browser session is never an agent's). Five minutes, read-only, no refresh: the page asks again. Bound
+ * to the session by `bsid`, so sign-out ends it. Held in the page's memory, never in storage; the route that calls
+ * this is same-origin and CSRF-checked (routes/authRoutes.js POST /api/auth/depot-token).
+ */
+export async function browserDepotToken(db, { userId, browserSid, iss, env = process.env }) {
+  if (!(await browserSessionLive(db, browserSid, userId))) throw new DepotAuthorityError('invalid_session', 401);
+  const principal = await resolvePrincipal(db, userId);
+  if (!principal || principal.kind !== 'human') throw new DepotAuthorityError('invalid_session', 401);
+  const actor = { principal, accountableId: String(principal.id), via: 'person', clientId: DEPOT_WEB_CLIENT, scopes: [BROWSER_TOKEN_SCOPE], expiresAt: null };
+  const door = await doorFor(db, actor);
+  if (!door.allowed) throw new DepotAuthorityError('depot_closed', 403, door.message || 'XENO Depot is not open to this account');
+  const key = await getSigningKey(db);
+  const now = Math.floor(Date.now() / 1000);
+  const token = jwt.sign({
+    iss, iat: now, sub: String(principal.id), aud: [DEPOT_AUDIENCE],
+    ...depotLoginClaims(DEPOT_AUDIENCE, principal.id, env),
+    scope: BROWSER_TOKEN_SCOPE, typ: ACCESS_TOKEN_TYP, jti: crypto.randomUUID(),
+    client_id: DEPOT_WEB_CLIENT, azp: DEPOT_WEB_CLIENT, bsid: String(browserSid),
+  }, key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn: BROWSER_TOKEN_SECONDS, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } });
+  return { access_token: token, token_type: 'Bearer', expires_in: BROWSER_TOKEN_SECONDS, scope: BROWSER_TOKEN_SCOPE };
 }
 
 // ── Headless agents: xdp_ credentials (decision 0001 §3, 0002 §2) ──────────────────────────────────────────────
@@ -340,6 +380,7 @@ export async function depotExchangeGrant(db, { subjectToken, subjectTokenType, r
     scope: scope.join(' '), typ: ACCESS_TOKEN_TYP, jti: crypto.randomUUID(),
     ...(actor.clientId ? { client_id: actor.clientId, azp: actor.clientId } : {}),
     ...(sourcePayload?.sid ? { sid: sourcePayload.sid, auth_epoch: sourcePayload.auth_epoch, auth_time: sourcePayload.auth_time } : {}),
+    ...(sourcePayload?.bsid ? { bsid: sourcePayload.bsid } : {}),   // a web page's token: its per-repo tokens end at sign-out too
     ...claims,
   }, key.privatePem, { algorithm: key.alg, keyid: key.kid, expiresIn, header: { typ: ACCESS_TOKEN_TYP, kid: key.kid } });
   return { access_token: token, issued_token_type: ACCESS_TOKEN_TYPE, token_type: 'Bearer', expires_in: expiresIn, scope: scope.join(' ') };

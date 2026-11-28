@@ -60,7 +60,7 @@ test('nginx: the Storage page on its host, gated; /api/ is ^~; the old redirect 
   assert.match(block, /location = \/login \{ return 302 \/api\/auth\/host\/start\?return=\$arg_returnUrl; \}/);
   assert.match(block, /location = \/health/);
   const gate = readFileSync(new URL('../public/coming-soon.html', import.meta.url), 'utf8');
-  assert.match(gate, /\^\(chat\|tasks\|storage\|tools\|motion\|creator\)\\\.\(xenosystem\\\.ai\|localhost\)\$/, 'the gate page asks xenosystem.ai silently on this host too');
+  assert.match(gate, /\^\(chat\|tasks\|storage\|depot\|tools\|motion\|creator\)\\\.\(xenosystem\\\.ai\|localhost\)\$/, 'the gate page asks xenosystem.ai silently on this host too');
   for (const [, f] of gate.matchAll(/(?:src|href)="(\/[^"/]+\.([a-z0-9]+))"/g)) assert.ok(block.includes('favicon') || !f.includes('favicon'), `${f} is linked at the root but this host does not serve it`);
 });
 

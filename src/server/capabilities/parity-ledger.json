@@ -189,7 +189,8 @@
     "githubRoutes.js": "account",
     "storageDepotServiceRoutes.js": "storage",
     "storageUploadRoutes.js": "storage",
-    "platform-storage-uploads.js": "storage"
+    "platform-storage-uploads.js": "storage",
+    "platform-depot.js": "platform"
   },
   "actions": {
     "route:accountGiftRoutes.js:POST /": {
@@ -12192,6 +12193,34 @@
       "status": "planned",
       "class": "reversible",
       "scope": "tasks:write"
+    },
+    "route:authRoutes.js:POST /depot-token": {
+      "status": "excluded",
+      "category": "self-authority",
+      "class": "safe",
+      "scope": "none",
+      "because": "mints a 5-minute Depot read token from the person's own browser session on depot.xenosystem.ai; an agent reads Depot with its own Depot credential, never a person's session"
+    },
+    "ui:platform-depot.js:data-dp-repo": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "opens a repository on the Depot page; an agent reads repositories through Depot's own API and MCP"
+    },
+    "ui:platform-depot.js:data-dp-back": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "returns the Depot page to the repository list"
+    },
+    "ui:platform-depot.js:data-dp-retry": {
+      "status": "excluded",
+      "category": "view-state",
+      "class": "safe",
+      "scope": "none",
+      "because": "loads the Depot page again after an error"
     },
     "route:chatRoutes.js:GET /projects/:id/notebook": {
       "status": "planned",
