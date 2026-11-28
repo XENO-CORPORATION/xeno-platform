@@ -5,6 +5,9 @@ plain-words account of what changed. It starts here; earlier history is in `git 
 
 ## 2026-11-28
 
+**The Corpus CLI can sign in for a hosted corpus.** A new client, `xeno-corpus-cli` (device grant in a terminal, loopback PKCE on a desktop), gets tokens for the `xeno-corpus` audience, with `corpus:read` and `corpus:write` and nothing else; every platform API refuses those tokens. An MCP client that registers itself for `corpus:*` alone gets the same audience; asking for Corpus scopes beside another area's is refused. The Corpus desktop app's own sign-in is unchanged. This is the sign-in half of `corpus-remote/1` (xeno-corpus D241); corpus.xenosystem.ai itself comes next.
+- Proof: `scripts/oidc-corpus-cli-client.test.mjs` 6/6 in `test:oidc-agent-client` (94/94); four mutations caught (audience dropped from the seed, Corpus scopes mixed with another area, the workspace audience given instead, credits added to the CLI).
+
 **A chat project's sources page is called Corpus, at `/projects/<id>/corpus`.** It was "notebook" for its first minutes live; reading, ranking and citing were always XENO Corpus's own code, so the page, its button and its messages now carry that name (owner: "we already have Corpus"). The old `/projects/<id>/notebook` addresses, of the page and of its API, answer 308 to `/corpus`, so a link made in those minutes still opens it.
 - Proof: `npm run test:chat-corpus-redirect` (the 308 and its Location for GET and PATCH, the nginx location and its order, the router mount; each mutation-checked) and `npm run test:chat-corpus-ui`, which opens the old address with no nginx in front and lands on `/corpus`.
 - The API's 308 answers before sign-in is checked, so any caller is sent to `/corpus` (behind sign-in, an unsigned caller saw 401 at the old address).

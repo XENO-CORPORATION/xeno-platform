@@ -52,7 +52,14 @@ export const WORKSPACE_AUDIENCE = 'xeno-workspace';
 // A scope is a CEILING on the token; what the person may do on one repo is its grants (services/depotAuthority.js).
 export const DEPOT_AUDIENCE = 'xeno-depot';
 export const DEPOT_SCOPES = Object.freeze(['depot:read', 'depot:write', 'depot:admin']);
-export const DYNAMIC_SCOPES = Object.freeze([...new Set([...TASKS_SCOPES, ...WORKSPACE_SCOPES, ...DEPOT_SCOPES])]);
+// XENO Corpus, hosted (xeno-corpus docs/specs/2026-11-28-corpus-remote-1.md §3, D241): corpus.xenosystem.ai serves
+// Corpus's own protocol, and its tokens name 'xeno-corpus', refused by every platform API, the way Depot's are. The
+// first-party CLI (xeno-corpus-cli) gets it, and so does a self-registered MCP client that asks for corpus:* alone.
+//   corpus:read   context, tenet, lapsed, consumers, unmanaged, can_ship, sources
+//   corpus:write  add a source, remember a note, propose a tenet (a proposal, never a tenet: D211)
+export const CORPUS_AUDIENCE = 'xeno-corpus';
+export const CORPUS_SCOPES = Object.freeze(['corpus:read', 'corpus:write']);
+export const DYNAMIC_SCOPES = Object.freeze([...new Set([...TASKS_SCOPES, ...WORKSPACE_SCOPES, ...DEPOT_SCOPES, ...CORPUS_SCOPES])]);
 /**
  * What Lore needs on a Depot LOGIN token (the one the device grant or a refresh mints, before any repo exists): Lore's
  * client sends it for `repository create` and `repository list`, and refuses to send a token whose `root_domains` do not
@@ -1174,8 +1181,11 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
   // mint one token two servers accept, which is the confusion separate audiences exist to prevent.
   const depot = scopes.filter((s) => DEPOT_SCOPES.includes(s));
   if (depot.length && depot.length !== scopes.length) throw bad('Depot scopes (depot:*) register a client of their own; ask for them without other scopes');
+  // the same rule for a hosted Corpus: its own resource server, so corpus:* never shares a token with another area
+  const corpus = scopes.filter((s) => CORPUS_SCOPES.includes(s));
+  if (corpus.length && corpus.length !== scopes.length) throw bad('Corpus scopes (corpus:*) register a client of their own; ask for them without other scopes');
   // Tasks-only stays on the Tasks audience; any other area makes it a workspace client (WORKSPACE AGENT SURFACE P2)
-  const audience = depot.length ? DEPOT_AUDIENCE
+  const audience = depot.length ? DEPOT_AUDIENCE : corpus.length ? CORPUS_AUDIENCE
     : scopes.every((s) => TASKS_SCOPES.includes(s)) ? TASKS_AUDIENCE : WORKSPACE_AUDIENCE;
   if (from) {
     const recent = (await db.query(`SELECT count(*)::int AS n FROM oauth_clients WHERE dynamic AND registered_from = $1 AND created_at > now() - interval '1 hour'`, [from])).rows[0].n;
@@ -1187,7 +1197,8 @@ export async function registerDynamicClient(db, meta = {}, { from = null } = {})
     `INSERT INTO oauth_clients (client_id, client_secret, name, redirect_uris, allowed_scopes, surface, is_first_party, loopback, dynamic, access_audience, registered_from)
      VALUES ($1, NULL, $2, $3, $4, $7, false, false, true, $5, $6)`,
     [clientId, name, uris, allowed, audience, from,
-      audience === TASKS_AUDIENCE ? 'xeno_tasks_mcp' : audience === DEPOT_AUDIENCE ? 'xeno_depot_mcp' : 'xeno_workspace_mcp']);
+      audience === TASKS_AUDIENCE ? 'xeno_tasks_mcp' : audience === DEPOT_AUDIENCE ? 'xeno_depot_mcp'
+        : audience === CORPUS_AUDIENCE ? 'xeno_corpus_mcp' : 'xeno_workspace_mcp']);
   return {
     client_id: clientId, client_id_issued_at: Math.floor(Date.now() / 1000), client_name: name, redirect_uris: uris,
     token_endpoint_auth_method: 'none', grant_types: grants, response_types: ['code'], scope: scopes.join(' '),
@@ -1215,3 +1226,6 @@ export const verifyWorkspaceAccessToken = (db, token) => verifyDynamicAccessToke
 /** A Depot-audience access token: the Depot CLI (first-party, device grant or loopback PKCE) or a self-registered agent
  *  CLI that asked for depot:* only. Accepted ONLY by Depot's authority seam (services/depotAuthority.js). */
 export const verifyDepotAccessToken = (db, token) => verifyDynamicAccessToken(db, token, DEPOT_AUDIENCE);
+/** A Corpus-audience access token: the Corpus CLI (first-party, device grant or loopback PKCE) or a self-registered MCP
+ *  client that asked for corpus:* only. For the corpus-remote/1 host (corpus.xenosystem.ai) alone. */
+export const verifyCorpusAccessToken = (db, token) => verifyDynamicAccessToken(db, token, CORPUS_AUDIENCE);

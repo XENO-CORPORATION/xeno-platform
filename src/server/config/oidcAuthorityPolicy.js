@@ -26,6 +26,11 @@ export const OIDC_SCOPES = Object.freeze([
   // XENO Depot (decision 0001 §3): its own resource server and audience ('xeno-depot'). A ceiling on the token; what a
   // person may do on ONE repo is that repo's grants (services/depotAuthority.js). Mirrors oidcProvider DEPOT_SCOPES.
   'depot:read', 'depot:write', 'depot:admin',
+  // XENO Corpus, hosted (corpus-remote/1, D241): its own audience ('xeno-corpus'). corpus:read reads a corpus the person
+  // can see (context, tenet, lapsed, consumers, unmanaged, can_ship, sources); corpus:write adds sources and notes and
+  // proposes tenets, never writes one (D211). A ceiling; what a corpus shows is its scope's ReBAC relation.
+  // Mirrors oidcProvider CORPUS_SCOPES.
+  'corpus:read', 'corpus:write',
   // XENO workspace agent surface (WORKSPACE AGENT SURFACE SPEC P2, approved 2026-10-20): the per-area scopes a
   // self-registered client may hold on the 'xeno-workspace' audience (capabilities/scopes.js, minus the two Tasks ones above)
   ...WORKSPACE_SCOPES.filter((s) => s !== 'tasks:read' && s !== 'tasks:write'),
@@ -86,6 +91,9 @@ export const CLIENT_AUTHORITY = Object.freeze({
   // desktop. Identity plus Depot's own scopes and nothing else: its tokens name 'xeno-depot' (migrate-oidc-clients
   // `audience`), which every platform API refuses, so it can never spend credits or read files here.
   'xeno-depot-cli': [...IDENTITY, 'depot:read', 'depot:write', 'depot:admin'],
+  // XENO Corpus CLI (corpus-remote/1 §3): identity plus Corpus's own two scopes and nothing else. Its tokens name
+  // 'xeno-corpus' (migrate-oidc-clients `audience`), which every platform API refuses: it spends nothing, reads no files.
+  'xeno-corpus-cli': [...IDENTITY, 'corpus:read', 'corpus:write'],
   // XENO Spawn: identity, read the credits balance, and run inference through the XENO
   // gateway on the user's behalf (which spends credits). Nothing more: no projects/sync,
   // no workforce, no billing, team or broker authority. Widen by a reviewed change only.
