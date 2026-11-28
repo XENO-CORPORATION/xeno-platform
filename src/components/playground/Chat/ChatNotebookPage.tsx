@@ -31,6 +31,9 @@ const REASONS: Record<string, string> = {
   unsupported_type: 'This file type cannot be read',
   extract_limit: 'Too large to read',
   malware_detected: 'Blocked by the malware scan',
+  pc_missing: 'The PC it was on has been removed',
+  project_not_enabled: 'That PC no longer offers this corpus',
+  snapshot_missing: 'Its saved copy is gone',
 };
 const reasonText = (reason: string | null): string => {
   if (!reason) return '';

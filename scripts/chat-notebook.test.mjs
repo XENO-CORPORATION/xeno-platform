@@ -209,6 +209,29 @@ test('corpus_sources refuses a malformed source at the database', { skip: !pool 
   assert.ok(ok.rows[0].id);
   const listed = (await notebookSources(pool, userPrincipal(ownerId), project.id)).find((x) => x.kind === 'web');
   assert.equal(listed.state, 'queued');
+
+  // a local corpus names its PC and the project id the desktop offers (at most 64, the relay's PROJECT schema)
+  await assert.rejects(pool.query(`INSERT INTO corpus_sources(corpus_id, kind, title, local_project_id) VALUES ($1, 'local_corpus', 'pc', $2)`, [corpus.id, 'x'.repeat(65)]));
+  await assert.rejects(pool.query(`INSERT INTO corpus_sources(corpus_id, kind, title, local_project_id) VALUES ($1, 'local_corpus', 'pc', 'proj-1')`, [corpus.id]),
+    /corpus_sources_local_needs_pc/, 'a local corpus with no PC is refused unless it is failed');
+  const pc = (await pool.query(
+    `INSERT INTO browser_installations(user_id, installation_id, dpop_jkt, label) VALUES ($1, gen_random_uuid(), $2, 'Desk PC') RETURNING id`,
+    [ownerId, 'a'.repeat(43)])).rows[0].id;
+  const local = (await pool.query(
+    `INSERT INTO corpus_sources(corpus_id, kind, title, local_binding_id, local_project_id) VALUES ($1, 'local_corpus', 'My notes', $2, 'proj-1') RETURNING id`,
+    [corpus.id, pc])).rows[0].id;
+  await pool.query('DELETE FROM browser_installations WHERE id = $1', [pc]);
+  const gone = (await pool.query('SELECT state, state_reason, local_binding_id FROM corpus_sources WHERE id = $1', [local])).rows[0];
+  assert.deepEqual(gone, { state: 'failed', state_reason: 'pc_missing', local_binding_id: null }, 'a removed PC leaves its source failed, never answered by another PC');
+
+  // a web page or note hangs its passages on a snapshot; a snapshot that is gone leaves the source failed
+  const snapPath = path.join(dir, `${marker}-snapshot.md`);
+  await fs.writeFile(snapPath, 'snapshot', 'utf8');
+  const snap = await registerManagedLibraryFile(pool, { userId: ownerId, filename: `${marker}-snapshot.md`, originalName: 'snapshot.md', mimeType: 'text/markdown', fileSize: 8, storagePath: snapPath, metadata: { source: 'notebook-test' } });
+  const note = (await pool.query(
+    `INSERT INTO corpus_sources(corpus_id, kind, title, snapshot_asset_id) VALUES ($1, 'note', 'A note', $2) RETURNING id`, [corpus.id, snap.id])).rows[0].id;
+  await pool.query('DELETE FROM user_files WHERE id = $1', [snap.id]);
+  assert.deepEqual((await pool.query('SELECT state, state_reason FROM corpus_sources WHERE id = $1', [note])).rows[0], { state: 'failed', state_reason: 'snapshot_missing' });
 });
 
 test('a file ingested before notebooks is read into passages without touching its own chunks', { skip: !pool }, async () => {
