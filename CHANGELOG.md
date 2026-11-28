@@ -3,6 +3,12 @@
 Newest first. The record of each deploy is XENO Index's release record (`/workspace/releases`); this file is the
 plain-words account of what changed. It starts here; earlier history is in `git log` and that record.
 
+## 2026-11-28
+
+**A chat project now has a notebook, and its answers cite their sources.** Files in a project are read into passages with XENO Corpus's own engine (vendored byte for byte at xeno-corpus `7a1b67c`), each anchored at its page or heading. When a project's files have passages, the model is given those passages numbered `[1]`, `[2]`… (all of them when they fit, the best-ranked ones otherwise) and is asked to cite them. Every mark in the answer is checked against exactly what the model was given: a number it was not given is named under the answer and never linked. The notebook page (`chat.xenosystem.ai/projects/<id>/notebook`, or the layers button beside the project's Files) lists every source with its state: how many passages, still being read, out of date and why, or couldn't be read and why. A switch keeps a file out of answers. A source with no readable text says so instead of looking empty.
+- Proof: `npm run test:chat-notebook` 11/11 on real Postgres (ingest, sources, grounding, ranking, refused citations, a failed source, staleness, the switch, the source table's rules, reading older files); `test:notebook-ingestion-kind` refuses any reader of file ingestions that would see notebook rows (mutation-checked on a real file); `test:corpus-notebook-vendor` pins the four Corpus files; `test:chat-project-db` 14/14.
+- Files added before today are read into passages by `node scripts/notebook-backfill.mjs --confirm` in the backend (dry run without `--confirm`); their own chunks are untouched.
+
 ## 2026-11-27
 
 **chat.xenosystem.ai: Images opens in the area you are in.** The Images button jumped to the Studio area by a fixed address, which broke the rule that opening a feature keeps the current area (`test:workspace-overview-stays` was red on main). It now opens Image generation in place, and `/images` on the chat host matches Images from any area.
