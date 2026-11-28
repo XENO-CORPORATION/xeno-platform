@@ -60,6 +60,11 @@ export const FIRST_PARTY_CLIENTS = [
   // XENO Depot CLI (xeno-depot/docs/decisions/0001-depot-foundation.md §2-3): device grant or loopback PKCE, and its
   // tokens name Depot's audience, not 'xeno-api' — `audience` is written to access_audience by the upsert below.
   { id: 'xeno-depot-cli', name: 'XENO Depot CLI', loopback: true, audience: 'xeno-depot' },
+  // XENO Corpus CLI and remote members (xeno-corpus docs/specs/2026-11-28-corpus-remote-1.md §3, D241): device grant on a
+  // terminal, loopback PKCE on a desktop, for a hosted corpus at corpus.xenosystem.ai. Its tokens name 'xeno-corpus',
+  // which every platform API refuses. NOT the desktop's own client ('xeno-corpus' above), whose tokens are the platform's
+  // because its agent panel spends credits; the two never share a token.
+  { id: 'xeno-corpus-cli', name: 'XENO Corpus CLI', loopback: true, audience: 'xeno-corpus' },
   // Standalone Agent (loopback PKCE; no client secret)
   { id: 'xeno-agent-interface', name: 'XENO Agent', loopback: true },
   // XENO Spawn — a local web UI served by its own loopback Node server. The SERVER
