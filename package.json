@@ -172,6 +172,7 @@
     "test:chat-host-mutation": "node prototypes/xeno-workspace/tests/chat-host-mutation-check.mjs",
     "test:storage-host-ui": "node prototypes/xeno-workspace/tests/storage-host-test.mjs",
     "test:storage-host-mutation": "node prototypes/xeno-workspace/tests/storage-host-mutation-check.mjs",
+    "test:depot-host-ui": "node prototypes/xeno-workspace/tests/depot-host-test.mjs",
     "test:product-address": "node --test prototypes/xeno-workspace/tests/product-address.test.mjs",
     "measure:tasks-open": "node prototypes/xeno-workspace/tests/tasks-open-measure.mjs",
     "test:marketplace-skills": "node src/server/tests/marketplace-skills.test.mjs",
