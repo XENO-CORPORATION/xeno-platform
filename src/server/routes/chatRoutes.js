@@ -3036,7 +3036,7 @@ router.get('/projects/:id/files', async (req, res) => {
        JOIN user_files f ON f.id = pa.asset_id AND f.deleted_at IS NULL
        LEFT JOIN LATERAL (
          SELECT state, error_code, error_message FROM library_asset_ingestions
-         WHERE asset_id = f.id ORDER BY created_at DESC LIMIT 1
+         WHERE asset_id = f.id AND extractor_id IS DISTINCT FROM 'corpus-notebook' ORDER BY created_at DESC LIMIT 1
        ) i ON TRUE
        WHERE pa.project_id = $1
        ORDER BY pa.created_at DESC`,

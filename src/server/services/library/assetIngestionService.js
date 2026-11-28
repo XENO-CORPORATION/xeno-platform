@@ -218,7 +218,7 @@ export async function ingestLibraryAsset(db, assetId, {
   const { rows } = await db.query(
     `SELECT i.*, f.storage_path FROM library_asset_ingestions i
      JOIN user_files f ON f.id = i.asset_id AND f.deleted_at IS NULL
-     WHERE i.asset_id = $1 AND ($2::uuid IS NULL OR i.id = $2)
+     WHERE i.asset_id = $1 AND i.extractor_id IS DISTINCT FROM 'corpus-notebook' AND ($2::uuid IS NULL OR i.id = $2)
      ORDER BY i.created_at DESC LIMIT 1`,
     [assetId, ingestionId],
   );

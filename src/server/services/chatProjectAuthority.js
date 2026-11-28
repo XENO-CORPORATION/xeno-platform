@@ -139,7 +139,7 @@ export async function linkAssetToProject(db, { principal, projectId, assetId }) 
         `INSERT INTO chat_project_chunk_embeddings(project_id,chunk_id,asset_id,embedding_model_id,embedding)
          SELECT $1,c.id,c.asset_id,c.embedding_model_id,c.embedding
          FROM library_asset_chunks c
-         JOIN library_asset_ingestions i ON i.id=c.ingestion_id AND i.state='ready' AND i.semantic_status='ready'
+         JOIN library_asset_ingestions i ON i.id=c.ingestion_id AND i.state='ready' AND i.semantic_status='ready' AND i.extractor_id IS DISTINCT FROM 'corpus-notebook'
          WHERE c.asset_id=$2 AND c.embedding IS NOT NULL
          ON CONFLICT(project_id,chunk_id) DO UPDATE SET
            embedding=EXCLUDED.embedding, embedding_model_id=EXCLUDED.embedding_model_id, updated_at=NOW()`,

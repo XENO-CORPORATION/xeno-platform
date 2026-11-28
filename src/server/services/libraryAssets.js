@@ -196,7 +196,7 @@ export async function verifyAuthorizedLibraryContentRequest(db, {
       `SELECT f.id, f.original_name, f.filename, f.mime_type, f.file_size, f.storage_path
        FROM chat_project_assets pa JOIN user_files f ON f.id = pa.asset_id
        WHERE pa.project_id = $1 AND pa.asset_id = $2 AND f.deleted_at IS NULL
-         AND EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = f.id AND i.state IN ('ready','unsupported'))`,
+         AND EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = f.id AND i.state IN ('ready','unsupported') AND i.extractor_id IS DISTINCT FROM 'corpus-notebook')`,
       [grant.authorizing_resource_id, assetId],
     );
     return linked.rows[0] ? { file: linked.rows[0], grant } : null;
@@ -204,7 +204,7 @@ export async function verifyAuthorizedLibraryContentRequest(db, {
   const file = (await db.query(
     `SELECT id, original_name, filename, mime_type, file_size, storage_path
      FROM user_files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
-       AND EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = user_files.id AND i.state IN ('ready','unsupported'))`,
+       AND EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = user_files.id AND i.state IN ('ready','unsupported') AND i.extractor_id IS DISTINCT FROM 'corpus-notebook')`,
     [assetId, grant.authorizing_resource_id],
   )).rows[0];
   return file ? { file, grant } : null;
@@ -311,7 +311,7 @@ export async function getManagedLibraryFile(db, assetId, userId) {
      FROM user_files
      WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NULL
        AND storage_type = 'platform-upload'
-       AND EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = user_files.id AND i.state IN ('ready','unsupported'))`,
+       AND EXISTS (SELECT 1 FROM library_asset_ingestions i WHERE i.asset_id = user_files.id AND i.state IN ('ready','unsupported') AND i.extractor_id IS DISTINCT FROM 'corpus-notebook')`,
     [assetId, userId],
   );
   return rows[0] || null;
@@ -335,7 +335,7 @@ export async function getAuthorizedLibraryFile(db, principal, assetId, relation 
             COALESCE(latest.state = 'ready', FALSE) AS ingestion_ready
      FROM user_files f
      LEFT JOIN LATERAL (
-       SELECT state, error_code FROM library_asset_ingestions WHERE asset_id = f.id ORDER BY created_at DESC LIMIT 1
+       SELECT state, error_code FROM library_asset_ingestions WHERE asset_id = f.id AND extractor_id IS DISTINCT FROM 'corpus-notebook' ORDER BY created_at DESC LIMIT 1
      ) latest ON TRUE
      WHERE f.id = $1 AND f.deleted_at IS NULL AND f.storage_type = 'platform-upload'
     `,

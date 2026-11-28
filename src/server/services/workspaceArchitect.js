@@ -44,7 +44,7 @@ async function canView(db, actor, fileId) {
 }
 async function fileChunks(db, fileId) {
   return (await db.query(`SELECT c.id, c.ordinal, c.content, COALESCE(f.original_name, f.filename, 'File') AS name
-     FROM library_asset_chunks c JOIN library_asset_ingestions i ON i.id = c.ingestion_id AND i.state = 'ready'
+     FROM library_asset_chunks c JOIN library_asset_ingestions i ON i.id = c.ingestion_id AND i.state = 'ready' AND i.extractor_id IS DISTINCT FROM 'corpus-notebook'
      JOIN user_files f ON f.id = c.asset_id AND f.deleted_at IS NULL
      WHERE c.asset_id = $1 ORDER BY c.ordinal LIMIT $2`, [fileId, LIMITS.chunksPerFile])).rows;
 }

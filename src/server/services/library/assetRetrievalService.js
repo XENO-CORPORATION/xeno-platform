@@ -27,7 +27,7 @@ async function lexicalCandidates(db, projectId, query, limit) {
        ON parent.object_type='library_asset' AND parent.object_id=pa.asset_id::text
       AND parent.relation='parent' AND parent.subject_type='project'
       AND parent.subject_id=pa.project_id::text
-     JOIN library_asset_ingestions i ON i.asset_id = pa.asset_id AND i.state = 'ready'
+     JOIN library_asset_ingestions i ON i.asset_id = pa.asset_id AND i.state = 'ready' AND i.extractor_id IS DISTINCT FROM 'corpus-notebook'
      JOIN library_asset_chunks c ON c.ingestion_id = i.id
      JOIN user_files f ON f.id = c.asset_id AND f.deleted_at IS NULL
      WHERE pa.project_id = $1 AND pa.retrieval_enabled = TRUE
@@ -66,7 +66,7 @@ async function semanticCandidates(db, projectId, query, limit) {
         AND pce.asset_id=pa.asset_id AND pce.embedding_model_id=$3
        JOIN library_asset_chunks c ON c.id=pce.chunk_id AND c.asset_id=pce.asset_id
        JOIN library_asset_ingestions i ON i.id=c.ingestion_id
-        AND i.state='ready' AND i.semantic_status='ready'
+        AND i.state='ready' AND i.semantic_status='ready' AND i.extractor_id IS DISTINCT FROM 'corpus-notebook'
        JOIN user_files f ON f.id=c.asset_id AND f.deleted_at IS NULL
        WHERE pa.project_id=$1 AND pa.retrieval_enabled=TRUE
        ORDER BY pce.embedding::vector(512) <=> $2::vector(512)

@@ -209,7 +209,7 @@ export async function getFile(db, actor, assetId, { maxChars = 20000 } = {}) {
   if (!f.ingestion_safe) return { ...out, note: 'It is still being checked; its content is not readable yet.' };
   if (/^text\/|json|xml|markdown|csv/i.test(f.mime_type || '')) {
     const text = (await db.query(`SELECT string_agg(c.content, '' ORDER BY c.ordinal) AS t FROM library_asset_chunks c
-      JOIN library_asset_ingestions i ON i.id = c.ingestion_id AND i.state = 'ready' WHERE c.asset_id = $1`, [f.id]).catch(() => ({ rows: [{}] }))).rows[0]?.t;
+      JOIN library_asset_ingestions i ON i.id = c.ingestion_id AND i.state = 'ready' AND i.extractor_id IS DISTINCT FROM 'corpus-notebook' WHERE c.asset_id = $1`, [f.id]).catch(() => ({ rows: [{}] }))).rows[0]?.t;
     if (text) return { ...out, content: text.slice(0, maxChars), truncated: text.length > maxChars };
   }
   return out;

@@ -107,7 +107,7 @@ export async function evictLocalCopies(db, { idleHours = 24, limit = 500, store 
   const { rows } = await db.query(
     `SELECT f.id, f.storage_path, o.object_key, o.size_bytes FROM user_files f JOIN storage_objects o ON o.file_id = f.id
       WHERE f.storage_type = 'platform-upload' AND f.storage_path IS NOT NULL
-        AND (SELECT i.state FROM library_asset_ingestions i WHERE i.asset_id = f.id ORDER BY i.created_at DESC LIMIT 1) IN ('ready', 'unsupported')
+        AND (SELECT i.state FROM library_asset_ingestions i WHERE i.asset_id = f.id AND i.extractor_id IS DISTINCT FROM 'corpus-notebook' ORDER BY i.created_at DESC LIMIT 1) IN ('ready', 'unsupported')
       ORDER BY o.stored_at ASC LIMIT $1`, [limit * 20]);
   const result = { evicted: 0, bytes: 0, kept: 0, failed: 0 };
   const idleMs = idleHours * 3600000;

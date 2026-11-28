@@ -9,7 +9,7 @@ export async function claimLibraryIngestion(pool, workerId) {
     const { rows } = await tx.query(
       `SELECT id, asset_id
        FROM library_asset_ingestions
-       WHERE (
+       WHERE extractor_id IS DISTINCT FROM 'corpus-notebook' AND (
          (attempt_count < 3 AND (
            state IN ('queued', 'quarantined', 'failed')
            OR (state IN ('scanning', 'extracting', 'indexing') AND lease_expires_at < NOW())
